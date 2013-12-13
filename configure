@@ -10,265 +10,266 @@ import sys
 CC = os.environ.get('CC', 'cc')
 
 root_dir = os.path.dirname(__file__)
-sys.path.insert(0, os.path.join(root_dir, 'deps', 'v8', 'tools'))
+sys.path.insert(0, os.path.join(root_dir, 'tools', 'gyp', 'pylib'))
+from gyp.common import GetFlavor
 
 # parse our options
 parser = optparse.OptionParser()
 
-parser.add_option("--debug",
-    action="store_true",
-    dest="debug",
-    help="Also build debug build")
+# Options should be in alphabetical order but keep --prefix at the top,
+# that's arguably the one people will be looking for most.
+parser.add_option('--prefix',
+    action='store',
+    dest='prefix',
+    help='select the install prefix (defaults to /usr/local)')
 
-parser.add_option("--prefix",
-    action="store",
-    dest="prefix",
-    help="Select the install prefix (defaults to /usr/local)")
+parser.add_option('--debug',
+    action='store_true',
+    dest='debug',
+    help='also build debug build')
 
-parser.add_option("--without-npm",
-    action="store_true",
-    dest="without_npm",
-    help="Don\'t install the bundled npm package manager")
+parser.add_option('--dest-cpu',
+    action='store',
+    dest='dest_cpu',
+    help='CPU architecture to build for. Valid values are: arm, ia32, x64')
 
-parser.add_option("--without-ssl",
-    action="store_true",
-    dest="without_ssl",
-    help="Build without SSL")
+parser.add_option('--dest-os',
+    action='store',
+    dest='dest_os',
+    help='operating system to build for. Valid values are: '
+         'win, mac, solaris, freebsd, openbsd, linux, android')
 
-parser.add_option("--without-snapshot",
-    action="store_true",
-    dest="without_snapshot",
-    help="Build without snapshotting V8 libraries. You might want to set"
-         " this for cross-compiling. [Default: False]")
+parser.add_option('--gdb',
+    action='store_true',
+    dest='gdb',
+    help='add gdb support')
 
-parser.add_option("--shared-v8",
-    action="store_true",
-    dest="shared_v8",
-    help="Link to a shared V8 DLL instead of static linking")
+parser.add_option('--ninja',
+    action='store_true',
+    dest='use_ninja',
+    help='generate files for the ninja build system')
 
-parser.add_option("--shared-v8-includes",
-    action="store",
-    dest="shared_v8_includes",
-    help="Directory containing V8 header files")
-
-parser.add_option("--shared-v8-libpath",
-    action="store",
-    dest="shared_v8_libpath",
-    help="A directory to search for the shared V8 DLL")
-
-parser.add_option("--shared-v8-libname",
-    action="store",
-    dest="shared_v8_libname",
-    help="Alternative lib name to link to (default: 'v8')")
-
-parser.add_option("--shared-openssl",
-    action="store_true",
-    dest="shared_openssl",
-    help="Link to a shared OpenSSl DLL instead of static linking")
-
-parser.add_option("--shared-openssl-includes",
-    action="store",
-    dest="shared_openssl_includes",
-    help="Directory containing OpenSSL header files")
-
-parser.add_option("--shared-openssl-libpath",
-    action="store",
-    dest="shared_openssl_libpath",
-    help="A directory to search for the shared OpenSSL DLLs")
-
-parser.add_option("--shared-openssl-libname",
-    action="store",
-    dest="shared_openssl_libname",
-    help="Alternative lib name to link to (default: 'crypto,ssl')")
+parser.add_option('--no-ifaddrs',
+    action='store_true',
+    dest='no_ifaddrs',
+    help='use on deprecated SunOS systems that do not support ifaddrs.h')
 
 # deprecated
-parser.add_option("--openssl-use-sys",
-    action="store_true",
-    dest="shared_openssl",
+parser.add_option('--openssl-includes',
+    action='store',
+    dest='shared_openssl_includes',
     help=optparse.SUPPRESS_HELP)
 
 # deprecated
-parser.add_option("--openssl-includes",
-    action="store",
-    dest="shared_openssl_includes",
+parser.add_option('--openssl-libpath',
+    action='store',
+    dest='shared_openssl_libpath',
     help=optparse.SUPPRESS_HELP)
 
 # deprecated
-parser.add_option("--openssl-libpath",
-    action="store",
-    dest="shared_openssl_libpath",
+parser.add_option('--openssl-use-sys',
+    action='store_true',
+    dest='shared_openssl',
     help=optparse.SUPPRESS_HELP)
+
+parser.add_option('--shared-cares',
+    action='store_true',
+    dest='shared_cares',
+    help='link to a shared cares DLL instead of static linking')
+
+parser.add_option('--shared-cares-includes',
+    action='store',
+    dest='shared_cares_includes',
+    help='directory containing cares header files')
+
+parser.add_option('--shared-cares-libname',
+    action='store',
+    dest='shared_cares_libname',
+    help='alternative lib name to link to (default: \'cares\')')
+
+parser.add_option('--shared-cares-libpath',
+    action='store',
+    dest='shared_cares_libpath',
+    help='a directory to search for the shared cares DLL')
+
+parser.add_option('--shared-http-parser',
+    action='store_true',
+    dest='shared_http_parser',
+    help='link to a shared http_parser DLL instead of static linking')
+
+parser.add_option('--shared-http-parser-includes',
+    action='store',
+    dest='shared_http_parser_includes',
+    help='directory containing http_parser header files')
+
+parser.add_option('--shared-http-parser-libname',
+    action='store',
+    dest='shared_http_parser_libname',
+    help='alternative lib name to link to (default: \'http_parser\')')
+
+parser.add_option('--shared-http-parser-libpath',
+    action='store',
+    dest='shared_http_parser_libpath',
+    help='a directory to search for the shared http_parser DLL')
+
+parser.add_option('--shared-libuv',
+    action='store_true',
+    dest='shared_libuv',
+    help='link to a shared libuv DLL instead of static linking')
+
+parser.add_option('--shared-libuv-includes',
+    action='store',
+    dest='shared_libuv_includes',
+    help='directory containing libuv header files')
+
+parser.add_option('--shared-libuv-libname',
+    action='store',
+    dest='shared_libuv_libname',
+    help='alternative lib name to link to (default: \'uv\')')
+
+parser.add_option('--shared-libuv-libpath',
+    action='store',
+    dest='shared_libuv_libpath',
+    help='a directory to search for the shared libuv DLL')
+
+parser.add_option('--shared-openssl',
+    action='store_true',
+    dest='shared_openssl',
+    help='link to a shared OpenSSl DLL instead of static linking')
+
+parser.add_option('--shared-openssl-includes',
+    action='store',
+    dest='shared_openssl_includes',
+    help='directory containing OpenSSL header files')
+
+parser.add_option('--shared-openssl-libname',
+    action='store',
+    dest='shared_openssl_libname',
+    help='alternative lib name to link to (default: \'crypto,ssl\')')
+
+parser.add_option('--shared-openssl-libpath',
+    action='store',
+    dest='shared_openssl_libpath',
+    help='a directory to search for the shared OpenSSL DLLs')
+
+parser.add_option('--shared-v8',
+    action='store_true',
+    dest='shared_v8',
+    help='link to a shared V8 DLL instead of static linking')
+
+parser.add_option('--shared-v8-includes',
+    action='store',
+    dest='shared_v8_includes',
+    help='directory containing V8 header files')
+
+parser.add_option('--shared-v8-libname',
+    action='store',
+    dest='shared_v8_libname',
+    help='alternative lib name to link to (default: \'v8\')')
+
+parser.add_option('--shared-v8-libpath',
+    action='store',
+    dest='shared_v8_libpath',
+    help='a directory to search for the shared V8 DLL')
+
+parser.add_option('--shared-zlib',
+    action='store_true',
+    dest='shared_zlib',
+    help='link to a shared zlib DLL instead of static linking')
+
+parser.add_option('--shared-zlib-includes',
+    action='store',
+    dest='shared_zlib_includes',
+    help='directory containing zlib header files')
+
+parser.add_option('--shared-zlib-libname',
+    action='store',
+    dest='shared_zlib_libname',
+    help='alternative lib name to link to (default: \'z\')')
+
+parser.add_option('--shared-zlib-libpath',
+    action='store',
+    dest='shared_zlib_libpath',
+    help='a directory to search for the shared zlib DLL')
 
 # TODO document when we've decided on what the tracing API and its options will
 # look like
-parser.add_option("--systemtap-includes",
-    action="store",
-    dest="systemtap_includes",
+parser.add_option('--systemtap-includes',
+    action='store',
+    dest='systemtap_includes',
     help=optparse.SUPPRESS_HELP)
 
-parser.add_option("--no-ssl2",
-    action="store_true",
-    dest="no_ssl2",
-    help="Disable OpenSSL v2")
+parser.add_option('--tag',
+    action='store',
+    dest='tag',
+    help='custom build tag')
 
-parser.add_option("--shared-zlib",
-    action="store_true",
-    dest="shared_zlib",
-    help="Link to a shared zlib DLL instead of static linking")
+parser.add_option('--with-arm-float-abi',
+    action='store',
+    dest='arm_float_abi',
+    help='specifies which floating-point ABI to use. Valid values are: '
+         'soft, softfp, hard')
 
-parser.add_option("--shared-zlib-includes",
-    action="store",
-    dest="shared_zlib_includes",
-    help="Directory containing zlib header files")
+parser.add_option('--with-dtrace',
+    action='store_true',
+    dest='with_dtrace',
+    help='build with DTrace (default is true on sunos)')
 
-parser.add_option("--shared-zlib-libpath",
-    action="store",
-    dest="shared_zlib_libpath",
-    help="A directory to search for the shared zlib DLL")
+parser.add_option('--with-etw',
+    action='store_true',
+    dest='with_etw',
+    help='build with ETW (default is true on Windows)')
 
-parser.add_option("--shared-zlib-libname",
-    action="store",
-    dest="shared_zlib_libname",
-    help="Alternative lib name to link to (default: 'z')")
+parser.add_option('--with-icu-path',
+    action='store',
+    dest='with_icu_path',
+    help='Path to icu.gyp (ICU i18n, Chromium version only.)')
 
-parser.add_option("--shared-http-parser",
-    action="store_true",
-    dest="shared_http_parser",
-    help="Link to a shared http_parser DLL instead of static linking")
+parser.add_option('--with-perfctr',
+    action='store_true',
+    dest='with_perfctr',
+    help='build with performance counters (default is true on Windows)')
 
-parser.add_option("--shared-http-parser-includes",
-    action="store",
-    dest="shared_http_parser_includes",
-    help="Directory containing http_parser header files")
+parser.add_option('--with-sslv2',
+    action='store_true',
+    dest='with_sslv2',
+    help='enable SSL v2')
 
-parser.add_option("--shared-http-parser-libpath",
-    action="store",
-    dest="shared_http_parser_libpath",
-    help="A directory to search for the shared http_parser DLL")
+parser.add_option('--without-dtrace',
+    action='store_true',
+    dest='without_dtrace',
+    help='build without DTrace')
 
-parser.add_option("--shared-http-parser-libname",
-    action="store",
-    dest="shared_http_parser_libname",
-    help="Alternative lib name to link to (default: 'http_parser')")
+parser.add_option('--without-etw',
+    action='store_true',
+    dest='without_etw',
+    help='build without ETW')
 
-parser.add_option("--shared-cares",
-    action="store_true",
-    dest="shared_cares",
-    help="Link to a shared cares DLL instead of static linking")
+parser.add_option('--without-npm',
+    action='store_true',
+    dest='without_npm',
+    help='don\'t install the bundled npm package manager')
 
-parser.add_option("--shared-cares-includes",
-    action="store",
-    dest="shared_cares_includes",
-    help="Directory containing cares header files")
+parser.add_option('--without-perfctr',
+    action='store_true',
+    dest='without_perfctr',
+    help='build without performance counters')
 
-parser.add_option("--shared-cares-libpath",
-    action="store",
-    dest="shared_cares_libpath",
-    help="A directory to search for the shared cares DLL")
+parser.add_option('--without-snapshot',
+    action='store_true',
+    dest='without_snapshot',
+    help='build without snapshotting V8 libraries. You might want to set'
+         ' this for cross-compiling. [Default: False]')
 
-parser.add_option("--shared-cares-libname",
-    action="store",
-    dest="shared_cares_libname",
-    help="Alternative lib name to link to (default: 'cares')")
+parser.add_option('--without-ssl',
+    action='store_true',
+    dest='without_ssl',
+    help='build without SSL')
 
-parser.add_option("--shared-libuv",
-    action="store_true",
-    dest="shared_libuv",
-    help="Link to a shared libuv DLL instead of static linking")
-
-parser.add_option("--shared-libuv-includes",
-    action="store",
-    dest="shared_libuv_includes",
-    help="Directory containing libuv header files")
-
-parser.add_option("--shared-libuv-libpath",
-    action="store",
-    dest="shared_libuv_libpath",
-    help="A directory to search for the shared libuv DLL")
-
-parser.add_option("--shared-libuv-libname",
-    action="store",
-    dest="shared_libuv_libname",
-    help="Alternative lib name to link to (default: 'uv')")
-
-parser.add_option("--with-dtrace",
-    action="store_true",
-    dest="with_dtrace",
-    help="Build with DTrace (default is true on sunos)")
-
-parser.add_option("--without-dtrace",
-    action="store_true",
-    dest="without_dtrace",
-    help="Build without DTrace")
-
-parser.add_option("--with-etw",
-    action="store_true",
-    dest="with_etw",
-    help="Build with ETW (default is true on Windows)")
-
-parser.add_option("--without-etw",
-    action="store_true",
-    dest="without_etw",
-    help="Build without ETW")
-
-parser.add_option("--with-perfctr",
-    action="store_true",
-    dest="with_perfctr",
-    help="Build with performance counters (default is true on Windows)")
-
-parser.add_option("--without-perfctr",
-    action="store_true",
-    dest="without_perfctr",
-    help="Build without performance counters")
-
-# CHECKME does this still work with recent releases of V8?
-parser.add_option("--gdb",
-    action="store_true",
-    dest="gdb",
-    help="add gdb support")
-
-parser.add_option("--dest-cpu",
-    action="store",
-    dest="dest_cpu",
-    help="CPU architecture to build for. Valid values are: arm, ia32, x64")
-
-parser.add_option("--dest-os",
-    action="store",
-    dest="dest_os",
-    help="Operating system to build for. Valid values are: "
-         "win, mac, solaris, freebsd, linux")
-
-parser.add_option("--no-ifaddrs",
-    action="store_true",
-    dest="no_ifaddrs",
-    help="Use on deprecated SunOS systems that do not support ifaddrs.h")
-
-parser.add_option("--with-arm-float-abi",
-    action="store",
-    dest="arm_float_abi",
-    help="Specifies which floating-point ABI to use. Valid values are: "
-         "soft, softfp, hard")
-
-parser.add_option("--ninja",
-    action="store_true",
-    dest="use_ninja",
-    help="Generate files for the ninja build system")
-
-# Using --unsafe-optimizations voids your warranty.
-parser.add_option("--unsafe-optimizations",
-    action="store_true",
-    dest="unsafe_optimizations",
-    help=optparse.SUPPRESS_HELP)
-
-parser.add_option("--xcode",
-    action="store_true",
-    dest="use_xcode",
-    help="Generate build files for use with xcode")
-
-parser.add_option("--tag",
-    action="store",
-    dest="tag",
-    help="Custom build tag")
+parser.add_option('--xcode',
+    action='store_true',
+    dest='use_xcode',
+    help='generate build files for use with xcode')
 
 (options, args) = parser.parse_args()
 
@@ -380,6 +381,7 @@ def host_arch_cc():
     '__x86_64__'  : 'x64',
     '__i386__'    : 'ia32',
     '__arm__'     : 'arm',
+    '__mips__'    : 'mips',
   }
 
   rtn = 'ia32' # default
@@ -401,6 +403,7 @@ def host_arch_win():
     'AMD64'  : 'x64',
     'x86'    : 'ia32',
     'arm'    : 'arm',
+    'mips'   : 'mips',
   }
 
   return matchup.get(arch, 'ia32')
@@ -408,13 +411,15 @@ def host_arch_win():
 
 def compiler_version():
   try:
-    proc = subprocess.Popen(shlex.split(CC) + ['--version'], stdout=subprocess.PIPE)
+    proc = subprocess.Popen(shlex.split(CC) + ['--version'],
+                            stdout=subprocess.PIPE)
   except WindowsError:
     return (0, False)
 
   is_clang = 'clang' in proc.communicate()[0].split('\n')[0]
 
-  proc = subprocess.Popen(shlex.split(CC) + ['-dumpversion'], stdout=subprocess.PIPE)
+  proc = subprocess.Popen(shlex.split(CC) + ['-dumpversion'],
+                          stdout=subprocess.PIPE)
   version = tuple(map(int, proc.communicate()[0].split('.')))
 
   return (version, is_clang)
@@ -423,8 +428,10 @@ def compiler_version():
 def configure_arm(o):
   if options.arm_float_abi:
     arm_float_abi = options.arm_float_abi
+  elif is_arm_hard_float_abi():
+    arm_float_abi = 'hard'
   else:
-    arm_float_abi = 'hard' if is_arm_hard_float_abi() else 'default'
+    'default'
   o['variables']['armv7'] = int(is_arch_armv7())
   o['variables']['arm_fpu'] = 'vfpv3'  # V8 3.18 no longer supports VFP2.
   o['variables']['arm_neon'] = int(is_arm_neon())
@@ -433,12 +440,10 @@ def configure_arm(o):
 
 
 def configure_node(o):
-  o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
-  o['variables']['v8_no_strict_aliasing'] = 1 # work around compiler bugs
+  if options.dest_os == 'android':
+    o['variables']['OS'] = 'android'
   o['variables']['node_prefix'] = os.path.expanduser(options.prefix or '')
   o['variables']['node_install_npm'] = b(not options.without_npm)
-  o['variables']['node_unsafe_optimizations'] = (
-    1 if options.unsafe_optimizations else 0)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
 
   host_arch = host_arch_win() if os.name == 'nt' else host_arch_cc()
@@ -459,37 +464,43 @@ def configure_node(o):
   if not is_clang and cc_version < (4,0,0):
     o['variables']['visibility'] = ''
 
-  # By default, enable DTrace on SunOS systems. Don't allow it on other
-  # systems, since it won't work.  (The MacOS build process is different than
-  # SunOS, and we haven't implemented it.)
-  if sys.platform.startswith('sunos') or sys.platform.startswith('darwin'):
-    o['variables']['node_use_dtrace'] = b(not options.without_dtrace)
-  elif sys.platform.startswith('linux'):
-    o['variables']['node_use_dtrace'] = 'false'
-    o['variables']['node_use_systemtap'] = b(options.with_dtrace)
-    if options.systemtap_includes:
-      o['include_dirs'] += [options.systemtap_includes]
+  if flavor in ('solaris', 'mac', 'linux'):
+    use_dtrace = not options.without_dtrace
+    # Don't enable by default on linux, it needs the sdt-devel package.
+    if flavor == 'linux':
+      if options.systemtap_includes:
+        o['include_dirs'] += [options.systemtap_includes]
+      use_dtrace = options.with_dtrace
+    o['variables']['node_use_dtrace'] = b(use_dtrace)
+    o['variables']['uv_use_dtrace'] = b(use_dtrace)
+    o['variables']['uv_parent_path'] = '/deps/uv/'
   elif options.with_dtrace:
     raise Exception(
-       'DTrace is currently only supported on SunOS or Linux systems.')
+       'DTrace is currently only supported on SunOS, MacOS or Linux systems.')
   else:
     o['variables']['node_use_dtrace'] = 'false'
-    o['variables']['node_use_systemtap'] = 'false'
+
+  # if we're on illumos based systems wrap the helper library into the
+  # executable
+  if flavor == 'solaris':
+    o['variables']['node_use_mdb'] = 'true'
+  else:
+    o['variables']['node_use_mdb'] = 'false'
 
   if options.no_ifaddrs:
     o['defines'] += ['SUNOS_NO_IFADDRS']
 
   # By default, enable ETW on Windows.
-  if sys.platform.startswith('win32'):
-    o['variables']['node_use_etw'] = b(not options.without_etw);
+  if flavor == 'win':
+    o['variables']['node_use_etw'] = b(not options.without_etw)
   elif options.with_etw:
     raise Exception('ETW is only supported on Windows.')
   else:
     o['variables']['node_use_etw'] = 'false'
 
   # By default, enable Performance counters on Windows.
-  if sys.platform.startswith('win32'):
-    o['variables']['node_use_perfctr'] = b(not options.without_perfctr);
+  if flavor == 'win':
+    o['variables']['node_use_perfctr'] = b(not options.without_perfctr)
   elif options.with_perfctr:
     raise Exception('Performance counter is only supported on Windows.')
   else:
@@ -558,8 +569,12 @@ def configure_libuv(o):
 
 
 def configure_v8(o):
-  o['variables']['v8_use_snapshot'] = b(not options.without_snapshot)
   o['variables']['node_shared_v8'] = b(options.shared_v8)
+  o['variables']['v8_enable_gdbjit'] = 1 if options.gdb else 0
+  o['variables']['v8_no_strict_aliasing'] = 1  # Work around compiler bugs.
+  o['variables']['v8_optimized_debug'] = 0  # Compile with -O0 in debug builds.
+  o['variables']['v8_random_seed'] = 0  # Use a random seed for hash tables.
+  o['variables']['v8_use_snapshot'] = b(not options.without_snapshot)
 
   # assume shared_v8 if one of these is set?
   if options.shared_v8_libpath:
@@ -579,7 +594,9 @@ def configure_openssl(o):
   if options.without_ssl:
     return
 
-  if options.no_ssl2:
+  # OpenSSL uses `#ifndef OPENSSL_NO_SSL2` checks so only define the
+  # macro when we want to _disable_ SSL2.
+  if not options.with_sslv2:
     o['defines'] += ['OPENSSL_NO_SSL2=1']
 
   if options.shared_openssl:
@@ -601,18 +618,34 @@ def configure_openssl(o):
 
 
 def configure_winsdk(o):
-  if not sys.platform.startswith('win32'):
+  if flavor != 'win':
     return
 
-  winsdk_dir = os.environ.get("WindowsSdkDir")
+  winsdk_dir = os.environ.get('WindowsSdkDir')
 
   if winsdk_dir and os.path.isfile(winsdk_dir + '\\bin\\ctrpp.exe'):
-    print "Found ctrpp in WinSDK--will build generated files into tools/msvs/genfiles."
+    print('Found ctrpp in WinSDK--will build generated files '
+          'into tools/msvs/genfiles.')
     o['variables']['node_has_winsdk'] = 'true'
     return
 
-  print "ctrpp not found in WinSDK path--using pre-gen files from tools/msvs/genfiles."
+  print('ctrpp not found in WinSDK path--using pre-gen files '
+        'from tools/msvs/genfiles.')
 
+
+def configure_icu(o):
+  have_icu_path = bool(options.with_icu_path)
+  o['variables']['v8_enable_i18n_support'] = int(have_icu_path)
+  if have_icu_path:
+    o['variables']['icu_gyp_path'] = options.with_icu_path
+
+
+# determine the "flavor" (operating system) we're building for,
+# leveraging gyp's GetFlavor function
+flavor_params = {}
+if (options.dest_os):
+  flavor_params['flavor'] = options.dest_os
+flavor = GetFlavor(flavor_params)
 
 output = {
   'variables': { 'python': sys.executable },
@@ -630,6 +663,7 @@ configure_libuv(output)
 configure_v8(output)
 configure_openssl(output)
 configure_winsdk(output)
+configure_icu(output)
 
 # variables should be a root level element,
 # move everything else to target_defaults
@@ -643,12 +677,12 @@ pprint.pprint(output, indent=2)
 
 def write(filename, data):
   filename = os.path.join(root_dir, filename)
-  print "creating ", filename
+  print 'creating ', filename
   f = open(filename, 'w+')
   f.write(data)
 
-write('config.gypi', "# Do not edit. Generated by the configure script.\n" +
-  pprint.pformat(output, indent=2) + "\n")
+write('config.gypi', '# Do not edit. Generated by the configure script.\n' +
+      pprint.pformat(output, indent=2) + '\n')
 
 config = {
   'BUILDTYPE': 'Debug' if options.debug else 'Release',
@@ -665,15 +699,17 @@ config = '\n'.join(map('='.join, config.iteritems())) + '\n'
 write('config.mk',
       '# Do not edit. Generated by the configure script.\n' + config)
 
-if options.use_ninja:
-  gyp_args = ['-f', 'ninja']
-elif options.use_xcode:
-  gyp_args = ['-f', 'xcode']
-elif os.name == 'nt':
-  gyp_args = ['-f', 'msvs', '-G', 'msvs_version=auto']
-elif options.dest_os:
-  gyp_args = ['-f', 'make-' + options.dest_os]
-else:
-  gyp_args = ['-f', 'make']
+gyp_args = [sys.executable, 'tools/gyp_node.py', '--no-parallel']
 
-subprocess.call([sys.executable, 'tools/gyp_node'] + gyp_args)
+if options.use_ninja:
+  gyp_args += ['-f', 'ninja-' + flavor]
+elif options.use_xcode:
+  gyp_args += ['-f', 'xcode']
+elif flavor == 'win':
+  gyp_args += ['-f', 'msvs', '-G', 'msvs_version=auto']
+else:
+  gyp_args += ['-f', 'make-' + flavor]
+
+gyp_args += args
+
+subprocess.call(gyp_args)

@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#if V8_TARGET_ARCH_MIPS
 
 #include "bootstrapper.h"
 #include "code-stubs.h"
@@ -39,13 +39,44 @@ namespace v8 {
 namespace internal {
 
 
+void FastNewClosureStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a2 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      Runtime::FunctionForId(Runtime::kNewClosureFromStubFailure)->entry;
+}
+
+
+void ToNumberStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a0 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ = NULL;
+}
+
+
+void NumberToStringStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a0 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      Runtime::FunctionForId(Runtime::kNumberToString)->entry;
+}
+
+
 void FastCloneShallowArrayStub::InitializeInterfaceDescriptor(
     Isolate* isolate,
     CodeStubInterfaceDescriptor* descriptor) {
   static Register registers[] = { a3, a2, a1 };
   descriptor->register_param_count_ = 3;
   descriptor->register_params_ = registers;
-  descriptor->stack_parameter_count_ = NULL;
   descriptor->deoptimization_handler_ =
       Runtime::FunctionForId(Runtime::kCreateArrayLiteralShallow)->entry;
 }
@@ -57,9 +88,18 @@ void FastCloneShallowObjectStub::InitializeInterfaceDescriptor(
   static Register registers[] = { a3, a2, a1, a0 };
   descriptor->register_param_count_ = 4;
   descriptor->register_params_ = registers;
-  descriptor->stack_parameter_count_ = NULL;
   descriptor->deoptimization_handler_ =
-      Runtime::FunctionForId(Runtime::kCreateObjectLiteralShallow)->entry;
+      Runtime::FunctionForId(Runtime::kCreateObjectLiteral)->entry;
+}
+
+
+void CreateAllocationSiteStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a2 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ = NULL;
 }
 
 
@@ -71,6 +111,26 @@ void KeyedLoadFastElementStub::InitializeInterfaceDescriptor(
   descriptor->register_params_ = registers;
   descriptor->deoptimization_handler_ =
       FUNCTION_ADDR(KeyedLoadIC_MissFromStubFailure);
+}
+
+
+void LoadFieldStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a0 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ = NULL;
+}
+
+
+void KeyedLoadFieldStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a1 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ = NULL;
 }
 
 
@@ -97,45 +157,142 @@ void TransitionElementsKindStub::InitializeInterfaceDescriptor(
 }
 
 
-static void InitializeArrayConstructorDescriptor(Isolate* isolate,
+void CompareNilICStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
     CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a0 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      FUNCTION_ADDR(CompareNilIC_Miss);
+  descriptor->SetMissHandler(
+      ExternalReference(IC_Utility(IC::kCompareNilIC_Miss), isolate));
+}
+
+
+static void InitializeArrayConstructorDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor,
+    int constant_stack_parameter_count) {
   // register state
-  // a1 -- constructor function
+  // a0 -- number of arguments
+  // a1 -- function
   // a2 -- type info cell with elements kind
-  // a0 -- number of arguments to the constructor function
   static Register registers[] = { a1, a2 };
   descriptor->register_param_count_ = 2;
-  // stack param count needs (constructor pointer, and single argument)
-  descriptor->stack_parameter_count_ = &a0;
+  if (constant_stack_parameter_count != 0) {
+    // stack param count needs (constructor pointer, and single argument)
+    descriptor->stack_parameter_count_ = a0;
+  }
+  descriptor->hint_stack_parameter_count_ = constant_stack_parameter_count;
   descriptor->register_params_ = registers;
   descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
   descriptor->deoptimization_handler_ =
-      FUNCTION_ADDR(ArrayConstructor_StubFailure);
+      Runtime::FunctionForId(Runtime::kArrayConstructor)->entry;
+}
+
+
+static void InitializeInternalArrayConstructorDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor,
+    int constant_stack_parameter_count) {
+  // register state
+  // a0 -- number of arguments
+  // a1 -- constructor function
+  static Register registers[] = { a1 };
+  descriptor->register_param_count_ = 1;
+
+  if (constant_stack_parameter_count != 0) {
+    // Stack param count needs (constructor pointer, and single argument).
+    descriptor->stack_parameter_count_ = a0;
+  }
+  descriptor->hint_stack_parameter_count_ = constant_stack_parameter_count;
+  descriptor->register_params_ = registers;
+  descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
+  descriptor->deoptimization_handler_ =
+      Runtime::FunctionForId(Runtime::kInternalArrayConstructor)->entry;
 }
 
 
 void ArrayNoArgumentConstructorStub::InitializeInterfaceDescriptor(
     Isolate* isolate,
     CodeStubInterfaceDescriptor* descriptor) {
-  InitializeArrayConstructorDescriptor(isolate, descriptor);
+  InitializeArrayConstructorDescriptor(isolate, descriptor, 0);
 }
 
 
 void ArraySingleArgumentConstructorStub::InitializeInterfaceDescriptor(
     Isolate* isolate,
     CodeStubInterfaceDescriptor* descriptor) {
-  InitializeArrayConstructorDescriptor(isolate, descriptor);
+  InitializeArrayConstructorDescriptor(isolate, descriptor, 1);
 }
 
 
 void ArrayNArgumentsConstructorStub::InitializeInterfaceDescriptor(
     Isolate* isolate,
     CodeStubInterfaceDescriptor* descriptor) {
-  InitializeArrayConstructorDescriptor(isolate, descriptor);
+  InitializeArrayConstructorDescriptor(isolate, descriptor, -1);
+}
+
+
+void ToBooleanStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a0 };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      FUNCTION_ADDR(ToBooleanIC_Miss);
+  descriptor->SetMissHandler(
+      ExternalReference(IC_Utility(IC::kToBooleanIC_Miss), isolate));
+}
+
+
+void InternalArrayNoArgumentConstructorStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  InitializeInternalArrayConstructorDescriptor(isolate, descriptor, 0);
+}
+
+
+void InternalArraySingleArgumentConstructorStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  InitializeInternalArrayConstructorDescriptor(isolate, descriptor, 1);
+}
+
+
+void InternalArrayNArgumentsConstructorStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  InitializeInternalArrayConstructorDescriptor(isolate, descriptor, -1);
+}
+
+
+void StoreGlobalStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a1, a2, a0 };
+  descriptor->register_param_count_ = 3;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      FUNCTION_ADDR(StoreIC_MissFromStubFailure);
+}
+
+
+void ElementsTransitionAndStoreStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a0, a3, a1, a2 };
+  descriptor->register_param_count_ = 4;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      FUNCTION_ADDR(ElementsTransitionAndStoreIC_Miss);
 }
 
 
 #define __ ACCESS_MASM(masm)
+
 
 static void EmitIdenticalObjectComparison(MacroAssembler* masm,
                                           Label* slow,
@@ -151,161 +308,27 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
                                            Register rhs);
 
 
-// Check if the operand is a heap number.
-static void EmitCheckForHeapNumber(MacroAssembler* masm, Register operand,
-                                   Register scratch1, Register scratch2,
-                                   Label* not_a_heap_number) {
-  __ lw(scratch1, FieldMemOperand(operand, HeapObject::kMapOffset));
-  __ LoadRoot(scratch2, Heap::kHeapNumberMapRootIndex);
-  __ Branch(not_a_heap_number, ne, scratch1, Operand(scratch2));
-}
+void HydrogenCodeStub::GenerateLightweightMiss(MacroAssembler* masm) {
+  // Update the static counter each time a new code stub is generated.
+  Isolate* isolate = masm->isolate();
+  isolate->counters()->code_stubs()->Increment();
 
-
-void ToNumberStub::Generate(MacroAssembler* masm) {
-  // The ToNumber stub takes one argument in a0.
-  Label check_heap_number, call_builtin;
-  __ JumpIfNotSmi(a0, &check_heap_number);
-  __ Ret(USE_DELAY_SLOT);
-  __ mov(v0, a0);
-
-  __ bind(&check_heap_number);
-  EmitCheckForHeapNumber(masm, a0, a1, t0, &call_builtin);
-  __ Ret(USE_DELAY_SLOT);
-  __ mov(v0, a0);
-
-  __ bind(&call_builtin);
-  __ push(a0);
-  __ InvokeBuiltin(Builtins::TO_NUMBER, JUMP_FUNCTION);
-}
-
-
-void FastNewClosureStub::Generate(MacroAssembler* masm) {
-  // Create a new closure from the given function info in new
-  // space. Set the context to the current context in cp.
-  Counters* counters = masm->isolate()->counters();
-
-  Label gc;
-
-  // Pop the function info from the stack.
-  __ pop(a3);
-
-  // Attempt to allocate new JSFunction in new space.
-  __ Allocate(JSFunction::kSize, v0, a1, a2, &gc, TAG_OBJECT);
-
-  __ IncrementCounter(counters->fast_new_closure_total(), 1, t2, t3);
-
-  int map_index = Context::FunctionMapIndex(language_mode_, is_generator_);
-
-  // Compute the function map in the current native context and set that
-  // as the map of the allocated object.
-  __ lw(a2, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
-  __ lw(a2, FieldMemOperand(a2, GlobalObject::kNativeContextOffset));
-  __ lw(t1, MemOperand(a2, Context::SlotOffset(map_index)));
-  __ sw(t1, FieldMemOperand(v0, HeapObject::kMapOffset));
-
-  // Initialize the rest of the function. We don't have to update the
-  // write barrier because the allocated object is in new space.
-  __ LoadRoot(a1, Heap::kEmptyFixedArrayRootIndex);
-  __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
-  __ sw(a1, FieldMemOperand(v0, JSObject::kPropertiesOffset));
-  __ sw(a1, FieldMemOperand(v0, JSObject::kElementsOffset));
-  __ sw(t1, FieldMemOperand(v0, JSFunction::kPrototypeOrInitialMapOffset));
-  __ sw(a3, FieldMemOperand(v0, JSFunction::kSharedFunctionInfoOffset));
-  __ sw(cp, FieldMemOperand(v0, JSFunction::kContextOffset));
-  __ sw(a1, FieldMemOperand(v0, JSFunction::kLiteralsOffset));
-
-  // Initialize the code pointer in the function to be the one
-  // found in the shared function info object.
-  // But first check if there is an optimized version for our context.
-  Label check_optimized;
-  Label install_unoptimized;
-  if (FLAG_cache_optimized_code) {
-    __ lw(a1,
-          FieldMemOperand(a3, SharedFunctionInfo::kOptimizedCodeMapOffset));
-    __ And(at, a1, a1);
-    __ Branch(&check_optimized, ne, at, Operand(zero_reg));
+  CodeStubInterfaceDescriptor* descriptor = GetInterfaceDescriptor(isolate);
+  int param_count = descriptor->register_param_count_;
+  {
+    // Call the runtime system in a fresh internal frame.
+    FrameScope scope(masm, StackFrame::INTERNAL);
+    ASSERT(descriptor->register_param_count_ == 0 ||
+           a0.is(descriptor->register_params_[param_count - 1]));
+    // Push arguments
+    for (int i = 0; i < param_count; ++i) {
+      __ push(descriptor->register_params_[i]);
+    }
+    ExternalReference miss = descriptor->miss_handler();
+    __ CallExternalReference(miss, descriptor->register_param_count_);
   }
-  __ bind(&install_unoptimized);
-  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
-  __ sw(t0, FieldMemOperand(v0, JSFunction::kNextFunctionLinkOffset));
-  __ lw(a3, FieldMemOperand(a3, SharedFunctionInfo::kCodeOffset));
-  __ Addu(a3, a3, Operand(Code::kHeaderSize - kHeapObjectTag));
 
-  // Return result. The argument function info has been popped already.
-  __ sw(a3, FieldMemOperand(v0, JSFunction::kCodeEntryOffset));
   __ Ret();
-
-  __ bind(&check_optimized);
-
-  __ IncrementCounter(counters->fast_new_closure_try_optimized(), 1, t2, t3);
-
-  // a2 holds native context, a1 points to fixed array of 3-element entries
-  // (native context, optimized code, literals).
-  // The optimized code map must never be empty, so check the first elements.
-  Label install_optimized;
-  // Speculatively move code object into t0.
-  __ lw(t0, FieldMemOperand(a1, FixedArray::kHeaderSize + kPointerSize));
-  __ lw(t1, FieldMemOperand(a1, FixedArray::kHeaderSize));
-  __ Branch(&install_optimized, eq, a2, Operand(t1));
-
-  // Iterate through the rest of map backwards.  t0 holds an index as a Smi.
-  Label loop;
-  __ lw(t0, FieldMemOperand(a1, FixedArray::kLengthOffset));
-  __ bind(&loop);
-  // Do not double check first entry.
-
-  __ Branch(&install_unoptimized, eq, t0,
-            Operand(Smi::FromInt(SharedFunctionInfo::kEntryLength)));
-  __ Subu(t0, t0, Operand(
-      Smi::FromInt(SharedFunctionInfo::kEntryLength)));  // Skip an entry.
-  __ Addu(t1, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sll(at, t0, kPointerSizeLog2 - kSmiTagSize);
-  __ Addu(t1, t1, Operand(at));
-  __ lw(t1, MemOperand(t1));
-  __ Branch(&loop, ne, a2, Operand(t1));
-  // Hit: fetch the optimized code.
-  __ Addu(t1, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sll(at, t0, kPointerSizeLog2 - kSmiTagSize);
-  __ Addu(t1, t1, Operand(at));
-  __ Addu(t1, t1, Operand(kPointerSize));
-  __ lw(t0, MemOperand(t1));
-
-  __ bind(&install_optimized);
-  __ IncrementCounter(counters->fast_new_closure_install_optimized(),
-                      1, t2, t3);
-
-  // TODO(fschneider): Idea: store proper code pointers in the map and either
-  // unmangle them on marking or do nothing as the whole map is discarded on
-  // major GC anyway.
-  __ Addu(t0, t0, Operand(Code::kHeaderSize - kHeapObjectTag));
-  __ sw(t0, FieldMemOperand(v0, JSFunction::kCodeEntryOffset));
-
-  // Now link a function into a list of optimized functions.
-  __ lw(t0, ContextOperand(a2, Context::OPTIMIZED_FUNCTIONS_LIST));
-
-  __ sw(t0, FieldMemOperand(v0, JSFunction::kNextFunctionLinkOffset));
-  // No need for write barrier as JSFunction (eax) is in the new space.
-
-  __ sw(v0, ContextOperand(a2, Context::OPTIMIZED_FUNCTIONS_LIST));
-  // Store JSFunction (eax) into edx before issuing write barrier as
-  // it clobbers all the registers passed.
-  __ mov(t0, v0);
-  __ RecordWriteContextSlot(
-      a2,
-      Context::SlotOffset(Context::OPTIMIZED_FUNCTIONS_LIST),
-      t0,
-      a1,
-      kRAHasNotBeenSaved,
-      kDontSaveFPRegs);
-
-  // Return result. The argument function info has been popped already.
-  __ Ret();
-
-  // Create a new closure through the slower runtime call.
-  __ bind(&gc);
-  __ LoadRoot(t0, Heap::kFalseValueRootIndex);
-  __ Push(cp, a3, t0);
-  __ TailCallRuntime(Runtime::kNewClosure, 3, 1);
 }
 
 
@@ -380,8 +403,7 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   Label after_sentinel;
   __ JumpIfNotSmi(a3, &after_sentinel);
   if (FLAG_debug_code) {
-    const char* message = "Expected 0 as a Smi sentinel";
-    __ Assert(eq, message, a3, Operand(zero_reg));
+    __ Assert(eq, kExpected0AsASmiSentinel, a3, Operand(zero_reg));
   }
   __ lw(a3, GlobalObjectOperand());
   __ lw(a3, FieldMemOperand(a3, GlobalObject::kNativeContextOffset));
@@ -510,291 +532,141 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
 }
 
 
-void FloatingPointHelper::LoadSmis(MacroAssembler* masm,
-                                   FloatingPointHelper::Destination destination,
-                                   Register scratch1,
-                                   Register scratch2) {
-  __ sra(scratch1, a0, kSmiTagSize);
-  __ mtc1(scratch1, f14);
-  __ cvt_d_w(f14, f14);
-  __ sra(scratch1, a1, kSmiTagSize);
-  __ mtc1(scratch1, f12);
-  __ cvt_d_w(f12, f12);
-  if (destination == kCoreRegisters) {
-    __ Move(a2, a3, f14);
-    __ Move(a0, a1, f12);
+void DoubleToIStub::Generate(MacroAssembler* masm) {
+  Label out_of_range, only_low, negate, done;
+  Register input_reg = source();
+  Register result_reg = destination();
+
+  int double_offset = offset();
+  // Account for saved regs if input is sp.
+  if (input_reg.is(sp)) double_offset += 3 * kPointerSize;
+
+  Register scratch =
+      GetRegisterThatIsNotOneOf(input_reg, result_reg);
+  Register scratch2 =
+      GetRegisterThatIsNotOneOf(input_reg, result_reg, scratch);
+  Register scratch3 =
+      GetRegisterThatIsNotOneOf(input_reg, result_reg, scratch, scratch2);
+  DoubleRegister double_scratch = kLithiumScratchDouble;
+
+  __ Push(scratch, scratch2, scratch3);
+
+  if (!skip_fastpath()) {
+    // Load double input.
+    __ ldc1(double_scratch, MemOperand(input_reg, double_offset));
+
+    // Clear cumulative exception flags and save the FCSR.
+    __ cfc1(scratch2, FCSR);
+    __ ctc1(zero_reg, FCSR);
+
+    // Try a conversion to a signed integer.
+    __ Trunc_w_d(double_scratch, double_scratch);
+    // Move the converted value into the result register.
+    __ mfc1(result_reg, double_scratch);
+
+    // Retrieve and restore the FCSR.
+    __ cfc1(scratch, FCSR);
+    __ ctc1(scratch2, FCSR);
+
+    // Check for overflow and NaNs.
+    __ And(
+        scratch, scratch,
+        kFCSROverflowFlagMask | kFCSRUnderflowFlagMask
+           | kFCSRInvalidOpFlagMask);
+    // If we had no exceptions we are done.
+    __ Branch(&done, eq, scratch, Operand(zero_reg));
   }
-}
 
+  // Load the double value and perform a manual truncation.
+  Register input_high = scratch2;
+  Register input_low = scratch3;
 
-void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
-                                     Destination destination,
-                                     Register object,
-                                     FPURegister dst,
-                                     Register dst1,
-                                     Register dst2,
-                                     Register heap_number_map,
-                                     Register scratch1,
-                                     Register scratch2,
-                                     Label* not_number) {
-  __ AssertRootValue(heap_number_map,
-                     Heap::kHeapNumberMapRootIndex,
-                     "HeapNumberMap register clobbered.");
+  __ lw(input_low, MemOperand(input_reg, double_offset));
+  __ lw(input_high, MemOperand(input_reg, double_offset + kIntSize));
 
-  Label is_smi, done;
+  Label normal_exponent, restore_sign;
+  // Extract the biased exponent in result.
+  __ Ext(result_reg,
+         input_high,
+         HeapNumber::kExponentShift,
+         HeapNumber::kExponentBits);
 
-  // Smi-check
-  __ UntagAndJumpIfSmi(scratch1, object, &is_smi);
-  // Heap number check
-  __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_number);
+  // Check for Infinity and NaNs, which should return 0.
+  __ Subu(scratch, result_reg, HeapNumber::kExponentMask);
+  __ Movz(result_reg, zero_reg, scratch);
+  __ Branch(&done, eq, scratch, Operand(zero_reg));
 
-  // Handle loading a double from a heap number.
-  if (destination == kFPURegisters) {
-    // Load the double from tagged HeapNumber to double register.
+  // Express exponent as delta to (number of mantissa bits + 31).
+  __ Subu(result_reg,
+          result_reg,
+          Operand(HeapNumber::kExponentBias + HeapNumber::kMantissaBits + 31));
 
-    // ARM uses a workaround here because of the unaligned HeapNumber
-    // kValueOffset. On MIPS this workaround is built into ldc1 so there's no
-    // point in generating even more instructions.
-    __ ldc1(dst, FieldMemOperand(object, HeapNumber::kValueOffset));
-  } else {
-    ASSERT(destination == kCoreRegisters);
-    // Load the double from heap number to dst1 and dst2 in double format.
-    __ lw(dst1, FieldMemOperand(object, HeapNumber::kValueOffset));
-    __ lw(dst2, FieldMemOperand(object,
-        HeapNumber::kValueOffset + kPointerSize));
-  }
+  // If the delta is strictly positive, all bits would be shifted away,
+  // which means that we can return 0.
+  __ Branch(&normal_exponent, le, result_reg, Operand(zero_reg));
+  __ mov(result_reg, zero_reg);
   __ Branch(&done);
 
-  // Handle loading a double from a smi.
-  __ bind(&is_smi);
-  // Convert smi to double using FPU instructions.
-  __ mtc1(scratch1, dst);
-  __ cvt_d_w(dst, dst);
-  if (destination == kCoreRegisters) {
-    // Load the converted smi to dst1 and dst2 in double format.
-    __ Move(dst1, dst2, dst);
-  }
-  __ bind(&done);
-}
+  __ bind(&normal_exponent);
+  const int kShiftBase = HeapNumber::kNonMantissaBitsInTopWord - 1;
+  // Calculate shift.
+  __ Addu(scratch, result_reg, Operand(kShiftBase + HeapNumber::kMantissaBits));
 
+  // Save the sign.
+  Register sign = result_reg;
+  result_reg = no_reg;
+  __ And(sign, input_high, Operand(HeapNumber::kSignMask));
 
-void FloatingPointHelper::ConvertNumberToInt32(MacroAssembler* masm,
-                                               Register object,
-                                               Register dst,
-                                               Register heap_number_map,
-                                               Register scratch1,
-                                               Register scratch2,
-                                               Register scratch3,
-                                               FPURegister double_scratch,
-                                               Label* not_number) {
-  __ AssertRootValue(heap_number_map,
-                     Heap::kHeapNumberMapRootIndex,
-                     "HeapNumberMap register clobbered.");
-  Label done;
-  Label not_in_int32_range;
+  // On ARM shifts > 31 bits are valid and will result in zero. On MIPS we need
+  // to check for this specific case.
+  Label high_shift_needed, high_shift_done;
+  __ Branch(&high_shift_needed, lt, scratch, Operand(32));
+  __ mov(input_high, zero_reg);
+  __ Branch(&high_shift_done);
+  __ bind(&high_shift_needed);
 
-  __ UntagAndJumpIfSmi(dst, object, &done);
-  __ lw(scratch1, FieldMemOperand(object, HeapNumber::kMapOffset));
-  __ Branch(not_number, ne, scratch1, Operand(heap_number_map));
-  __ ConvertToInt32(object,
-                    dst,
-                    scratch1,
-                    scratch2,
-                    double_scratch,
-                    &not_in_int32_range);
-  __ jmp(&done);
+  // Set the implicit 1 before the mantissa part in input_high.
+  __ Or(input_high,
+        input_high,
+        Operand(1 << HeapNumber::kMantissaBitsInTopWord));
+  // Shift the mantissa bits to the correct position.
+  // We don't need to clear non-mantissa bits as they will be shifted away.
+  // If they weren't, it would mean that the answer is in the 32bit range.
+  __ sllv(input_high, input_high, scratch);
 
-  __ bind(&not_in_int32_range);
-  __ lw(scratch1, FieldMemOperand(object, HeapNumber::kExponentOffset));
-  __ lw(scratch2, FieldMemOperand(object, HeapNumber::kMantissaOffset));
+  __ bind(&high_shift_done);
 
-  __ EmitOutOfInt32RangeTruncate(dst,
-                                 scratch1,
-                                 scratch2,
-                                 scratch3);
+  // Replace the shifted bits with bits from the lower mantissa word.
+  Label pos_shift, shift_done;
+  __ li(at, 32);
+  __ subu(scratch, at, scratch);
+  __ Branch(&pos_shift, ge, scratch, Operand(zero_reg));
 
-  __ bind(&done);
-}
+  // Negate scratch.
+  __ Subu(scratch, zero_reg, scratch);
+  __ sllv(input_low, input_low, scratch);
+  __ Branch(&shift_done);
 
+  __ bind(&pos_shift);
+  __ srlv(input_low, input_low, scratch);
 
-void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
-                                             Register int_scratch,
-                                             Destination destination,
-                                             FPURegister double_dst,
-                                             Register dst_mantissa,
-                                             Register dst_exponent,
-                                             Register scratch2,
-                                             FPURegister single_scratch) {
-  ASSERT(!int_scratch.is(scratch2));
-  ASSERT(!int_scratch.is(dst_mantissa));
-  ASSERT(!int_scratch.is(dst_exponent));
-
-  __ mtc1(int_scratch, single_scratch);
-  __ cvt_d_w(double_dst, single_scratch);
-  if (destination == kCoreRegisters) {
-    __ Move(dst_mantissa, dst_exponent, double_dst);
-  }
-}
-
-
-void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
-                                                  Register object,
-                                                  Destination destination,
-                                                  DoubleRegister double_dst,
-                                                  DoubleRegister double_scratch,
-                                                  Register dst_mantissa,
-                                                  Register dst_exponent,
-                                                  Register heap_number_map,
-                                                  Register scratch1,
-                                                  Register scratch2,
-                                                  FPURegister single_scratch,
-                                                  Label* not_int32) {
-  ASSERT(!scratch1.is(object) && !scratch2.is(object));
-  ASSERT(!scratch1.is(scratch2));
-  ASSERT(!heap_number_map.is(object) &&
-         !heap_number_map.is(scratch1) &&
-         !heap_number_map.is(scratch2));
-
-  Label done, obj_is_not_smi;
-
-  __ JumpIfNotSmi(object, &obj_is_not_smi);
-  __ SmiUntag(scratch1, object);
-  ConvertIntToDouble(masm, scratch1, destination, double_dst, dst_mantissa,
-                     dst_exponent, scratch2, single_scratch);
-  __ Branch(&done);
-
-  __ bind(&obj_is_not_smi);
-  __ AssertRootValue(heap_number_map,
-                     Heap::kHeapNumberMapRootIndex,
-                     "HeapNumberMap register clobbered.");
-  __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_int32);
-
-  // Load the number.
-  // Load the double value.
-  __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
-
-  Register except_flag = scratch2;
-  __ EmitFPUTruncate(kRoundToZero,
-                     scratch1,
-                     double_dst,
-                     at,
-                     double_scratch,
-                     except_flag,
-                     kCheckForInexactConversion);
-
-  // Jump to not_int32 if the operation did not succeed.
-  __ Branch(not_int32, ne, except_flag, Operand(zero_reg));
-  if (destination == kCoreRegisters) {
-    __ Move(dst_mantissa, dst_exponent, double_dst);
-  }
-  __ bind(&done);
-}
-
-
-void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
-                                            Register object,
-                                            Register dst,
-                                            Register heap_number_map,
-                                            Register scratch1,
-                                            Register scratch2,
-                                            Register scratch3,
-                                            DoubleRegister double_scratch0,
-                                            DoubleRegister double_scratch1,
-                                            Label* not_int32) {
-  ASSERT(!dst.is(object));
-  ASSERT(!scratch1.is(object) && !scratch2.is(object) && !scratch3.is(object));
-  ASSERT(!scratch1.is(scratch2) &&
-         !scratch1.is(scratch3) &&
-         !scratch2.is(scratch3));
-
-  Label done, maybe_undefined;
-
-  __ UntagAndJumpIfSmi(dst, object, &done);
-
-  __ AssertRootValue(heap_number_map,
-                     Heap::kHeapNumberMapRootIndex,
-                     "HeapNumberMap register clobbered.");
-
-  __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, &maybe_undefined);
-
-  // Object is a heap number.
-  // Convert the floating point value to a 32-bit integer.
-  // Load the double value.
-  __ ldc1(double_scratch0, FieldMemOperand(object, HeapNumber::kValueOffset));
-
-  Register except_flag = scratch2;
-  __ EmitFPUTruncate(kRoundToZero,
-                     dst,
-                     double_scratch0,
-                     scratch1,
-                     double_scratch1,
-                     except_flag,
-                     kCheckForInexactConversion);
-
-  // Jump to not_int32 if the operation did not succeed.
-  __ Branch(not_int32, ne, except_flag, Operand(zero_reg));
-  __ Branch(&done);
-
-  __ bind(&maybe_undefined);
-  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ Branch(not_int32, ne, object, Operand(at));
-  // |undefined| is truncated to 0.
-  __ li(dst, Operand(Smi::FromInt(0)));
-  // Fall through.
+  __ bind(&shift_done);
+  __ Or(input_high, input_high, Operand(input_low));
+  // Restore sign if necessary.
+  __ mov(scratch, sign);
+  result_reg = sign;
+  sign = no_reg;
+  __ Subu(result_reg, zero_reg, input_high);
+  __ Movz(result_reg, input_high, scratch);
 
   __ bind(&done);
+
+  __ Pop(scratch, scratch2, scratch3);
+  __ Ret();
 }
 
 
-void FloatingPointHelper::CallCCodeForDoubleOperation(
-    MacroAssembler* masm,
-    Token::Value op,
-    Register heap_number_result,
-    Register scratch) {
-  // Using core registers:
-  // a0: Left value (least significant part of mantissa).
-  // a1: Left value (sign, exponent, top of mantissa).
-  // a2: Right value (least significant part of mantissa).
-  // a3: Right value (sign, exponent, top of mantissa).
-
-  // Assert that heap_number_result is saved.
-  // We currently always use s0 to pass it.
-  ASSERT(heap_number_result.is(s0));
-
-  // Push the current return address before the C call.
-  __ push(ra);
-  __ PrepareCallCFunction(4, scratch);  // Two doubles are 4 arguments.
-  if (!IsMipsSoftFloatABI) {
-    // We are not using MIPS FPU instructions, and parameters for the runtime
-    // function call are prepaired in a0-a3 registers, but function we are
-    // calling is compiled with hard-float flag and expecting hard float ABI
-    // (parameters in f12/f14 registers). We need to copy parameters from
-    // a0-a3 registers to f12/f14 register pairs.
-    __ Move(f12, a0, a1);
-    __ Move(f14, a2, a3);
-  }
-  {
-    AllowExternalCallThatCantCauseGC scope(masm);
-    __ CallCFunction(
-        ExternalReference::double_fp_operation(op, masm->isolate()), 0, 2);
-  }
-  // Store answer in the overwritable heap number.
-  if (!IsMipsSoftFloatABI) {
-    // Double returned in register f0.
-    __ sdc1(f0, FieldMemOperand(heap_number_result, HeapNumber::kValueOffset));
-  } else {
-    // Double returned in registers v0 and v1.
-    __ sw(v1, FieldMemOperand(heap_number_result, HeapNumber::kExponentOffset));
-    __ sw(v0, FieldMemOperand(heap_number_result, HeapNumber::kMantissaOffset));
-  }
-  // Place heap_number_result in v0 and return to the pushed return address.
-  __ pop(ra);
-  __ Ret(USE_DELAY_SLOT);
-  __ mov(v0, heap_number_result);
-}
-
-
-bool WriteInt32ToHeapNumberStub::IsPregenerated() {
+bool WriteInt32ToHeapNumberStub::IsPregenerated(Isolate* isolate) {
   // These variants are compiled ahead of time.  See next method.
   if (the_int_.is(a1) &&
       the_heap_number_.is(v0) &&
@@ -855,9 +727,9 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   __ sw(scratch_, FieldMemOperand(the_heap_number_,
                                    HeapNumber::kExponentOffset));
   __ sll(scratch_, the_int_, 32 - shift_distance);
+  __ Ret(USE_DELAY_SLOT);
   __ sw(scratch_, FieldMemOperand(the_heap_number_,
                                    HeapNumber::kMantissaOffset));
-  __ Ret();
 
   __ bind(&max_negative_int);
   // The max negative int32 is stored as a positive number in the mantissa of
@@ -869,9 +741,9 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   __ sw(scratch_,
         FieldMemOperand(the_heap_number_, HeapNumber::kExponentOffset));
   __ mov(scratch_, zero_reg);
+  __ Ret(USE_DELAY_SLOT);
   __ sw(scratch_,
         FieldMemOperand(the_heap_number_, HeapNumber::kMantissaOffset));
-  __ Ret();
 }
 
 
@@ -889,7 +761,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
 
   __ li(exp_mask_reg, Operand(HeapNumber::kExponentMask));
 
-  // Test for NaN. Sadly, we can't just compare to factory->nan_value(),
+  // Test for NaN. Sadly, we can't just compare to Factory::nan_value(),
   // so we do the second best thing - test it ourselves.
   // They are both equal and they are not both Smis so both of them are not
   // Smis. If it's not a heap number, then return equal.
@@ -909,6 +781,8 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
         __ Branch(&return_equal, ne, t4, Operand(ODDBALL_TYPE));
         __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
         __ Branch(&return_equal, ne, a0, Operand(t2));
+        ASSERT(is_int16(GREATER) && is_int16(LESS));
+        __ Ret(USE_DELAY_SLOT);
         if (cc == le) {
           // undefined <= undefined should fail.
           __ li(v0, Operand(GREATER));
@@ -916,13 +790,13 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
           // undefined >= undefined should fail.
           __ li(v0, Operand(LESS));
         }
-        __ Ret();
       }
     }
   }
 
   __ bind(&return_equal);
-
+  ASSERT(is_int16(GREATER) && is_int16(LESS));
+  __ Ret(USE_DELAY_SLOT);
   if (cc == less) {
     __ li(v0, Operand(GREATER));  // Things aren't less than themselves.
   } else if (cc == greater) {
@@ -930,7 +804,6 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   } else {
     __ mov(v0, zero_reg);         // Things are <=, >=, ==, === themselves.
   }
-  __ Ret();
 
   // For less and greater we don't have to check for NaN since the result of
   // x < x is false regardless.  For the others here is some code to check
@@ -961,13 +834,14 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
     if (cc != eq) {
       // All-zero means Infinity means equal.
       __ Ret(eq, v0, Operand(zero_reg));
+      ASSERT(is_int16(GREATER) && is_int16(LESS));
+      __ Ret(USE_DELAY_SLOT);
       if (cc == le) {
         __ li(v0, Operand(GREATER));  // NaN <= NaN should fail.
       } else {
         __ li(v0, Operand(LESS));     // NaN >= NaN should fail.
       }
     }
-    __ Ret();
   }
   // No fall through here.
 
@@ -1065,12 +939,10 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
 
     // Now that we have the types we might as well check for
     // internalized-internalized.
-    // Ensure that no non-strings have the internalized bit set.
-    STATIC_ASSERT(LAST_TYPE < kNotStringTag + kIsInternalizedMask);
-    STATIC_ASSERT(kInternalizedTag != 0);
-    __ And(t2, a2, Operand(a3));
-    __ And(t0, t2, Operand(kIsInternalizedMask));
-    __ Branch(&return_not_equal, ne, t0, Operand(zero_reg));
+    STATIC_ASSERT(kInternalizedTag == 0 && kStringTag == 0);
+    __ Or(a2, a2, Operand(a3));
+    __ And(at, a2, Operand(kIsNotStringMask | kIsNotInternalizedMask));
+    __ Branch(&return_not_equal, eq, at, Operand(zero_reg));
 }
 
 
@@ -1104,18 +976,17 @@ static void EmitCheckForInternalizedStringsOrObjects(MacroAssembler* masm,
   ASSERT((lhs.is(a0) && rhs.is(a1)) ||
          (lhs.is(a1) && rhs.is(a0)));
 
-  // a2 is object type of lhs.
-  // Ensure that no non-strings have the internalized bit set.
+  // a2 is object type of rhs.
   Label object_test;
-  STATIC_ASSERT(kInternalizedTag != 0);
+  STATIC_ASSERT(kInternalizedTag == 0 && kStringTag == 0);
   __ And(at, a2, Operand(kIsNotStringMask));
   __ Branch(&object_test, ne, at, Operand(zero_reg));
-  __ And(at, a2, Operand(kIsInternalizedMask));
-  __ Branch(possible_strings, eq, at, Operand(zero_reg));
+  __ And(at, a2, Operand(kIsNotInternalizedMask));
+  __ Branch(possible_strings, ne, at, Operand(zero_reg));
   __ GetObjectType(rhs, a3, a3);
   __ Branch(not_both_strings, ge, a3, Operand(FIRST_NONSTRING_TYPE));
-  __ And(at, a3, Operand(kIsInternalizedMask));
-  __ Branch(possible_strings, eq, at, Operand(zero_reg));
+  __ And(at, a3, Operand(kIsNotInternalizedMask));
+  __ Branch(possible_strings, ne, at, Operand(zero_reg));
 
   // Both are internalized strings. We already checked they weren't the same
   // pointer so they are not equal.
@@ -1137,109 +1008,6 @@ static void EmitCheckForInternalizedStringsOrObjects(MacroAssembler* masm,
   __ And(a0, a0, Operand(1 << Map::kIsUndetectable));
   __ Ret(USE_DELAY_SLOT);
   __ xori(v0, a0, 1 << Map::kIsUndetectable);
-}
-
-
-void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
-                                                         Register object,
-                                                         Register result,
-                                                         Register scratch1,
-                                                         Register scratch2,
-                                                         Register scratch3,
-                                                         bool object_is_smi,
-                                                         Label* not_found) {
-  // Use of registers. Register result is used as a temporary.
-  Register number_string_cache = result;
-  Register mask = scratch3;
-
-  // Load the number string cache.
-  __ LoadRoot(number_string_cache, Heap::kNumberStringCacheRootIndex);
-
-  // Make the hash mask from the length of the number string cache. It
-  // contains two elements (number and string) for each cache entry.
-  __ lw(mask, FieldMemOperand(number_string_cache, FixedArray::kLengthOffset));
-  // Divide length by two (length is a smi).
-  __ sra(mask, mask, kSmiTagSize + 1);
-  __ Addu(mask, mask, -1);  // Make mask.
-
-  // Calculate the entry in the number string cache. The hash value in the
-  // number string cache for smis is just the smi value, and the hash for
-  // doubles is the xor of the upper and lower words. See
-  // Heap::GetNumberStringCache.
-  Isolate* isolate = masm->isolate();
-  Label is_smi;
-  Label load_result_from_cache;
-  if (!object_is_smi) {
-    __ JumpIfSmi(object, &is_smi);
-    __ CheckMap(object,
-                scratch1,
-                Heap::kHeapNumberMapRootIndex,
-                not_found,
-                DONT_DO_SMI_CHECK);
-
-    STATIC_ASSERT(8 == kDoubleSize);
-    __ Addu(scratch1,
-            object,
-            Operand(HeapNumber::kValueOffset - kHeapObjectTag));
-    __ lw(scratch2, MemOperand(scratch1, kPointerSize));
-    __ lw(scratch1, MemOperand(scratch1, 0));
-    __ Xor(scratch1, scratch1, Operand(scratch2));
-    __ And(scratch1, scratch1, Operand(mask));
-
-    // Calculate address of entry in string cache: each entry consists
-    // of two pointer sized fields.
-    __ sll(scratch1, scratch1, kPointerSizeLog2 + 1);
-    __ Addu(scratch1, number_string_cache, scratch1);
-
-    Register probe = mask;
-    __ lw(probe,
-           FieldMemOperand(scratch1, FixedArray::kHeaderSize));
-    __ JumpIfSmi(probe, not_found);
-    __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset));
-    __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset));
-    __ BranchF(&load_result_from_cache, NULL, eq, f12, f14);
-    __ Branch(not_found);
-  }
-
-  __ bind(&is_smi);
-  Register scratch = scratch1;
-  __ sra(scratch, object, 1);   // Shift away the tag.
-  __ And(scratch, mask, Operand(scratch));
-
-  // Calculate address of entry in string cache: each entry consists
-  // of two pointer sized fields.
-  __ sll(scratch, scratch, kPointerSizeLog2 + 1);
-  __ Addu(scratch, number_string_cache, scratch);
-
-  // Check if the entry is the smi we are looking for.
-  Register probe = mask;
-  __ lw(probe, FieldMemOperand(scratch, FixedArray::kHeaderSize));
-  __ Branch(not_found, ne, object, Operand(probe));
-
-  // Get the result from the cache.
-  __ bind(&load_result_from_cache);
-  __ lw(result,
-         FieldMemOperand(scratch, FixedArray::kHeaderSize + kPointerSize));
-
-  __ IncrementCounter(isolate->counters()->number_to_string_native(),
-                      1,
-                      scratch1,
-                      scratch2);
-}
-
-
-void NumberToStringStub::Generate(MacroAssembler* masm) {
-  Label runtime;
-
-  __ lw(a1, MemOperand(sp, 0));
-
-  // Generate code to lookup number in the number string cache.
-  GenerateLookupNumberStringCache(masm, a1, v0, a2, a3, t0, false, &runtime);
-  __ DropAndRet(1);
-
-  __ bind(&runtime);
-  // Handle number to string in the runtime system if not found in the cache.
-  __ TailCallRuntime(Runtime::kNumberToString, 1, 1);
 }
 
 
@@ -1342,12 +1110,14 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
   __ bind(&nan);
   // NaN comparisons always fail.
   // Load whatever we need in v0 to make the comparison fail.
+  ASSERT(is_int16(GREATER) && is_int16(LESS));
+  __ Ret(USE_DELAY_SLOT);
   if (cc == lt || cc == le) {
     __ li(v0, Operand(GREATER));
   } else {
     __ li(v0, Operand(LESS));
   }
-  __ Ret();
+
 
   __ bind(&not_smis);
   // At this point we know we are dealing with two different objects,
@@ -1437,116 +1207,6 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
 }
 
 
-// The stub expects its argument in the tos_ register and returns its result in
-// it, too: zero for false, and a non-zero value for true.
-void ToBooleanStub::Generate(MacroAssembler* masm) {
-  Label patch;
-  const Register map = t5.is(tos_) ? t3 : t5;
-
-  // undefined -> false.
-  CheckOddball(masm, UNDEFINED, Heap::kUndefinedValueRootIndex, false);
-
-  // Boolean -> its value.
-  CheckOddball(masm, BOOLEAN, Heap::kFalseValueRootIndex, false);
-  CheckOddball(masm, BOOLEAN, Heap::kTrueValueRootIndex, true);
-
-  // 'null' -> false.
-  CheckOddball(masm, NULL_TYPE, Heap::kNullValueRootIndex, false);
-
-  if (types_.Contains(SMI)) {
-    // Smis: 0 -> false, all other -> true
-    __ And(at, tos_, kSmiTagMask);
-    // tos_ contains the correct return value already
-    __ Ret(eq, at, Operand(zero_reg));
-  } else if (types_.NeedsMap()) {
-    // If we need a map later and have a Smi -> patch.
-    __ JumpIfSmi(tos_, &patch);
-  }
-
-  if (types_.NeedsMap()) {
-    __ lw(map, FieldMemOperand(tos_, HeapObject::kMapOffset));
-
-    if (types_.CanBeUndetectable()) {
-      __ lbu(at, FieldMemOperand(map, Map::kBitFieldOffset));
-      __ And(at, at, Operand(1 << Map::kIsUndetectable));
-      // Undetectable -> false.
-      __ Movn(tos_, zero_reg, at);
-      __ Ret(ne, at, Operand(zero_reg));
-    }
-  }
-
-  if (types_.Contains(SPEC_OBJECT)) {
-    // Spec object -> true.
-    __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-    // tos_ contains the correct non-zero return value already.
-    __ Ret(ge, at, Operand(FIRST_SPEC_OBJECT_TYPE));
-  }
-
-  if (types_.Contains(STRING)) {
-    // String value -> false iff empty.
-    __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-    Label skip;
-    __ Branch(&skip, ge, at, Operand(FIRST_NONSTRING_TYPE));
-    __ Ret(USE_DELAY_SLOT);  // the string length is OK as the return value
-    __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
-    __ bind(&skip);
-  }
-
-  if (types_.Contains(HEAP_NUMBER)) {
-    // Heap number -> false iff +0, -0, or NaN.
-    Label not_heap_number;
-    __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
-    __ Branch(&not_heap_number, ne, map, Operand(at));
-    Label zero_or_nan, number;
-    __ ldc1(f2, FieldMemOperand(tos_, HeapNumber::kValueOffset));
-    __ BranchF(&number, &zero_or_nan, ne, f2, kDoubleRegZero);
-    // "tos_" is a register, and contains a non zero value by default.
-    // Hence we only need to overwrite "tos_" with zero to return false for
-    // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
-    __ bind(&zero_or_nan);
-    __ mov(tos_, zero_reg);
-    __ bind(&number);
-    __ Ret();
-    __ bind(&not_heap_number);
-  }
-
-  __ bind(&patch);
-  GenerateTypeTransition(masm);
-}
-
-
-void ToBooleanStub::CheckOddball(MacroAssembler* masm,
-                                 Type type,
-                                 Heap::RootListIndex value,
-                                 bool result) {
-  if (types_.Contains(type)) {
-    // If we see an expected oddball, return its ToBoolean value tos_.
-    __ LoadRoot(at, value);
-    __ Subu(at, at, tos_);  // This is a check for equality for the movz below.
-    // The value of a root is never NULL, so we can avoid loading a non-null
-    // value into tos_ when we want to return 'true'.
-    if (!result) {
-      __ Movz(tos_, zero_reg, at);
-    }
-    __ Ret(eq, at, Operand(zero_reg));
-  }
-}
-
-
-void ToBooleanStub::GenerateTypeTransition(MacroAssembler* masm) {
-  __ Move(a3, tos_);
-  __ li(a2, Operand(Smi::FromInt(tos_.code())));
-  __ li(a1, Operand(Smi::FromInt(types_.ToByte())));
-  __ Push(a3, a2, a1);
-  // Patch the caller to an appropriate specialized stub and return the
-  // operation result to the caller of the stub.
-  __ TailCallExternalReference(
-      ExternalReference(IC_Utility(IC::kToBoolean_Patch), masm->isolate()),
-      3,
-      1);
-}
-
-
 void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
   // We don't allow a GC during a store buffer overflow so there is no need to
   // store the registers in any particular way, but we do have to store and
@@ -1561,7 +1221,7 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
 
   AllowExternalCallThatCantCauseGC scope(masm);
   __ PrepareCallCFunction(argument_count, fp_argument_count, scratch);
-  __ li(a0, Operand(ExternalReference::isolate_address()));
+  __ li(a0, Operand(ExternalReference::isolate_address(masm->isolate())));
   __ CallCFunction(
       ExternalReference::store_buffer_overflow_function(masm->isolate()),
       argument_count);
@@ -1574,1256 +1234,16 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
 }
 
 
-void UnaryOpStub::PrintName(StringStream* stream) {
-  const char* op_name = Token::Name(op_);
-  const char* overwrite_name = NULL;  // Make g++ happy.
-  switch (mode_) {
-    case UNARY_NO_OVERWRITE: overwrite_name = "Alloc"; break;
-    case UNARY_OVERWRITE: overwrite_name = "Overwrite"; break;
-  }
-  stream->Add("UnaryOpStub_%s_%s_%s",
-              op_name,
-              overwrite_name,
-              UnaryOpIC::GetName(operand_type_));
+void BinaryOpStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { a1, a0 };
+  descriptor->register_param_count_ = 2;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ = FUNCTION_ADDR(BinaryOpIC_Miss);
+  descriptor->SetMissHandler(
+      ExternalReference(IC_Utility(IC::kBinaryOpIC_Miss), isolate));
 }
-
-
-// TODO(svenpanne): Use virtual functions instead of switch.
-void UnaryOpStub::Generate(MacroAssembler* masm) {
-  switch (operand_type_) {
-    case UnaryOpIC::UNINITIALIZED:
-      GenerateTypeTransition(masm);
-      break;
-    case UnaryOpIC::SMI:
-      GenerateSmiStub(masm);
-      break;
-    case UnaryOpIC::NUMBER:
-      GenerateNumberStub(masm);
-      break;
-    case UnaryOpIC::GENERIC:
-      GenerateGenericStub(masm);
-      break;
-  }
-}
-
-
-void UnaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
-  // Argument is in a0 and v0 at this point, so we can overwrite a0.
-  __ li(a2, Operand(Smi::FromInt(op_)));
-  __ li(a1, Operand(Smi::FromInt(mode_)));
-  __ li(a0, Operand(Smi::FromInt(operand_type_)));
-  __ Push(v0, a2, a1, a0);
-
-  __ TailCallExternalReference(
-      ExternalReference(IC_Utility(IC::kUnaryOp_Patch), masm->isolate()), 4, 1);
-}
-
-
-// TODO(svenpanne): Use virtual functions instead of switch.
-void UnaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
-  switch (op_) {
-    case Token::SUB:
-      GenerateSmiStubSub(masm);
-      break;
-    case Token::BIT_NOT:
-      GenerateSmiStubBitNot(masm);
-      break;
-    default:
-      UNREACHABLE();
-  }
-}
-
-
-void UnaryOpStub::GenerateSmiStubSub(MacroAssembler* masm) {
-  Label non_smi, slow;
-  GenerateSmiCodeSub(masm, &non_smi, &slow);
-  __ bind(&non_smi);
-  __ bind(&slow);
-  GenerateTypeTransition(masm);
-}
-
-
-void UnaryOpStub::GenerateSmiStubBitNot(MacroAssembler* masm) {
-  Label non_smi;
-  GenerateSmiCodeBitNot(masm, &non_smi);
-  __ bind(&non_smi);
-  GenerateTypeTransition(masm);
-}
-
-
-void UnaryOpStub::GenerateSmiCodeSub(MacroAssembler* masm,
-                                     Label* non_smi,
-                                     Label* slow) {
-  __ JumpIfNotSmi(a0, non_smi);
-
-  // The result of negating zero or the smallest negative smi is not a smi.
-  __ And(t0, a0, ~0x80000000);
-  __ Branch(slow, eq, t0, Operand(zero_reg));
-
-  // Return '0 - value'.
-  __ Ret(USE_DELAY_SLOT);
-  __ subu(v0, zero_reg, a0);
-}
-
-
-void UnaryOpStub::GenerateSmiCodeBitNot(MacroAssembler* masm,
-                                        Label* non_smi) {
-  __ JumpIfNotSmi(a0, non_smi);
-
-  // Flip bits and revert inverted smi-tag.
-  __ Neg(v0, a0);
-  __ And(v0, v0, ~kSmiTagMask);
-  __ Ret();
-}
-
-
-// TODO(svenpanne): Use virtual functions instead of switch.
-void UnaryOpStub::GenerateNumberStub(MacroAssembler* masm) {
-  switch (op_) {
-    case Token::SUB:
-      GenerateNumberStubSub(masm);
-      break;
-    case Token::BIT_NOT:
-      GenerateNumberStubBitNot(masm);
-      break;
-    default:
-      UNREACHABLE();
-  }
-}
-
-
-void UnaryOpStub::GenerateNumberStubSub(MacroAssembler* masm) {
-  Label non_smi, slow, call_builtin;
-  GenerateSmiCodeSub(masm, &non_smi, &call_builtin);
-  __ bind(&non_smi);
-  GenerateHeapNumberCodeSub(masm, &slow);
-  __ bind(&slow);
-  GenerateTypeTransition(masm);
-  __ bind(&call_builtin);
-  GenerateGenericCodeFallback(masm);
-}
-
-
-void UnaryOpStub::GenerateNumberStubBitNot(MacroAssembler* masm) {
-  Label non_smi, slow;
-  GenerateSmiCodeBitNot(masm, &non_smi);
-  __ bind(&non_smi);
-  GenerateHeapNumberCodeBitNot(masm, &slow);
-  __ bind(&slow);
-  GenerateTypeTransition(masm);
-}
-
-
-void UnaryOpStub::GenerateHeapNumberCodeSub(MacroAssembler* masm,
-                                            Label* slow) {
-  EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
-  // a0 is a heap number.  Get a new heap number in a1.
-  if (mode_ == UNARY_OVERWRITE) {
-    __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-    __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
-    __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-  } else {
-    Label slow_allocate_heapnumber, heapnumber_allocated;
-    __ AllocateHeapNumber(a1, a2, a3, t2, &slow_allocate_heapnumber);
-    __ jmp(&heapnumber_allocated);
-
-    __ bind(&slow_allocate_heapnumber);
-    {
-      FrameScope scope(masm, StackFrame::INTERNAL);
-      __ push(a0);
-      __ CallRuntime(Runtime::kNumberAlloc, 0);
-      __ mov(a1, v0);
-      __ pop(a0);
-    }
-
-    __ bind(&heapnumber_allocated);
-    __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
-    __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-    __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
-    __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
-    __ sw(a2, FieldMemOperand(a1, HeapNumber::kExponentOffset));
-    __ mov(v0, a1);
-  }
-  __ Ret();
-}
-
-
-void UnaryOpStub::GenerateHeapNumberCodeBitNot(
-    MacroAssembler* masm,
-    Label* slow) {
-  Label impossible;
-
-  EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
-  // Convert the heap number in a0 to an untagged integer in a1.
-  __ ConvertToInt32(a0, a1, a2, a3, f0, slow);
-
-  // Do the bitwise operation and check if the result fits in a smi.
-  Label try_float;
-  __ Neg(a1, a1);
-  __ Addu(a2, a1, Operand(0x40000000));
-  __ Branch(&try_float, lt, a2, Operand(zero_reg));
-
-  // Tag the result as a smi and we're done.
-  __ SmiTag(v0, a1);
-  __ Ret();
-
-  // Try to store the result in a heap number.
-  __ bind(&try_float);
-  if (mode_ == UNARY_NO_OVERWRITE) {
-    Label slow_allocate_heapnumber, heapnumber_allocated;
-    // Allocate a new heap number without zapping v0, which we need if it fails.
-    __ AllocateHeapNumber(a2, a3, t0, t2, &slow_allocate_heapnumber);
-    __ jmp(&heapnumber_allocated);
-
-    __ bind(&slow_allocate_heapnumber);
-    {
-      FrameScope scope(masm, StackFrame::INTERNAL);
-      __ push(v0);  // Push the heap number, not the untagged int32.
-      __ CallRuntime(Runtime::kNumberAlloc, 0);
-      __ mov(a2, v0);  // Move the new heap number into a2.
-      // Get the heap number into v0, now that the new heap number is in a2.
-      __ pop(v0);
-    }
-
-    // Convert the heap number in v0 to an untagged integer in a1.
-    // This can't go slow-case because it's the same number we already
-    // converted once again.
-    __ ConvertToInt32(v0, a1, a3, t0, f0, &impossible);
-    // Negate the result.
-    __ Xor(a1, a1, -1);
-
-    __ bind(&heapnumber_allocated);
-    __ mov(v0, a2);  // Move newly allocated heap number to v0.
-  }
-
-  // Convert the int32 in a1 to the heap number in v0. a2 is corrupted.
-  __ mtc1(a1, f0);
-  __ cvt_d_w(f0, f0);
-  __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
-  __ Ret();
-
-  __ bind(&impossible);
-  if (FLAG_debug_code) {
-    __ stop("Incorrect assumption in bit-not stub");
-  }
-}
-
-
-// TODO(svenpanne): Use virtual functions instead of switch.
-void UnaryOpStub::GenerateGenericStub(MacroAssembler* masm) {
-  switch (op_) {
-    case Token::SUB:
-      GenerateGenericStubSub(masm);
-      break;
-    case Token::BIT_NOT:
-      GenerateGenericStubBitNot(masm);
-      break;
-    default:
-      UNREACHABLE();
-  }
-}
-
-
-void UnaryOpStub::GenerateGenericStubSub(MacroAssembler* masm) {
-  Label non_smi, slow;
-  GenerateSmiCodeSub(masm, &non_smi, &slow);
-  __ bind(&non_smi);
-  GenerateHeapNumberCodeSub(masm, &slow);
-  __ bind(&slow);
-  GenerateGenericCodeFallback(masm);
-}
-
-
-void UnaryOpStub::GenerateGenericStubBitNot(MacroAssembler* masm) {
-  Label non_smi, slow;
-  GenerateSmiCodeBitNot(masm, &non_smi);
-  __ bind(&non_smi);
-  GenerateHeapNumberCodeBitNot(masm, &slow);
-  __ bind(&slow);
-  GenerateGenericCodeFallback(masm);
-}
-
-
-void UnaryOpStub::GenerateGenericCodeFallback(
-    MacroAssembler* masm) {
-  // Handle the slow case by jumping to the JavaScript builtin.
-  __ push(a0);
-  switch (op_) {
-    case Token::SUB:
-      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_FUNCTION);
-      break;
-    case Token::BIT_NOT:
-      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_FUNCTION);
-      break;
-    default:
-      UNREACHABLE();
-  }
-}
-
-
-void BinaryOpStub::Initialize() {
-  platform_specific_bit_ = true;  // FPU is a base requirement for V8.
-}
-
-
-void BinaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
-  Label get_result;
-
-  __ Push(a1, a0);
-
-  __ li(a2, Operand(Smi::FromInt(MinorKey())));
-  __ push(a2);
-
-  __ TailCallExternalReference(
-      ExternalReference(IC_Utility(IC::kBinaryOp_Patch),
-                        masm->isolate()),
-      3,
-      1);
-}
-
-
-void BinaryOpStub::GenerateTypeTransitionWithSavedArgs(
-    MacroAssembler* masm) {
-  UNIMPLEMENTED();
-}
-
-
-void BinaryOpStub_GenerateSmiSmiOperation(MacroAssembler* masm,
-                                          Token::Value op) {
-  Register left = a1;
-  Register right = a0;
-
-  Register scratch1 = t0;
-  Register scratch2 = t1;
-
-  ASSERT(right.is(a0));
-  STATIC_ASSERT(kSmiTag == 0);
-
-  Label not_smi_result;
-  switch (op) {
-    case Token::ADD:
-      __ AdduAndCheckForOverflow(v0, left, right, scratch1);
-      __ RetOnNoOverflow(scratch1);
-      // No need to revert anything - right and left are intact.
-      break;
-    case Token::SUB:
-      __ SubuAndCheckForOverflow(v0, left, right, scratch1);
-      __ RetOnNoOverflow(scratch1);
-      // No need to revert anything - right and left are intact.
-      break;
-    case Token::MUL: {
-      // Remove tag from one of the operands. This way the multiplication result
-      // will be a smi if it fits the smi range.
-      __ SmiUntag(scratch1, right);
-      // Do multiplication.
-      // lo = lower 32 bits of scratch1 * left.
-      // hi = higher 32 bits of scratch1 * left.
-      __ Mult(left, scratch1);
-      // Check for overflowing the smi range - no overflow if higher 33 bits of
-      // the result are identical.
-      __ mflo(scratch1);
-      __ mfhi(scratch2);
-      __ sra(scratch1, scratch1, 31);
-      __ Branch(&not_smi_result, ne, scratch1, Operand(scratch2));
-      // Go slow on zero result to handle -0.
-      __ mflo(v0);
-      __ Ret(ne, v0, Operand(zero_reg));
-      // We need -0 if we were multiplying a negative number with 0 to get 0.
-      // We know one of them was zero.
-      __ Addu(scratch2, right, left);
-      Label skip;
-      // ARM uses the 'pl' condition, which is 'ge'.
-      // Negating it results in 'lt'.
-      __ Branch(&skip, lt, scratch2, Operand(zero_reg));
-      ASSERT(Smi::FromInt(0) == 0);
-      __ Ret(USE_DELAY_SLOT);
-      __ mov(v0, zero_reg);  // Return smi 0 if the non-zero one was positive.
-      __ bind(&skip);
-      // We fall through here if we multiplied a negative number with 0, because
-      // that would mean we should produce -0.
-      }
-      break;
-    case Token::DIV: {
-      Label done;
-      __ SmiUntag(scratch2, right);
-      __ SmiUntag(scratch1, left);
-      __ Div(scratch1, scratch2);
-      // A minor optimization: div may be calculated asynchronously, so we check
-      // for division by zero before getting the result.
-      __ Branch(&not_smi_result, eq, scratch2, Operand(zero_reg));
-      // If the result is 0, we need to make sure the dividsor (right) is
-      // positive, otherwise it is a -0 case.
-      // Quotient is in 'lo', remainder is in 'hi'.
-      // Check for no remainder first.
-      __ mfhi(scratch1);
-      __ Branch(&not_smi_result, ne, scratch1, Operand(zero_reg));
-      __ mflo(scratch1);
-      __ Branch(&done, ne, scratch1, Operand(zero_reg));
-      __ Branch(&not_smi_result, lt, scratch2, Operand(zero_reg));
-      __ bind(&done);
-      // Check that the signed result fits in a Smi.
-      __ Addu(scratch2, scratch1, Operand(0x40000000));
-      __ Branch(&not_smi_result, lt, scratch2, Operand(zero_reg));
-      __ SmiTag(v0, scratch1);
-      __ Ret();
-      }
-      break;
-    case Token::MOD: {
-      Label done;
-      __ SmiUntag(scratch2, right);
-      __ SmiUntag(scratch1, left);
-      __ Div(scratch1, scratch2);
-      // A minor optimization: div may be calculated asynchronously, so we check
-      // for division by 0 before calling mfhi.
-      // Check for zero on the right hand side.
-      __ Branch(&not_smi_result, eq, scratch2, Operand(zero_reg));
-      // If the result is 0, we need to make sure the dividend (left) is
-      // positive (or 0), otherwise it is a -0 case.
-      // Remainder is in 'hi'.
-      __ mfhi(scratch2);
-      __ Branch(&done, ne, scratch2, Operand(zero_reg));
-      __ Branch(&not_smi_result, lt, scratch1, Operand(zero_reg));
-      __ bind(&done);
-      // Check that the signed result fits in a Smi.
-      __ Addu(scratch1, scratch2, Operand(0x40000000));
-      __ Branch(&not_smi_result, lt, scratch1, Operand(zero_reg));
-      __ SmiTag(v0, scratch2);
-      __ Ret();
-      }
-      break;
-    case Token::BIT_OR:
-      __ Ret(USE_DELAY_SLOT);
-      __ or_(v0, left, right);
-      break;
-    case Token::BIT_AND:
-      __ Ret(USE_DELAY_SLOT);
-      __ and_(v0, left, right);
-      break;
-    case Token::BIT_XOR:
-      __ Ret(USE_DELAY_SLOT);
-      __ xor_(v0, left, right);
-      break;
-    case Token::SAR:
-      // Remove tags from right operand.
-      __ GetLeastBitsFromSmi(scratch1, right, 5);
-      __ srav(scratch1, left, scratch1);
-      // Smi tag result.
-      __ And(v0, scratch1, ~kSmiTagMask);
-      __ Ret();
-      break;
-    case Token::SHR:
-      // Remove tags from operands. We can't do this on a 31 bit number
-      // because then the 0s get shifted into bit 30 instead of bit 31.
-      __ SmiUntag(scratch1, left);
-      __ GetLeastBitsFromSmi(scratch2, right, 5);
-      __ srlv(v0, scratch1, scratch2);
-      // Unsigned shift is not allowed to produce a negative number, so
-      // check the sign bit and the sign bit after Smi tagging.
-      __ And(scratch1, v0, Operand(0xc0000000));
-      __ Branch(&not_smi_result, ne, scratch1, Operand(zero_reg));
-      // Smi tag result.
-      __ SmiTag(v0);
-      __ Ret();
-      break;
-    case Token::SHL:
-      // Remove tags from operands.
-      __ SmiUntag(scratch1, left);
-      __ GetLeastBitsFromSmi(scratch2, right, 5);
-      __ sllv(scratch1, scratch1, scratch2);
-      // Check that the signed result fits in a Smi.
-      __ Addu(scratch2, scratch1, Operand(0x40000000));
-      __ Branch(&not_smi_result, lt, scratch2, Operand(zero_reg));
-      __ SmiTag(v0, scratch1);
-      __ Ret();
-      break;
-    default:
-      UNREACHABLE();
-  }
-  __ bind(&not_smi_result);
-}
-
-
-void BinaryOpStub_GenerateHeapResultAllocation(MacroAssembler* masm,
-                                               Register result,
-                                               Register heap_number_map,
-                                               Register scratch1,
-                                               Register scratch2,
-                                               Label* gc_required,
-                                               OverwriteMode mode);
-
-
-void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
-                                      BinaryOpIC::TypeInfo left_type,
-                                      BinaryOpIC::TypeInfo right_type,
-                                      bool smi_operands,
-                                      Label* not_numbers,
-                                      Label* gc_required,
-                                      Label* miss,
-                                      Token::Value op,
-                                      OverwriteMode mode) {
-  Register left = a1;
-  Register right = a0;
-  Register scratch1 = t3;
-  Register scratch2 = t5;
-  Register scratch3 = t0;
-
-  ASSERT(smi_operands || (not_numbers != NULL));
-  if (smi_operands) {
-    __ AssertSmi(left);
-    __ AssertSmi(right);
-  }
-  if (left_type == BinaryOpIC::SMI) {
-    __ JumpIfNotSmi(left, miss);
-  }
-  if (right_type == BinaryOpIC::SMI) {
-    __ JumpIfNotSmi(right, miss);
-  }
-
-  Register heap_number_map = t2;
-  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-
-  switch (op) {
-    case Token::ADD:
-    case Token::SUB:
-    case Token::MUL:
-    case Token::DIV:
-    case Token::MOD: {
-      // Load left and right operands into f12 and f14 or a0/a1 and a2/a3
-      // depending on operation.
-      FloatingPointHelper::Destination destination =
-          op != Token::MOD ?
-              FloatingPointHelper::kFPURegisters :
-              FloatingPointHelper::kCoreRegisters;
-
-      // Allocate new heap number for result.
-      Register result = s0;
-      BinaryOpStub_GenerateHeapResultAllocation(
-          masm, result, heap_number_map, scratch1, scratch2, gc_required, mode);
-
-      // Load the operands.
-      if (smi_operands) {
-        FloatingPointHelper::LoadSmis(masm, destination, scratch1, scratch2);
-      } else {
-        // Load right operand to f14 or a2/a3.
-        if (right_type == BinaryOpIC::INT32) {
-          FloatingPointHelper::LoadNumberAsInt32Double(
-              masm, right, destination, f14, f16, a2, a3, heap_number_map,
-              scratch1, scratch2, f2, miss);
-        } else {
-          Label* fail = (right_type == BinaryOpIC::NUMBER) ? miss : not_numbers;
-          FloatingPointHelper::LoadNumber(
-              masm, destination, right, f14, a2, a3, heap_number_map,
-              scratch1, scratch2, fail);
-        }
-        // Load left operand to f12 or a0/a1. This keeps a0/a1 intact if it
-        // jumps to |miss|.
-        if (left_type == BinaryOpIC::INT32) {
-          FloatingPointHelper::LoadNumberAsInt32Double(
-              masm, left, destination, f12, f16, a0, a1, heap_number_map,
-              scratch1, scratch2, f2, miss);
-        } else {
-          Label* fail = (left_type == BinaryOpIC::NUMBER) ? miss : not_numbers;
-          FloatingPointHelper::LoadNumber(
-              masm, destination, left, f12, a0, a1, heap_number_map,
-              scratch1, scratch2, fail);
-        }
-      }
-
-      // Calculate the result.
-      if (destination == FloatingPointHelper::kFPURegisters) {
-        // Using FPU registers:
-        // f12: Left value.
-        // f14: Right value.
-        switch (op) {
-        case Token::ADD:
-          __ add_d(f10, f12, f14);
-          break;
-        case Token::SUB:
-          __ sub_d(f10, f12, f14);
-          break;
-        case Token::MUL:
-          __ mul_d(f10, f12, f14);
-          break;
-        case Token::DIV:
-          __ div_d(f10, f12, f14);
-          break;
-        default:
-          UNREACHABLE();
-        }
-
-        // ARM uses a workaround here because of the unaligned HeapNumber
-        // kValueOffset. On MIPS this workaround is built into sdc1 so
-        // there's no point in generating even more instructions.
-        __ sdc1(f10, FieldMemOperand(result, HeapNumber::kValueOffset));
-        __ Ret(USE_DELAY_SLOT);
-        __ mov(v0, result);
-      } else {
-        // Call the C function to handle the double operation.
-        FloatingPointHelper::CallCCodeForDoubleOperation(masm,
-                                                         op,
-                                                         result,
-                                                         scratch1);
-        if (FLAG_debug_code) {
-          __ stop("Unreachable code.");
-        }
-      }
-      break;
-    }
-    case Token::BIT_OR:
-    case Token::BIT_XOR:
-    case Token::BIT_AND:
-    case Token::SAR:
-    case Token::SHR:
-    case Token::SHL: {
-      if (smi_operands) {
-        __ SmiUntag(a3, left);
-        __ SmiUntag(a2, right);
-      } else {
-        // Convert operands to 32-bit integers. Right in a2 and left in a3.
-        FloatingPointHelper::ConvertNumberToInt32(masm,
-                                                  left,
-                                                  a3,
-                                                  heap_number_map,
-                                                  scratch1,
-                                                  scratch2,
-                                                  scratch3,
-                                                  f0,
-                                                  not_numbers);
-        FloatingPointHelper::ConvertNumberToInt32(masm,
-                                                  right,
-                                                  a2,
-                                                  heap_number_map,
-                                                  scratch1,
-                                                  scratch2,
-                                                  scratch3,
-                                                  f0,
-                                                  not_numbers);
-      }
-      Label result_not_a_smi;
-      switch (op) {
-        case Token::BIT_OR:
-          __ Or(a2, a3, Operand(a2));
-          break;
-        case Token::BIT_XOR:
-          __ Xor(a2, a3, Operand(a2));
-          break;
-        case Token::BIT_AND:
-          __ And(a2, a3, Operand(a2));
-          break;
-        case Token::SAR:
-          // Use only the 5 least significant bits of the shift count.
-          __ GetLeastBitsFromInt32(a2, a2, 5);
-          __ srav(a2, a3, a2);
-          break;
-        case Token::SHR:
-          // Use only the 5 least significant bits of the shift count.
-          __ GetLeastBitsFromInt32(a2, a2, 5);
-          __ srlv(a2, a3, a2);
-          // SHR is special because it is required to produce a positive answer.
-          // The code below for writing into heap numbers isn't capable of
-          // writing the register as an unsigned int so we go to slow case if we
-          // hit this case.
-          __ Branch(&result_not_a_smi, lt, a2, Operand(zero_reg));
-          break;
-        case Token::SHL:
-          // Use only the 5 least significant bits of the shift count.
-          __ GetLeastBitsFromInt32(a2, a2, 5);
-          __ sllv(a2, a3, a2);
-          break;
-        default:
-          UNREACHABLE();
-      }
-      // Check that the *signed* result fits in a smi.
-      __ Addu(a3, a2, Operand(0x40000000));
-      __ Branch(&result_not_a_smi, lt, a3, Operand(zero_reg));
-      __ SmiTag(v0, a2);
-      __ Ret();
-
-      // Allocate new heap number for result.
-      __ bind(&result_not_a_smi);
-      Register result = t1;
-      if (smi_operands) {
-        __ AllocateHeapNumber(
-            result, scratch1, scratch2, heap_number_map, gc_required);
-      } else {
-        BinaryOpStub_GenerateHeapResultAllocation(
-            masm, result, heap_number_map, scratch1, scratch2, gc_required,
-            mode);
-      }
-
-      // a2: Answer as signed int32.
-      // t1: Heap number to write answer into.
-
-      // Nothing can go wrong now, so move the heap number to v0, which is the
-      // result.
-      __ mov(v0, t1);
-      // Convert the int32 in a2 to the heap number in a0. As
-      // mentioned above SHR needs to always produce a positive result.
-      __ mtc1(a2, f0);
-      if (op == Token::SHR) {
-        __ Cvt_d_uw(f0, f0, f22);
-      } else {
-        __ cvt_d_w(f0, f0);
-      }
-      // ARM uses a workaround here because of the unaligned HeapNumber
-      // kValueOffset. On MIPS this workaround is built into sdc1 so
-      // there's no point in generating even more instructions.
-      __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
-      __ Ret();
-      break;
-    }
-    default:
-      UNREACHABLE();
-  }
-}
-
-
-// Generate the smi code. If the operation on smis are successful this return is
-// generated. If the result is not a smi and heap number allocation is not
-// requested the code falls through. If number allocation is requested but a
-// heap number cannot be allocated the code jumps to the label gc_required.
-void BinaryOpStub_GenerateSmiCode(
-    MacroAssembler* masm,
-    Label* use_runtime,
-    Label* gc_required,
-    Token::Value op,
-    BinaryOpStub::SmiCodeGenerateHeapNumberResults allow_heapnumber_results,
-    OverwriteMode mode) {
-  Label not_smis;
-
-  Register left = a1;
-  Register right = a0;
-  Register scratch1 = t3;
-
-  // Perform combined smi check on both operands.
-  __ Or(scratch1, left, Operand(right));
-  STATIC_ASSERT(kSmiTag == 0);
-  __ JumpIfNotSmi(scratch1, &not_smis);
-
-  // If the smi-smi operation results in a smi return is generated.
-  BinaryOpStub_GenerateSmiSmiOperation(masm, op);
-
-  // If heap number results are possible generate the result in an allocated
-  // heap number.
-  if (allow_heapnumber_results == BinaryOpStub::ALLOW_HEAPNUMBER_RESULTS) {
-    BinaryOpStub_GenerateFPOperation(
-        masm, BinaryOpIC::UNINITIALIZED, BinaryOpIC::UNINITIALIZED, true,
-        use_runtime, gc_required, &not_smis, op, mode);
-  }
-  __ bind(&not_smis);
-}
-
-
-void BinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
-  Label not_smis, call_runtime;
-
-  if (result_type_ == BinaryOpIC::UNINITIALIZED ||
-      result_type_ == BinaryOpIC::SMI) {
-    // Only allow smi results.
-    BinaryOpStub_GenerateSmiCode(
-        masm, &call_runtime, NULL, op_, NO_HEAPNUMBER_RESULTS, mode_);
-  } else {
-    // Allow heap number result and don't make a transition if a heap number
-    // cannot be allocated.
-    BinaryOpStub_GenerateSmiCode(
-        masm, &call_runtime, &call_runtime, op_, ALLOW_HEAPNUMBER_RESULTS,
-        mode_);
-  }
-
-  // Code falls through if the result is not returned as either a smi or heap
-  // number.
-  GenerateTypeTransition(masm);
-
-  __ bind(&call_runtime);
-  GenerateRegisterArgsPush(masm);
-  GenerateCallRuntime(masm);
-}
-
-
-void BinaryOpStub::GenerateBothStringStub(MacroAssembler* masm) {
-  Label call_runtime;
-  ASSERT(left_type_ == BinaryOpIC::STRING && right_type_ == BinaryOpIC::STRING);
-  ASSERT(op_ == Token::ADD);
-  // If both arguments are strings, call the string add stub.
-  // Otherwise, do a transition.
-
-  // Registers containing left and right operands respectively.
-  Register left = a1;
-  Register right = a0;
-
-  // Test if left operand is a string.
-  __ JumpIfSmi(left, &call_runtime);
-  __ GetObjectType(left, a2, a2);
-  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
-
-  // Test if right operand is a string.
-  __ JumpIfSmi(right, &call_runtime);
-  __ GetObjectType(right, a2, a2);
-  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
-
-  StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
-  GenerateRegisterArgsPush(masm);
-  __ TailCallStub(&string_add_stub);
-
-  __ bind(&call_runtime);
-  GenerateTypeTransition(masm);
-}
-
-
-void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
-  ASSERT(Max(left_type_, right_type_) == BinaryOpIC::INT32);
-
-  Register left = a1;
-  Register right = a0;
-  Register scratch1 = t3;
-  Register scratch2 = t5;
-  FPURegister double_scratch = f0;
-  FPURegister single_scratch = f6;
-
-  Register heap_number_result = no_reg;
-  Register heap_number_map = t2;
-  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-
-  Label call_runtime;
-  // Labels for type transition, used for wrong input or output types.
-  // Both label are currently actually bound to the same position. We use two
-  // different label to differentiate the cause leading to type transition.
-  Label transition;
-
-  // Smi-smi fast case.
-  Label skip;
-  __ Or(scratch1, left, right);
-  __ JumpIfNotSmi(scratch1, &skip);
-  BinaryOpStub_GenerateSmiSmiOperation(masm, op_);
-  // Fall through if the result is not a smi.
-  __ bind(&skip);
-
-  switch (op_) {
-    case Token::ADD:
-    case Token::SUB:
-    case Token::MUL:
-    case Token::DIV:
-    case Token::MOD: {
-      // It could be that only SMIs have been seen at either the left
-      // or the right operand. For precise type feedback, patch the IC
-      // again if this changes.
-      if (left_type_ == BinaryOpIC::SMI) {
-        __ JumpIfNotSmi(left, &transition);
-      }
-      if (right_type_ == BinaryOpIC::SMI) {
-        __ JumpIfNotSmi(right, &transition);
-      }
-      // Load both operands and check that they are 32-bit integer.
-      // Jump to type transition if they are not. The registers a0 and a1 (right
-      // and left) are preserved for the runtime call.
-      FloatingPointHelper::Destination destination = (op_ != Token::MOD)
-              ? FloatingPointHelper::kFPURegisters
-              : FloatingPointHelper::kCoreRegisters;
-
-      FloatingPointHelper::LoadNumberAsInt32Double(masm,
-                                                   right,
-                                                   destination,
-                                                   f14,
-                                                   f16,
-                                                   a2,
-                                                   a3,
-                                                   heap_number_map,
-                                                   scratch1,
-                                                   scratch2,
-                                                   f2,
-                                                   &transition);
-      FloatingPointHelper::LoadNumberAsInt32Double(masm,
-                                                   left,
-                                                   destination,
-                                                   f12,
-                                                   f16,
-                                                   t0,
-                                                   t1,
-                                                   heap_number_map,
-                                                   scratch1,
-                                                   scratch2,
-                                                   f2,
-                                                   &transition);
-
-      if (destination == FloatingPointHelper::kFPURegisters) {
-        Label return_heap_number;
-        switch (op_) {
-          case Token::ADD:
-            __ add_d(f10, f12, f14);
-            break;
-          case Token::SUB:
-            __ sub_d(f10, f12, f14);
-            break;
-          case Token::MUL:
-            __ mul_d(f10, f12, f14);
-            break;
-          case Token::DIV:
-            __ div_d(f10, f12, f14);
-            break;
-          default:
-            UNREACHABLE();
-        }
-
-        if (op_ != Token::DIV) {
-          // These operations produce an integer result.
-          // Try to return a smi if we can.
-          // Otherwise return a heap number if allowed, or jump to type
-          // transition.
-
-          Register except_flag = scratch2;
-          __ EmitFPUTruncate(kRoundToZero,
-                             scratch1,
-                             f10,
-                             at,
-                             f16,
-                             except_flag);
-
-          if (result_type_ <= BinaryOpIC::INT32) {
-            // If except_flag != 0, result does not fit in a 32-bit integer.
-            __ Branch(&transition, ne, except_flag, Operand(zero_reg));
-          }
-
-          // Check if the result fits in a smi.
-          __ Addu(scratch2, scratch1, Operand(0x40000000));
-          // If not try to return a heap number.
-          __ Branch(&return_heap_number, lt, scratch2, Operand(zero_reg));
-          // Check for minus zero. Return heap number for minus zero.
-          Label not_zero;
-          __ Branch(&not_zero, ne, scratch1, Operand(zero_reg));
-          __ mfc1(scratch2, f11);
-          __ And(scratch2, scratch2, HeapNumber::kSignMask);
-          __ Branch(&return_heap_number, ne, scratch2, Operand(zero_reg));
-          __ bind(&not_zero);
-
-          // Tag the result and return.
-          __ SmiTag(v0, scratch1);
-          __ Ret();
-        } else {
-          // DIV just falls through to allocating a heap number.
-        }
-
-        __ bind(&return_heap_number);
-        // Return a heap number, or fall through to type transition or runtime
-        // call if we can't.
-        if (result_type_ >= ((op_ == Token::DIV) ? BinaryOpIC::NUMBER
-                                                 : BinaryOpIC::INT32)) {
-          // We are using FPU registers so s0 is available.
-          heap_number_result = s0;
-          BinaryOpStub_GenerateHeapResultAllocation(masm,
-                                                    heap_number_result,
-                                                    heap_number_map,
-                                                    scratch1,
-                                                    scratch2,
-                                                    &call_runtime,
-                                                    mode_);
-          __ mov(v0, heap_number_result);
-          __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
-          __ Ret();
-        }
-
-        // A DIV operation expecting an integer result falls through
-        // to type transition.
-
-      } else {
-        // We preserved a0 and a1 to be able to call runtime.
-        // Save the left value on the stack.
-        __ Push(t1, t0);
-
-        Label pop_and_call_runtime;
-
-        // Allocate a heap number to store the result.
-        heap_number_result = s0;
-        BinaryOpStub_GenerateHeapResultAllocation(masm,
-                                                  heap_number_result,
-                                                  heap_number_map,
-                                                  scratch1,
-                                                  scratch2,
-                                                  &pop_and_call_runtime,
-                                                  mode_);
-
-        // Load the left value from the value saved on the stack.
-        __ Pop(a1, a0);
-
-        // Call the C function to handle the double operation.
-        FloatingPointHelper::CallCCodeForDoubleOperation(
-            masm, op_, heap_number_result, scratch1);
-        if (FLAG_debug_code) {
-          __ stop("Unreachable code.");
-        }
-
-        __ bind(&pop_and_call_runtime);
-        __ Drop(2);
-        __ Branch(&call_runtime);
-      }
-
-      break;
-    }
-
-    case Token::BIT_OR:
-    case Token::BIT_XOR:
-    case Token::BIT_AND:
-    case Token::SAR:
-    case Token::SHR:
-    case Token::SHL: {
-      Label return_heap_number;
-      Register scratch3 = t1;
-      // Convert operands to 32-bit integers. Right in a2 and left in a3. The
-      // registers a0 and a1 (right and left) are preserved for the runtime
-      // call.
-      FloatingPointHelper::LoadNumberAsInt32(masm,
-                                             left,
-                                             a3,
-                                             heap_number_map,
-                                             scratch1,
-                                             scratch2,
-                                             scratch3,
-                                             f0,
-                                             f2,
-                                             &transition);
-      FloatingPointHelper::LoadNumberAsInt32(masm,
-                                             right,
-                                             a2,
-                                             heap_number_map,
-                                             scratch1,
-                                             scratch2,
-                                             scratch3,
-                                             f0,
-                                             f2,
-                                             &transition);
-
-      // The ECMA-262 standard specifies that, for shift operations, only the
-      // 5 least significant bits of the shift value should be used.
-      switch (op_) {
-        case Token::BIT_OR:
-          __ Or(a2, a3, Operand(a2));
-          break;
-        case Token::BIT_XOR:
-          __ Xor(a2, a3, Operand(a2));
-          break;
-        case Token::BIT_AND:
-          __ And(a2, a3, Operand(a2));
-          break;
-        case Token::SAR:
-          __ And(a2, a2, Operand(0x1f));
-          __ srav(a2, a3, a2);
-          break;
-        case Token::SHR:
-          __ And(a2, a2, Operand(0x1f));
-          __ srlv(a2, a3, a2);
-          // SHR is special because it is required to produce a positive answer.
-          // We only get a negative result if the shift value (a2) is 0.
-          // This result cannot be respresented as a signed 32-bit integer, try
-          // to return a heap number if we can.
-          __ Branch((result_type_ <= BinaryOpIC::INT32)
-                      ? &transition
-                      : &return_heap_number,
-                     lt,
-                     a2,
-                     Operand(zero_reg));
-          break;
-        case Token::SHL:
-          __ And(a2, a2, Operand(0x1f));
-          __ sllv(a2, a3, a2);
-          break;
-        default:
-          UNREACHABLE();
-      }
-
-      // Check if the result fits in a smi.
-      __ Addu(scratch1, a2, Operand(0x40000000));
-      // If not try to return a heap number. (We know the result is an int32.)
-      __ Branch(&return_heap_number, lt, scratch1, Operand(zero_reg));
-      // Tag the result and return.
-      __ SmiTag(v0, a2);
-      __ Ret();
-
-      __ bind(&return_heap_number);
-      heap_number_result = t1;
-      BinaryOpStub_GenerateHeapResultAllocation(masm,
-                                                heap_number_result,
-                                                heap_number_map,
-                                                scratch1,
-                                                scratch2,
-                                                &call_runtime,
-                                                mode_);
-
-      if (op_ != Token::SHR) {
-        // Convert the result to a floating point value.
-        __ mtc1(a2, double_scratch);
-        __ cvt_d_w(double_scratch, double_scratch);
-      } else {
-        // The result must be interpreted as an unsigned 32-bit integer.
-        __ mtc1(a2, double_scratch);
-        __ Cvt_d_uw(double_scratch, double_scratch, single_scratch);
-      }
-
-      // Store the result.
-      __ mov(v0, heap_number_result);
-      __ sdc1(double_scratch, FieldMemOperand(v0, HeapNumber::kValueOffset));
-      __ Ret();
-
-      break;
-    }
-
-    default:
-      UNREACHABLE();
-  }
-
-  // We never expect DIV to yield an integer result, so we always generate
-  // type transition code for DIV operations expecting an integer result: the
-  // code will fall through to this type transition.
-  if (transition.is_linked() ||
-      ((op_ == Token::DIV) && (result_type_ <= BinaryOpIC::INT32))) {
-    __ bind(&transition);
-    GenerateTypeTransition(masm);
-  }
-
-  __ bind(&call_runtime);
-  GenerateRegisterArgsPush(masm);
-  GenerateCallRuntime(masm);
-}
-
-
-void BinaryOpStub::GenerateOddballStub(MacroAssembler* masm) {
-  Label call_runtime;
-
-  if (op_ == Token::ADD) {
-    // Handle string addition here, because it is the only operation
-    // that does not do a ToNumber conversion on the operands.
-    GenerateAddStrings(masm);
-  }
-
-  // Convert oddball arguments to numbers.
-  Label check, done;
-  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
-  __ Branch(&check, ne, a1, Operand(t0));
-  if (Token::IsBitOp(op_)) {
-    __ li(a1, Operand(Smi::FromInt(0)));
-  } else {
-    __ LoadRoot(a1, Heap::kNanValueRootIndex);
-  }
-  __ jmp(&done);
-  __ bind(&check);
-  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
-  __ Branch(&done, ne, a0, Operand(t0));
-  if (Token::IsBitOp(op_)) {
-    __ li(a0, Operand(Smi::FromInt(0)));
-  } else {
-    __ LoadRoot(a0, Heap::kNanValueRootIndex);
-  }
-  __ bind(&done);
-
-  GenerateNumberStub(masm);
-}
-
-
-void BinaryOpStub::GenerateNumberStub(MacroAssembler* masm) {
-  Label call_runtime, transition;
-  BinaryOpStub_GenerateFPOperation(
-      masm, left_type_, right_type_, false,
-      &transition, &call_runtime, &transition, op_, mode_);
-
-  __ bind(&transition);
-  GenerateTypeTransition(masm);
-
-  __ bind(&call_runtime);
-  GenerateRegisterArgsPush(masm);
-  GenerateCallRuntime(masm);
-}
-
-
-void BinaryOpStub::GenerateGeneric(MacroAssembler* masm) {
-  Label call_runtime, call_string_add_or_runtime, transition;
-
-  BinaryOpStub_GenerateSmiCode(
-      masm, &call_runtime, &call_runtime, op_, ALLOW_HEAPNUMBER_RESULTS, mode_);
-
-  BinaryOpStub_GenerateFPOperation(
-      masm, left_type_, right_type_, false,
-      &call_string_add_or_runtime, &call_runtime, &transition, op_, mode_);
-
-  __ bind(&transition);
-  GenerateTypeTransition(masm);
-
-  __ bind(&call_string_add_or_runtime);
-  if (op_ == Token::ADD) {
-    GenerateAddStrings(masm);
-  }
-
-  __ bind(&call_runtime);
-  GenerateRegisterArgsPush(masm);
-  GenerateCallRuntime(masm);
-}
-
-
-void BinaryOpStub::GenerateAddStrings(MacroAssembler* masm) {
-  ASSERT(op_ == Token::ADD);
-  Label left_not_string, call_runtime;
-
-  Register left = a1;
-  Register right = a0;
-
-  // Check if left argument is a string.
-  __ JumpIfSmi(left, &left_not_string);
-  __ GetObjectType(left, a2, a2);
-  __ Branch(&left_not_string, ge, a2, Operand(FIRST_NONSTRING_TYPE));
-
-  StringAddStub string_add_left_stub(NO_STRING_CHECK_LEFT_IN_STUB);
-  GenerateRegisterArgsPush(masm);
-  __ TailCallStub(&string_add_left_stub);
-
-  // Left operand is not a string, test right.
-  __ bind(&left_not_string);
-  __ JumpIfSmi(right, &call_runtime);
-  __ GetObjectType(right, a2, a2);
-  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
-
-  StringAddStub string_add_right_stub(NO_STRING_CHECK_RIGHT_IN_STUB);
-  GenerateRegisterArgsPush(masm);
-  __ TailCallStub(&string_add_right_stub);
-
-  // At least one argument is not a string.
-  __ bind(&call_runtime);
-}
-
-
-void BinaryOpStub_GenerateHeapResultAllocation(MacroAssembler* masm,
-                                               Register result,
-                                               Register heap_number_map,
-                                               Register scratch1,
-                                               Register scratch2,
-                                               Label* gc_required,
-                                               OverwriteMode mode) {
-  // Code below will scratch result if allocation fails. To keep both arguments
-  // intact for the runtime call result cannot be one of these.
-  ASSERT(!result.is(a0) && !result.is(a1));
-
-  if (mode == OVERWRITE_LEFT || mode == OVERWRITE_RIGHT) {
-    Label skip_allocation, allocated;
-    Register overwritable_operand = mode == OVERWRITE_LEFT ? a1 : a0;
-    // If the overwritable operand is already an object, we skip the
-    // allocation of a heap number.
-    __ JumpIfNotSmi(overwritable_operand, &skip_allocation);
-    // Allocate a heap number for the result.
-    __ AllocateHeapNumber(
-        result, scratch1, scratch2, heap_number_map, gc_required);
-    __ Branch(&allocated);
-    __ bind(&skip_allocation);
-    // Use object holding the overwritable operand for result.
-    __ mov(result, overwritable_operand);
-    __ bind(&allocated);
-  } else {
-    ASSERT(mode == NO_OVERWRITE);
-    __ AllocateHeapNumber(
-        result, scratch1, scratch2, heap_number_map, gc_required);
-  }
-}
-
-
-void BinaryOpStub::GenerateRegisterArgsPush(MacroAssembler* masm) {
-  __ Push(a1, a0);
-}
-
 
 
 void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
@@ -3061,16 +1481,6 @@ Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
 }
 
 
-void StackCheckStub::Generate(MacroAssembler* masm) {
-  __ TailCallRuntime(Runtime::kStackGuard, 0, 1);
-}
-
-
-void InterruptStub::Generate(MacroAssembler* masm) {
-  __ TailCallRuntime(Runtime::kInterrupt, 0, 1);
-}
-
-
 void MathPowStub::Generate(MacroAssembler* masm) {
   const Register base = a1;
   const Register exponent = a2;
@@ -3291,8 +1701,8 @@ bool CEntryStub::NeedsImmovableCode() {
 }
 
 
-bool CEntryStub::IsPregenerated() {
-  return (!save_doubles_ || ISOLATE->fp_stubs_generated()) &&
+bool CEntryStub::IsPregenerated(Isolate* isolate) {
+  return (!save_doubles_ || isolate->fp_stubs_generated()) &&
           result_size_ == 1;
 }
 
@@ -3303,6 +1713,9 @@ void CodeStub::GenerateStubsAheadOfTime(Isolate* isolate) {
   StoreBufferOverflowStub::GenerateFixedRegStubsAheadOfTime(isolate);
   StubFailureTrampolineStub::GenerateAheadOfTime(isolate);
   RecordWriteStub::GenerateFixedRegStubsAheadOfTime(isolate);
+  ArrayConstructorStubBase::GenerateStubsAheadOfTime(isolate);
+  CreateAllocationSiteStub::GenerateAheadOfTime(isolate);
+  BinaryOpStub::GenerateAheadOfTime(isolate);
 }
 
 
@@ -3361,8 +1774,9 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   if (do_gc) {
     // Move result passed in v0 into a0 to call PerformGC.
     __ mov(a0, v0);
-    __ PrepareCallCFunction(1, 0, a1);
-    __ CallCFunction(ExternalReference::perform_gc_function(isolate), 1, 0);
+    __ PrepareCallCFunction(2, 0, a1);
+    __ li(a1, Operand(ExternalReference::isolate_address(masm->isolate())));
+    __ CallCFunction(ExternalReference::perform_gc_function(isolate), 2, 0);
   }
 
   ExternalReference scope_depth =
@@ -3384,7 +1798,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 
   __ AssertStackIsAligned();
 
-  __ li(a2, Operand(ExternalReference::isolate_address()));
+  __ li(a2, Operand(ExternalReference::isolate_address(isolate)));
 
   // To let the GC traverse the return address of the exit frames, we need to
   // know where the return address is. The CEntryStub is unmovable, so
@@ -3441,7 +1855,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // v0:v1: result
   // sp: stack pointer
   // fp: frame pointer
-  __ LeaveExitFrame(save_doubles_, s0, true);
+  __ LeaveExitFrame(save_doubles_, s0, true, EMIT_RETURN);
 
   // Check if we should retry or throw exception.
   Label retry;
@@ -3488,6 +1902,8 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // fp: frame pointer    (restored after C call)
   // sp: stack pointer    (restored as callee's sp after C call)
   // cp: current context  (C callee-saved)
+
+  ProfileEntryHookStub::MaybeCallEntryHook(masm);
 
   // NOTE: Invocations of builtins may return failure objects
   // instead of a proper result. The builtin entry handles
@@ -3581,6 +1997,8 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Stack:
   // 4 args slots
   // args
+
+  ProfileEntryHookStub::MaybeCallEntryHook(masm);
 
   // Save callee saved registers on the stack.
   __ MultiPush(kCalleeSaved | ra.bit());
@@ -3810,7 +2228,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     __ Subu(inline_site, ra, scratch);
     // Get the map location in scratch and patch it.
     __ GetRelocatedValue(inline_site, scratch, v1);  // v1 used as scratch.
-    __ sw(map, FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
+    __ sw(map, FieldMemOperand(scratch, Cell::kValueOffset));
   }
 
   // Register mapping: a3 is object map and t0 is function prototype.
@@ -3942,7 +2360,8 @@ void FunctionPrototypeStub::Generate(MacroAssembler* masm) {
 
   StubCompiler::GenerateLoadFunctionPrototype(masm, receiver, a3, t0, &miss);
   __ bind(&miss);
-  StubCompiler::TailCallBuiltin(masm, StubCompiler::MissBuiltin(kind()));
+  StubCompiler::TailCallBuiltin(
+      masm, BaseLoadStoreStubCompiler::MissBuiltin(kind()));
 }
 
 
@@ -3969,11 +2388,11 @@ void StringLengthStub::Generate(MacroAssembler* masm) {
     receiver = a0;
   }
 
-  StubCompiler::GenerateLoadStringLength(masm, receiver, a3, t0, &miss,
-                                         support_wrapper_);
+  StubCompiler::GenerateLoadStringLength(masm, receiver, a3, t0, &miss);
 
   __ bind(&miss);
-  StubCompiler::TailCallBuiltin(masm, StubCompiler::MissBuiltin(kind()));
+  StubCompiler::TailCallBuiltin(
+      masm, BaseLoadStoreStubCompiler::MissBuiltin(kind()));
 }
 
 
@@ -4043,7 +2462,8 @@ void StoreArrayLengthStub::Generate(MacroAssembler* masm) {
 
   __ bind(&miss);
 
-  StubCompiler::TailCallBuiltin(masm, StubCompiler::MissBuiltin(kind()));
+  StubCompiler::TailCallBuiltin(
+      masm, BaseLoadStoreStubCompiler::MissBuiltin(kind()));
 }
 
 
@@ -4051,12 +2471,6 @@ Register InstanceofStub::left() { return a0; }
 
 
 Register InstanceofStub::right() { return a1; }
-
-
-void LoadFieldStub::Generate(MacroAssembler* masm) {
-  StubCompiler::DoGenerateFastPropertyLoad(masm, v0, reg_, inobject_, index_);
-  __ Ret();
-}
 
 
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
@@ -4087,8 +2501,8 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   __ subu(a3, a0, a1);
   __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(a3, fp, Operand(t3));
+  __ Ret(USE_DELAY_SLOT);
   __ lw(v0, MemOperand(a3, kDisplacement));
-  __ Ret();
 
   // Arguments adaptor case: Check index (a1) against actual arguments
   // limit found in the arguments adaptor frame. Use unsigned
@@ -4101,8 +2515,8 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   __ subu(a3, a0, a1);
   __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(a3, a2, Operand(t3));
+  __ Ret(USE_DELAY_SLOT);
   __ lw(v0, MemOperand(a3, kDisplacement));
-  __ Ret();
 
   // Slow-case: Handle non-smi or out-of-bounds access to arguments
   // by calling the runtime system.
@@ -4509,12 +2923,12 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   if (FLAG_debug_code) {
     __ And(t0, regexp_data, Operand(kSmiTagMask));
     __ Check(nz,
-             "Unexpected type for RegExp data, FixedArray expected",
+             kUnexpectedTypeForRegExpDataFixedArrayExpected,
              t0,
              Operand(zero_reg));
     __ GetObjectType(regexp_data, a0, a0);
     __ Check(eq,
-             "Unexpected type for RegExp data, FixedArray expected",
+             kUnexpectedTypeForRegExpDataFixedArrayExpected,
              a0,
              Operand(FIXED_ARRAY_TYPE));
   }
@@ -4663,7 +3077,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Argument 9: Pass current isolate address.
   // CFunctionArgumentOperand handles MIPS stack argument slots.
-  __ li(a0, Operand(ExternalReference::isolate_address()));
+  __ li(a0, Operand(ExternalReference::isolate_address(isolate)));
   __ sw(a0, MemOperand(sp, 5 * kPointerSize));
 
   // Argument 8: Indicate that this is a direct call from JavaScript.
@@ -4721,7 +3135,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   DirectCEntryStub stub;
   stub.GenerateCall(masm, t9);
 
-  __ LeaveExitFrame(false, no_reg);
+  __ LeaveExitFrame(false, no_reg, true);
 
   // v0: result
   // subject: subject string (callee saved)
@@ -4869,7 +3283,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
     // Sequential strings have already been ruled out.
     __ And(at, a0, Operand(kIsIndirectStringMask));
     __ Assert(eq,
-              "external string expected, but not found",
+              kExternalStringExpectedButNotFound,
               at,
               Operand(zero_reg));
   }
@@ -4985,56 +3399,13 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
 }
 
 
-static void GenerateRecordCallTargetNoArray(MacroAssembler* masm) {
-  // Cache the called function in a global property cell.  Cache states
-  // are uninitialized, monomorphic (indicated by a JSFunction), and
-  // megamorphic.
-  // a1 : the function to call
-  // a2 : cache cell for call target
-  ASSERT(!FLAG_optimize_constructed_arrays);
-  Label done;
-
-  ASSERT_EQ(*TypeFeedbackCells::MegamorphicSentinel(masm->isolate()),
-            masm->isolate()->heap()->undefined_value());
-  ASSERT_EQ(*TypeFeedbackCells::UninitializedSentinel(masm->isolate()),
-            masm->isolate()->heap()->the_hole_value());
-
-  // Load the cache state into a3.
-  __ lw(a3, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
-
-  // A monomorphic cache hit or an already megamorphic state: invoke the
-  // function without changing the state.
-  __ Branch(&done, eq, a3, Operand(a1));
-  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ Branch(&done, eq, a3, Operand(at));
-
-  // A monomorphic miss (i.e, here the cache is not uninitialized) goes
-  // megamorphic.
-  __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-
-  __ Branch(USE_DELAY_SLOT, &done, eq, a3, Operand(at));
-  // An uninitialized cache is patched with the function.
-  // Store a1 in the delay slot. This may or may not get overwritten depending
-  // on the result of the comparison.
-  __ sw(a1, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
-  // No need for a write barrier here - cells are rescanned.
-
-  // MegamorphicSentinel is an immortal immovable object (undefined) so no
-  // write-barrier is needed.
-  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ sw(at, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
-
-  __ bind(&done);
-}
-
-
 static void GenerateRecordCallTarget(MacroAssembler* masm) {
   // Cache the called function in a global property cell.  Cache states
   // are uninitialized, monomorphic (indicated by a JSFunction), and
   // megamorphic.
+  // a0 : number of arguments to the construct function
   // a1 : the function to call
   // a2 : cache cell for call target
-  ASSERT(FLAG_optimize_constructed_arrays);
   Label initialize, done, miss, megamorphic, not_array_function;
 
   ASSERT_EQ(*TypeFeedbackCells::MegamorphicSentinel(masm->isolate()),
@@ -5043,21 +3414,20 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
             masm->isolate()->heap()->the_hole_value());
 
   // Load the cache state into a3.
-  __ lw(a3, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  __ lw(a3, FieldMemOperand(a2, Cell::kValueOffset));
 
   // A monomorphic cache hit or an already megamorphic state: invoke the
   // function without changing the state.
   __ Branch(&done, eq, a3, Operand(a1));
-  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ Branch(&done, eq, a3, Operand(at));
 
-  // Special handling of the Array() function, which caches not only the
-  // monomorphic Array function but the initial ElementsKind with special
-  // sentinels
-  Handle<Object> terminal_kind_sentinel =
-      TypeFeedbackCells::MonomorphicArraySentinel(masm->isolate(),
-                                                  LAST_FAST_ELEMENTS_KIND);
-  __ Branch(&miss, ne, a3, Operand(terminal_kind_sentinel));
+  // If we came here, we need to see if we are the array function.
+  // If we didn't have a matching function, and we didn't find the megamorph
+  // sentinel, then we have in the cell either some other function or an
+  // AllocationSite. Do a map check on the object in a3.
+  __ lw(t1, FieldMemOperand(a3, 0));
+  __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
+  __ Branch(&miss, ne, t1, Operand(at));
+
   // Make sure the function is the Array() function
   __ LoadArrayFunction(a3);
   __ Branch(&megamorphic, ne, a1, Operand(a3));
@@ -5073,7 +3443,8 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   // write-barrier is needed.
   __ bind(&megamorphic);
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ sw(at, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  __ sw(at, FieldMemOperand(a2, Cell::kValueOffset));
+  __ jmp(&done);
 
   // An uninitialized cache is patched with the function or sentinel to
   // indicate the ElementsKind if function is the Array constructor.
@@ -5082,18 +3453,29 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   __ LoadArrayFunction(a3);
   __ Branch(&not_array_function, ne, a1, Operand(a3));
 
-  // The target function is the Array constructor, install a sentinel value in
-  // the constructor's type info cell that will track the initial ElementsKind
-  // that should be used for the array when its constructed.
-  Handle<Object> initial_kind_sentinel =
-      TypeFeedbackCells::MonomorphicArraySentinel(masm->isolate(),
-          GetInitialFastElementsKind());
-  __ li(a3, Operand(initial_kind_sentinel));
-  __ sw(a3, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  // The target function is the Array constructor.
+  // Create an AllocationSite if we don't already have it, store it in the cell.
+  {
+    FrameScope scope(masm, StackFrame::INTERNAL);
+    const RegList kSavedRegs =
+        1 << 4  |  // a0
+        1 << 5  |  // a1
+        1 << 6;    // a2
+
+    // Arguments register must be smi-tagged to call out.
+    __ SmiTag(a0);
+    __ MultiPush(kSavedRegs);
+
+    CreateAllocationSiteStub create_stub;
+    __ CallStub(&create_stub);
+
+    __ MultiPop(kSavedRegs);
+    __ SmiUntag(a0);
+  }
   __ Branch(&done);
 
   __ bind(&not_array_function);
-  __ sw(a1, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  __ sw(a1, FieldMemOperand(a2, Cell::kValueOffset));
   // No need for a write barrier here - cells are rescanned.
 
   __ bind(&done);
@@ -5132,11 +3514,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ Branch(&slow, ne, a3, Operand(JS_FUNCTION_TYPE));
 
   if (RecordCallTarget()) {
-    if (FLAG_optimize_constructed_arrays) {
-      GenerateRecordCallTarget(masm);
-    } else {
-      GenerateRecordCallTargetNoArray(masm);
-    }
+    GenerateRecordCallTarget(masm);
   }
 
   // Fast-case: Invoke the function now.
@@ -5169,7 +3547,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     ASSERT_EQ(*TypeFeedbackCells::MegamorphicSentinel(masm->isolate()),
               masm->isolate()->heap()->undefined_value());
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-    __ sw(at, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+    __ sw(at, FieldMemOperand(a2, Cell::kValueOffset));
   }
   // Check for function proxy.
   __ Branch(&non_function, ne, a3, Operand(JS_FUNCTION_PROXY_TYPE));
@@ -5210,15 +3588,11 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
   __ Branch(&slow, ne, a3, Operand(JS_FUNCTION_TYPE));
 
   if (RecordCallTarget()) {
-    if (FLAG_optimize_constructed_arrays) {
-      GenerateRecordCallTarget(masm);
-    } else {
-      GenerateRecordCallTargetNoArray(masm);
-    }
+    GenerateRecordCallTarget(masm);
   }
 
   // Jump to the function-specific construct stub.
-  Register jmp_reg = FLAG_optimize_constructed_arrays ? a3 : a2;
+  Register jmp_reg = a3;
   __ lw(jmp_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ lw(jmp_reg, FieldMemOperand(jmp_reg,
                                  SharedFunctionInfo::kConstructStubOffset));
@@ -5291,7 +3665,7 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
 void StringCharCodeAtGenerator::GenerateSlow(
     MacroAssembler* masm,
     const RuntimeCallHelper& call_helper) {
-  __ Abort("Unexpected fallthrough to CharCodeAt slow case");
+  __ Abort(kUnexpectedFallthroughToCharCodeAtSlowCase);
 
   // Index is not a smi.
   __ bind(&index_not_smi_);
@@ -5340,7 +3714,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
   call_helper.AfterCall(masm);
   __ jmp(&exit_);
 
-  __ Abort("Unexpected fallthrough from CharCodeAt slow case");
+  __ Abort(kUnexpectedFallthroughFromCharCodeAtSlowCase);
 }
 
 
@@ -5377,7 +3751,7 @@ void StringCharFromCodeGenerator::GenerateFast(MacroAssembler* masm) {
 void StringCharFromCodeGenerator::GenerateSlow(
     MacroAssembler* masm,
     const RuntimeCallHelper& call_helper) {
-  __ Abort("Unexpected fallthrough to CharFromCode slow case");
+  __ Abort(kUnexpectedFallthroughToCharFromCodeSlowCase);
 
   __ bind(&slow_case_);
   call_helper.BeforeCall(masm);
@@ -5388,7 +3762,7 @@ void StringCharFromCodeGenerator::GenerateSlow(
   call_helper.AfterCall(masm);
   __ Branch(&exit_);
 
-  __ Abort("Unexpected fallthrough from CharFromCode slow case");
+  __ Abort(kUnexpectedFallthroughFromCharFromCodeSlowCase);
 }
 
 
@@ -5443,7 +3817,7 @@ void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
     // that it is.
     __ And(scratch4, dest, Operand(kPointerAlignmentMask));
     __ Check(eq,
-             "Destination of copy not aligned.",
+             kDestinationOfCopyNotAligned,
              scratch4,
              Operand(zero_reg));
   }
@@ -5643,7 +4017,7 @@ void StringHelper::GenerateTwoCharacterStringTableProbe(MacroAssembler* masm,
     // Must be the hole (deleted entry).
     if (FLAG_debug_code) {
       __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
-      __ Assert(eq, "oddball in string table is not undefined or the hole",
+      __ Assert(eq, kOddballInStringTableIsNotUndefinedOrTheHole,
           scratch, Operand(candidate));
     }
     __ jmp(&next_probe[i]);
@@ -5964,16 +4338,18 @@ void StringCompareStub::GenerateFlatAsciiStringEquals(MacroAssembler* masm,
   __ lw(scratch2, FieldMemOperand(right, String::kLengthOffset));
   __ Branch(&check_zero_length, eq, length, Operand(scratch2));
   __ bind(&strings_not_equal);
+  ASSERT(is_int16(NOT_EQUAL));
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(Smi::FromInt(NOT_EQUAL)));
-  __ Ret();
 
   // Check if the length is zero.
   Label compare_chars;
   __ bind(&check_zero_length);
   STATIC_ASSERT(kSmiTag == 0);
   __ Branch(&compare_chars, ne, length, Operand(zero_reg));
+  ASSERT(is_int16(EQUAL));
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(Smi::FromInt(EQUAL)));
-  __ Ret();
 
   // Compare characters.
   __ bind(&compare_chars);
@@ -5983,8 +4359,8 @@ void StringCompareStub::GenerateFlatAsciiStringEquals(MacroAssembler* masm,
                                 &strings_not_equal);
 
   // Characters are equal.
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(Smi::FromInt(EQUAL)));
-  __ Ret();
 }
 
 
@@ -6116,7 +4492,11 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // Second argument.
 
   // Make sure that both arguments are strings if not known in advance.
-  if (flags_ == NO_STRING_ADD_FLAGS) {
+  // Otherwise, at least one of the arguments is definitely a string,
+  // and we convert the one that is not known to be a string.
+  if ((flags_ & STRING_ADD_CHECK_BOTH) == STRING_ADD_CHECK_BOTH) {
+    ASSERT((flags_ & STRING_ADD_CHECK_LEFT) == STRING_ADD_CHECK_LEFT);
+    ASSERT((flags_ & STRING_ADD_CHECK_RIGHT) == STRING_ADD_CHECK_RIGHT);
     __ JumpIfEitherSmi(a0, a1, &call_runtime);
     // Load instance types.
     __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
@@ -6128,20 +4508,16 @@ void StringAddStub::Generate(MacroAssembler* masm) {
     __ Or(t4, t0, Operand(t1));
     __ And(t4, t4, Operand(kIsNotStringMask));
     __ Branch(&call_runtime, ne, t4, Operand(zero_reg));
-  } else {
-    // Here at least one of the arguments is definitely a string.
-    // We convert the one that is not known to be a string.
-    if ((flags_ & NO_STRING_CHECK_LEFT_IN_STUB) == 0) {
-      ASSERT((flags_ & NO_STRING_CHECK_RIGHT_IN_STUB) != 0);
-      GenerateConvertArgument(
-          masm, 1 * kPointerSize, a0, a2, a3, t0, t1, &call_builtin);
-      builtin_id = Builtins::STRING_ADD_RIGHT;
-    } else if ((flags_ & NO_STRING_CHECK_RIGHT_IN_STUB) == 0) {
-      ASSERT((flags_ & NO_STRING_CHECK_LEFT_IN_STUB) != 0);
-      GenerateConvertArgument(
-          masm, 0 * kPointerSize, a1, a2, a3, t0, t1, &call_builtin);
-      builtin_id = Builtins::STRING_ADD_LEFT;
-    }
+  } else if ((flags_ & STRING_ADD_CHECK_LEFT) == STRING_ADD_CHECK_LEFT) {
+    ASSERT((flags_ & STRING_ADD_CHECK_RIGHT) == 0);
+    GenerateConvertArgument(
+        masm, 1 * kPointerSize, a0, a2, a3, t0, t1, &call_builtin);
+    builtin_id = Builtins::STRING_ADD_RIGHT;
+  } else if ((flags_ & STRING_ADD_CHECK_RIGHT) == STRING_ADD_CHECK_RIGHT) {
+    ASSERT((flags_ & STRING_ADD_CHECK_LEFT) == 0);
+    GenerateConvertArgument(
+        masm, 0 * kPointerSize, a1, a2, a3, t0, t1, &call_builtin);
+    builtin_id = Builtins::STRING_ADD_LEFT;
   }
 
   // Both arguments are strings.
@@ -6192,7 +4568,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ Branch(&longer_than_two, ne, t2, Operand(2));
 
   // Check that both strings are non-external ASCII strings.
-  if (flags_ != NO_STRING_ADD_FLAGS) {
+  if ((flags_ & STRING_ADD_CHECK_BOTH) != STRING_ADD_CHECK_BOTH) {
     __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
     __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
@@ -6236,7 +4612,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   // If result is not supposed to be flat, allocate a cons string object.
   // If both strings are ASCII the result is an ASCII cons string.
-  if (flags_ != NO_STRING_ADD_FLAGS) {
+  if ((flags_ & STRING_ADD_CHECK_BOTH) != STRING_ADD_CHECK_BOTH) {
     __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
     __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
@@ -6254,25 +4630,53 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ AllocateAsciiConsString(v0, t2, t0, t1, &call_runtime);
   __ bind(&allocated);
   // Fill the fields of the cons string.
+  Label skip_write_barrier, after_writing;
+  ExternalReference high_promotion_mode = ExternalReference::
+      new_space_high_promotion_mode_active_address(masm->isolate());
+  __ li(t0, Operand(high_promotion_mode));
+  __ lw(t0, MemOperand(t0, 0));
+  __ Branch(&skip_write_barrier, eq, t0, Operand(zero_reg));
+
+  __ mov(t3, v0);
+  __ sw(a0, FieldMemOperand(t3, ConsString::kFirstOffset));
+  __ RecordWriteField(t3,
+                      ConsString::kFirstOffset,
+                      a0,
+                      t0,
+                      kRAHasNotBeenSaved,
+                      kDontSaveFPRegs);
+  __ sw(a1, FieldMemOperand(t3, ConsString::kSecondOffset));
+  __ RecordWriteField(t3,
+                      ConsString::kSecondOffset,
+                      a1,
+                      t0,
+                      kRAHasNotBeenSaved,
+                      kDontSaveFPRegs);
+  __ jmp(&after_writing);
+
+  __ bind(&skip_write_barrier);
   __ sw(a0, FieldMemOperand(v0, ConsString::kFirstOffset));
   __ sw(a1, FieldMemOperand(v0, ConsString::kSecondOffset));
+
+  __ bind(&after_writing);
+
   __ IncrementCounter(counters->string_add_native(), 1, a2, a3);
   __ DropAndRet(2);
 
   __ bind(&non_ascii);
   // At least one of the strings is two-byte. Check whether it happens
-  // to contain only ASCII characters.
+  // to contain only one byte characters.
   // t0: first instance type.
   // t1: second instance type.
-  // Branch to if _both_ instances have kAsciiDataHintMask set.
-  __ And(at, t0, Operand(kAsciiDataHintMask));
+  // Branch to if _both_ instances have kOneByteDataHintMask set.
+  __ And(at, t0, Operand(kOneByteDataHintMask));
   __ and_(at, at, t1);
   __ Branch(&ascii_data, ne, at, Operand(zero_reg));
   __ Xor(t0, t0, Operand(t1));
-  STATIC_ASSERT(kOneByteStringTag != 0 && kAsciiDataHintTag != 0);
-  __ And(t0, t0, Operand(kOneByteStringTag | kAsciiDataHintTag));
+  STATIC_ASSERT(kOneByteStringTag != 0 && kOneByteDataHintTag != 0);
+  __ And(t0, t0, Operand(kOneByteStringTag | kOneByteDataHintTag));
   __ Branch(&ascii_data, eq, t0,
-      Operand(kOneByteStringTag | kAsciiDataHintTag));
+      Operand(kOneByteStringTag | kOneByteDataHintTag));
 
   // Allocate a two byte cons string.
   __ AllocateTwoByteConsString(v0, t2, t0, t1, &call_runtime);
@@ -6291,7 +4695,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // t2: sum of lengths.
   Label first_prepared, second_prepared;
   __ bind(&string_add_flat_result);
-  if (flags_ != NO_STRING_ADD_FLAGS) {
+  if ((flags_ & STRING_ADD_CHECK_BOTH) != STRING_ADD_CHECK_BOTH) {
     __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
     __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
@@ -6386,6 +4790,18 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 }
 
 
+void StringAddStub::GenerateRegisterArgsPush(MacroAssembler* masm) {
+  __ push(a0);
+  __ push(a1);
+}
+
+
+void StringAddStub::GenerateRegisterArgsPop(MacroAssembler* masm) {
+  __ pop(a1);
+  __ pop(a0);
+}
+
+
 void StringAddStub::GenerateConvertArgument(MacroAssembler* masm,
                                             int stack_offset,
                                             Register arg,
@@ -6401,33 +4817,11 @@ void StringAddStub::GenerateConvertArgument(MacroAssembler* masm,
   __ Branch(&done, lt, scratch1, Operand(FIRST_NONSTRING_TYPE));
 
   // Check the number to string cache.
-  Label not_cached;
   __ bind(&not_string);
   // Puts the cached result into scratch1.
-  NumberToStringStub::GenerateLookupNumberStringCache(masm,
-                                                      arg,
-                                                      scratch1,
-                                                      scratch2,
-                                                      scratch3,
-                                                      scratch4,
-                                                      false,
-                                                      &not_cached);
+  __ LookupNumberStringCache(arg, scratch1, scratch2, scratch3, scratch4, slow);
   __ mov(arg, scratch1);
   __ sw(arg, MemOperand(sp, stack_offset));
-  __ jmp(&done);
-
-  // Check if the argument is a safe string wrapper.
-  __ bind(&not_cached);
-  __ JumpIfSmi(arg, slow);
-  __ GetObjectType(arg, scratch1, scratch2);  // map -> scratch1.
-  __ Branch(slow, ne, scratch2, Operand(JS_VALUE_TYPE));
-  __ lbu(scratch2, FieldMemOperand(scratch1, Map::kBitField2Offset));
-  __ li(scratch4, 1 << Map::kStringWrapperSafeForDefaultValueOf);
-  __ And(scratch2, scratch2, scratch4);
-  __ Branch(slow, ne, scratch2, Operand(scratch4));
-  __ lw(arg, FieldMemOperand(arg, JSValue::kValueOffset));
-  __ sw(arg, MemOperand(sp, stack_offset));
-
   __ bind(&done);
 }
 
@@ -6440,14 +4834,15 @@ void ICCompareStub::GenerateSmis(MacroAssembler* masm) {
 
   if (GetCondition() == eq) {
     // For equality we do not care about the sign of the result.
+    __ Ret(USE_DELAY_SLOT);
     __ Subu(v0, a0, a1);
   } else {
     // Untag before subtracting to avoid handling overflow.
     __ SmiUntag(a1);
     __ SmiUntag(a0);
+    __ Ret(USE_DELAY_SLOT);
     __ Subu(v0, a1, a0);
   }
-  __ Ret();
 
   __ bind(&miss);
   GenerateMiss(masm);
@@ -6508,16 +4903,17 @@ void ICCompareStub::GenerateNumbers(MacroAssembler* masm) {
   __ BranchF(&fpu_lt, NULL, lt, f0, f2);
 
   // Otherwise it's greater, so just fall thru, and return.
+  ASSERT(is_int16(GREATER) && is_int16(EQUAL) && is_int16(LESS));
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(GREATER));
-  __ Ret();
 
   __ bind(&fpu_eq);
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(EQUAL));
-  __ Ret();
 
   __ bind(&fpu_lt);
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(LESS));
-  __ Ret();
 
   __ bind(&unordered);
   __ bind(&generic_stub);
@@ -6564,10 +4960,11 @@ void ICCompareStub::GenerateInternalizedStrings(MacroAssembler* masm) {
   __ lw(tmp2, FieldMemOperand(right, HeapObject::kMapOffset));
   __ lbu(tmp1, FieldMemOperand(tmp1, Map::kInstanceTypeOffset));
   __ lbu(tmp2, FieldMemOperand(tmp2, Map::kInstanceTypeOffset));
-  STATIC_ASSERT(kInternalizedTag != 0);
-  __ And(tmp1, tmp1, Operand(tmp2));
-  __ And(tmp1, tmp1, kIsInternalizedMask);
-  __ Branch(&miss, eq, tmp1, Operand(zero_reg));
+  STATIC_ASSERT(kInternalizedTag == 0 && kStringTag == 0);
+  __ Or(tmp1, tmp1, Operand(tmp2));
+  __ And(at, tmp1, Operand(kIsNotStringMask | kIsNotInternalizedMask));
+  __ Branch(&miss, ne, at, Operand(zero_reg));
+
   // Make sure a0 is non-zero. At this point input operands are
   // guaranteed to be non-zero.
   ASSERT(right.is(a0));
@@ -6576,8 +4973,9 @@ void ICCompareStub::GenerateInternalizedStrings(MacroAssembler* masm) {
   __ mov(v0, right);
   // Internalized strings are compared by identity.
   __ Ret(ne, left, Operand(right));
+  ASSERT(is_int16(EQUAL));
+  __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(Smi::FromInt(EQUAL)));
-  __ Ret();
 
   __ bind(&miss);
   GenerateMiss(masm);
@@ -6600,23 +4998,13 @@ void ICCompareStub::GenerateUniqueNames(MacroAssembler* masm) {
 
   // Check that both operands are unique names. This leaves the instance
   // types loaded in tmp1 and tmp2.
-  STATIC_ASSERT(kInternalizedTag != 0);
   __ lw(tmp1, FieldMemOperand(left, HeapObject::kMapOffset));
   __ lw(tmp2, FieldMemOperand(right, HeapObject::kMapOffset));
   __ lbu(tmp1, FieldMemOperand(tmp1, Map::kInstanceTypeOffset));
   __ lbu(tmp2, FieldMemOperand(tmp2, Map::kInstanceTypeOffset));
 
-  Label succeed1;
-  __ And(at, tmp1, Operand(kIsInternalizedMask));
-  __ Branch(&succeed1, ne, at, Operand(zero_reg));
-  __ Branch(&miss, ne, tmp1, Operand(SYMBOL_TYPE));
-  __ bind(&succeed1);
-
-  Label succeed2;
-  __ And(at, tmp2, Operand(kIsInternalizedMask));
-  __ Branch(&succeed2, ne, at, Operand(zero_reg));
-  __ Branch(&miss, ne, tmp2, Operand(SYMBOL_TYPE));
-  __ bind(&succeed2);
+  __ JumpIfNotUniqueName(tmp1, &miss);
+  __ JumpIfNotUniqueName(tmp2, &miss);
 
   // Use a0 as result
   __ mov(v0, a0);
@@ -6679,14 +5067,15 @@ void ICCompareStub::GenerateStrings(MacroAssembler* masm) {
   // Handle not identical strings.
 
   // Check that both strings are internalized strings. If they are, we're done
-  // because we already know they are not identical.
+  // because we already know they are not identical. We know they are both
+  // strings.
   if (equality) {
     ASSERT(GetCondition() == eq);
-    STATIC_ASSERT(kInternalizedTag != 0);
-    __ And(tmp3, tmp1, Operand(tmp2));
-    __ And(tmp5, tmp3, Operand(kIsInternalizedMask));
+    STATIC_ASSERT(kInternalizedTag == 0);
+    __ Or(tmp3, tmp1, Operand(tmp2));
+    __ And(tmp5, tmp3, Operand(kIsNotInternalizedMask));
     Label is_symbol;
-    __ Branch(&is_symbol, eq, tmp5, Operand(zero_reg));
+    __ Branch(&is_symbol, ne, tmp5, Operand(zero_reg));
     // Make sure a0 is non-zero. At this point input operands are
     // guaranteed to be non-zero.
     ASSERT(right.is(a0));
@@ -6759,6 +5148,7 @@ void ICCompareStub::GenerateKnownObjects(MacroAssembler* masm) {
   GenerateMiss(masm);
 }
 
+
 void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
   {
     // Call the runtime system in a fresh internal frame.
@@ -6782,9 +5172,16 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
 
 
 void DirectCEntryStub::Generate(MacroAssembler* masm) {
-  // No need to pop or drop anything, LeaveExitFrame will restore the old
-  // stack, thus dropping the allocated space for the return value.
-  // The saved ra is after the reserved stack space for the 4 args.
+  // Make place for arguments to fit C calling convention. Most of the callers
+  // of DirectCEntryStub::GenerateCall are using EnterExitFrame/LeaveExitFrame
+  // so they handle stack restoring and we don't have to do that here.
+  // Any caller of DirectCEntryStub::GenerateCall must take care of dropping
+  // kCArgsSlotsSize stack space after the call.
+  __ Subu(sp, sp, Operand(kCArgsSlotsSize));
+  // Place the return address on the stack, making the call
+  // GC safe. The RegExp backend also relies on this.
+  __ sw(ra, MemOperand(sp, kCArgsSlotsSize));
+  __ Call(t9);  // Call the C++ function.
   __ lw(t9, MemOperand(sp, kCArgsSlotsSize));
 
   if (FLAG_debug_code && FLAG_enable_slow_asserts) {
@@ -6792,7 +5189,7 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
     // filled with kZapValue by the GC.
     // Dereference the address and check for this.
     __ lw(t0, MemOperand(t9));
-    __ Assert(ne, "Received invalid return address.", t0,
+    __ Assert(ne, kReceivedInvalidReturnAddress, t0,
         Operand(reinterpret_cast<uint32_t>(kZapValue)));
   }
   __ Jump(t9);
@@ -6800,41 +5197,12 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
 
 
 void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
-                                    ExternalReference function) {
-  __ li(t9, Operand(function));
-  this->GenerateCall(masm, t9);
-}
-
-
-void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
                                     Register target) {
-  __ Move(t9, target);
-  __ AssertStackIsAligned();
-  // Allocate space for arg slots.
-  __ Subu(sp, sp, kCArgsSlotsSize);
-
-  // Block the trampoline pool through the whole function to make sure the
-  // number of generated instructions is constant.
-  Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
-
-  // We need to get the current 'pc' value, which is not available on MIPS.
-  Label find_ra;
-  masm->bal(&find_ra);  // ra = pc + 8.
-  masm->nop();  // Branch delay slot nop.
-  masm->bind(&find_ra);
-
-  const int kNumInstructionsToJump = 6;
-  masm->addiu(ra, ra, kNumInstructionsToJump * kPointerSize);
-  // Push return address (accessible to GC through exit frame pc).
-  // This spot for ra was reserved in EnterExitFrame.
-  masm->sw(ra, MemOperand(sp, kCArgsSlotsSize));
   intptr_t loc =
       reinterpret_cast<intptr_t>(GetCode(masm->isolate()).location());
-  masm->li(ra, Operand(loc, RelocInfo::CODE_TARGET), CONSTANT_SIZE);
-  // Call the function.
-  masm->Jump(t9);
-  // Make sure the stored 'ra' points to this position.
-  ASSERT_EQ(kNumInstructionsToJump, masm->InstructionsGeneratedSince(&find_ra));
+  __ Move(t9, target);
+  __ li(ra, Operand(loc, RelocInfo::CODE_TARGET), CONSTANT_SIZE);
+  __ Call(ra);
 }
 
 
@@ -6891,10 +5259,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ lw(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
     __ lbu(entity_name,
            FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
-    __ And(scratch0, entity_name, Operand(kIsInternalizedMask));
-    __ Branch(&good, ne, scratch0, Operand(zero_reg));
-    __ Branch(miss, ne, entity_name, Operand(SYMBOL_TYPE));
-
+    __ JumpIfNotUniqueName(entity_name, miss);
     __ bind(&good);
 
     // Restore the properties.
@@ -7068,14 +5433,10 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
     if (i != kTotalProbes - 1 && mode_ == NEGATIVE_LOOKUP) {
       // Check if the entry name is not a unique name.
-      Label cont;
       __ lw(entry_key, FieldMemOperand(entry_key, HeapObject::kMapOffset));
       __ lbu(entry_key,
              FieldMemOperand(entry_key, Map::kInstanceTypeOffset));
-      __ And(result, entry_key, Operand(kIsInternalizedMask));
-      __ Branch(&cont, ne, result, Operand(zero_reg));
-      __ Branch(&maybe_in_dictionary, ne, entry_key, Operand(SYMBOL_TYPE));
-      __ bind(&cont);
+      __ JumpIfNotUniqueName(entry_key, &maybe_in_dictionary);
     }
   }
 
@@ -7103,6 +5464,7 @@ struct AheadOfTimeWriteBarrierStubList {
   RememberedSetAction action;
 };
 
+
 #define REG(Name) { kRegister_ ## Name ## _Code }
 
 static const AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
@@ -7112,8 +5474,6 @@ static const AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // Also used in StoreIC::GenerateNormal via GenerateDictionaryStore.
   // Also used in KeyedStoreIC::GenerateGeneric.
   { REG(a3), REG(t0), REG(t1), EMIT_REMEMBERED_SET },
-  // Used in CompileStoreGlobal.
-  { REG(t0), REG(a1), REG(a2), OMIT_REMEMBERED_SET },
   // Used in StoreStubCompiler::CompileStoreField via GenerateStoreField.
   { REG(a1), REG(a2), REG(a3), EMIT_REMEMBERED_SET },
   { REG(a3), REG(a2), REG(a1), EMIT_REMEMBERED_SET },
@@ -7135,6 +5495,9 @@ static const AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   { REG(t1), REG(a0), REG(t2), EMIT_REMEMBERED_SET },
   // FastNewClosureStub::Generate
   { REG(a2), REG(t0), REG(a1), EMIT_REMEMBERED_SET },
+  // StringAddStub::Generate
+  { REG(t3), REG(a1), REG(t0), EMIT_REMEMBERED_SET },
+  { REG(t3), REG(a0), REG(t0), EMIT_REMEMBERED_SET },
   // Null termination.
   { REG(no_reg), REG(no_reg), REG(no_reg), EMIT_REMEMBERED_SET}
 };
@@ -7142,7 +5505,7 @@ static const AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
 #undef REG
 
 
-bool RecordWriteStub::IsPregenerated() {
+bool RecordWriteStub::IsPregenerated(Isolate* isolate) {
   for (const AheadOfTimeWriteBarrierStubList* entry = kAheadOfTime;
        !entry->object.is(no_reg);
        entry++) {
@@ -7162,6 +5525,9 @@ void StoreBufferOverflowStub::GenerateFixedRegStubsAheadOfTime(
     Isolate* isolate) {
   StoreBufferOverflowStub stub1(kDontSaveFPRegs);
   stub1.GetCode(isolate)->set_is_pregenerated(true);
+  // Hydrogen code stubs need stub2 at snapshot time.
+  StoreBufferOverflowStub stub2(kSaveFPRegs);
+  stub2.GetCode(isolate)->set_is_pregenerated(true);
 }
 
 
@@ -7277,7 +5643,7 @@ void RecordWriteStub::InformIncrementalMarker(MacroAssembler* masm, Mode mode) {
   __ Move(address, regs_.address());
   __ Move(a0, regs_.object());
   __ Move(a1, address);
-  __ li(a2, Operand(ExternalReference::isolate_address()));
+  __ li(a2, Operand(ExternalReference::isolate_address(masm->isolate())));
 
   AllowExternalCallThatCantCauseGC scope(masm);
   if (mode == INCREMENTAL_COMPACTION) {
@@ -7385,10 +5751,10 @@ void RecordWriteStub::CheckNeedsToInformIncrementalMarker(
 void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   // ----------- S t a t e -------------
   //  -- a0    : element value to store
-  //  -- a1    : array literal
-  //  -- a2    : map of array literal
   //  -- a3    : element index as smi
-  //  -- t0    : array literal index in function as smi
+  //  -- sp[0] : array literal index in function as smi
+  //  -- sp[4] : array literal
+  // clobbers a1, a2, t0
   // -----------------------------------
 
   Label element_done;
@@ -7396,6 +5762,11 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   Label smi_element;
   Label slow_elements;
   Label fast_elements;
+
+  // Get array literal index, array literal and its map.
+  __ lw(t0, MemOperand(sp, 0 * kPointerSize));
+  __ lw(a1, MemOperand(sp, 1 * kPointerSize));
+  __ lw(a2, FieldMemOperand(a1, JSObject::kMapOffset));
 
   __ CheckFastElements(a2, t1, &double_elements);
   // Check for FAST_*_SMI_ELEMENTS or FAST_*_ELEMENTS elements
@@ -7438,10 +5809,7 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   // Array literal has ElementsKind of FAST_*_DOUBLE_ELEMENTS.
   __ bind(&double_elements);
   __ lw(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
-  __ StoreNumberToDoubleElements(a0, a3,
-                                 // Overwrites all regs after this.
-                                 t1, t2, t3, t5, a2,
-                                 &slow_elements);
+  __ StoreNumberToDoubleElements(a0, a3, t1, t3, t5, a2, &slow_elements);
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, a0);
 }
@@ -7458,13 +5826,14 @@ void StubFailureTrampolineStub::Generate(MacroAssembler* masm) {
   }
   masm->LeaveFrame(StackFrame::STUB_FAILURE_TRAMPOLINE);
   __ sll(a1, a1, kPointerSizeLog2);
+  __ Ret(USE_DELAY_SLOT);
   __ Addu(sp, sp, a1);
-  __ Ret();
 }
 
 
 void ProfileEntryHookStub::MaybeCallEntryHook(MacroAssembler* masm) {
-  if (entry_hook_ != NULL) {
+  if (masm->isolate()->function_entry_hook() != NULL) {
+    AllowStubCallsScope allow_stub_calls(masm, true);
     ProfileEntryHookStub stub;
     __ push(ra);
     __ CallStub(&stub);
@@ -7479,9 +5848,16 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   const int32_t kReturnAddressDistanceFromFunctionStart =
       Assembler::kCallTargetAddressOffset + (2 * Assembler::kInstrSize);
 
-  // Save live volatile registers.
-  __ Push(ra, t1, a1);
-  const int32_t kNumSavedRegs = 3;
+  // This should contain all kJSCallerSaved registers.
+  const RegList kSavedRegs =
+     kJSCallerSaved |  // Caller saved registers.
+     s5.bit();         // Saved stack pointer.
+
+  // We also save ra, so the count here is one higher than the mask indicates.
+  const int32_t kNumSavedRegs = kNumJSCallerSaved + 2;
+
+  // Save all caller-save registers as this may be called from anywhere.
+  __ MultiPush(kSavedRegs | ra.bit());
 
   // Compute the function's address for the first argument.
   __ Subu(a0, ra, Operand(kReturnAddressDistanceFromFunctionStart));
@@ -7493,20 +5869,22 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   // Align the stack if necessary.
   int frame_alignment = masm->ActivationFrameAlignment();
   if (frame_alignment > kPointerSize) {
-    __ mov(t1, sp);
+    __ mov(s5, sp);
     ASSERT(IsPowerOf2(frame_alignment));
     __ And(sp, sp, Operand(-frame_alignment));
   }
 
 #if defined(V8_HOST_ARCH_MIPS)
-  __ li(at, Operand(reinterpret_cast<int32_t>(&entry_hook_)));
-  __ lw(at, MemOperand(at));
+  int32_t entry_hook =
+      reinterpret_cast<int32_t>(masm->isolate()->function_entry_hook());
+  __ li(at, Operand(entry_hook));
 #else
   // Under the simulator we need to indirect the entry hook through a
   // trampoline function at a known address.
-  Address trampoline_address = reinterpret_cast<Address>(
-      reinterpret_cast<intptr_t>(EntryHookTrampoline));
-  ApiFunction dispatcher(trampoline_address);
+  // It additionally takes an isolate as a third parameter.
+  __ li(a2, Operand(ExternalReference::isolate_address(masm->isolate())));
+
+  ApiFunction dispatcher(FUNCTION_ADDR(EntryHookTrampoline));
   __ li(at, Operand(ExternalReference(&dispatcher,
                                       ExternalReference::BUILTIN_CALL,
                                       masm->isolate())));
@@ -7515,11 +5893,328 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
 
   // Restore the stack pointer if needed.
   if (frame_alignment > kPointerSize) {
-    __ mov(sp, t1);
+    __ mov(sp, s5);
   }
 
-  __ Pop(ra, t1, a1);
+  // Also pop ra to get Ret(0).
+  __ MultiPop(kSavedRegs | ra.bit());
   __ Ret();
+}
+
+
+template<class T>
+static void CreateArrayDispatch(MacroAssembler* masm,
+                                AllocationSiteOverrideMode mode) {
+  if (mode == DISABLE_ALLOCATION_SITES) {
+    T stub(GetInitialFastElementsKind(),
+           CONTEXT_CHECK_REQUIRED,
+           mode);
+    __ TailCallStub(&stub);
+  } else if (mode == DONT_OVERRIDE) {
+    int last_index = GetSequenceIndexFromFastElementsKind(
+        TERMINAL_FAST_ELEMENTS_KIND);
+    for (int i = 0; i <= last_index; ++i) {
+      Label next;
+      ElementsKind kind = GetFastElementsKindFromSequenceIndex(i);
+      __ Branch(&next, ne, a3, Operand(kind));
+      T stub(kind);
+      __ TailCallStub(&stub);
+      __ bind(&next);
+    }
+
+    // If we reached this point there is a problem.
+    __ Abort(kUnexpectedElementsKindInArrayConstructor);
+  } else {
+    UNREACHABLE();
+  }
+}
+
+
+static void CreateArrayDispatchOneArgument(MacroAssembler* masm,
+                                           AllocationSiteOverrideMode mode) {
+  // a2 - type info cell (if mode != DISABLE_ALLOCATION_SITES)
+  // a3 - kind (if mode != DISABLE_ALLOCATION_SITES)
+  // a0 - number of arguments
+  // a1 - constructor?
+  // sp[0] - last argument
+  Label normal_sequence;
+  if (mode == DONT_OVERRIDE) {
+    ASSERT(FAST_SMI_ELEMENTS == 0);
+    ASSERT(FAST_HOLEY_SMI_ELEMENTS == 1);
+    ASSERT(FAST_ELEMENTS == 2);
+    ASSERT(FAST_HOLEY_ELEMENTS == 3);
+    ASSERT(FAST_DOUBLE_ELEMENTS == 4);
+    ASSERT(FAST_HOLEY_DOUBLE_ELEMENTS == 5);
+
+    // is the low bit set? If so, we are holey and that is good.
+    __ And(at, a3, Operand(1));
+    __ Branch(&normal_sequence, ne, at, Operand(zero_reg));
+  }
+
+  // look at the first argument
+  __ lw(t1, MemOperand(sp, 0));
+  __ Branch(&normal_sequence, eq, t1, Operand(zero_reg));
+
+  if (mode == DISABLE_ALLOCATION_SITES) {
+    ElementsKind initial = GetInitialFastElementsKind();
+    ElementsKind holey_initial = GetHoleyElementsKind(initial);
+
+    ArraySingleArgumentConstructorStub stub_holey(holey_initial,
+                                                  CONTEXT_CHECK_REQUIRED,
+                                                  DISABLE_ALLOCATION_SITES);
+    __ TailCallStub(&stub_holey);
+
+    __ bind(&normal_sequence);
+    ArraySingleArgumentConstructorStub stub(initial,
+                                            CONTEXT_CHECK_REQUIRED,
+                                            DISABLE_ALLOCATION_SITES);
+    __ TailCallStub(&stub);
+  } else if (mode == DONT_OVERRIDE) {
+    // We are going to create a holey array, but our kind is non-holey.
+    // Fix kind and retry (only if we have an allocation site in the cell).
+    __ Addu(a3, a3, Operand(1));
+    __ lw(t1, FieldMemOperand(a2, Cell::kValueOffset));
+
+    if (FLAG_debug_code) {
+      __ lw(t1, FieldMemOperand(t1, 0));
+      __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
+      __ Assert(eq, kExpectedAllocationSiteInCell, t1, Operand(at));
+      __ lw(t1, FieldMemOperand(a2, Cell::kValueOffset));
+    }
+
+    // Save the resulting elements kind in type info
+    __ SmiTag(a3);
+    __ lw(t1, FieldMemOperand(a2, Cell::kValueOffset));
+    __ sw(a3, FieldMemOperand(t1, AllocationSite::kTransitionInfoOffset));
+    __ SmiUntag(a3);
+
+    __ bind(&normal_sequence);
+    int last_index = GetSequenceIndexFromFastElementsKind(
+        TERMINAL_FAST_ELEMENTS_KIND);
+    for (int i = 0; i <= last_index; ++i) {
+      Label next;
+      ElementsKind kind = GetFastElementsKindFromSequenceIndex(i);
+      __ Branch(&next, ne, a3, Operand(kind));
+      ArraySingleArgumentConstructorStub stub(kind);
+      __ TailCallStub(&stub);
+      __ bind(&next);
+    }
+
+    // If we reached this point there is a problem.
+    __ Abort(kUnexpectedElementsKindInArrayConstructor);
+  } else {
+    UNREACHABLE();
+  }
+}
+
+
+template<class T>
+static void ArrayConstructorStubAheadOfTimeHelper(Isolate* isolate) {
+  ElementsKind initial_kind = GetInitialFastElementsKind();
+  ElementsKind initial_holey_kind = GetHoleyElementsKind(initial_kind);
+
+  int to_index = GetSequenceIndexFromFastElementsKind(
+      TERMINAL_FAST_ELEMENTS_KIND);
+  for (int i = 0; i <= to_index; ++i) {
+    ElementsKind kind = GetFastElementsKindFromSequenceIndex(i);
+    T stub(kind);
+    stub.GetCode(isolate)->set_is_pregenerated(true);
+    if (AllocationSite::GetMode(kind) != DONT_TRACK_ALLOCATION_SITE ||
+        (!FLAG_track_allocation_sites &&
+         (kind == initial_kind || kind == initial_holey_kind))) {
+      T stub1(kind, CONTEXT_CHECK_REQUIRED, DISABLE_ALLOCATION_SITES);
+      stub1.GetCode(isolate)->set_is_pregenerated(true);
+    }
+  }
+}
+
+
+void ArrayConstructorStubBase::GenerateStubsAheadOfTime(Isolate* isolate) {
+  ArrayConstructorStubAheadOfTimeHelper<ArrayNoArgumentConstructorStub>(
+      isolate);
+  ArrayConstructorStubAheadOfTimeHelper<ArraySingleArgumentConstructorStub>(
+      isolate);
+  ArrayConstructorStubAheadOfTimeHelper<ArrayNArgumentsConstructorStub>(
+      isolate);
+}
+
+
+void InternalArrayConstructorStubBase::GenerateStubsAheadOfTime(
+    Isolate* isolate) {
+  ElementsKind kinds[2] = { FAST_ELEMENTS, FAST_HOLEY_ELEMENTS };
+  for (int i = 0; i < 2; i++) {
+    // For internal arrays we only need a few things.
+    InternalArrayNoArgumentConstructorStub stubh1(kinds[i]);
+    stubh1.GetCode(isolate)->set_is_pregenerated(true);
+    InternalArraySingleArgumentConstructorStub stubh2(kinds[i]);
+    stubh2.GetCode(isolate)->set_is_pregenerated(true);
+    InternalArrayNArgumentsConstructorStub stubh3(kinds[i]);
+    stubh3.GetCode(isolate)->set_is_pregenerated(true);
+  }
+}
+
+
+void ArrayConstructorStub::GenerateDispatchToArrayStub(
+    MacroAssembler* masm,
+    AllocationSiteOverrideMode mode) {
+  if (argument_count_ == ANY) {
+    Label not_zero_case, not_one_case;
+    __ And(at, a0, a0);
+    __ Branch(&not_zero_case, ne, at, Operand(zero_reg));
+    CreateArrayDispatch<ArrayNoArgumentConstructorStub>(masm, mode);
+
+    __ bind(&not_zero_case);
+    __ Branch(&not_one_case, gt, a0, Operand(1));
+    CreateArrayDispatchOneArgument(masm, mode);
+
+    __ bind(&not_one_case);
+    CreateArrayDispatch<ArrayNArgumentsConstructorStub>(masm, mode);
+  } else if (argument_count_ == NONE) {
+    CreateArrayDispatch<ArrayNoArgumentConstructorStub>(masm, mode);
+  } else if (argument_count_ == ONE) {
+    CreateArrayDispatchOneArgument(masm, mode);
+  } else if (argument_count_ == MORE_THAN_ONE) {
+    CreateArrayDispatch<ArrayNArgumentsConstructorStub>(masm, mode);
+  } else {
+    UNREACHABLE();
+  }
+}
+
+
+void ArrayConstructorStub::Generate(MacroAssembler* masm) {
+  // ----------- S t a t e -------------
+  //  -- a0 : argc (only if argument_count_ == ANY)
+  //  -- a1 : constructor
+  //  -- a2 : type info cell
+  //  -- sp[0] : return address
+  //  -- sp[4] : last argument
+  // -----------------------------------
+  if (FLAG_debug_code) {
+    // The array construct code is only set for the global and natives
+    // builtin Array functions which always have maps.
+
+    // Initial map for the builtin Array function should be a map.
+    __ lw(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
+    // Will both indicate a NULL and a Smi.
+    __ And(at, a3, Operand(kSmiTagMask));
+    __ Assert(ne, kUnexpectedInitialMapForArrayFunction,
+        at, Operand(zero_reg));
+    __ GetObjectType(a3, a3, t0);
+    __ Assert(eq, kUnexpectedInitialMapForArrayFunction,
+        t0, Operand(MAP_TYPE));
+
+    // We should either have undefined in a2 or a valid cell.
+    Label okay_here;
+    Handle<Map> cell_map = masm->isolate()->factory()->cell_map();
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    __ Branch(&okay_here, eq, a2, Operand(at));
+    __ lw(a3, FieldMemOperand(a2, 0));
+    __ Assert(eq, kExpectedPropertyCellInRegisterA2,
+        a3, Operand(cell_map));
+    __ bind(&okay_here);
+  }
+
+  Label no_info;
+  // Get the elements kind and case on that.
+  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+  __ Branch(&no_info, eq, a2, Operand(at));
+  __ lw(a3, FieldMemOperand(a2, Cell::kValueOffset));
+
+  // If the type cell is undefined, or contains anything other than an
+  // AllocationSite, call an array constructor that doesn't use AllocationSites.
+  __ lw(t0, FieldMemOperand(a3, 0));
+  __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
+  __ Branch(&no_info, ne, t0, Operand(at));
+
+  __ lw(a3, FieldMemOperand(a3, AllocationSite::kTransitionInfoOffset));
+  __ SmiUntag(a3);
+  GenerateDispatchToArrayStub(masm, DONT_OVERRIDE);
+
+  __ bind(&no_info);
+  GenerateDispatchToArrayStub(masm, DISABLE_ALLOCATION_SITES);
+}
+
+
+void InternalArrayConstructorStub::GenerateCase(
+    MacroAssembler* masm, ElementsKind kind) {
+  Label not_zero_case, not_one_case;
+  Label normal_sequence;
+
+  __ Branch(&not_zero_case, ne, a0, Operand(zero_reg));
+  InternalArrayNoArgumentConstructorStub stub0(kind);
+  __ TailCallStub(&stub0);
+
+  __ bind(&not_zero_case);
+  __ Branch(&not_one_case, gt, a0, Operand(1));
+
+  if (IsFastPackedElementsKind(kind)) {
+    // We might need to create a holey array
+    // look at the first argument.
+    __ lw(at, MemOperand(sp, 0));
+    __ Branch(&normal_sequence, eq, at, Operand(zero_reg));
+
+    InternalArraySingleArgumentConstructorStub
+        stub1_holey(GetHoleyElementsKind(kind));
+    __ TailCallStub(&stub1_holey);
+  }
+
+  __ bind(&normal_sequence);
+  InternalArraySingleArgumentConstructorStub stub1(kind);
+  __ TailCallStub(&stub1);
+
+  __ bind(&not_one_case);
+  InternalArrayNArgumentsConstructorStub stubN(kind);
+  __ TailCallStub(&stubN);
+}
+
+
+void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
+  // ----------- S t a t e -------------
+  //  -- a0 : argc
+  //  -- a1 : constructor
+  //  -- sp[0] : return address
+  //  -- sp[4] : last argument
+  // -----------------------------------
+
+  if (FLAG_debug_code) {
+    // The array construct code is only set for the global and natives
+    // builtin Array functions which always have maps.
+
+    // Initial map for the builtin Array function should be a map.
+    __ lw(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
+    // Will both indicate a NULL and a Smi.
+    __ And(at, a3, Operand(kSmiTagMask));
+    __ Assert(ne, kUnexpectedInitialMapForArrayFunction,
+        at, Operand(zero_reg));
+    __ GetObjectType(a3, a3, t0);
+    __ Assert(eq, kUnexpectedInitialMapForArrayFunction,
+        t0, Operand(MAP_TYPE));
+  }
+
+  // Figure out the right elements kind.
+  __ lw(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
+
+  // Load the map's "bit field 2" into a3. We only need the first byte,
+  // but the following bit field extraction takes care of that anyway.
+  __ lbu(a3, FieldMemOperand(a3, Map::kBitField2Offset));
+  // Retrieve elements_kind from bit field 2.
+  __ Ext(a3, a3, Map::kElementsKindShift, Map::kElementsKindBitCount);
+
+  if (FLAG_debug_code) {
+    Label done;
+    __ Branch(&done, eq, a3, Operand(FAST_ELEMENTS));
+    __ Assert(
+        eq, kInvalidElementsKindForInternalArrayOrInternalPackedArray,
+        a3, Operand(FAST_HOLEY_ELEMENTS));
+    __ bind(&done);
+  }
+
+  Label fast_elements_case;
+  __ Branch(&fast_elements_case, eq, a3, Operand(FAST_ELEMENTS));
+  GenerateCase(masm, FAST_HOLEY_ELEMENTS);
+
+  __ bind(&fast_elements_case);
+  GenerateCase(masm, FAST_ELEMENTS);
 }
 
 

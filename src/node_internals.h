@@ -22,17 +22,66 @@
 #ifndef SRC_NODE_INTERNALS_H_
 #define SRC_NODE_INTERNALS_H_
 
+#include "env.h"
+#include "util.h"
+#include "util-inl.h"
+#include "uv.h"
+#include "v8.h"
+
+#include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 
-#include "v8.h"
+struct sockaddr;
 
 namespace node {
 
 // Defined in node.cc
 extern v8::Isolate* node_isolate;
 
-// Defined in node.cc at startup.
-extern v8::Persistent<v8::Object> process;
+// If persistent.IsWeak() == false, then do not call persistent.Dispose()
+// while the returned Local<T> is still in scope, it will destroy the
+// reference to the object.
+template <class TypeName>
+inline v8::Local<TypeName> PersistentToLocal(
+    v8::Isolate* isolate,
+    const v8::Persistent<TypeName>& persistent);
+
+// Call with valid HandleScope and while inside Context scope.
+v8::Handle<v8::Value> MakeCallback(Environment* env,
+                                   v8::Handle<v8::Object> object,
+                                   const char* method,
+                                   int argc = 0,
+                                   v8::Handle<v8::Value>* argv = NULL);
+
+// Call with valid HandleScope and while inside Context scope.
+v8::Handle<v8::Value> MakeCallback(Environment* env,
+                                   const v8::Handle<v8::Object> object,
+                                   uint32_t index,
+                                   int argc = 0,
+                                   v8::Handle<v8::Value>* argv = NULL);
+
+// Call with valid HandleScope and while inside Context scope.
+v8::Handle<v8::Value> MakeCallback(Environment* env,
+                                   const v8::Handle<v8::Object> object,
+                                   const v8::Handle<v8::String> symbol,
+                                   int argc = 0,
+                                   v8::Handle<v8::Value>* argv = NULL);
+
+// Call with valid HandleScope and while inside Context scope.
+v8::Handle<v8::Value> MakeCallback(Environment* env,
+                                   const v8::Handle<v8::Object> object,
+                                   const v8::Handle<v8::Function> callback,
+                                   int argc = 0,
+                                   v8::Handle<v8::Value>* argv = NULL);
+
+// Convert a struct sockaddr to a { address: '1.2.3.4', port: 1234 } JS object.
+// Sets address and port properties on the info object and returns it.
+// If |info| is omitted, a new object is returned.
+v8::Local<v8::Object> AddressToJS(
+    Environment* env,
+    const sockaddr* addr,
+    v8::Local<v8::Object> info = v8::Handle<v8::Object>());
 
 #ifdef _WIN32
 // emulate snprintf() on windows, _snprintf() doesn't zero-terminate the buffer
@@ -42,7 +91,8 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   int n = _vsprintf_p(buf, len, fmt, ap);
-  if (len) buf[len - 1] = '\0';
+  if (len)
+    buf[len - 1] = '\0';
   va_end(ap);
   return n;
 }
@@ -54,18 +104,6 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 # define BITS_PER_LONG 32
 #endif
 
-#ifndef offset_of
-// g++ in strict mode complains loudly about the system offsetof() macro
-// because it uses NULL as the base address.
-# define offset_of(type, member) \
-  ((intptr_t) ((char *) &(((type *) 8)->member) - 8))
-#endif
-
-#ifndef container_of
-# define container_of(ptr, type, member) \
-  ((type *) ((char *) (ptr) - offset_of(type, member)))
-#endif
-
 #ifndef ARRAY_SIZE
 # define ARRAY_SIZE(a) (sizeof((a)) / sizeof((a)[0]))
 #endif
@@ -74,45 +112,95 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 # define ROUND_UP(a, b) ((a) % (b) ? ((a) + (b)) - ((a) % (b)) : (a))
 #endif
 
+#if defined(__GNUC__) && __GNUC__ >= 4
+# define MUST_USE_RESULT __attribute__((warn_unused_result))
+# define NO_RETURN __attribute__((noreturn))
+#else
+# define MUST_USE_RESULT
+# define NO_RETURN
+#endif
+
 // this would have been a template function were it not for the fact that g++
 // sometimes fails to resolve it...
 #define THROW_ERROR(fun)                                                      \
   do {                                                                        \
     v8::HandleScope scope(node_isolate);                                      \
-    return v8::ThrowException(fun(v8::String::New(errmsg)));                  \
+    v8::ThrowException(fun(OneByteString(node_isolate, errmsg)));             \
   }                                                                           \
   while (0)
 
-inline static v8::Handle<v8::Value> ThrowError(const char* errmsg) {
+inline static void ThrowError(const char* errmsg) {
   THROW_ERROR(v8::Exception::Error);
 }
 
-inline static v8::Handle<v8::Value> ThrowTypeError(const char* errmsg) {
+inline static void ThrowTypeError(const char* errmsg) {
   THROW_ERROR(v8::Exception::TypeError);
 }
 
-inline static v8::Handle<v8::Value> ThrowRangeError(const char* errmsg) {
+inline static void ThrowRangeError(const char* errmsg) {
   THROW_ERROR(v8::Exception::RangeError);
 }
 
-#define UNWRAP(type)                                                        \
-  assert(!args.This().IsEmpty());                                           \
-  assert(args.This()->InternalFieldCount() > 0);                            \
-  type* wrap = static_cast<type*>(                                          \
-      args.This()->GetAlignedPointerFromInternalField(0));                  \
-  if (!wrap) {                                                              \
-    fprintf(stderr, #type ": Aborting due to unwrap failure at %s:%d\n",    \
-            __FILE__, __LINE__);                                            \
-    abort();                                                                \
+inline static void ThrowErrnoException(int errorno,
+                                       const char* syscall = NULL,
+                                       const char* message = NULL,
+                                       const char* path = NULL) {
+  v8::ThrowException(ErrnoException(errorno, syscall, message, path));
+}
+
+inline static void ThrowUVException(int errorno,
+                                    const char* syscall = NULL,
+                                    const char* message = NULL,
+                                    const char* path = NULL) {
+  v8::ThrowException(UVException(errorno, syscall, message, path));
+}
+
+NO_RETURN void FatalError(const char* location, const char* message);
+
+v8::Local<v8::Object> BuildStatsObject(Environment* env, const uv_stat_t* s);
+
+enum Endianness {
+  kLittleEndian,  // _Not_ LITTLE_ENDIAN, clashes with endian.h.
+  kBigEndian
+};
+
+inline enum Endianness GetEndianness() {
+  // Constant-folded by the compiler.
+  const union {
+    uint8_t u8[2];
+    uint16_t u16;
+  } u = {
+    { 1, 0 }
+  };
+  return u.u16 == 1 ? kLittleEndian : kBigEndian;
+}
+
+inline bool IsLittleEndian() {
+  return GetEndianness() == kLittleEndian;
+}
+
+inline bool IsBigEndian() {
+  return GetEndianness() == kBigEndian;
+}
+
+// parse index for external array data
+inline MUST_USE_RESULT bool ParseArrayIndex(v8::Handle<v8::Value> arg,
+                                            size_t def,
+                                            size_t* ret) {
+  if (arg->IsUndefined()) {
+    *ret = def;
+    return true;
   }
 
-v8::Handle<v8::Value> FromConstructorTemplate(
-    v8::Persistent<v8::FunctionTemplate> t,
-    const v8::Arguments& args);
+  int32_t tmp_i = arg->Int32Value();
 
-// allow for quick domain check
-extern bool using_domains;
+  if (tmp_i < 0)
+    return false;
 
-} // namespace node
+  *ret = static_cast<size_t>(tmp_i);
+  return true;
+}
 
-#endif // SRC_NODE_INTERNALS_H_
+}  // namespace node
+
+#endif  // SRC_NODE_INTERNALS_H_

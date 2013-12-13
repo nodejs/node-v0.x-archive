@@ -19,27 +19,29 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef NODE_STAT_WATCHER_H_
-#define NODE_STAT_WATCHER_H_
+#ifndef SRC_NODE_STAT_WATCHER_H_
+#define SRC_NODE_STAT_WATCHER_H_
 
 #include "node.h"
+#include "async-wrap.h"
+#include "env.h"
 #include "uv.h"
+#include "v8.h"
 
 namespace node {
 
-class StatWatcher : ObjectWrap {
+class StatWatcher : public AsyncWrap {
  public:
+  virtual ~StatWatcher();
+
   static void Initialize(v8::Handle<v8::Object> target);
 
  protected:
-  static v8::Persistent<v8::FunctionTemplate> constructor_template;
+  StatWatcher(Environment* env, v8::Local<v8::Object> wrap);
 
-  StatWatcher();
-  virtual ~StatWatcher();
-
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Start(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Stop(const v8::Arguments& args);
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Stop(const v8::FunctionCallbackInfo<v8::Value>& args);
 
  private:
   static void Callback(uv_fs_poll_t* handle,
@@ -52,4 +54,4 @@ class StatWatcher : ObjectWrap {
 };
 
 }  // namespace node
-#endif  // NODE_STAT_WATCHER_H_
+#endif  // SRC_NODE_STAT_WATCHER_H_

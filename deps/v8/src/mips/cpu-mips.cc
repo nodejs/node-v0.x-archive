@@ -36,7 +36,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#if V8_TARGET_ARCH_MIPS
 
 #include "cpu.h"
 #include "macro-assembler.h"
@@ -86,14 +86,6 @@ void CPU::FlushICache(void* start, size_t size) {
   Simulator::FlushICache(Isolate::Current()->simulator_i_cache(), start, size);
 #endif  // USE_SIMULATOR.
 }
-
-
-void CPU::DebugBreak() {
-#ifdef __mips
-  asm volatile("break");
-#endif  // #ifdef __mips
-}
-
 
 } }  // namespace v8::internal
 

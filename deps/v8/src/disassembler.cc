@@ -71,7 +71,7 @@ class V8NameConverter: public disasm::NameConverter {
 
 
 const char* V8NameConverter::NameOfAddress(byte* pc) const {
-  const char* name = Isolate::Current()->builtins()->Lookup(pc);
+  const char* name = code_->GetIsolate()->builtins()->Lookup(pc);
   if (name != NULL) {
     OS::SNPrintF(v8_buffer_, "%s  (%p)", name, pc);
     return v8_buffer_.start();
@@ -115,10 +115,10 @@ static int DecodeIt(Isolate* isolate,
                     const V8NameConverter& converter,
                     byte* begin,
                     byte* end) {
-  NoHandleAllocation ha(isolate);
-  AssertNoAllocation no_alloc;
-  ExternalReferenceEncoder ref_encoder;
-  Heap* heap = HEAP;
+  SealHandleScope shs(isolate);
+  DisallowHeapAllocation no_alloc;
+  ExternalReferenceEncoder ref_encoder(isolate);
+  Heap* heap = isolate->heap();
 
   v8::internal::EmbeddedVector<char, 128> decode_buffer;
   v8::internal::EmbeddedVector<char, kOutBufferSize> out_buffer;
@@ -250,7 +250,7 @@ static int DecodeIt(Isolate* isolate,
           if (kind == Code::CALL_IC || kind == Code::KEYED_CALL_IC) {
             out.AddFormatted(", argc = %d", code->arguments_count());
           }
-        } else if (kind == Code::STUB) {
+        } else if (kind == Code::STUB || kind == Code::HANDLER) {
           // Reverse lookup required as the minor key cannot be retrieved
           // from the code object.
           Object* obj = heap->code_stubs()->SlowReverseLookup(code);
@@ -293,7 +293,14 @@ static int DecodeIt(Isolate* isolate,
                                                 addr,
                                                 Deoptimizer::LAZY);
           if (id == Deoptimizer::kNotDeoptimizationEntry) {
-            out.AddFormatted("    ;; %s", RelocInfo::RelocModeName(rmode));
+            id = Deoptimizer::GetDeoptimizationId(isolate,
+                                                  addr,
+                                                  Deoptimizer::SOFT);
+            if (id == Deoptimizer::kNotDeoptimizationEntry) {
+              out.AddFormatted("    ;; %s", RelocInfo::RelocModeName(rmode));
+            } else {
+              out.AddFormatted("    ;; soft deoptimization bailout %d", id);
+            }
           } else {
             out.AddFormatted("    ;; lazy deoptimization bailout %d", id);
           }
@@ -353,6 +360,8 @@ void Disassembler::Dump(FILE* f, byte* begin, byte* end) {}
 int Disassembler::Decode(Isolate* isolate, FILE* f, byte* begin, byte* end) {
   return 0;
 }
+
+
 void Disassembler::Decode(FILE* f, Code* code) {}
 
 #endif  // ENABLE_DISASSEMBLER

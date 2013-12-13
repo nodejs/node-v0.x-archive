@@ -35,22 +35,21 @@ namespace v8 {
 namespace internal {
 
 
-static MaybeObject* AllocateRaw(int length) {
-  Heap* heap = Isolate::Current()->heap();
-
+static MaybeObject* AllocateRaw(Isolate* isolate, int length) {
   // Use FixedArray to not use TransitionArray::cast on incomplete object.
   FixedArray* array;
-  MaybeObject* maybe_array = heap->AllocateFixedArray(length);
+  MaybeObject* maybe_array = isolate->heap()->AllocateFixedArray(length);
   if (!maybe_array->To(&array)) return maybe_array;
   return array;
 }
 
 
-MaybeObject* TransitionArray::Allocate(int number_of_transitions) {
+MaybeObject* TransitionArray::Allocate(Isolate* isolate,
+                                       int number_of_transitions) {
   FixedArray* array;
-  MaybeObject* maybe_array = AllocateRaw(ToKeyIndex(number_of_transitions));
+  MaybeObject* maybe_array =
+      AllocateRaw(isolate, ToKeyIndex(number_of_transitions));
   if (!maybe_array->To(&array)) return maybe_array;
-  array->set(kElementsTransitionIndex, Smi::FromInt(0));
   array->set(kPrototypeTransitionsIndex, Smi::FromInt(0));
   return array;
 }
@@ -78,11 +77,11 @@ MaybeObject* TransitionArray::NewWith(SimpleTransitionFlag flag,
   MaybeObject* maybe_result;
 
   if (flag == SIMPLE_TRANSITION) {
-    maybe_result = AllocateRaw(kSimpleTransitionSize);
+    maybe_result = AllocateRaw(target->GetIsolate(), kSimpleTransitionSize);
     if (!maybe_result->To(&result)) return maybe_result;
     result->set(kSimpleTransitionTarget, target);
   } else {
-    maybe_result = Allocate(1);
+    maybe_result = Allocate(target->GetIsolate(), 1);
     if (!maybe_result->To(&result)) return maybe_result;
     result->NoIncrementalWriteBarrierSet(0, key, target);
   }
@@ -95,7 +94,7 @@ MaybeObject* TransitionArray::ExtendToFullTransitionArray() {
   ASSERT(!IsFullTransitionArray());
   int nof = number_of_transitions();
   TransitionArray* result;
-  MaybeObject* maybe_result = Allocate(nof);
+  MaybeObject* maybe_result = Allocate(GetIsolate(), nof);
   if (!maybe_result->To(&result)) return maybe_result;
 
   if (nof == 1) {
@@ -117,12 +116,8 @@ MaybeObject* TransitionArray::CopyInsert(Name* name, Map* target) {
   if (insertion_index == kNotFound) ++new_size;
 
   MaybeObject* maybe_array;
-  maybe_array = TransitionArray::Allocate(new_size);
+  maybe_array = TransitionArray::Allocate(GetIsolate(), new_size);
   if (!maybe_array->To(&result)) return maybe_array;
-
-  if (HasElementsTransition()) {
-    result->set_elements_transition(elements_transition());
-  }
 
   if (HasPrototypeTransitions()) {
     result->SetPrototypeTransitions(GetPrototypeTransitions());
@@ -135,6 +130,7 @@ MaybeObject* TransitionArray::CopyInsert(Name* name, Map* target) {
       }
     }
     result->NoIncrementalWriteBarrierSet(insertion_index, name, target);
+    result->set_back_pointer_storage(back_pointer_storage());
     return result;
   }
 

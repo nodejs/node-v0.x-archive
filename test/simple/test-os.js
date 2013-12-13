@@ -30,14 +30,22 @@ var os = require('os');
 process.env.TMPDIR = '/tmpdir';
 process.env.TMP = '/tmp';
 process.env.TEMP = '/temp';
-var t = ( process.platform === 'win32' ? 'c:\\windows\\temp' : '/tmp' );
-assert.equal(os.tmpdir(), '/tmpdir');
-process.env.TMPDIR = '';
-assert.equal(os.tmpdir(), '/tmp');
-process.env.TMP = '';
-assert.equal(os.tmpdir(), '/temp');
-process.env.TEMP = '';
-assert.equal(os.tmpdir(), t);
+if (process.platform === 'win32') {
+  assert.equal(os.tmpdir(), '/temp');
+  process.env.TEMP = '';
+  assert.equal(os.tmpdir(), '/tmp');
+  process.env.TMP = '';
+  var expected = (process.env.SystemRoot || process.env.windir) + '\\temp';
+  assert.equal(os.tmpdir(), expected);
+} else {
+  assert.equal(os.tmpdir(), '/tmpdir');
+  process.env.TMPDIR = '';
+  assert.equal(os.tmpdir(), '/tmp');
+  process.env.TMP = '';
+  assert.equal(os.tmpdir(), '/temp');
+  process.env.TEMP = '';
+  assert.equal(os.tmpdir(), '/tmp');
+}
 
 var endianness = os.endianness();
 console.log('endianness = %s', endianness);
@@ -85,13 +93,17 @@ switch (platform) {
   case 'linux':
     var filter = function(e) { return e.address == '127.0.0.1'; };
     var actual = interfaces.lo.filter(filter);
-    var expected = [{ address: '127.0.0.1', family: 'IPv4', internal: true }];
+    var expected = [{ address: '127.0.0.1', netmask: '255.0.0.0',
+                      mac: '00:00:00:00:00:00', family: 'IPv4',
+                      internal: true }];
     assert.deepEqual(actual, expected);
     break;
   case 'win32':
     var filter = function(e) { return e.address == '127.0.0.1'; };
     var actual = interfaces['Loopback Pseudo-Interface 1'].filter(filter);
-    var expected = [{ address: '127.0.0.1', family: 'IPv4', internal: true }];
+    var expected = [{ address: '127.0.0.1', netmask: '255.0.0.0',
+                      mac: '00:00:00:00:00:00', family: 'IPv4',
+                      internal: true }];
     assert.deepEqual(actual, expected);
     break;
 }

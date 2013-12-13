@@ -46,6 +46,15 @@ var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
     'ascii');
 var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
     'ascii');
+var rsaKeyPemEncrypted = fs.readFileSync(
+  common.fixturesDir + '/test_rsa_privkey_encrypted.pem', 'ascii');
+var dsaPubPem = fs.readFileSync(common.fixturesDir + '/test_dsa_pubkey.pem',
+    'ascii');
+var dsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_dsa_privkey.pem',
+    'ascii');
+var dsaKeyPemEncrypted = fs.readFileSync(
+  common.fixturesDir + '/test_dsa_privkey_encrypted.pem', 'ascii');
+
 
 try {
   var credentials = crypto.createCredentials(
@@ -446,6 +455,15 @@ a6.write('123');
 a6.end();
 a6 = a6.read();
 
+var a7 = crypto.createHash('sha512');
+a7.end();
+a7 = a7.read();
+
+var a8 = crypto.createHash('sha512');
+a8.write('');
+a8.end();
+a8 = a8.read();
+
 assert.equal(a0, '8308651804facb7b9af8ffc53a33a22d6a1c8ac2', 'Test SHA1');
 assert.equal(a1, 'h\u00ea\u00cb\u0097\u00d8o\fF!\u00fa+\u000e\u0017\u00ca' +
              '\u00bd\u008c', 'Test MD5 as binary');
@@ -468,6 +486,8 @@ assert.deepEqual(a4,
 // stream interface should produce the same result.
 assert.deepEqual(a5, a3, 'stream interface is consistent');
 assert.deepEqual(a6, a3, 'stream interface is consistent');
+assert.notEqual(a7, undefined, 'no data should return data');
+assert.notEqual(a8, undefined, 'empty string should generate data');
 
 // Test multiple updates to same hash
 var h1 = crypto.createHash('sha1').update('Test123').digest('hex');
@@ -698,9 +718,20 @@ var secret3 = dh3.computeSecret(key2, 'hex', 'base64');
 
 assert.equal(secret1, secret3);
 
+// Run this one twice to make sure that the dh3 clears its error properly
+(function() {
+  var c = crypto.createDecipher('aes-128-ecb', '');
+  assert.throws(function() { c.final('utf8') }, /wrong final block length/);
+})();
+
 assert.throws(function() {
   dh3.computeSecret('');
 }, /key is too small/i);
+
+(function() {
+  var c = crypto.createDecipher('aes-128-ecb', '');
+  assert.throws(function() { c.final('utf8') }, /wrong final block length/);
+})();
 
 // Create a shared using a DH group.
 var alice = crypto.createDiffieHellmanGroup('modp5');
@@ -739,6 +770,30 @@ assert.equal(rsaSignature,
 rsaVerify.update(rsaPubPem);
 assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 
+// Test RSA key signing/verification with encrypted key
+rsaSign = crypto.createSign('RSA-SHA1');
+rsaSign.update(rsaPubPem);
+assert.doesNotThrow(function() {
+  var signOptions = { key: rsaKeyPemEncrypted, passphrase: 'password' };
+  rsaSignature = rsaSign.sign(signOptions, 'hex');
+});
+assert.equal(rsaSignature,
+             '5c50e3145c4e2497aadb0eabc83b342d0b0021ece0d4c4a064b7c' +
+             '8f020d7e2688b122bfb54c724ac9ee169f83f66d2fe90abeb95e8' +
+             'e1290e7e177152a4de3d944cf7d4883114a20ed0f78e70e25ef0f' +
+             '60f06b858e6af42a2f276ede95bbc6bc9a9bbdda15bd663186a6f' +
+             '40819a7af19e577bb2efa5e579a1f5ce8a0d4ca8b8f6');
+
+rsaVerify = crypto.createVerify('RSA-SHA1');
+rsaVerify.update(rsaPubPem);
+assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
+
+rsaSign = crypto.createSign('RSA-SHA1');
+rsaSign.update(rsaPubPem);
+assert.throws(function() {
+  var signOptions = { key: rsaKeyPemEncrypted, passphrase: 'wrong' };
+  rsaSign.sign(signOptions, 'hex');
+});
 
 //
 // Test RSA signing and verification
@@ -776,24 +831,48 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 // Test DSA signing and verification
 //
 (function() {
-  var privateKey = fs.readFileSync(
-      common.fixturesDir + '/test_dsa_privkey.pem');
-
-  var publicKey = fs.readFileSync(
-      common.fixturesDir + '/test_dsa_pubkey.pem');
-
   var input = 'I AM THE WALRUS';
 
   // DSA signatures vary across runs so there is no static string to verify
   // against
   var sign = crypto.createSign('DSS1');
   sign.update(input);
-  var signature = sign.sign(privateKey, 'hex');
+  var signature = sign.sign(dsaKeyPem, 'hex');
 
   var verify = crypto.createVerify('DSS1');
   verify.update(input);
 
-  assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
+  assert.strictEqual(verify.verify(dsaPubPem, signature, 'hex'), true);
+})();
+
+
+//
+// Test DSA signing and verification with encrypted key
+//
+(function() {
+  var input = 'I AM THE WALRUS';
+
+  var sign = crypto.createSign('DSS1');
+  sign.update(input);
+  assert.throws(function() {
+    sign.sign({ key: dsaKeyPemEncrypted, passphrase: 'wrong' }, 'hex');
+  });
+
+  // DSA signatures vary across runs so there is no static string to verify
+  // against
+  var sign = crypto.createSign('DSS1');
+  sign.update(input);
+
+  var signature;
+  assert.doesNotThrow(function() {
+    var signOptions = { key: dsaKeyPemEncrypted, passphrase: 'password' };
+    signature = sign.sign(signOptions, 'hex');
+  });
+
+  var verify = crypto.createVerify('DSS1');
+  verify.update(input);
+
+  assert.strictEqual(verify.verify(dsaPubPem, signature, 'hex'), true);
 })();
 
 
@@ -858,11 +937,6 @@ assert.equal(-1, crypto.getHashes().indexOf('SHA1'));
 assert.equal(-1, crypto.getHashes().indexOf('SHA'));
 assertSorted(crypto.getHashes());
 
-(function() {
-  var c = crypto.createDecipher('aes-128-ecb', '');
-  assert.throws(function() { c.final('utf8') }, /invalid public key/);
-})();
-
 // Base64 padding regression test, see #4837.
 (function() {
   var c = crypto.createCipher('aes-256-cbc', 'secret');
@@ -887,3 +961,50 @@ assert.throws(function() {
   try { d.final('xxx') } catch (e) { /* Ignore. */ }
   try { d.final('xxx') } catch (e) { /* Ignore. */ }
 })();
+
+// Regression test for #5482: string to Cipher#update() should not assert.
+(function() {
+  var c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update');
+  c.final();
+})();
+
+// #5655 regression tests, 'utf-8' and 'utf8' are identical.
+(function() {
+  var c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update', '');  // Defaults to "utf8".
+  c.final('utf-8');  // Should not throw.
+
+  c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update', 'utf8');
+  c.final('utf-8');  // Should not throw.
+
+  c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update', 'utf-8');
+  c.final('utf8');  // Should not throw.
+})();
+
+// Regression tests for #5725: hex input that's not a power of two should
+// throw, not assert in C++ land.
+assert.throws(function() {
+  crypto.createCipher('aes192', 'test').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createDecipher('aes192', 'test').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createHash('sha1').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createSign('RSA-SHA1').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createVerify('RSA-SHA1').update('0', 'hex');
+}, /Bad input string/);
+
+// Make sure memory isn't released before being returned
+console.log(crypto.randomBytes(16));

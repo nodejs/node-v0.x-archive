@@ -33,6 +33,7 @@
 #include "checks.h"
 #include "deoptimizer.h"
 #include "ia32/lithium-gap-resolver-ia32.h"
+#include "lithium-codegen.h"
 #include "safepoint-table.h"
 #include "scopes.h"
 #include "v8utils.h"
@@ -45,49 +46,41 @@ class LDeferredCode;
 class LGapNode;
 class SafepointGenerator;
 
-class LCodeGen BASE_EMBEDDED {
+class LCodeGen: public LCodeGenBase {
  public:
   LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info)
-      : zone_(info->zone()),
-        chunk_(static_cast<LPlatformChunk*>(chunk)),
-        masm_(assembler),
-        info_(info),
-        current_block_(-1),
-        current_instruction_(-1),
-        instructions_(chunk->instructions()),
+      : LCodeGenBase(chunk, assembler, info),
         deoptimizations_(4, info->zone()),
         jump_table_(4, info->zone()),
         deoptimization_literals_(8, info->zone()),
-        prototype_maps_(0, info->zone()),
         inlined_function_count_(0),
         scope_(info->scope()),
-        status_(UNUSED),
         translations_(info->zone()),
         deferred_(8, info->zone()),
         dynamic_frame_alignment_(false),
         support_aligned_spilled_doubles_(false),
         osr_pc_offset_(-1),
-        last_lazy_deopt_pc_(0),
         frame_is_built_(false),
-        x87_stack_depth_(0),
+        x87_stack_(assembler),
         safepoints_(info->zone()),
         resolver_(this),
         expected_safepoint_kind_(Safepoint::kSimple) {
     PopulateDeoptimizationLiteralsWithInlinedFunctions();
   }
 
-  // Simple accessors.
-  MacroAssembler* masm() const { return masm_; }
-  CompilationInfo* info() const { return info_; }
-  Isolate* isolate() const { return info_->isolate(); }
-  Factory* factory() const { return isolate()->factory(); }
-  Heap* heap() const { return isolate()->heap(); }
-  Zone* zone() const { return zone_; }
+  int LookupDestination(int block_id) const {
+    return chunk()->LookupDestination(block_id);
+  }
+
+  bool IsNextEmittedBlock(int block_id) const {
+    return LookupDestination(block_id) == GetNextEmittedBlock();
+  }
 
   bool NeedsEagerFrame() const {
     return GetStackSlotCount() > 0 ||
         info()->is_non_deferred_calling() ||
-        !info()->IsStub();
+        !info()->IsStub() ||
+        info()->requires_frame();
   }
   bool NeedsDeferredFrame() const {
     return !NeedsEagerFrame() && info()->is_deferred_calling();
@@ -97,22 +90,44 @@ class LCodeGen BASE_EMBEDDED {
   Operand ToOperand(LOperand* op) const;
   Register ToRegister(LOperand* op) const;
   XMMRegister ToDoubleRegister(LOperand* op) const;
-  bool IsX87TopOfStack(LOperand* op) const;
+  X87Register ToX87Register(LOperand* op) const;
 
   bool IsInteger32(LConstantOperand* op) const;
-  Immediate ToInteger32Immediate(LOperand* op) const {
-    return Immediate(ToInteger32(LConstantOperand::cast(op)));
+  bool IsSmi(LConstantOperand* op) const;
+  Immediate ToImmediate(LOperand* op, const Representation& r) const {
+    return Immediate(ToRepresentation(LConstantOperand::cast(op), r));
   }
+  double ToDouble(LConstantOperand* op) const;
 
   // Support for non-sse2 (x87) floating point stack handling.
-  // These functions maintain the depth of the stack (either 0 or 1)
-  void PushX87DoubleOperand(Operand src);
-  void PushX87FloatOperand(Operand src);
-  void ReadX87Operand(Operand dst);
-  bool X87StackNonEmpty() const { return x87_stack_depth_ > 0; }
-  void PopX87();
-  void CurrentInstructionReturnsX87Result();
-  void FlushX87StackIfNecessary(LInstruction* instr);
+  // These functions maintain the mapping of physical stack registers to our
+  // virtual registers between instructions.
+  enum X87OperandType { kX87DoubleOperand, kX87FloatOperand, kX87IntOperand };
+
+  void X87Mov(X87Register reg, Operand src,
+      X87OperandType operand = kX87DoubleOperand);
+  void X87Mov(Operand src, X87Register reg,
+      X87OperandType operand = kX87DoubleOperand);
+
+  void X87PrepareBinaryOp(
+      X87Register left, X87Register right, X87Register result);
+
+  void X87LoadForUsage(X87Register reg);
+  void X87LoadForUsage(X87Register reg1, X87Register reg2);
+  void X87PrepareToWrite(X87Register reg) { x87_stack_.PrepareToWrite(reg); }
+  void X87CommitWrite(X87Register reg) { x87_stack_.CommitWrite(reg); }
+
+  void X87Fxch(X87Register reg, int other_slot = 0) {
+    x87_stack_.Fxch(reg, other_slot);
+  }
+  void X87Free(X87Register reg) {
+    x87_stack_.Free(reg);
+  }
+
+
+  bool X87StackEmpty() {
+    return x87_stack_.depth() == 0;
+  }
 
   Handle<Object> ToHandle(LConstantOperand* op) const;
 
@@ -137,30 +152,22 @@ class LCodeGen BASE_EMBEDDED {
                             LOperand* value,
                             IntegerSignedness signedness);
 
-  void DoDeferredTaggedToI(LTaggedToI* instr);
-  void DoDeferredTaggedToINoSSE2(LTaggedToINoSSE2* instr);
+  void DoDeferredTaggedToI(LTaggedToI* instr, Label* done);
   void DoDeferredMathAbsTaggedHeapNumber(LMathAbs* instr);
   void DoDeferredStackCheck(LStackCheck* instr);
-  void DoDeferredRandom(LRandom* instr);
   void DoDeferredStringCharCodeAt(LStringCharCodeAt* instr);
   void DoDeferredStringCharFromCode(LStringCharFromCode* instr);
-  void DoDeferredAllocateObject(LAllocateObject* instr);
   void DoDeferredAllocate(LAllocate* instr);
   void DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
                                        Label* map_check);
-
-  void DoCheckMapCommon(Register reg, Handle<Map> map,
-                        CompareMapMode mode, LInstruction* instr);
+  void DoDeferredInstanceMigration(LCheckMaps* instr, Register object);
 
   // Parallel move support.
   void DoParallelMove(LParallelMove* move);
   void DoGap(LGap* instr);
 
   // Emit frame translation commands for an environment.
-  void WriteTranslation(LEnvironment* environment,
-                        Translation* translation,
-                        int* arguments_index,
-                        int* arguments_count);
+  void WriteTranslation(LEnvironment* environment, Translation* translation);
 
   void EnsureRelocSpaceForDeoptimization();
 
@@ -170,27 +177,13 @@ class LCodeGen BASE_EMBEDDED {
 #undef DECLARE_DO
 
  private:
-  enum Status {
-    UNUSED,
-    GENERATING,
-    DONE,
-    ABORTED
-  };
-
-  bool is_unused() const { return status_ == UNUSED; }
-  bool is_generating() const { return status_ == GENERATING; }
-  bool is_done() const { return status_ == DONE; }
-  bool is_aborted() const { return status_ == ABORTED; }
-
   StrictModeFlag strict_mode_flag() const {
     return info()->is_classic_mode() ? kNonStrictMode : kStrictMode;
   }
 
-  LPlatformChunk* chunk() const { return chunk_; }
   Scope* scope() const { return scope_; }
-  HGraph* graph() const { return chunk_->graph(); }
 
-  int GetNextEmittedBlock(int block);
+  XMMRegister double_scratch0() const { return xmm0; }
 
   void EmitClassOfTest(Label* if_true,
                        Label* if_false,
@@ -201,18 +194,21 @@ class LCodeGen BASE_EMBEDDED {
 
   int GetStackSlotCount() const { return chunk()->spill_slot_count(); }
 
-  void Abort(const char* reason);
-  void FPRINTF_CHECKING Comment(const char* format, ...);
+  void Abort(BailoutReason reason);
 
   void AddDeferredCode(LDeferredCode* code) { deferred_.Add(code, zone()); }
 
   // Code generation passes.  Returns true if code generation should
   // continue.
+  void GenerateBodyInstructionPre(LInstruction* instr) V8_OVERRIDE;
+  void GenerateBodyInstructionPost(LInstruction* instr) V8_OVERRIDE;
   bool GeneratePrologue();
-  bool GenerateBody();
   bool GenerateDeferredCode();
   bool GenerateJumpTable();
   bool GenerateSafepointTable();
+
+  // Generates the custom OSR entrypoint and sets the osr_pc_offset.
+  void GenerateOsrPrologue();
 
   enum SafepointMode {
     RECORD_SIMPLE_SAFEPOINT,
@@ -230,7 +226,8 @@ class LCodeGen BASE_EMBEDDED {
 
   void CallRuntime(const Runtime::Function* fun,
                    int argc,
-                   LInstruction* instr);
+                   LInstruction* instr,
+                   SaveFPRegsMode save_doubles = kDontSaveFPRegs);
 
   void CallRuntime(Runtime::FunctionId id,
                    int argc,
@@ -254,6 +251,7 @@ class LCodeGen BASE_EMBEDDED {
   // Generate a direct call to a known function.  Expects the function
   // to be in edi.
   void CallKnownFunction(Handle<JSFunction> function,
+                         int formal_parameter_count,
                          int arity,
                          LInstruction* instr,
                          CallKind call_kind,
@@ -264,15 +262,19 @@ class LCodeGen BASE_EMBEDDED {
 
   void RegisterEnvironmentForDeoptimization(LEnvironment* environment,
                                             Safepoint::DeoptMode mode);
+  void DeoptimizeIf(Condition cc,
+                    LEnvironment* environment,
+                    Deoptimizer::BailoutType bailout_type);
   void DeoptimizeIf(Condition cc, LEnvironment* environment);
+  void ApplyCheckIf(Condition cc, LBoundsCheck* check);
 
-  void AddToTranslation(Translation* translation,
+  void AddToTranslation(LEnvironment* environment,
+                        Translation* translation,
                         LOperand* op,
                         bool is_tagged,
                         bool is_uint32,
-                        bool arguments_known,
-                        int arguments_index,
-                        int arguments_count);
+                        int* object_index_pointer,
+                        int* dematerialized_index_pointer);
   void RegisterDependentCodeForEmbeddedMaps(Handle<Code> code);
   void PopulateDeoptimizationData(Handle<Code> code);
   int DefineDeoptimizationLiteral(Handle<Object> literal);
@@ -281,9 +283,11 @@ class LCodeGen BASE_EMBEDDED {
 
   Register ToRegister(int index) const;
   XMMRegister ToDoubleRegister(int index) const;
-  int ToInteger32(LConstantOperand* op) const;
+  X87Register ToX87Register(int index) const;
+  int32_t ToRepresentation(LConstantOperand* op, const Representation& r) const;
+  int32_t ToInteger32(LConstantOperand* op) const;
+  ExternalReference ToExternalReference(LConstantOperand* op) const;
 
-  double ToDouble(LConstantOperand* op) const;
   Operand BuildFastArrayOperand(LOperand* elements_pointer,
                                 LOperand* key,
                                 Representation key_representation,
@@ -303,16 +307,20 @@ class LCodeGen BASE_EMBEDDED {
   void RecordSafepointWithRegisters(LPointerMap* pointers,
                                     int arguments,
                                     Safepoint::DeoptMode mode);
-  void RecordPosition(int position);
+
+  void RecordAndWritePosition(int position) V8_OVERRIDE;
 
   static Condition TokenToCondition(Token::Value op, bool is_unsigned);
   void EmitGoto(int block);
-  void EmitBranch(int left_block, int right_block, Condition cc);
+  template<class InstrType>
+  void EmitBranch(InstrType instr, Condition cc);
+  template<class InstrType>
+  void EmitFalseBranch(InstrType instr, Condition cc);
   void EmitNumberUntagD(
       Register input,
       Register temp,
       XMMRegister result,
-      bool deoptimize_on_undefined,
+      bool allow_undefined_as_nan,
       bool deoptimize_on_minus_zero,
       LEnvironment* env,
       NumberUntagDMode mode = NUMBER_CANDIDATE_IS_ANY_TAGGED);
@@ -320,7 +328,8 @@ class LCodeGen BASE_EMBEDDED {
   void EmitNumberUntagDNoSSE2(
       Register input,
       Register temp,
-      bool deoptimize_on_undefined,
+      X87Register res_reg,
+      bool allow_undefined_as_nan,
       bool deoptimize_on_minus_zero,
       LEnvironment* env,
       NumberUntagDMode mode = NUMBER_CANDIDATE_IS_ANY_TAGGED);
@@ -346,17 +355,12 @@ class LCodeGen BASE_EMBEDDED {
   // true and false label should be made, to optimize fallthrough.
   Condition EmitIsString(Register input,
                          Register temp1,
-                         Label* is_not_string);
+                         Label* is_not_string,
+                         SmiCheck check_needed);
 
   // Emits optimized code for %_IsConstructCall().
   // Caller should branch on equal condition.
   void EmitIsConstructCall(Register temp);
-
-  void EmitLoadFieldOrConstantFunction(Register result,
-                                       Register object,
-                                       Handle<Map> type,
-                                       Handle<String> name,
-                                       LEnvironment* env);
 
   // Emits optimized code to deep-copy the contents of statically known
   // object graphs (e.g. object literal boilerplate).
@@ -366,7 +370,7 @@ class LCodeGen BASE_EMBEDDED {
                     int* offset,
                     AllocationSiteMode mode);
 
-  void EnsureSpaceForLazyDeopt();
+  void EnsureSpaceForLazyDeopt(int space_needed) V8_OVERRIDE;
   void DoLoadKeyedExternalArray(LLoadKeyed* instr);
   void DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr);
   void DoLoadKeyedFixedArray(LLoadKeyed* instr);
@@ -380,41 +384,82 @@ class LCodeGen BASE_EMBEDDED {
   // register, or a stack slot operand.
   void EmitPushTaggedOperand(LOperand* operand);
 
-  Zone* zone_;
-  LPlatformChunk* const chunk_;
-  MacroAssembler* const masm_;
-  CompilationInfo* const info_;
+  void X87Fld(Operand src, X87OperandType opts);
 
-  struct JumpTableEntry {
-    inline JumpTableEntry(Address entry, bool frame, bool is_lazy)
-        : label(),
-          address(entry),
-          needs_frame(frame),
-          is_lazy_deopt(is_lazy) { }
-    Label label;
-    Address address;
-    bool needs_frame;
-    bool is_lazy_deopt;
-  };
+  void EmitFlushX87ForDeopt();
+  void FlushX87StackIfNecessary(LInstruction* instr) {
+    x87_stack_.FlushIfNecessary(instr, this);
+  }
+  friend class LGapResolver;
 
-  int current_block_;
-  int current_instruction_;
-  const ZoneList<LInstruction*>* instructions_;
+#ifdef _MSC_VER
+  // On windows, you may not access the stack more than one page below
+  // the most recently mapped page. To make the allocated area randomly
+  // accessible, we write an arbitrary value to each page in range
+  // esp + offset - page_size .. esp in turn.
+  void MakeSureStackPagesMapped(int offset);
+#endif
+
   ZoneList<LEnvironment*> deoptimizations_;
-  ZoneList<JumpTableEntry> jump_table_;
+  ZoneList<Deoptimizer::JumpTableEntry> jump_table_;
   ZoneList<Handle<Object> > deoptimization_literals_;
-  ZoneList<Handle<Map> > prototype_maps_;
   int inlined_function_count_;
   Scope* const scope_;
-  Status status_;
   TranslationBuffer translations_;
   ZoneList<LDeferredCode*> deferred_;
   bool dynamic_frame_alignment_;
   bool support_aligned_spilled_doubles_;
   int osr_pc_offset_;
-  int last_lazy_deopt_pc_;
   bool frame_is_built_;
-  int x87_stack_depth_;
+
+  class X87Stack {
+   public:
+    explicit X87Stack(MacroAssembler* masm)
+        : stack_depth_(0), is_mutable_(true), masm_(masm) { }
+    explicit X87Stack(const X87Stack& other)
+        : stack_depth_(other.stack_depth_), is_mutable_(false), masm_(masm()) {
+      for (int i = 0; i < stack_depth_; i++) {
+        stack_[i] = other.stack_[i];
+      }
+    }
+    bool operator==(const X87Stack& other) const {
+      if (stack_depth_ != other.stack_depth_) return false;
+      for (int i = 0; i < stack_depth_; i++) {
+        if (!stack_[i].is(other.stack_[i])) return false;
+      }
+      return true;
+    }
+    bool Contains(X87Register reg);
+    void Fxch(X87Register reg, int other_slot = 0);
+    void Free(X87Register reg);
+    void PrepareToWrite(X87Register reg);
+    void CommitWrite(X87Register reg);
+    void FlushIfNecessary(LInstruction* instr, LCodeGen* cgen);
+    void LeavingBlock(int current_block_id, LGoto* goto_instr);
+    int depth() const { return stack_depth_; }
+    void pop() {
+      ASSERT(is_mutable_);
+      stack_depth_--;
+    }
+    void push(X87Register reg) {
+      ASSERT(is_mutable_);
+      ASSERT(stack_depth_ < X87Register::kNumAllocatableRegisters);
+      stack_[stack_depth_] = reg;
+      stack_depth_++;
+    }
+
+    MacroAssembler* masm() const { return masm_; }
+
+   private:
+    int ArrayIndex(X87Register reg);
+    int st2idx(int pos);
+
+    X87Register stack_[X87Register::kNumAllocatableRegisters];
+    int stack_depth_;
+    bool is_mutable_;
+    MacroAssembler* masm_;
+  };
+  X87Stack x87_stack_;
 
   // Builder that keeps track of safepoints in the code. The table
   // itself is emitted at the end of the generated code.
@@ -425,7 +470,7 @@ class LCodeGen BASE_EMBEDDED {
 
   Safepoint::Kind expected_safepoint_kind_;
 
-  class PushSafepointRegistersScope BASE_EMBEDDED {
+  class PushSafepointRegistersScope V8_FINAL  BASE_EMBEDDED {
    public:
     explicit PushSafepointRegistersScope(LCodeGen* codegen)
         : codegen_(codegen) {
@@ -452,23 +497,26 @@ class LCodeGen BASE_EMBEDDED {
 };
 
 
-class LDeferredCode: public ZoneObject {
+class LDeferredCode : public ZoneObject {
  public:
-  explicit LDeferredCode(LCodeGen* codegen)
+  explicit LDeferredCode(LCodeGen* codegen, const LCodeGen::X87Stack& x87_stack)
       : codegen_(codegen),
         external_exit_(NULL),
-        instruction_index_(codegen->current_instruction_) {
+        instruction_index_(codegen->current_instruction_),
+        x87_stack_(x87_stack) {
     codegen->AddDeferredCode(this);
   }
 
-  virtual ~LDeferredCode() { }
+  virtual ~LDeferredCode() {}
   virtual void Generate() = 0;
   virtual LInstruction* instr() = 0;
 
   void SetExit(Label* exit) { external_exit_ = exit; }
   Label* entry() { return &entry_; }
   Label* exit() { return external_exit_ != NULL ? external_exit_ : &exit_; }
+  Label* done() { return codegen_->NeedsDeferredFrame() ? &done_ : exit(); }
   int instruction_index() const { return instruction_index_; }
+  const LCodeGen::X87Stack& x87_stack() const { return x87_stack_; }
 
  protected:
   LCodeGen* codegen() const { return codegen_; }
@@ -479,7 +527,9 @@ class LDeferredCode: public ZoneObject {
   Label entry_;
   Label exit_;
   Label* external_exit_;
+  Label done_;
   int instruction_index_;
+  LCodeGen::X87Stack x87_stack_;
 };
 
 } }  // namespace v8::internal

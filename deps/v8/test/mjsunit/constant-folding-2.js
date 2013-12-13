@@ -34,7 +34,7 @@ function test(f) {
   %OptimizeFunctionOnNextCall(f);
   f();
   // Assert that there has been no deopt.
-  assertTrue(%GetOptimizationStatus(f) != 2);
+  assertOptimized(f);
 }
 
 test(function add() {
@@ -255,4 +255,13 @@ test(function stringCharAt() {
   assertEquals("", "abc".charAt(4));
   assertEquals("b", "abc".charAt(1.1));
   assertEquals("", "abc".charAt(4.1));
+});
+
+
+test(function int32Mod() {
+  assertEquals(-0, -2147483648 % (-1));
+});
+
+test(function int32Div() {
+  assertEquals(2147483648, -2147483648 / (-1));
 });

@@ -94,6 +94,9 @@ def BuildOptions():
                     default=False, action="store_true")
   result.add_option("--cat", help="Print the source of the tests",
                     default=False, action="store_true")
+  result.add_option("--flaky-tests",
+                    help="Regard tests marked as flaky (run|skip|dontcare)",
+                    default="dontcare")
   result.add_option("--command-prefix",
                     help="Prepended to each shell command used to run a test",
                     default="")
@@ -109,6 +112,9 @@ def BuildOptions():
   result.add_option("-m", "--mode",
                     help="The test modes in which to run (comma-separated)",
                     default="release,debug")
+  result.add_option("--no-i18n", "--noi18n",
+                    help="Skip internationalization tests",
+                    default=False, action="store_true")
   result.add_option("--no-network", "--nonetwork",
                     help="Don't distribute tests on the network",
                     default=(utils.GuessOS() != "linux"),
@@ -119,6 +125,9 @@ def BuildOptions():
   result.add_option("--no-stress", "--nostress",
                     help="Don't run crankshaft --always-opt --stress-op test",
                     default=False, dest="no_stress", action="store_true")
+  result.add_option("--no-variants", "--novariants",
+                    help="Don't run any testing variants",
+                    default=False, dest="no_variants", action="store_true")
   result.add_option("--outdir", help="Base directory with compile output",
                     default="out")
   result.add_option("-p", "--progress",
@@ -191,8 +200,18 @@ def ProcessOptions(options):
   options.extra_flags = shlex.split(options.extra_flags)
   if options.j == 0:
     options.j = multiprocessing.cpu_count()
+
+  def excl(*args):
+    """Returns true if zero or one of multiple arguments are true."""
+    return reduce(lambda x, y: x + y, args) <= 1
+
+  if not excl(options.no_stress, options.stress_only, options.no_variants):
+    print "Use only one of --no-stress, --stress-only or --no-variants."
+    return False
   if options.no_stress:
     VARIANT_FLAGS = [[], ["--nocrankshaft"]]
+  if options.no_variants:
+    VARIANT_FLAGS = [[]]
   if not options.shell_dir:
     if options.shell:
       print "Warning: --shell is deprecated, use --shell-dir instead."
@@ -204,6 +223,11 @@ def ProcessOptions(options):
     # This is OK for distributed running, so we don't need to set no_network.
     options.command_prefix = (["python", "-u", run_valgrind] +
                               options.command_prefix)
+  if not options.flaky_tests in ["run", "skip", "dontcare"]:
+    print "Unknown flaky test mode %s" % options.flaky_tests
+    return False
+  if not options.no_i18n:
+    DEFAULT_TESTS.append("intl")
   return True
 
 
@@ -296,14 +320,17 @@ def Execute(arch, mode, args, options, suites, workspace):
                         mode_flags, options.verbose,
                         timeout, options.isolates,
                         options.command_prefix,
-                        options.extra_flags)
+                        options.extra_flags,
+                        options.no_i18n)
 
   # Find available test suites and read test cases from them.
   variables = {
     "mode": mode,
     "arch": arch,
     "system": utils.GuessOS(),
-    "isolates": options.isolates
+    "isolates": options.isolates,
+    "deopt_fuzzer": False,
+    "no_i18n": options.no_i18n,
   }
   all_tests = []
   num_tests = 0
@@ -314,12 +341,13 @@ def Execute(arch, mode, args, options, suites, workspace):
     if len(args) > 0:
       s.FilterTestCasesByArgs(args)
     all_tests += s.tests
-    s.FilterTestCasesByStatus(options.warn_unused)
+    s.FilterTestCasesByStatus(options.warn_unused, options.flaky_tests)
     if options.cat:
       verbose.PrintTestSource(s.tests)
       continue
-    variant_flags = s.VariantFlags() or VARIANT_FLAGS
-    s.tests = [ t.CopyAddingFlags(v) for t in s.tests for v in variant_flags ]
+    s.tests = [ t.CopyAddingFlags(v)
+                for t in s.tests
+                for v in s.VariantFlags(t, VARIANT_FLAGS) ]
     s.tests = ShardTests(s.tests, options.shard_count, options.shard_run)
     num_tests += len(s.tests)
     for t in s.tests:

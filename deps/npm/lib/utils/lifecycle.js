@@ -3,14 +3,14 @@ exports = module.exports = lifecycle
 exports.cmd = cmd
 
 var log = require("npmlog")
-  , exec = require("./exec.js")
+  , spawn = require("child_process").spawn
   , npm = require("../npm.js")
   , path = require("path")
   , fs = require("graceful-fs")
   , chain = require("slide").chain
-  , constants = require("constants")
   , Stream = require("stream").Stream
   , PATH = "PATH"
+  , uidNumber = require("uid-number")
 
 // windows calls it's path "Path" usually, but this is not guaranteed.
 if (process.platform === "win32") {
@@ -132,37 +132,95 @@ function validWd (d, cb) {
 function runPackageLifecycle (pkg, env, wd, unsafe, cb) {
   // run package lifecycle scripts in the package root, or the nearest parent.
   var stage = env.npm_lifecycle_event
-    , user = unsafe ? null : npm.config.get("user")
-    , group = unsafe ? null : npm.config.get("group")
     , cmd = env.npm_lifecycle_script
-    , sh = "sh"
-    , shFlag = "-c"
+
+  var note = "\n> " + pkg._id + " " + stage + " " + wd
+           + "\n> " + cmd + "\n"
+  runCmd(note, cmd, pkg, env, stage, wd, unsafe, cb)
+}
+
+
+var running = false
+var queue = []
+function dequeue() {
+  running = false
+  if (queue.length) {
+    var r = queue.shift()
+    runCmd.apply(null, r)
+  }
+}
+
+function runCmd (note, cmd, pkg, env, stage, wd, unsafe, cb) {
+  if (running) {
+    queue.push([note, cmd, pkg, env, stage, wd, unsafe, cb])
+    return
+  }
+
+  running = true
+  log.pause()
+  var user = unsafe ? null : npm.config.get("user")
+    , group = unsafe ? null : npm.config.get("group")
+
+  console.log(note)
+  log.verbose("unsafe-perm in lifecycle", unsafe)
+
+  if (process.platform === "win32") {
+    unsafe = true
+  }
+
+  if (unsafe) {
+    runCmd_(cmd, pkg, env, wd, stage, unsafe, 0, 0, cb)
+  } else {
+    uidNumber(user, group, function (er, uid, gid) {
+      runCmd_(cmd, pkg, env, wd, stage, unsafe, uid, gid, cb)
+    })
+  }
+}
+
+function runCmd_ (cmd, pkg, env, wd, stage, unsafe, uid, gid, cb_) {
+
+  function cb (er) {
+    cb_.apply(null, arguments)
+    log.resume()
+    process.nextTick(dequeue)
+  }
+
+  var sh = "sh"
+  var shFlag = "-c"
 
   if (process.platform === "win32") {
     sh = "cmd"
     shFlag = "/c"
   }
 
-  log.verbose("unsafe-perm in lifecycle", unsafe)
+  var conf = { cwd: wd
+             , env: env
+             , stdio: [ 0, 1, 2 ]
+             }
 
-  var note = "\n> " + pkg._id + " " + stage + " " + wd
-           + "\n> " + cmd + "\n"
+  if (!unsafe) {
+    conf.uid = uid ^ 0
+    conf.gid = gid ^ 0
+  }
 
-  console.log(note)
-  exec( sh, [shFlag, cmd], env, true, wd
-      , user, group
-      , function (er, code, stdout, stderr) {
+  var proc = spawn(sh, [shFlag, cmd], conf)
+  proc.on("close", function (code, signal) {
+    if (signal) {
+      process.kill(process.pid, signal);
+    } else if (code) {
+      var er = new Error("Exit status " + code)
+    }
     if (er && !npm.ROLLBACK) {
       log.info(pkg._id, "Failed to exec "+stage+" script")
       er.message = pkg._id + " "
-                 + stage + ": `" + env.npm_lifecycle_script+"`\n"
+                 + stage + ": `" + cmd +"`\n"
                  + er.message
       if (er.code !== "EPERM") {
         er.code = "ELIFECYCLE"
       }
       er.pkgid = pkg._id
       er.stage = stage
-      er.script = env.npm_lifecycle_script
+      er.script = cmd
       er.pkgname = pkg.name
       return cb(er)
     } else if (er) {
@@ -174,6 +232,7 @@ function runPackageLifecycle (pkg, env, wd, unsafe, cb) {
   })
 }
 
+
 function runHookLifecycle (pkg, env, wd, unsafe, cb) {
   // check for a hook script, run if present.
   var stage = env.npm_lifecycle_event
@@ -184,17 +243,9 @@ function runHookLifecycle (pkg, env, wd, unsafe, cb) {
 
   fs.stat(hook, function (er) {
     if (er) return cb()
-
-    exec( "sh", ["-c", cmd], env, true, wd
-        , user, group
-        , function (er) {
-      if (er) {
-        er.message += "\nFailed to exec "+stage+" hook script"
-        log.info(pkg._id, er)
-      }
-      if (npm.ROLLBACK) return cb()
-      cb(er)
-    })
+    var note = "\n> " + pkg._id + " " + stage + " " + wd
+             + "\n> " + cmd
+    runCmd(note, hook, pkg, env, stage, wd, unsafe, cb)
   })
 }
 

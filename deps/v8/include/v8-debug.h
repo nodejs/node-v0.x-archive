@@ -30,40 +30,6 @@
 
 #include "v8.h"
 
-#ifdef _WIN32
-typedef int int32_t;
-typedef unsigned int uint32_t;
-typedef unsigned short uint16_t;  // NOLINT
-typedef long long int64_t;  // NOLINT
-
-// Setup for Windows DLL export/import. See v8.h in this directory for
-// information on how to build/use V8 as a DLL.
-#if defined(BUILDING_V8_SHARED) && defined(USING_V8_SHARED)
-#error both BUILDING_V8_SHARED and USING_V8_SHARED are set - please check the\
-  build configuration to ensure that at most one of these is set
-#endif
-
-#ifdef BUILDING_V8_SHARED
-#define EXPORT __declspec(dllexport)
-#elif USING_V8_SHARED
-#define EXPORT __declspec(dllimport)
-#else
-#define EXPORT
-#endif
-
-#else  // _WIN32
-
-// Setup for Linux shared library export. See v8.h in this directory for
-// information on how to build/use V8 as shared library.
-#if defined(__GNUC__) && (__GNUC__ >= 4) && defined(V8_SHARED)
-#define EXPORT __attribute__ ((visibility("default")))
-#else  // defined(__GNUC__) && (__GNUC__ >= 4)
-#define EXPORT
-#endif  // defined(__GNUC__) && (__GNUC__ >= 4)
-
-#endif  // _WIN32
-
-
 /**
  * Debugger support for the V8 JavaScript engine.
  */
@@ -81,7 +47,7 @@ enum DebugEvent {
 };
 
 
-class EXPORT Debug {
+class V8_EXPORT Debug {
  public:
   /**
    * A client object passed to the v8 debugger whose ownership will be taken by
@@ -140,6 +106,8 @@ class EXPORT Debug {
      */
     virtual ClientData* GetClientData() const = 0;
 
+    virtual Isolate* GetIsolate() const = 0;
+
     virtual ~Message() {}
   };
 
@@ -184,21 +152,6 @@ class EXPORT Debug {
     virtual ~EventDetails() {}
   };
 
-
-  /**
-   * Debug event callback function.
-   *
-   * \param event the type of the debug event that triggered the callback
-   *   (enum DebugEvent)
-   * \param exec_state execution state (JavaScript object)
-   * \param event_data event specific data (JavaScript object)
-   * \param data value passed by the user to SetDebugEventListener
-   */
-  typedef void (*EventCallback)(DebugEvent event,
-                                Handle<Object> exec_state,
-                                Handle<Object> event_data,
-                                Handle<Value> data);
-
   /**
    * Debug event callback function.
    *
@@ -213,23 +166,8 @@ class EXPORT Debug {
    * Debug message callback function.
    *
    * \param message the debug message handler message object
-   * \param length length of the message
-   * \param client_data the data value passed when registering the message handler
-
-   * A MessageHandler does not take possession of the message string,
-   * and must not rely on the data persisting after the handler returns.
    *
-   * This message handler is deprecated. Use MessageHandler2 instead.
-   */
-  typedef void (*MessageHandler)(const uint16_t* message, int length,
-                                 ClientData* client_data);
-
-  /**
-   * Debug message callback function.
-   *
-   * \param message the debug message handler message object
-   *
-   * A MessageHandler does not take possession of the message data,
+   * A MessageHandler2 does not take possession of the message data,
    * and must not rely on the data persisting after the handler returns.
    */
   typedef void (*MessageHandler2)(const Message& message);
@@ -244,9 +182,6 @@ class EXPORT Debug {
    */
   typedef void (*DebugMessageDispatchHandler)();
 
-  // Set a C debug event listener.
-  static bool SetDebugEventListener(EventCallback that,
-                                    Handle<Value> data = Handle<Value>());
   static bool SetDebugEventListener2(EventCallback2 that,
                                      Handle<Value> data = Handle<Value>());
 
@@ -267,22 +202,23 @@ class EXPORT Debug {
   // Break execution of JavaScript in the given isolate (this method
   // can be invoked from a non-VM thread) for further client command
   // execution on a VM thread. Client data is then passed in
-  // EventDetails to EventCallback at the moment when the VM actually
+  // EventDetails to EventCallback2 at the moment when the VM actually
   // stops. If no isolate is provided the default isolate is used.
   static void DebugBreakForCommand(ClientData* data = NULL,
                                    Isolate* isolate = NULL);
 
-  // Message based interface. The message protocol is JSON. NOTE the message
-  // handler thread is not supported any more parameter must be false.
-  static void SetMessageHandler(MessageHandler handler,
-                                bool message_handler_thread = false);
+  // Message based interface. The message protocol is JSON.
   static void SetMessageHandler2(MessageHandler2 handler);
 
   // If no isolate is provided the default isolate is
   // used.
+  // TODO(dcarney): remove
   static void SendCommand(const uint16_t* command, int length,
                           ClientData* client_data = NULL,
                           Isolate* isolate = NULL);
+  static void SendCommand(Isolate* isolate,
+                          const uint16_t* command, int length,
+                          ClientData* client_data = NULL);
 
   // Dispatch interface.
   static void SetHostDispatchHandler(HostDispatchHandler handler,

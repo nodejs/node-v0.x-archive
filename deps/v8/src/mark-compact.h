@@ -406,9 +406,10 @@ class SlotsBuffer {
 // CodeFlusher collects candidates for code flushing during marking and
 // processes those candidates after marking has completed in order to
 // reset those functions referencing code objects that would otherwise
-// be unreachable. Code objects can be referenced in two ways:
+// be unreachable. Code objects can be referenced in three ways:
 //    - SharedFunctionInfo references unoptimized code.
 //    - JSFunction references either unoptimized or optimized code.
+//    - OptimizedCodeMap references optimized code.
 // We are not allowed to flush unoptimized code for functions that got
 // optimized or inlined into optimized code, because we might bailout
 // into the unoptimized code again during deoptimization.
@@ -417,7 +418,8 @@ class CodeFlusher {
   explicit CodeFlusher(Isolate* isolate)
       : isolate_(isolate),
         jsfunction_candidates_head_(NULL),
-        shared_function_info_candidates_head_(NULL) {}
+        shared_function_info_candidates_head_(NULL),
+        optimized_code_map_holder_head_(NULL) {}
 
   void AddCandidate(SharedFunctionInfo* shared_info) {
     if (GetNextCandidate(shared_info) == NULL) {
@@ -434,15 +436,25 @@ class CodeFlusher {
     }
   }
 
+  void AddOptimizedCodeMap(SharedFunctionInfo* code_map_holder) {
+    if (GetNextCodeMap(code_map_holder)->IsUndefined()) {
+      SetNextCodeMap(code_map_holder, optimized_code_map_holder_head_);
+      optimized_code_map_holder_head_ = code_map_holder;
+    }
+  }
+
+  void EvictOptimizedCodeMap(SharedFunctionInfo* code_map_holder);
   void EvictCandidate(SharedFunctionInfo* shared_info);
   void EvictCandidate(JSFunction* function);
 
   void ProcessCandidates() {
+    ProcessOptimizedCodeMaps();
     ProcessSharedFunctionInfoCandidates();
     ProcessJSFunctionCandidates();
   }
 
   void EvictAllCandidates() {
+    EvictOptimizedCodeMaps();
     EvictJSFunctionCandidates();
     EvictSharedFunctionInfoCandidates();
   }
@@ -450,8 +462,10 @@ class CodeFlusher {
   void IteratePointersToFromSpace(ObjectVisitor* v);
 
  private:
+  void ProcessOptimizedCodeMaps();
   void ProcessJSFunctionCandidates();
   void ProcessSharedFunctionInfoCandidates();
+  void EvictOptimizedCodeMaps();
   void EvictJSFunctionCandidates();
   void EvictSharedFunctionInfoCandidates();
 
@@ -489,9 +503,27 @@ class CodeFlusher {
     candidate->code()->set_gc_metadata(NULL, SKIP_WRITE_BARRIER);
   }
 
+  static SharedFunctionInfo* GetNextCodeMap(SharedFunctionInfo* holder) {
+    FixedArray* code_map = FixedArray::cast(holder->optimized_code_map());
+    Object* next_map = code_map->get(SharedFunctionInfo::kNextMapIndex);
+    return reinterpret_cast<SharedFunctionInfo*>(next_map);
+  }
+
+  static void SetNextCodeMap(SharedFunctionInfo* holder,
+                             SharedFunctionInfo* next_holder) {
+    FixedArray* code_map = FixedArray::cast(holder->optimized_code_map());
+    code_map->set(SharedFunctionInfo::kNextMapIndex, next_holder);
+  }
+
+  static void ClearNextCodeMap(SharedFunctionInfo* holder) {
+    FixedArray* code_map = FixedArray::cast(holder->optimized_code_map());
+    code_map->set_undefined(SharedFunctionInfo::kNextMapIndex);
+  }
+
   Isolate* isolate_;
   JSFunction* jsfunction_candidates_head_;
   SharedFunctionInfo* shared_function_info_candidates_head_;
+  SharedFunctionInfo* optimized_code_map_holder_head_;
 
   DISALLOW_COPY_AND_ASSIGN(CodeFlusher);
 };
@@ -538,6 +570,8 @@ class MarkCompactCollector {
   inline void SetFlags(int flags);
 
   static void Initialize();
+
+  void TearDown();
 
   void CollectEvacuationCandidates(PagedSpace* space);
 
@@ -603,8 +637,8 @@ class MarkCompactCollector {
   void VerifyMarkbitsAreClean();
   static void VerifyMarkbitsAreClean(PagedSpace* space);
   static void VerifyMarkbitsAreClean(NewSpace* space);
-  void VerifyWeakEmbeddedMapsInOptimizedCode();
-  void VerifyOmittedPrototypeChecks();
+  void VerifyWeakEmbeddedObjectsInOptimizedCode();
+  void VerifyOmittedMapChecks();
 #endif
 
   // Sweep a single page from the given space conservatively.
@@ -663,9 +697,11 @@ class MarkCompactCollector {
 
   bool TryPromoteObject(HeapObject* object, int object_size);
 
-  inline Object* encountered_weak_maps() { return encountered_weak_maps_; }
-  inline void set_encountered_weak_maps(Object* weak_map) {
-    encountered_weak_maps_ = weak_map;
+  inline Object* encountered_weak_collections() {
+    return encountered_weak_collections_;
+  }
+  inline void set_encountered_weak_collections(Object* weak_collection) {
+    encountered_weak_collections_ = weak_collection;
   }
 
   void InvalidateCode(Code* code);
@@ -699,16 +735,16 @@ class MarkCompactCollector {
     return sequential_sweeping_;
   }
 
-  // Parallel marking support.
-  void MarkInParallel();
-
-  void WaitUntilMarkingCompleted();
+  // Mark the global table which maps weak objects to dependent code without
+  // marking its contents.
+  void MarkWeakObjectToCodeTable();
 
  private:
   MarkCompactCollector();
   ~MarkCompactCollector();
 
   bool MarkInvalidatedCode();
+  bool WillBeDeoptimized(Code* code);
   void RemoveDeadInvalidatedCode();
   void ProcessInvalidatedCode(ObjectVisitor* visitor);
 
@@ -803,19 +839,28 @@ class MarkCompactCollector {
 
   // Mark the string table specially.  References to internalized strings from
   // the string table are weak.
-  void MarkStringTable();
+  void MarkStringTable(RootMarkingVisitor* visitor);
 
   // Mark objects in implicit references groups if their parent object
   // is marked.
   void MarkImplicitRefGroups();
 
-  // Mark all objects which are reachable due to host application
-  // logic like object groups or implicit references' groups.
-  void ProcessExternalMarking(RootMarkingVisitor* visitor);
-
   // Mark objects reachable (transitively) from objects in the marking stack
   // or overflowed in the heap.
   void ProcessMarkingDeque();
+
+  // Mark objects reachable (transitively) from objects in the marking stack
+  // or overflowed in the heap.  This respects references only considered in
+  // the final atomic marking pause including the following:
+  //    - Processing of objects reachable through Harmony WeakMaps.
+  //    - Objects reachable due to host application logic like object groups
+  //      or implicit references' groups.
+  void ProcessEphemeralMarking(ObjectVisitor* visitor);
+
+  // If the call-site of the top optimized code was not prepared for
+  // deoptimization, then treat the maps in the code as strong pointers,
+  // otherwise a map can die and deoptimize the code.
+  void ProcessTopOptimizedFrame(ObjectVisitor* visitor);
 
   // Mark objects reachable (transitively) from objects in the marking
   // stack.  This function empties the marking stack, but may leave
@@ -843,8 +888,8 @@ class MarkCompactCollector {
   void ClearNonLivePrototypeTransitions(Map* map);
   void ClearNonLiveMapTransitions(Map* map, MarkBit map_mark);
 
-  void ClearAndDeoptimizeDependentCode(Map* map);
-  void ClearNonLiveDependentCode(Map* map);
+  void ClearAndDeoptimizeDependentCode(DependentCode* dependent_code);
+  void ClearNonLiveDependentCode(DependentCode* dependent_code);
 
   // Marking detaches initial maps from SharedFunctionInfo objects
   // to make this reference weak. We need to reattach initial maps
@@ -852,15 +897,15 @@ class MarkCompactCollector {
   // ClearNonLiveTransitions pass or by calling this function.
   void ReattachInitialMaps();
 
-  // Mark all values associated with reachable keys in weak maps encountered
-  // so far.  This might push new object or even new weak maps onto the
-  // marking stack.
-  void ProcessWeakMaps();
+  // Mark all values associated with reachable keys in weak collections
+  // encountered so far.  This might push new object or even new weak maps onto
+  // the marking stack.
+  void ProcessWeakCollections();
 
   // After all reachable objects have been marked those weak map entries
   // with an unreachable key are removed from all encountered weak maps.
   // The linked list of all encountered weak maps is destroyed.
-  void ClearWeakMaps();
+  void ClearWeakCollections();
 
   // -----------------------------------------------------------------------
   // Phase 2: Sweeping to clear mark bits and free non-live objects for
@@ -877,6 +922,9 @@ class MarkCompactCollector {
   // for the large object space, clearing mark bits and adding unmarked
   // regions to each space's free list.
   void SweepSpaces();
+
+  int DiscoverAndPromoteBlackObjectsOnPage(NewSpace* new_space,
+                                           NewSpacePage* p);
 
   void EvacuateNewSpace();
 
@@ -899,12 +947,57 @@ class MarkCompactCollector {
   Heap* heap_;
   MarkingDeque marking_deque_;
   CodeFlusher* code_flusher_;
-  Object* encountered_weak_maps_;
+  Object* encountered_weak_collections_;
+  bool have_code_to_deoptimize_;
 
   List<Page*> evacuation_candidates_;
   List<Code*> invalidated_code_;
 
   friend class Heap;
+};
+
+
+class MarkBitCellIterator BASE_EMBEDDED {
+ public:
+  explicit MarkBitCellIterator(MemoryChunk* chunk)
+      : chunk_(chunk) {
+    last_cell_index_ = Bitmap::IndexToCell(
+        Bitmap::CellAlignIndex(
+            chunk_->AddressToMarkbitIndex(chunk_->area_end())));
+    cell_base_ = chunk_->area_start();
+    cell_index_ = Bitmap::IndexToCell(
+        Bitmap::CellAlignIndex(
+            chunk_->AddressToMarkbitIndex(cell_base_)));
+    cells_ = chunk_->markbits()->cells();
+  }
+
+  inline bool Done() { return cell_index_ == last_cell_index_; }
+
+  inline bool HasNext() { return cell_index_ < last_cell_index_ - 1; }
+
+  inline MarkBit::CellType* CurrentCell() {
+    ASSERT(cell_index_ == Bitmap::IndexToCell(Bitmap::CellAlignIndex(
+        chunk_->AddressToMarkbitIndex(cell_base_))));
+    return &cells_[cell_index_];
+  }
+
+  inline Address CurrentCellBase() {
+    ASSERT(cell_index_ == Bitmap::IndexToCell(Bitmap::CellAlignIndex(
+        chunk_->AddressToMarkbitIndex(cell_base_))));
+    return cell_base_;
+  }
+
+  inline void Advance() {
+    cell_index_++;
+    cell_base_ += 32 * kPointerSize;
+  }
+
+ private:
+  MemoryChunk* chunk_;
+  MarkBit::CellType* cells_;
+  unsigned int last_cell_index_;
+  unsigned int cell_index_;
+  Address cell_base_;
 };
 
 

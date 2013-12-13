@@ -27,12 +27,33 @@ The contents of `circle.js`:
     };
 
 The module `circle.js` has exported the functions `area()` and
-`circumference()`.  To export an object, add to the special `exports`
-object.
+`circumference()`.  To add functions and objects to the root of your module,
+you can add them to the special `exports` object.
 
-Variables
-local to the module will be private. In this example the variable `PI` is
-private to `circle.js`.
+Variables local to the module will be private, as though the module was wrapped
+in a function. In this example the variable `PI` is private to `circle.js`.
+
+If you want the root of your module's export to be a function (such as a
+constructor) or if you want to export a complete object in one assignment
+instead of building it one property at a time, assign it to `module.exports`
+instead of `exports`.
+
+Below, `bar.js` makes use of the `square` module, which exports a constructor:
+
+    var square = require('./square.js');
+    var mySquare = square(2);
+    console.log('The area of my square is ' + mySquare.area());
+
+The `square` module is defined in `square.js`:
+
+    // assigning to exports will not modify module, must use module.exports
+    module.exports = function(width) {
+      return {
+        area: function() {
+          return width * width;
+        }
+      };
+    }
 
 The module system is implemented in the `require("module")` module.
 
@@ -73,7 +94,7 @@ Consider this situation:
 When `main.js` loads `a.js`, then `a.js` in turn loads `b.js`.  At that
 point, `b.js` tries to load `a.js`.  In order to prevent an infinite
 loop an **unfinished copy** of the `a.js` exports object is returned to the
-`b.js` module.  `b.js` then finishes loading, and its exports object is
+`b.js` module.  `b.js` then finishes loading, and its `exports` object is
 provided to the `a.js` module.
 
 By the time `main.js` has loaded both modules, they're both finished.
@@ -218,18 +239,21 @@ would resolve to different files.
 * {Object}
 
 In each module, the `module` free variable is a reference to the object
-representing the current module.  In particular
-`module.exports` is the same as the `exports` object.
-`module` isn't actually a global but rather local to each module.
+representing the current module.  For convenience, `module.exports` is
+also accessible via the `exports` module-global. `module` isn't actually
+a global but rather local to each module.
 
 ### module.exports
 
 * {Object}
 
-The `exports` object is created by the Module system. Sometimes this is not
-acceptable, many want their module to be an instance of some class. To do this
-assign the desired export object to `module.exports`. For example suppose we
-were making a module called `a.js`
+The `module.exports` object is created by the Module system. Sometimes this is not
+acceptable; many want their module to be an instance of some class. To do this
+assign the desired export object to `module.exports`. Note that assigning the
+desired object to `exports` will simply rebind the local `exports` variable,
+which is probably not what you want to do.
+
+For example suppose we were making a module called `a.js`
 
     var EventEmitter = require('events').EventEmitter;
 
@@ -263,17 +287,39 @@ y.js:
     var x = require('./x');
     console.log(x.a);
 
+#### exports alias
+
+The `exports` variable that is available within a module starts as a reference
+to `module.exports`. As with any variable, if you assign a new value to it, it
+is no longer bound to the previous value.
+
+To illustrate the behaviour, imagine this hypothetical implementation of
+`require()`:
+
+    function require(...) {
+      // ...
+      function (module, exports) {
+        // Your module code here
+        exports = some_func;        // re-assigns exports, exports is no longer
+                                    // a shortcut, and nothing is exported.
+        module.exports = some_func; // makes your module export 0
+      } (module, module.exports);
+      return module;
+    }
+
+As a guideline, if the relationship between `exports` and `module.exports`
+seems like magic to you, ignore `exports` and only use `module.exports`.
 
 ### module.require(id)
 
 * `id` {String}
-* Return: {Object} `exports` from the resolved module
+* Return: {Object} `module.exports` from the resolved module
 
 The `module.require` method provides a way to load a module as if
 `require()` was called from the original module.
 
 Note that in order to do this, you must get a reference to the `module`
-object.  Since `require()` returns the `exports`, and the `module` is
+object.  Since `require()` returns the `module.exports`, and the `module` is
 typically *only* available within a specific module's code, it must be
 explicitly exported in order to be used.
 

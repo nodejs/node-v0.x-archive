@@ -36,6 +36,10 @@ namespace v8 {
 namespace internal {
 
 
+void ArrayNativeCode(MacroAssembler* masm,
+                     bool construct_call,
+                     Label* call_generic_code);
+
 // Compute a transcendental math function natively, or call the
 // TranscendentalCache runtime function.
 class TranscendentalCacheStub: public PlatformCodeStub {
@@ -70,7 +74,7 @@ class StoreBufferOverflowStub: public PlatformCodeStub {
 
   void Generate(MacroAssembler* masm);
 
-  virtual bool IsPregenerated() { return true; }
+  virtual bool IsPregenerated(Isolate* isolate) V8_OVERRIDE { return true; }
   static void GenerateFixedRegStubsAheadOfTime(Isolate* isolate);
   virtual bool SometimesSetsUpAFrame() { return false; }
 
@@ -79,80 +83,6 @@ class StoreBufferOverflowStub: public PlatformCodeStub {
 
   Major MajorKey() { return StoreBufferOverflow; }
   int MinorKey() { return (save_doubles_ == kSaveFPRegs) ? 1 : 0; }
-};
-
-
-class UnaryOpStub: public PlatformCodeStub {
- public:
-  UnaryOpStub(Token::Value op,
-              UnaryOverwriteMode mode,
-              UnaryOpIC::TypeInfo operand_type = UnaryOpIC::UNINITIALIZED)
-      : op_(op),
-        mode_(mode),
-        operand_type_(operand_type) {
-  }
-
- private:
-  Token::Value op_;
-  UnaryOverwriteMode mode_;
-
-  // Operand type information determined at runtime.
-  UnaryOpIC::TypeInfo operand_type_;
-
-  virtual void PrintName(StringStream* stream);
-
-  class ModeBits: public BitField<UnaryOverwriteMode, 0, 1> {};
-  class OpBits: public BitField<Token::Value, 1, 7> {};
-  class OperandTypeInfoBits: public BitField<UnaryOpIC::TypeInfo, 8, 3> {};
-
-  Major MajorKey() { return UnaryOp; }
-  int MinorKey() {
-    return ModeBits::encode(mode_)
-           | OpBits::encode(op_)
-           | OperandTypeInfoBits::encode(operand_type_);
-  }
-
-  // Note: A lot of the helper functions below will vanish when we use virtual
-  // function instead of switch more often.
-  void Generate(MacroAssembler* masm);
-
-  void GenerateTypeTransition(MacroAssembler* masm);
-
-  void GenerateSmiStub(MacroAssembler* masm);
-  void GenerateSmiStubSub(MacroAssembler* masm);
-  void GenerateSmiStubBitNot(MacroAssembler* masm);
-  void GenerateSmiCodeSub(MacroAssembler* masm,
-                          Label* non_smi,
-                          Label* undo,
-                          Label* slow,
-                          Label::Distance non_smi_near = Label::kFar,
-                          Label::Distance undo_near = Label::kFar,
-                          Label::Distance slow_near = Label::kFar);
-  void GenerateSmiCodeBitNot(MacroAssembler* masm,
-                             Label* non_smi,
-                             Label::Distance non_smi_near = Label::kFar);
-  void GenerateSmiCodeUndo(MacroAssembler* masm);
-
-  void GenerateNumberStub(MacroAssembler* masm);
-  void GenerateNumberStubSub(MacroAssembler* masm);
-  void GenerateNumberStubBitNot(MacroAssembler* masm);
-  void GenerateHeapNumberCodeSub(MacroAssembler* masm, Label* slow);
-  void GenerateHeapNumberCodeBitNot(MacroAssembler* masm, Label* slow);
-
-  void GenerateGenericStub(MacroAssembler* masm);
-  void GenerateGenericStubSub(MacroAssembler* masm);
-  void GenerateGenericStubBitNot(MacroAssembler* masm);
-  void GenerateGenericCodeFallback(MacroAssembler* masm);
-
-  virtual Code::Kind GetCodeKind() const { return Code::UNARY_OP_IC; }
-
-  virtual InlineCacheState GetICState() {
-    return UnaryOpIC::ToState(operand_type_);
-  }
-
-  virtual void FinishCode(Handle<Code> code) {
-    code->set_unary_op_type(operand_type_);
-  }
 };
 
 
@@ -214,19 +144,6 @@ class StringHelper : public AllStatic {
 };
 
 
-// Flag that indicates how to generate code for the stub StringAddStub.
-enum StringAddFlags {
-  NO_STRING_ADD_FLAGS = 0,
-  // Omit left string check in stub (left is definitely a string).
-  NO_STRING_CHECK_LEFT_IN_STUB = 1 << 0,
-  // Omit right string check in stub (right is definitely a string).
-  NO_STRING_CHECK_RIGHT_IN_STUB = 1 << 1,
-  // Omit both string checks in stub.
-  NO_STRING_CHECK_IN_STUB =
-      NO_STRING_CHECK_LEFT_IN_STUB | NO_STRING_CHECK_RIGHT_IN_STUB
-};
-
-
 class StringAddStub: public PlatformCodeStub {
  public:
   explicit StringAddStub(StringAddFlags flags) : flags_(flags) {}
@@ -244,6 +161,9 @@ class StringAddStub: public PlatformCodeStub {
                                Register scratch2,
                                Register scratch3,
                                Label* slow);
+
+  void GenerateRegisterArgsPush(MacroAssembler* masm);
+  void GenerateRegisterArgsPop(MacroAssembler* masm, Register temp);
 
   const StringAddFlags flags_;
 };
@@ -294,31 +214,6 @@ class StringCompareStub: public PlatformCodeStub {
       Register scratch,
       Label* chars_not_equal,
       Label::Distance chars_not_equal_near = Label::kFar);
-};
-
-
-class NumberToStringStub: public PlatformCodeStub {
- public:
-  NumberToStringStub() { }
-
-  // Generate code to do a lookup in the number string cache. If the number in
-  // the register object is found in the cache the generated code falls through
-  // with the result in the result register. The object and the result register
-  // can be the same. If the number is not found in the cache the code jumps to
-  // the label not_found with only the content of register object unchanged.
-  static void GenerateLookupNumberStringCache(MacroAssembler* masm,
-                                              Register object,
-                                              Register result,
-                                              Register scratch1,
-                                              Register scratch2,
-                                              bool object_is_smi,
-                                              Label* not_found);
-
- private:
-  Major MajorKey() { return NumberToString; }
-  int MinorKey() { return 0; }
-
-  void Generate(MacroAssembler* masm);
 };
 
 
@@ -408,7 +303,7 @@ class RecordWriteStub: public PlatformCodeStub {
     INCREMENTAL_COMPACTION
   };
 
-  virtual bool IsPregenerated();
+  virtual bool IsPregenerated(Isolate* isolate) V8_OVERRIDE;
   static void GenerateFixedRegStubsAheadOfTime(Isolate* isolate);
   virtual bool SometimesSetsUpAFrame() { return false; }
 
@@ -549,7 +444,7 @@ class RecordWriteStub: public PlatformCodeStub {
         // Save all XMM registers except XMM0.
         for (int i = XMMRegister::kNumRegisters - 1; i > 0; i--) {
           XMMRegister reg = XMMRegister::from_code(i);
-          masm->movdbl(Operand(esp, (i - 1) * kDoubleSize), reg);
+          masm->movsd(Operand(esp, (i - 1) * kDoubleSize), reg);
         }
       }
     }
@@ -561,7 +456,7 @@ class RecordWriteStub: public PlatformCodeStub {
         // Restore all XMM registers except XMM0.
         for (int i = XMMRegister::kNumRegisters - 1; i > 0; i--) {
           XMMRegister reg = XMMRegister::from_code(i);
-          masm->movdbl(reg, Operand(esp, (i - 1) * kDoubleSize));
+          masm->movsd(reg, Operand(esp, (i - 1) * kDoubleSize));
         }
         masm->add(esp,
                   Immediate(kDoubleSize * (XMMRegister::kNumRegisters - 1)));

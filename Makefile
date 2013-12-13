@@ -14,6 +14,12 @@ NODE ?= ./node
 # or set the V environment variable to an empty string.
 V ?= 1
 
+ifeq ($(USE_NINJA),1)
+ifneq ($(V),)
+NINJA := $(NINJA) -v
+endif
+endif
+
 # BUILDTYPE=Debug builds both release and debug builds. If you want to compile
 # just the debug build, run `make -C out BUILDTYPE=Debug` instead.
 ifeq ($(BUILDTYPE),Release)
@@ -44,16 +50,20 @@ node_g: config.gypi out/Makefile
 	ln -fs out/Debug/node $@
 endif
 
-out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/toolchain.gypi deps/v8/build/features.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
 ifeq ($(USE_NINJA),1)
 	touch out/Makefile
-	$(PYTHON) tools/gyp_node -f ninja
+	$(PYTHON) tools/gyp_node.py -f ninja
 else
-	$(PYTHON) tools/gyp_node -f make
+	$(PYTHON) tools/gyp_node.py -f make
 endif
 
 config.gypi: configure
-	$(PYTHON) ./configure
+	if [ -f $@ ]; then
+		$(error Stale $@, please re-run ./configure)
+	else
+		$(error No $@, please run ./configure first)
+	fi
 
 install: all
 	$(PYTHON) tools/install.py $@ '$(DESTDIR)' '$(PREFIX)'
@@ -76,6 +86,7 @@ distclean:
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
 	$(MAKE) jslint
+	$(MAKE) cpplint
 
 test-http1: all
 	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
@@ -83,16 +94,16 @@ test-http1: all
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
-test/gc/node_modules/weak/build:
+test/gc/node_modules/weak/build/Release/weakref.node:
 	@if [ ! -f node ]; then make all; fi
 	./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
 		--directory="$(shell pwd)/test/gc/node_modules/weak" \
 		--nodedir="$(shell pwd)"
 
-test-gc: all test/gc/node_modules/weak/build
+test-gc: all test/gc/node_modules/weak/build/Release/weakref.node
 	$(PYTHON) tools/test.py --mode=release gc
 
-test-all: all test/gc/node_modules/weak/build
+test-all: all test/gc/node_modules/weak/build/Release/weakref.node
 	$(PYTHON) tools/test.py --mode=debug,release
 	make test-npm
 
@@ -208,7 +219,8 @@ docopen: out/doc/api/all.html
 docclean:
 	-rm -rf out/doc
 
-VERSION=v$(shell $(PYTHON) tools/getnodeversion.py)
+RAWVER=$(shell $(PYTHON) tools/getnodeversion.py)
+VERSION=v$(RAWVER)
 RELEASE=$(shell $(PYTHON) tools/getnodeisrelease.py)
 PLATFORM=$(shell uname | tr '[:upper:]' '[:lower:]')
 ifeq ($(findstring x86_64,$(shell uname -m)),x86_64)
@@ -235,6 +247,11 @@ BINARYNAME=$(TARNAME)-$(PLATFORM)-$(ARCH)
 BINARYTAR=$(BINARYNAME).tar.gz
 PKG=out/$(TARNAME).pkg
 packagemaker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
+
+PKGSRC=nodejs-$(DESTCPU)-$(RAWVER).tgz
+ifdef NIGHTLY
+PKGSRC=nodejs-$(DESTCPU)-$(RAWVER)-$(TAG).tgz
+endif
 
 dist: doc $(TARBALL) $(PKG)
 
@@ -267,23 +284,23 @@ pkg: $(PKG)
 $(PKG): release-only
 	rm -rf $(PKGDIR)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --prefix=$(PKGDIR)/32$(PREFIX) --without-snapshot --dest-cpu=ia32 --tag=$(TAG)
-	$(MAKE) install V=$(V)
+	$(PYTHON) ./configure --without-snapshot --dest-cpu=ia32 --tag=$(TAG)
+	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)/32
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --prefix=$(PKGDIR)$(PREFIX) --without-snapshot --dest-cpu=x64 --tag=$(TAG)
-	$(MAKE) install V=$(V)
-	SIGN="$(SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
-	lipo $(PKGDIR)/32$(PREFIX)/bin/node \
-		$(PKGDIR)$(PREFIX)/bin/node \
-		-output $(PKGDIR)$(PREFIX)/bin/node-universal \
+	$(PYTHON) ./configure --without-snapshot --dest-cpu=x64 --tag=$(TAG)
+	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)
+	SIGN="$(APP_SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
+	lipo $(PKGDIR)/32/usr/local/bin/node \
+		$(PKGDIR)/usr/local/bin/node \
+		-output $(PKGDIR)/usr/local/bin/node-universal \
 		-create
-	mv $(PKGDIR)$(PREFIX)/bin/node-universal $(PKGDIR)$(PREFIX)/bin/node
+	mv $(PKGDIR)/usr/local/bin/node-universal $(PKGDIR)/usr/local/bin/node
 	rm -rf $(PKGDIR)/32
 	$(packagemaker) \
 		--id "org.nodejs.Node" \
 		--doc tools/osx-pkg.pmdoc \
 		--out $(PKG)
-	SIGN="$(SIGN)" PKG="$(PKG)" bash tools/osx-productsign.sh
+	SIGN="$(INT_SIGN)" PKG="$(PKG)" bash tools/osx-productsign.sh
 
 $(TARBALL): release-only node doc
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | tar xf -
@@ -312,6 +329,19 @@ $(BINARYTAR): release-only
 	gzip -f -9 $(BINARYNAME).tar
 
 binary: $(BINARYTAR)
+
+$(PKGSRC): release-only
+	rm -rf dist out
+	$(PYTHON) configure --prefix=/ --without-snapshot \
+		--dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
+	$(MAKE) install DESTDIR=dist
+	(cd dist; find * -type f | sort) > packlist
+	pkg_info -X pkg_install | \
+		egrep '^(MACHINE_ARCH|OPSYS|OS_VERSION|PKGTOOLS_VERSION)' > build-info
+	pkg_create -B build-info -c tools/pkgsrc/comment -d tools/pkgsrc/description \
+		-f packlist -I /opt/local -p dist -U $(PKGSRC)
+
+pkgsrc: $(PKGSRC)
 
 dist-upload: $(TARBALL) $(PKG)
 	ssh node@nodejs.org mkdir -p web/nodejs.org/dist/$(VERSION)
@@ -369,8 +399,19 @@ jslintfix:
 jslint:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
+CPPLINT_EXCLUDE ?=
+CPPLINT_EXCLUDE += src/node_dtrace.cc
+CPPLINT_EXCLUDE += src/node_dtrace.cc
+CPPLINT_EXCLUDE += src/node_root_certs.h
+CPPLINT_EXCLUDE += src/node_win32_perfctr_provider.cc
+CPPLINT_EXCLUDE += src/queue.h
+CPPLINT_EXCLUDE += src/tree.h
+CPPLINT_EXCLUDE += src/v8abbr.h
+
+CPPLINT_FILES = $(filter-out $(CPPLINT_EXCLUDE), $(wildcard src/*.cc src/*.h src/*.c))
+
 cpplint:
-	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+	@$(PYTHON) tools/cpplint.py $(CPPLINT_FILES)
 
 lint: jslint cpplint
 

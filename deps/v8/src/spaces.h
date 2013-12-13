@@ -32,6 +32,8 @@
 #include "hashmap.h"
 #include "list.h"
 #include "log.h"
+#include "platform/mutex.h"
+#include "v8utils.h"
 
 namespace v8 {
 namespace internal {
@@ -305,7 +307,7 @@ class MemoryChunk {
   }
 
   // Only works for addresses in pointer spaces, not data or code spaces.
-  static inline MemoryChunk* FromAnyPointerAddress(Address addr);
+  static inline MemoryChunk* FromAnyPointerAddress(Heap* heap, Address addr);
 
   Address address() { return reinterpret_cast<Address>(this); }
 
@@ -780,8 +782,12 @@ class Page : public MemoryChunk {
   // Object area size in bytes.
   static const int kNonCodeObjectAreaSize = kPageSize - kObjectStartOffset;
 
-  // Maximum object size that fits in a page.
-  static const int kMaxNonCodeHeapObjectSize = kNonCodeObjectAreaSize;
+  // Maximum object size that fits in a page. Objects larger than that size
+  // are allocated in large object space and are never moved in memory. This
+  // also applies to new space allocation, since objects are never migrated
+  // from new space to large object space.  Takes double alignment into account.
+  static const int kMaxNonCodeHeapObjectSize =
+      kNonCodeObjectAreaSize - kPointerSize;
 
   // Page size mask.
   static const intptr_t kPageAlignmentMask = (1 << kPageSizeBits) - 1;
@@ -1077,6 +1083,13 @@ class MemoryAllocator {
     return (Available() / Page::kPageSize) * Page::kMaxNonCodeHeapObjectSize;
   }
 
+  // Returns an indication of whether a pointer is in a space that has
+  // been allocated by this MemoryAllocator.
+  V8_INLINE bool IsOutsideAllocatedSpace(const void* address) const {
+    return address < lowest_ever_allocated_ ||
+        address >= highest_ever_allocated_;
+  }
+
 #ifdef DEBUG
   // Reports statistic info of the space.
   void ReportStatistics();
@@ -1098,6 +1111,8 @@ class MemoryAllocator {
                                 size_t alignment,
                                 Executability executable,
                                 VirtualMemory* controller);
+
+  bool CommitMemory(Address addr, size_t size, Executability executable);
 
   void FreeMemory(VirtualMemory* reservation, Executability executable);
   void FreeMemory(Address addr, size_t size, Executability executable);
@@ -1144,10 +1159,10 @@ class MemoryAllocator {
     return CodePageAreaEndOffset() - CodePageAreaStartOffset();
   }
 
-  MUST_USE_RESULT static bool CommitExecutableMemory(VirtualMemory* vm,
-                                                     Address start,
-                                                     size_t commit_size,
-                                                     size_t reserved_size);
+  MUST_USE_RESULT bool CommitExecutableMemory(VirtualMemory* vm,
+                                              Address start,
+                                              size_t commit_size,
+                                              size_t reserved_size);
 
  private:
   Isolate* isolate_;
@@ -1161,6 +1176,14 @@ class MemoryAllocator {
   size_t size_;
   // Allocated executable space size in bytes.
   size_t size_executable_;
+
+  // We keep the lowest and highest addresses allocated as a quick way
+  // of determining that pointers are outside the heap. The estimate is
+  // conservative, i.e. not all addrsses in 'allocated' space are allocated
+  // to our heap. The range is [lowest, highest[, inclusive on the low end
+  // and exclusive on the high end.
+  void* lowest_ever_allocated_;
+  void* highest_ever_allocated_;
 
   struct MemoryAllocationCallbackRegistration {
     MemoryAllocationCallbackRegistration(MemoryAllocationCallback callback,
@@ -1183,6 +1206,11 @@ class MemoryAllocator {
   // used as a marking stack and its page headers are destroyed.
   Page* InitializePagesInChunk(int chunk_id, int pages_in_chunk,
                                PagedSpace* owner);
+
+  void UpdateAllocatedSpaceLimits(void* low, void* high) {
+    lowest_ever_allocated_ = Min(lowest_ever_allocated_, low);
+    highest_ever_allocated_ = Max(highest_ever_allocated_, high);
+  }
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(MemoryAllocator);
 };
@@ -1289,18 +1317,53 @@ class PageIterator BASE_EMBEDDED {
 // space.
 class AllocationInfo {
  public:
-  AllocationInfo() : top(NULL), limit(NULL) {
+  AllocationInfo() : top_(NULL), limit_(NULL) {
   }
 
-  Address top;  // Current allocation top.
-  Address limit;  // Current allocation limit.
+  INLINE(void set_top(Address top)) {
+    SLOW_ASSERT(top == NULL ||
+        (reinterpret_cast<intptr_t>(top) & HeapObjectTagMask()) == 0);
+    top_ = top;
+  }
+
+  INLINE(Address top()) const {
+    SLOW_ASSERT(top_ == NULL ||
+        (reinterpret_cast<intptr_t>(top_) & HeapObjectTagMask()) == 0);
+    return top_;
+  }
+
+  Address* top_address() {
+    return &top_;
+  }
+
+  INLINE(void set_limit(Address limit)) {
+    SLOW_ASSERT(limit == NULL ||
+        (reinterpret_cast<intptr_t>(limit) & HeapObjectTagMask()) == 0);
+    limit_ = limit;
+  }
+
+  INLINE(Address limit()) const {
+    SLOW_ASSERT(limit_ == NULL ||
+        (reinterpret_cast<intptr_t>(limit_) & HeapObjectTagMask()) == 0);
+    return limit_;
+  }
+
+  Address* limit_address() {
+    return &limit_;
+  }
 
 #ifdef DEBUG
   bool VerifyPagedAllocation() {
-    return (Page::FromAllocationTop(top) == Page::FromAllocationTop(limit))
-        && (top <= limit);
+    return (Page::FromAllocationTop(top_) == Page::FromAllocationTop(limit_))
+        && (top_ <= limit_);
   }
 #endif
+
+ private:
+  // Current allocation top.
+  Address top_;
+  // Current allocation limit.
+  Address limit_;
 };
 
 
@@ -1440,12 +1503,7 @@ class FreeListCategory {
   FreeListCategory() :
       top_(NULL),
       end_(NULL),
-      mutex_(OS::CreateMutex()),
       available_(0) {}
-
-  ~FreeListCategory() {
-    delete mutex_;
-  }
 
   intptr_t Concatenate(FreeListCategory* category);
 
@@ -1454,6 +1512,7 @@ class FreeListCategory {
   void Free(FreeListNode* node, int size_in_bytes);
 
   FreeListNode* PickNodeFromList(int *node_size);
+  FreeListNode* PickNodeFromList(int size_in_bytes, int *node_size);
 
   intptr_t EvictFreeListItemsInList(Page* p);
 
@@ -1471,7 +1530,7 @@ class FreeListCategory {
   int available() const { return available_; }
   void set_available(int available) { available_ = available; }
 
-  Mutex* mutex() { return mutex_; }
+  Mutex* mutex() { return &mutex_; }
 
 #ifdef DEBUG
   intptr_t SumFreeList();
@@ -1481,7 +1540,7 @@ class FreeListCategory {
  private:
   FreeListNode* top_;
   FreeListNode* end_;
-  Mutex* mutex_;
+  Mutex mutex_;
 
   // Total available bytes in all blocks of this free list category.
   int available_;
@@ -1683,16 +1742,29 @@ class PagedSpace : public Space {
   virtual intptr_t Waste() { return accounting_stats_.Waste(); }
 
   // Returns the allocation pointer in this space.
-  Address top() { return allocation_info_.top; }
-  Address limit() { return allocation_info_.limit; }
+  Address top() { return allocation_info_.top(); }
+  Address limit() { return allocation_info_.limit(); }
 
-  // The allocation top and limit addresses.
-  Address* allocation_top_address() { return &allocation_info_.top; }
-  Address* allocation_limit_address() { return &allocation_info_.limit; }
+  // The allocation top address.
+  Address* allocation_top_address() {
+    return allocation_info_.top_address();
+  }
+
+  // The allocation limit address.
+  Address* allocation_limit_address() {
+    return allocation_info_.limit_address();
+  }
+
+  enum AllocationType {
+    NEW_OBJECT,
+    MOVE_OBJECT
+  };
 
   // Allocate the requested number of bytes in the space if possible, return a
   // failure object if not.
-  MUST_USE_RESULT inline MaybeObject* AllocateRaw(int size_in_bytes);
+  MUST_USE_RESULT inline MaybeObject* AllocateRaw(
+      int size_in_bytes,
+      AllocationType event = NEW_OBJECT);
 
   virtual bool ReserveSpace(int bytes);
 
@@ -1714,9 +1786,9 @@ class PagedSpace : public Space {
   void SetTop(Address top, Address limit) {
     ASSERT(top == limit ||
            Page::FromAddress(top) == Page::FromAddress(limit - 1));
-    MemoryChunk::UpdateHighWaterMark(allocation_info_.top);
-    allocation_info_.top = top;
-    allocation_info_.limit = limit;
+    MemoryChunk::UpdateHighWaterMark(allocation_info_.top());
+    allocation_info_.set_top(top);
+    allocation_info_.set_limit(limit);
   }
 
   void Allocate(int bytes) {
@@ -1751,8 +1823,8 @@ class PagedSpace : public Space {
 
   // Report code object related statistics
   void CollectCodeStatistics();
-  static void ReportCodeStatistics();
-  static void ResetCodeStatistics();
+  static void ReportCodeStatistics(Isolate* isolate);
+  static void ResetCodeStatistics(Isolate* isolate);
 #endif
 
   bool was_swept_conservatively() { return was_swept_conservatively_; }
@@ -2357,9 +2429,15 @@ class NewSpace : public Space {
 
   // Return the address of the allocation pointer in the active semispace.
   Address top() {
-    ASSERT(to_space_.current_page()->ContainsLimit(allocation_info_.top));
-    return allocation_info_.top;
+    ASSERT(to_space_.current_page()->ContainsLimit(allocation_info_.top()));
+    return allocation_info_.top();
   }
+
+  void set_top(Address top) {
+    ASSERT(to_space_.current_page()->ContainsLimit(top));
+    allocation_info_.set_top(top);
+  }
+
   // Return the address of the first object in the active semispace.
   Address bottom() { return to_space_.space_start(); }
 
@@ -2384,9 +2462,15 @@ class NewSpace : public Space {
     return reinterpret_cast<Address>(index << kPointerSizeLog2);
   }
 
-  // The allocation top and limit addresses.
-  Address* allocation_top_address() { return &allocation_info_.top; }
-  Address* allocation_limit_address() { return &allocation_info_.limit; }
+  // The allocation top and limit address.
+  Address* allocation_top_address() {
+    return allocation_info_.top_address();
+  }
+
+  // The allocation limit address.
+  Address* allocation_limit_address() {
+    return allocation_info_.limit_address();
+  }
 
   MUST_USE_RESULT INLINE(MaybeObject* AllocateRaw(int size_in_bytes));
 
@@ -2396,13 +2480,14 @@ class NewSpace : public Space {
   void LowerInlineAllocationLimit(intptr_t step) {
     inline_allocation_limit_step_ = step;
     if (step == 0) {
-      allocation_info_.limit = to_space_.page_high();
+      allocation_info_.set_limit(to_space_.page_high());
     } else {
-      allocation_info_.limit = Min(
-          allocation_info_.top + inline_allocation_limit_step_,
-          allocation_info_.limit);
+      Address new_limit = Min(
+          allocation_info_.top() + inline_allocation_limit_step_,
+          allocation_info_.limit());
+      allocation_info_.set_limit(new_limit);
     }
-    top_on_previous_step_ = allocation_info_.top;
+    top_on_previous_step_ = allocation_info_.top();
   }
 
   // Get the extent of the inactive semispace (for use as a marking stack,
@@ -2549,9 +2634,9 @@ class OldSpace : public PagedSpace {
 // For contiguous spaces, top should be in the space (or at the end) and limit
 // should be the end of the space.
 #define ASSERT_SEMISPACE_ALLOCATION_INFO(info, space) \
-  SLOW_ASSERT((space).page_low() <= (info).top             \
-              && (info).top <= (space).page_high()         \
-              && (info).limit <= (space).page_high())
+  SLOW_ASSERT((space).page_low() <= (info).top() \
+              && (info).top() <= (space).page_high() \
+              && (info).limit() <= (space).page_high())
 
 
 // -----------------------------------------------------------------------------
@@ -2626,20 +2711,20 @@ class MapSpace : public FixedSpace {
 
 
 // -----------------------------------------------------------------------------
-// Old space for all global object property cell objects
+// Old space for simple property cell objects
 
 class CellSpace : public FixedSpace {
  public:
   // Creates a property cell space object with a maximum capacity.
   CellSpace(Heap* heap, intptr_t max_capacity, AllocationSpace id)
-      : FixedSpace(heap, max_capacity, id, JSGlobalPropertyCell::kSize)
+      : FixedSpace(heap, max_capacity, id, Cell::kSize)
   {}
 
   virtual int RoundSizeDownToObjectAlignment(int size) {
-    if (IsPowerOf2(JSGlobalPropertyCell::kSize)) {
-      return RoundDown(size, JSGlobalPropertyCell::kSize);
+    if (IsPowerOf2(Cell::kSize)) {
+      return RoundDown(size, Cell::kSize);
     } else {
-      return (size / JSGlobalPropertyCell::kSize) * JSGlobalPropertyCell::kSize;
+      return (size / Cell::kSize) * Cell::kSize;
     }
   }
 
@@ -2648,6 +2733,33 @@ class CellSpace : public FixedSpace {
 
  public:
   TRACK_MEMORY("CellSpace")
+};
+
+
+// -----------------------------------------------------------------------------
+// Old space for all global object property cell objects
+
+class PropertyCellSpace : public FixedSpace {
+ public:
+  // Creates a property cell space object with a maximum capacity.
+  PropertyCellSpace(Heap* heap, intptr_t max_capacity,
+                    AllocationSpace id)
+      : FixedSpace(heap, max_capacity, id, PropertyCell::kSize)
+  {}
+
+  virtual int RoundSizeDownToObjectAlignment(int size) {
+    if (IsPowerOf2(PropertyCell::kSize)) {
+      return RoundDown(size, PropertyCell::kSize);
+    } else {
+      return (size / PropertyCell::kSize) * PropertyCell::kSize;
+    }
+  }
+
+ protected:
+  virtual void VerifyObject(HeapObject* obj);
+
+ public:
+  TRACK_MEMORY("PropertyCellSpace")
 };
 
 

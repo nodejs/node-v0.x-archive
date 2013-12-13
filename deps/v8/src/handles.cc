@@ -101,7 +101,7 @@ void HandleScope::DeleteExtensions(Isolate* isolate) {
 }
 
 
-#ifdef ENABLE_EXTRA_CHECKS
+#ifdef ENABLE_HANDLE_ZAPPING
 void HandleScope::ZapRange(Object** start, Object** end) {
   ASSERT(end - start <= kHandleBlockSize);
   for (Object** p = start; p != end; p++) {
@@ -150,60 +150,6 @@ Handle<JSGlobalProxy> ReinitializeJSGlobalProxy(
 }
 
 
-void SetExpectedNofProperties(Handle<JSFunction> func, int nof) {
-  // If objects constructed from this function exist then changing
-  // 'estimated_nof_properties' is dangerous since the previous value might
-  // have been compiled into the fast construct stub. More over, the inobject
-  // slack tracking logic might have adjusted the previous value, so even
-  // passing the same value is risky.
-  if (func->shared()->live_objects_may_exist()) return;
-
-  func->shared()->set_expected_nof_properties(nof);
-  if (func->has_initial_map()) {
-    Handle<Map> new_initial_map =
-        func->GetIsolate()->factory()->CopyMap(
-            Handle<Map>(func->initial_map()));
-    new_initial_map->set_unused_property_fields(nof);
-    func->set_initial_map(*new_initial_map);
-  }
-}
-
-
-void SetPrototypeProperty(Handle<JSFunction> func, Handle<JSObject> value) {
-  CALL_HEAP_FUNCTION_VOID(func->GetIsolate(),
-                          func->SetPrototype(*value));
-}
-
-
-static int ExpectedNofPropertiesFromEstimate(int estimate) {
-  // If no properties are added in the constructor, they are more likely
-  // to be added later.
-  if (estimate == 0) estimate = 2;
-
-  // We do not shrink objects that go into a snapshot (yet), so we adjust
-  // the estimate conservatively.
-  if (Serializer::enabled()) return estimate + 2;
-
-  // Inobject slack tracking will reclaim redundant inobject space later,
-  // so we can afford to adjust the estimate generously.
-  if (FLAG_clever_optimizations) {
-    return estimate + 8;
-  } else {
-    return estimate + 3;
-  }
-}
-
-
-void SetExpectedNofPropertiesFromEstimate(Handle<SharedFunctionInfo> shared,
-                                          int estimate) {
-  // See the comment in SetExpectedNofProperties.
-  if (shared->live_objects_may_exist()) return;
-
-  shared->set_expected_nof_properties(
-      ExpectedNofPropertiesFromEstimate(estimate));
-}
-
-
 void FlattenString(Handle<String> string) {
   CALL_HEAP_FUNCTION_VOID(string->GetIsolate(), string->TryFlatten());
 }
@@ -211,17 +157,6 @@ void FlattenString(Handle<String> string) {
 
 Handle<String> FlattenGetString(Handle<String> string) {
   CALL_HEAP_FUNCTION(string->GetIsolate(), string->TryFlatten(), String);
-}
-
-
-Handle<Object> SetPrototype(Handle<JSFunction> function,
-                            Handle<Object> prototype) {
-  ASSERT(function->should_have_prototype());
-  CALL_HEAP_FUNCTION(function->GetIsolate(),
-                     Accessors::FunctionSetPrototype(*function,
-                                                     *prototype,
-                                                     NULL),
-                     Object);
 }
 
 
@@ -294,47 +229,11 @@ Handle<Object> GetProperty(Isolate* isolate,
 }
 
 
-Handle<Object> SetPrototype(Handle<JSObject> obj, Handle<Object> value) {
-  const bool skip_hidden_prototypes = false;
-  CALL_HEAP_FUNCTION(obj->GetIsolate(),
-                     obj->SetPrototype(*value, skip_hidden_prototypes), Object);
-}
-
-
 Handle<Object> LookupSingleCharacterStringFromCode(Isolate* isolate,
                                                    uint32_t index) {
   CALL_HEAP_FUNCTION(
       isolate,
       isolate->heap()->LookupSingleCharacterStringFromCode(index), Object);
-}
-
-
-Handle<String> SubString(Handle<String> str,
-                         int start,
-                         int end,
-                         PretenureFlag pretenure) {
-  CALL_HEAP_FUNCTION(str->GetIsolate(),
-                     str->SubString(start, end, pretenure), String);
-}
-
-
-Handle<JSObject> Copy(Handle<JSObject> obj) {
-  Isolate* isolate = obj->GetIsolate();
-  CALL_HEAP_FUNCTION(isolate,
-                     isolate->heap()->CopyJSObject(*obj), JSObject);
-}
-
-
-Handle<JSObject> DeepCopy(Handle<JSObject> obj) {
-  Isolate* isolate = obj->GetIsolate();
-  CALL_HEAP_FUNCTION(isolate,
-                     obj->DeepCopy(isolate),
-                     JSObject);
-}
-
-
-Handle<Object> SetAccessor(Handle<JSObject> obj, Handle<AccessorInfo> info) {
-  CALL_HEAP_FUNCTION(obj->GetIsolate(), obj->DefineAccessor(*info), Object);
 }
 
 
@@ -345,9 +244,9 @@ Handle<Object> SetAccessor(Handle<JSObject> obj, Handle<AccessorInfo> info) {
 // associated with the wrapper and get rid of both the wrapper and the
 // handle.
 static void ClearWrapperCache(v8::Isolate* v8_isolate,
-                              Persistent<v8::Value> handle,
+                              Persistent<v8::Value>* handle,
                               void*) {
-  Handle<Object> cache = Utils::OpenHandle(*handle);
+  Handle<Object> cache = Utils::OpenPersistent(handle);
   JSValue* wrapper = JSValue::cast(*cache);
   Foreign* foreign = Script::cast(wrapper->value())->wrapper();
   ASSERT(foreign->foreign_address() ==
@@ -387,7 +286,6 @@ Handle<JSValue> GetScriptWrapper(Handle<Script> script) {
   // garbage collector when it is not used anymore.
   Handle<Object> handle = isolate->global_handles()->Create(*result);
   isolate->global_handles()->MakeWeak(handle.location(),
-                                      NULL,
                                       NULL,
                                       &ClearWrapperCache);
   script->wrapper()->set_foreign_address(
@@ -457,7 +355,7 @@ Handle<FixedArray> CalculateLineEnds(Handle<String> src,
   List<int> line_ends(line_count_estimate);
   Isolate* isolate = src->GetIsolate();
   {
-    AssertNoAllocation no_heap_allocation;  // ensure vectors stay valid.
+    DisallowHeapAllocation no_allocation;  // ensure vectors stay valid.
     // Dispatch on type of strings.
     String::FlatContent content = src->GetFlatContent();
     ASSERT(content.IsFlat());
@@ -485,7 +383,7 @@ Handle<FixedArray> CalculateLineEnds(Handle<String> src,
 // Convert code position into line number.
 int GetScriptLineNumber(Handle<Script> script, int code_pos) {
   InitScriptLineEnds(script);
-  AssertNoAllocation no_allocation;
+  DisallowHeapAllocation no_allocation;
   FixedArray* line_ends_array = FixedArray::cast(script->line_ends());
   const int line_ends_len = line_ends_array->length();
 
@@ -507,12 +405,13 @@ int GetScriptLineNumber(Handle<Script> script, int code_pos) {
   return right + script->line_offset()->value();
 }
 
+
 // Convert code position into column number.
 int GetScriptColumnNumber(Handle<Script> script, int code_pos) {
   int line_number = GetScriptLineNumber(script, code_pos);
   if (line_number == -1) return -1;
 
-  AssertNoAllocation no_allocation;
+  DisallowHeapAllocation no_allocation;
   FixedArray* line_ends_array = FixedArray::cast(script->line_ends());
   line_number = line_number - script->line_offset()->value();
   if (line_number == 0) return code_pos + script->column_offset()->value();
@@ -521,8 +420,9 @@ int GetScriptColumnNumber(Handle<Script> script, int code_pos) {
   return code_pos - (prev_line_end_pos + 1);
 }
 
+
 int GetScriptLineNumberSafe(Handle<Script> script, int code_pos) {
-  AssertNoAllocation no_allocation;
+  DisallowHeapAllocation no_allocation;
   if (!script->line_ends()->IsUndefined()) {
     return GetScriptLineNumber(script, code_pos);
   }
@@ -545,34 +445,27 @@ int GetScriptLineNumberSafe(Handle<Script> script, int code_pos) {
 }
 
 
-void CustomArguments::IterateInstance(ObjectVisitor* v) {
-  v->VisitPointers(values_, values_ + ARRAY_SIZE(values_));
-}
-
-
 // Compute the property keys from the interceptor.
 // TODO(rossberg): support symbols in API, and filter here if needed.
 v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSReceiver> receiver,
                                                  Handle<JSObject> object) {
   Isolate* isolate = receiver->GetIsolate();
   Handle<InterceptorInfo> interceptor(object->GetNamedInterceptor());
-  CustomArguments args(isolate, interceptor->data(), *receiver, *object);
-  v8::AccessorInfo info(args.end());
+  PropertyCallbackArguments
+      args(isolate, interceptor->data(), *receiver, *object);
   v8::Handle<v8::Array> result;
   if (!interceptor->enumerator()->IsUndefined()) {
-    v8::NamedPropertyEnumerator enum_fun =
-        v8::ToCData<v8::NamedPropertyEnumerator>(interceptor->enumerator());
+    v8::NamedPropertyEnumeratorCallback enum_fun =
+        v8::ToCData<v8::NamedPropertyEnumeratorCallback>(
+            interceptor->enumerator());
     LOG(isolate, ApiObjectAccess("interceptor-named-enum", *object));
-    {
-      // Leaving JavaScript.
-      VMState state(isolate, EXTERNAL);
-      result = enum_fun(info);
-    }
+    result = args.Call(enum_fun);
   }
 #if ENABLE_EXTRA_CHECKS
   CHECK(result.IsEmpty() || v8::Utils::OpenHandle(*result)->IsJSObject());
 #endif
-  return result;
+  return v8::Local<v8::Array>::New(reinterpret_cast<v8::Isolate*>(isolate),
+                                   result);
 }
 
 
@@ -581,23 +474,21 @@ v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSReceiver> receiver,
                                                    Handle<JSObject> object) {
   Isolate* isolate = receiver->GetIsolate();
   Handle<InterceptorInfo> interceptor(object->GetIndexedInterceptor());
-  CustomArguments args(isolate, interceptor->data(), *receiver, *object);
-  v8::AccessorInfo info(args.end());
+  PropertyCallbackArguments
+      args(isolate, interceptor->data(), *receiver, *object);
   v8::Handle<v8::Array> result;
   if (!interceptor->enumerator()->IsUndefined()) {
-    v8::IndexedPropertyEnumerator enum_fun =
-        v8::ToCData<v8::IndexedPropertyEnumerator>(interceptor->enumerator());
+    v8::IndexedPropertyEnumeratorCallback enum_fun =
+        v8::ToCData<v8::IndexedPropertyEnumeratorCallback>(
+            interceptor->enumerator());
     LOG(isolate, ApiObjectAccess("interceptor-indexed-enum", *object));
-    {
-      // Leaving JavaScript.
-      VMState state(isolate, EXTERNAL);
-      result = enum_fun(info);
+    result = args.Call(enum_fun);
 #if ENABLE_EXTRA_CHECKS
-      CHECK(result.IsEmpty() || v8::Utils::OpenHandle(*result)->IsJSObject());
+    CHECK(result.IsEmpty() || v8::Utils::OpenHandle(*result)->IsJSObject());
 #endif
-    }
   }
-  return result;
+  return v8::Local<v8::Array>::New(reinterpret_cast<v8::Isolate*>(isolate),
+                                   result);
 }
 
 
@@ -652,8 +543,12 @@ Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
     if (p->IsJSProxy()) {
       Handle<JSProxy> proxy(JSProxy::cast(*p), isolate);
       Handle<Object> args[] = { proxy };
-      Handle<Object> names = Execution::Call(
-          isolate->proxy_enumerate(), object, ARRAY_SIZE(args), args, threw);
+      Handle<Object> names = Execution::Call(isolate,
+                                             isolate->proxy_enumerate(),
+                                             object,
+                                             ARRAY_SIZE(args),
+                                             args,
+                                             threw);
       if (*threw) return content;
       content = AddKeysFromJSArray(content, Handle<JSArray>::cast(names));
       break;
@@ -667,6 +562,10 @@ Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
                                  isolate->heap()->undefined_value(),
                                  v8::ACCESS_KEYS)) {
       isolate->ReportFailedAccessCheck(*current, v8::ACCESS_KEYS);
+      if (isolate->has_scheduled_exception()) {
+        isolate->PromoteScheduledException();
+        *threw = true;
+      }
       break;
     }
 
@@ -807,7 +706,7 @@ Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
           if (details.type() != FIELD) {
             indices = Handle<FixedArray>();
           } else {
-            int field_index = Descriptor::IndexFromValue(descs->GetValue(i));
+            int field_index = descs->GetFieldIndex(i);
             if (field_index >= map->inobject_properties()) {
               field_index = -(field_index - map->inobject_properties() + 1);
             }
@@ -931,6 +830,17 @@ DeferredHandles* DeferredHandleScope::Detach() {
   handles_detached_ = true;
 #endif
   return deferred;
+}
+
+
+void AddWeakObjectToCodeDependency(Heap* heap,
+                                   Handle<Object> object,
+                                   Handle<Code> code) {
+  heap->EnsureWeakObjectToCodeTable();
+  Handle<DependentCode> dep(heap->LookupWeakObjectToCodeDependency(*object));
+  dep = DependentCode::Insert(dep, DependentCode::kWeaklyEmbeddedGroup, code);
+  CALL_HEAP_FUNCTION_VOID(heap->isolate(),
+                          heap->AddWeakObjectToCodeDependency(*object, *dep));
 }
 
 

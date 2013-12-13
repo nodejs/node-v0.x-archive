@@ -28,7 +28,8 @@ if (!process.features.tls_npn) {
 var common = require('../common'),
     assert = require('assert'),
     fs = require('fs'),
-    tls = require('tls');
+    tls = require('tls'),
+    crypto = require('crypto');
 
 function filenamePEM(n) {
   return require('path').join(common.fixturesDir, 'keys', n + '.pem');
@@ -42,6 +43,13 @@ var serverOptions = {
   key: loadPEM('agent2-key'),
   cert: loadPEM('agent2-cert'),
   crl: loadPEM('ca2-crl'),
+  SNICallback: function() {
+    return crypto.createCredentials({
+      key: loadPEM('agent2-key'),
+      cert: loadPEM('agent2-cert'),
+      crl: loadPEM('ca2-crl'),
+    }).context;
+  },
   NPNProtocols: ['a', 'b', 'c']
 };
 
@@ -60,6 +68,12 @@ var clientsOptions = [{
   cert: serverOptions.cert,
   crl: serverOptions.crl,
   NPNProtocols: ['c', 'b', 'e'],
+  rejectUnauthorized: false
+},{
+  port: serverPort,
+  key: serverOptions.key,
+  cert: serverOptions.cert,
+  crl: serverOptions.crl,
   rejectUnauthorized: false
 },{
   port: serverPort,
@@ -91,7 +105,9 @@ function startTest() {
   connectClient(clientsOptions[0], function() {
     connectClient(clientsOptions[1], function() {
       connectClient(clientsOptions[2], function() {
-        server.close();
+        connectClient(clientsOptions[3], function() {
+          server.close();
+        });
       });
     });
   });
@@ -100,6 +116,8 @@ function startTest() {
 process.on('exit', function() {
   assert.equal(serverResults[0], clientsResults[0]);
   assert.equal(serverResults[1], clientsResults[1]);
-  assert.equal(serverResults[2], 'first-priority-unsupported');
+  assert.equal(serverResults[2], 'http/1.1');
   assert.equal(clientsResults[2], false);
+  assert.equal(serverResults[3], 'first-priority-unsupported');
+  assert.equal(clientsResults[3], false);
 });

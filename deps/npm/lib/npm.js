@@ -11,8 +11,8 @@ if (typeof WScript !== "undefined") {
 }
 
 
-// FIXME there really ought to be a path.split in node core
-require("path").SPLIT_CHAR = process.platform === "win32" ? "\\" : "/"
+// monkey-patch support for 0.6 child processes
+require('child-process-close')
 
 var EventEmitter = require("events").EventEmitter
   , npm = module.exports = new EventEmitter
@@ -53,15 +53,16 @@ function mkdir (p, cb) {
 npm.commands = {}
 
 try {
+  var pv = process.version.replace(/^v/, '')
   // startup, ok to do this synchronously
   var j = JSON.parse(fs.readFileSync(
     path.join(__dirname, "../package.json"))+"")
   npm.version = j.version
   npm.nodeVersionRequired = j.engines.node
-  if (!semver.satisfies(process.version, j.engines.node)) {
+  if (!semver.satisfies(pv, j.engines.node)) {
     log.warn("unsupported version", [""
             ,"npm requires node version: "+j.engines.node
-            ,"And you have: "+process.version
+            ,"And you have: "+pv
             ,"which is not satisfactory."
             ,""
             ,"Bad things will likely happen.  You have been warned."
@@ -105,6 +106,7 @@ var commandCache = {}
               , "tst": "test"
               , "find-dupes": "dedupe"
               , "ddp": "dedupe"
+              , "v": "view"
               }
 
   , aliasNames = Object.keys(aliases)
@@ -145,6 +147,7 @@ var commandCache = {}
               , "edit"
               , "explore"
               , "docs"
+              , "repo"
               , "bugs"
               , "faq"
               , "root"
@@ -163,6 +166,7 @@ var commandCache = {}
                , "unbuild"
                , "xmas"
                , "substack"
+               , "visnup"
                ]
   , fullList = npm.fullList = cmdList.concat(aliasNames).filter(function (c) {
       return plumbing.indexOf(c) === -1
@@ -280,7 +284,7 @@ function load (npm, cli, cb) {
       var color = conf.get("color")
 
       log.level = conf.get("loglevel")
-      log.heading = "npm"
+      log.heading = conf.get("heading") || "npm"
       log.stream = conf.get("logstream")
       switch (color) {
         case "always": log.enableColor(); break
@@ -475,9 +479,14 @@ Object.defineProperty(npm, "cache",
   })
 
 var tmpFolder
+var crypto = require("crypto")
+var rand = crypto.randomBytes(6)
+                 .toString("base64")
+                 .replace(/\//g, '_')
+                 .replace(/\+/, '-')
 Object.defineProperty(npm, "tmp",
   { get : function () {
-      if (!tmpFolder) tmpFolder = "npm-" + process.pid
+      if (!tmpFolder) tmpFolder = "npm-" + process.pid + "-" + rand
       return path.resolve(npm.config.get("tmp"), tmpFolder)
     }
   , enumerable : true

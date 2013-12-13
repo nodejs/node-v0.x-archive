@@ -35,7 +35,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#if V8_TARGET_ARCH_MIPS
 
 #include "mips/assembler-mips-inl.h"
 #include "serialize.h"
@@ -48,6 +48,7 @@ bool CpuFeatures::initialized_ = false;
 #endif
 unsigned CpuFeatures::supported_ = 0;
 unsigned CpuFeatures::found_by_runtime_probing_only_ = 0;
+unsigned CpuFeatures::cross_compile_ = 0;
 
 
 ExternalReference ExternalReference::cpu_features() {
@@ -126,7 +127,8 @@ void CpuFeatures::Probe() {
   supported_ |= static_cast<uint64_t>(1) << FPU;
 #else
   // Probe for additional features not already known to be available.
-  if (OS::MipsCpuHasFeature(FPU)) {
+  CPU cpu;
+  if (cpu.has_fpu()) {
     // This implementation also sets the FPU flags if
     // runtime detection of FPU returns true.
     supported_ |= static_cast<uint64_t>(1) << FPU;
@@ -237,11 +239,12 @@ void RelocInfo::PatchCodeWithCall(Address target, int guard_bytes) {
 // See assembler-mips-inl.h for inlined constructors.
 
 Operand::Operand(Handle<Object> handle) {
+  AllowDeferredHandleDereference using_raw_address;
   rm_ = no_reg;
   // Verify all Objects referred by code are NOT in new space.
   Object* obj = *handle;
-  ASSERT(!HEAP->InNewSpace(obj));
   if (obj->IsHeapObject()) {
+    ASSERT(!HeapObject::cast(obj)->GetHeap()->InNewSpace(obj));
     imm32_ = reinterpret_cast<intptr_t>(handle.location());
     rmode_ = RelocInfo::EMBEDDED_OBJECT;
   } else {
@@ -497,10 +500,12 @@ bool Assembler::IsBranch(Instr instr) {
       (opcode == COP1 && rs_field == BC1);  // Coprocessor branch.
 }
 
+
 bool Assembler::IsEmittedConstant(Instr instr) {
   uint32_t label_constant = GetLabelConst(instr);
   return label_constant == 0;  // Emitted label const in reg-exp engine.
 }
+
 
 bool Assembler::IsBeq(Instr instr) {
   return GetOpcodeField(instr) == BEQ;
@@ -535,9 +540,11 @@ bool Assembler::IsJal(Instr instr) {
   return GetOpcodeField(instr) == JAL;
 }
 
+
 bool Assembler::IsJr(Instr instr) {
   return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JR;
 }
+
 
 bool Assembler::IsJalr(Instr instr) {
   return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JALR;
@@ -821,12 +828,14 @@ void Assembler::next(Label* L) {
   }
 }
 
+
 bool Assembler::is_near(Label* L) {
   if (L->is_bound()) {
     return ((pc_offset() - L->pos()) < kMaxBranchOffset - 4 * kInstrSize);
   }
   return false;
 }
+
 
 // We have to use a temporary register for things that can be relocated even
 // if they can be encoded in the MIPS's 16 bits of immediate-offset instruction
@@ -1337,7 +1346,7 @@ void Assembler::rotrv(Register rd, Register rt, Register rs) {
 // Helper for base-reg + offset, when offset is larger than int16.
 void Assembler::LoadRegPlusOffsetToAt(const MemOperand& src) {
   ASSERT(!src.rm().is(at));
-  lui(at, src.offset_ >> kLuiShift);
+  lui(at, (src.offset_ >> kLuiShift) & kImm16Mask);
   ori(at, at, src.offset_ & kImm16Mask);  // Load 32-bit offset.
   addu(at, at, src.rm());  // Add base register.
 }
@@ -1471,7 +1480,7 @@ void Assembler::break_(uint32_t code, bool break_as_stop) {
 void Assembler::stop(const char* msg, uint32_t code) {
   ASSERT(code > kMaxWatchpointCode);
   ASSERT(code <= kMaxStopCode);
-#if defined(V8_HOST_ARCH_MIPS)
+#if V8_HOST_ARCH_MIPS
   break_(0x54321);
 #else  // V8_HOST_ARCH_MIPS
   BlockTrampolinePoolFor(2);
@@ -1665,6 +1674,7 @@ void Assembler::cfc1(Register rt, FPUControlRegister fs) {
   GenInstrRegister(COP1, CFC1, rt, fs);
 }
 
+
 void Assembler::DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi) {
   uint64_t i;
   OS::MemCopy(&i, &d, 8);
@@ -1672,6 +1682,7 @@ void Assembler::DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi) {
   *lo = i & 0xffffffff;
   *hi = i >> 32;
 }
+
 
 // Arithmetic.
 
@@ -2191,10 +2202,9 @@ void Assembler::set_target_address_at(Address pc, Address target) {
 
   Instr instr3 = instr_at(pc + 2 * kInstrSize);
   uint32_t ipc = reinterpret_cast<uint32_t>(pc + 3 * kInstrSize);
-  bool in_range = (ipc ^ static_cast<uint32_t>(itarget) >>
-                  (kImm26Bits + kImmFieldShift)) == 0;
+  bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
   uint32_t target_field =
-      static_cast<uint32_t>(itarget & kJumpAddrMask) >>kImmFieldShift;
+      static_cast<uint32_t>(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
 
 #ifndef ALLOW_JAL_IN_BOUNDARY_REGION
@@ -2252,6 +2262,7 @@ void Assembler::set_target_address_at(Address pc, Address target) {
 
   CPU::FlushICache(pc, (patched_jump ? 3 : 2) * sizeof(int32_t));
 }
+
 
 void Assembler::JumpLabelToJumpRegister(Address pc) {
   // Address pc points to lui/ori instructions.

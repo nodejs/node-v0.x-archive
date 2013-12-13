@@ -384,23 +384,47 @@ with a single error handler in a single place.
       // with the normal line number and stack message.
     });
 
+### domain.enter()
+
+The `enter` method is plumbing used by the `run`, `bind`, and `intercept`
+methods to set the active domain. It sets `domain.active` and `process.domain`
+to the domain, and implicitly pushes the domain onto the domain stack managed
+by the domain module (see `domain.exit()` for details on the domain stack). The
+call to `enter` delimits the beginning of a chain of asynchronous calls and I/O
+operations bound to a domain.
+
+Calling `enter` changes only the active domain, and does not alter the domain
+itself. `Enter` and `exit` can be called an arbitrary number of times on a
+single domain.
+
+If the domain on which `enter` is called has been disposed, `enter` will return
+without setting the domain.
+
+### domain.exit()
+
+The `exit` method exits the current domain, popping it off the domain stack.
+Any time execution is going to switch to the context of a different chain of
+asynchronous calls, it's important to ensure that the current domain is exited.
+The call to `exit` delimits either the end of or an interruption to the chain
+of asynchronous calls and I/O operations bound to a domain.
+
+If there are multiple, nested domains bound to the current execution context,
+`exit` will exit any domains nested within this domain.
+
+Calling `exit` changes only the active domain, and does not alter the domain
+itself. `Enter` and `exit` can be called an arbitrary number of times on a
+single domain.
+
+If the domain on which `exit` is called has been disposed, `exit` will return
+without exiting the domain.
+
 ### domain.dispose()
 
-The dispose method destroys a domain, and makes a best effort attempt to
-clean up any and all IO that is associated with the domain.  Streams are
-aborted, ended, closed, and/or destroyed.  Timers are cleared.
-Explicitly bound callbacks are no longer called.  Any error events that
-are raised as a result of this are ignored.
+    Stability: 0 - Deprecated.  Please recover from failed IO actions
+    explicitly via error event handlers set on the domain.
 
-The intention of calling `dispose` is generally to prevent cascading
-errors when a critical part of the Domain context is found to be in an
-error state.
-
-Once the domain is disposed the `dispose` event will emit.
-
-Note that IO might still be performed.  However, to the highest degree
-possible, once a domain is disposed, further errors from the emitters in
-that set will be ignored.  So, even if some remaining actions are still
-in flight, Node.js will not communicate further about them.
+Once `dispose` has been called, the domain will no longer be used by callbacks
+bound into the domain via `run`, `bind`, or `intercept`, and a `dispose` event
+is emitted.
 
 [EventEmitter]: events.html#events_class_events_eventemitter

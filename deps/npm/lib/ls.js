@@ -13,6 +13,8 @@ var npm = require("./npm.js")
   , path = require("path")
   , archy = require("archy")
   , semver = require("semver")
+  , url = require("url")
+  , isGitUrl = require("./utils/is-git-url.js")
 
 ls.usage = "npm ls"
 
@@ -33,7 +35,8 @@ function ls (args, silent, cb) {
     return [ name, ver ]
   })
 
-  readInstalled(dir, npm.config.get("depth"), function (er, data) {
+  var depth = npm.config.get("depth")
+  readInstalled(dir, depth, log.warn, function (er, data) {
     var bfs = bfsify(data, args)
       , lite = getLite(bfs)
 
@@ -60,6 +63,8 @@ function ls (args, silent, cb) {
     }
     console.log(out)
 
+    if (args.length && !data._found) process.exitCode = 1
+
     // if any errors were found, then complain and exit status 1
     if (lite.problems && lite.problems.length) {
       er = lite.problems.join('\n')
@@ -83,7 +88,6 @@ function alphasort (a, b) {
 function getLite (data, noname) {
   var lite = {}
     , maxDepth = npm.config.get("depth")
-    , url = require("url")
 
   if (!noname && data.name) lite.name = data.name
   if (data.version) lite.version = data.version
@@ -196,7 +200,7 @@ function filterFound (root, args) {
     var found = false
     for (var i = 0; !found && i < args.length; i ++) {
       if (d === args[i][0]) {
-        found = semver.satisfies(dep.version, args[i][1])
+        found = semver.satisfies(dep.version, args[i][1], true)
       }
     }
     // included explicitly
@@ -261,6 +265,13 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
               + (color ? "\033[0m" : "")
   }
 
+  // add giturl to name@version
+  if (data._resolved) {
+    var p = url.parse(data._resolved)
+    if (isGitUrl(p))
+      out.label += " (" + data._resolved + ")"
+  }
+
   if (long) {
     if (dir === data.path) out.label += "\n" + dir
     out.label += "\n" + getExtras(data, dir)
@@ -284,7 +295,6 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
 
 function getExtras (data, dir) {
   var extras = []
-    , url = require("url")
 
   if (data.description) extras.push(data.description)
   if (data.repository) extras.push(data.repository.url)
@@ -324,7 +334,7 @@ function makeParseable_ (data, long, dir, depth, parent, d) {
            + ":"+d+"@"+JSON.stringify(data)+":INVALID:MISSING"
            : ""
     } else {
-      data = path.resolve(data.path, "node_modules", d)
+      data = path.resolve(data.path || "", "node_modules", d || "")
            + (npm.config.get("long")
              ? ":" + d + "@" + JSON.stringify(data)
              + ":" // no realpath resolved

@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_ARM)
+#if V8_TARGET_ARCH_ARM
 
 #include "codegen.h"
 #include "debug.h"
@@ -55,7 +55,8 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
   patcher.masm()->ldr(v8::internal::ip, MemOperand(v8::internal::pc, 0));
   patcher.masm()->blx(v8::internal::ip);
-  patcher.Emit(Isolate::Current()->debug()->debug_break_return()->entry());
+  patcher.Emit(
+      debug_info_->GetIsolate()->debug()->debug_break_return()->entry());
   patcher.masm()->bkpt(0);
 }
 
@@ -95,7 +96,8 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
   patcher.masm()->ldr(v8::internal::ip, MemOperand(v8::internal::pc, 0));
   patcher.masm()->blx(v8::internal::ip);
-  patcher.Emit(Isolate::Current()->debug()->debug_break_slot()->entry());
+  patcher.Emit(
+      debug_info_->GetIsolate()->debug()->debug_break_slot()->entry());
 }
 
 
@@ -130,9 +132,9 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         if ((non_object_regs & (1 << r)) != 0) {
           if (FLAG_debug_code) {
             __ tst(reg, Operand(0xc0000000));
-            __ Assert(eq, "Unable to encode value as smi");
+            __ Assert(eq, kUnableToEncodeValueAsSmi);
           }
-          __ mov(reg, Operand(reg, LSL, kSmiTagSize));
+          __ SmiTag(reg);
         }
       }
       __ stm(db_w, sp, object_regs | non_object_regs);
@@ -154,7 +156,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         int r = JSCallerSavedCode(i);
         Register reg = { r };
         if ((non_object_regs & (1 << r)) != 0) {
-          __ mov(reg, Operand(reg, LSR, kSmiTagSize));
+          __ SmiUntag(reg);
         }
         if (FLAG_debug_code &&
             (((object_regs |non_object_regs) & (1 << r)) == 0)) {
@@ -221,6 +223,15 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
   //  -- r2     : receiver
   //  -- lr     : return address
   Generate_DebugBreakCallHelper(masm, r0.bit() | r1.bit() | r2.bit(), 0);
+}
+
+
+void Debug::GenerateCompareNilICDebugBreak(MacroAssembler* masm) {
+  // Register state for CompareNil IC
+  // ----------- S t a t e -------------
+  //  -- r0    : value
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, r0.bit(), 0);
 }
 
 
@@ -304,12 +315,12 @@ void Debug::GenerateSlotDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GeneratePlainReturnLiveEdit(MacroAssembler* masm) {
-  masm->Abort("LiveEdit frame dropping is not supported on arm");
+  masm->Abort(kLiveEditFrameDroppingIsNotSupportedOnArm);
 }
 
 
 void Debug::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
-  masm->Abort("LiveEdit frame dropping is not supported on arm");
+  masm->Abort(kLiveEditFrameDroppingIsNotSupportedOnArm);
 }
 
 const bool Debug::kFrameDropperSupported = false;

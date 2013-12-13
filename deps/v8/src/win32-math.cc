@@ -29,27 +29,18 @@
 // refer to The Open Group Base Specification for specification of the correct
 // semantics for these functions.
 // (http://www.opengroup.org/onlinepubs/000095399/)
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && (_MSC_VER < 1800)
 
-#undef V8_WIN32_LEAN_AND_MEAN
-#define V8_WIN32_HEADERS_FULL
 #include "win32-headers.h"
 #include <limits.h>        // Required for INT_MAX etc.
-#include <math.h>
 #include <float.h>         // Required for DBL_MAX and on Win32 for finite()
+#include <cmath>
 #include "win32-math.h"
 
 #include "checks.h"
 
-namespace v8 {
 
-// Test for finite value - usually defined in math.h
-int isfinite(double x) {
-  return _finite(x);
-}
-
-}  // namespace v8
-
+namespace std {
 
 // Test for a NaN (not a number) value - usually defined in math.h
 int isnan(double x) {
@@ -60,6 +51,12 @@ int isnan(double x) {
 // Test for infinity - usually defined in math.h
 int isinf(double x) {
   return (_fpclass(x) & (_FPCLASS_PINF | _FPCLASS_NINF)) != 0;
+}
+
+
+// Test for finite value - usually defined in math.h
+int isfinite(double x) {
+  return _finite(x);
 }
 
 
@@ -102,5 +99,7 @@ int signbit(double x) {
   else
     return x < 0;
 }
+
+}  // namespace std
 
 #endif  // _MSC_VER

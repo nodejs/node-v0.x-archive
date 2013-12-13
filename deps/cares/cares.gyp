@@ -34,6 +34,7 @@
         'include/nameser.h',
         'src/ares_cancel.c',
         'src/ares__close_sockets.c',
+        'src/ares_create_query.c',
         'src/ares_data.c',
         'src/ares_data.h',
         'src/ares_destroy.c',
@@ -92,9 +93,8 @@
         'src/bitncmp.c',
         'src/bitncmp.h',
         'src/inet_net_pton.c',
-        'src/inet_net_pton.h',
         'src/inet_ntop.c',
-        'src/inet_ntop.h',
+        'src/ares_inet_net_pton.h',
         'src/setup_once.h',
         'src/windows_port.c'
       ],
@@ -121,11 +121,15 @@
           # Not Windows i.e. POSIX
           'cflags': [
             '-g',
-            '--std=gnu89',
             '-pedantic',
             '-Wall',
             '-Wextra',
             '-Wno-unused-parameter'
+          ],
+        }],
+        [ 'OS not in "win android"', {
+          'cflags': [
+            '--std=gnu89'
           ],
         }],
         [ 'OS=="linux"', {
@@ -143,6 +147,10 @@
         [ 'OS=="openbsd"', {
           'include_dirs': [ 'config/openbsd' ],
           'sources': [ 'config/openbsd/ares_config.h' ]
+        }],
+        [ 'OS=="android"', {
+          'include_dirs': [ 'config/android' ],
+          'sources': [ 'config/android/ares_config.h' ],
         }],
         [ 'OS=="solaris"', {
           'include_dirs': [ 'config/sunos' ],

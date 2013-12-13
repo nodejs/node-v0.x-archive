@@ -84,8 +84,7 @@ function TestGeneratorObjectPrototype() {
   assertSame(GeneratorObjectPrototype,
              Object.getPrototypeOf((function*(){yield 1}).prototype));
 
-  var expected_property_names = ["next", "send", "throw", "close",
-                                 "constructor"];
+  var expected_property_names = ["next", "throw", "constructor"];
   var found_property_names =
       Object.getOwnPropertyNames(GeneratorObjectPrototype);
 
@@ -106,9 +105,14 @@ function TestGeneratorFunction() {
   assertSame(Function, Object.getPrototypeOf(GeneratorFunction));
   assertTrue(g instanceof Function);
 
+  assertEquals("function* g() { yield 1; }", g.toString());
+
   // Not all functions are generators.
   assertTrue(f instanceof Function);  // Sanity check.
   assertTrue(!(f instanceof GeneratorFunction));
+
+  assertTrue((new GeneratorFunction()) instanceof GeneratorFunction);
+  assertTrue(GeneratorFunction() instanceof GeneratorFunction);
 }
 TestGeneratorFunction();
 

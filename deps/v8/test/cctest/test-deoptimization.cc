@@ -77,30 +77,34 @@ class AlwaysOptimizeAllowNativesSyntaxNoInlining {
 
 // Utility class to set --allow-natives-syntax and --nouse-inlining when
 // constructed and return to their default state when destroyed.
-class AllowNativesSyntaxNoInlining {
+class AllowNativesSyntaxNoInliningNoConcurrent {
  public:
-  AllowNativesSyntaxNoInlining()
+  AllowNativesSyntaxNoInliningNoConcurrent()
       : allow_natives_syntax_(i::FLAG_allow_natives_syntax),
-        use_inlining_(i::FLAG_use_inlining) {
+        use_inlining_(i::FLAG_use_inlining),
+        concurrent_recompilation_(i::FLAG_concurrent_recompilation) {
     i::FLAG_allow_natives_syntax = true;
     i::FLAG_use_inlining = false;
+    i::FLAG_concurrent_recompilation = false;
   }
 
-  ~AllowNativesSyntaxNoInlining() {
+  ~AllowNativesSyntaxNoInliningNoConcurrent() {
     i::FLAG_allow_natives_syntax = allow_natives_syntax_;
     i::FLAG_use_inlining = use_inlining_;
+    i::FLAG_concurrent_recompilation = concurrent_recompilation_;
   }
 
  private:
   bool allow_natives_syntax_;
   bool use_inlining_;
+  bool concurrent_recompilation_;
 };
 
 
 // Abort any ongoing incremental marking to make sure that all weak global
 // handle callbacks are processed.
 static void NonIncrementalGC() {
-  HEAP->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
+  CcTest::heap()->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
 }
 
 
@@ -130,7 +134,7 @@ TEST(DeoptimizeSimple) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK(!GetJSFunction(env->Global(), "f")->IsOptimized());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 
   // Test lazy deoptimization of a simple function. Call the function after the
   // deoptimization while it is still activated further down the stack.
@@ -146,7 +150,7 @@ TEST(DeoptimizeSimple) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK(!GetJSFunction(env->Global(), "f")->IsOptimized());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -168,7 +172,7 @@ TEST(DeoptimizeSimpleWithArguments) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK(!GetJSFunction(env->Global(), "f")->IsOptimized());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 
   // Test lazy deoptimization of a simple function with some arguments. Call the
   // function after the deoptimization while it is still activated further down
@@ -185,7 +189,7 @@ TEST(DeoptimizeSimpleWithArguments) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK(!GetJSFunction(env->Global(), "f")->IsOptimized());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -209,7 +213,7 @@ TEST(DeoptimizeSimpleNested) {
     CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
     CHECK_EQ(6, env->Global()->Get(v8_str("result"))->Int32Value());
     CHECK(!GetJSFunction(env->Global(), "f")->IsOptimized());
-    CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+    CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
   }
 }
 
@@ -233,7 +237,7 @@ TEST(DeoptimizeRecursive) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(11, env->Global()->Get(v8_str("calls"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 
   v8::Local<v8::Function> fun =
       v8::Local<v8::Function>::Cast(env->Global()->Get(v8::String::New("f")));
@@ -265,7 +269,7 @@ TEST(DeoptimizeMultiple) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(14, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -286,7 +290,7 @@ TEST(DeoptimizeConstructor) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK(env->Global()->Get(v8_str("result"))->IsTrue());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 
   {
     AlwaysOptimizeAllowNativesSyntaxNoInlining options;
@@ -303,7 +307,7 @@ TEST(DeoptimizeConstructor) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(3, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -332,7 +336,7 @@ TEST(DeoptimizeConstructorMultiple) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(14, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -343,7 +347,7 @@ TEST(DeoptimizeBinaryOperationADDString) {
   const char* f_source = "function f(x, y) { return x + y; };";
 
   {
-    AllowNativesSyntaxNoInlining options;
+    AllowNativesSyntaxNoInliningNoConcurrent options;
     // Compile function f and collect to type feedback to insert binary op stub
     // call in the optimized code.
     i::FLAG_prepare_always_opt = true;
@@ -363,7 +367,7 @@ TEST(DeoptimizeBinaryOperationADDString) {
     i::FLAG_always_opt = true;
     CompileRun(f_source);
     CompileRun("f('a+', new X());");
-    CHECK(!i::V8::UseCrankshaft() ||
+    CHECK(!CcTest::i_isolate()->use_crankshaft() ||
           GetJSFunction(env->Global(), "f")->IsOptimized());
 
     // Call f and force deoptimization while processing the binary operation.
@@ -376,9 +380,9 @@ TEST(DeoptimizeBinaryOperationADDString) {
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   v8::Handle<v8::Value> result = env->Global()->Get(v8_str("result"));
   CHECK(result->IsString());
-  v8::String::AsciiValue ascii(result);
-  CHECK_EQ("a+an X", *ascii);
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  v8::String::Utf8Value utf8(result);
+  CHECK_EQ("a+an X", *utf8);
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -401,7 +405,7 @@ static void TestDeoptimizeBinaryOpHelper(LocalContext* env,
                binary_op);
   char* f_source = f_source_buffer.start();
 
-  AllowNativesSyntaxNoInlining options;
+  AllowNativesSyntaxNoInliningNoConcurrent options;
   // Compile function f and collect to type feedback to insert binary op stub
   // call in the optimized code.
   i::FLAG_prepare_always_opt = true;
@@ -415,7 +419,7 @@ static void TestDeoptimizeBinaryOpHelper(LocalContext* env,
   i::FLAG_always_opt = true;
   CompileRun(f_source);
   CompileRun("f(7, new X());");
-  CHECK(!i::V8::UseCrankshaft() ||
+  CHECK(!CcTest::i_isolate()->use_crankshaft() ||
         GetJSFunction((*env)->Global(), "f")->IsOptimized());
 
   // Call f and force deoptimization while processing the binary operation.
@@ -434,7 +438,7 @@ TEST(DeoptimizeBinaryOperationADD) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(15, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -446,7 +450,7 @@ TEST(DeoptimizeBinaryOperationSUB) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(-1, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -458,7 +462,7 @@ TEST(DeoptimizeBinaryOperationMUL) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(56, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -470,7 +474,7 @@ TEST(DeoptimizeBinaryOperationDIV) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(0, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -482,7 +486,7 @@ TEST(DeoptimizeBinaryOperationMOD) {
 
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(7, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -493,7 +497,7 @@ TEST(DeoptimizeCompare) {
   const char* f_source = "function f(x, y) { return x < y; };";
 
   {
-    AllowNativesSyntaxNoInlining options;
+    AllowNativesSyntaxNoInliningNoConcurrent options;
     // Compile function f and collect to type feedback to insert compare ic
     // call in the optimized code.
     i::FLAG_prepare_always_opt = true;
@@ -513,7 +517,7 @@ TEST(DeoptimizeCompare) {
     i::FLAG_always_opt = true;
     CompileRun(f_source);
     CompileRun("f('a', new X());");
-    CHECK(!i::V8::UseCrankshaft() ||
+    CHECK(!CcTest::i_isolate()->use_crankshaft() ||
           GetJSFunction(env->Global(), "f")->IsOptimized());
 
     // Call f and force deoptimization while processing the comparison.
@@ -525,7 +529,7 @@ TEST(DeoptimizeCompare) {
   CHECK(!GetJSFunction(env->Global(), "f")->IsOptimized());
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(true, env->Global()->Get(v8_str("result"))->BooleanValue());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -540,7 +544,7 @@ TEST(DeoptimizeLoadICStoreIC) {
   const char* g2_source = "function g2(x, y) { x[y] = 1; };";
 
   {
-    AllowNativesSyntaxNoInlining options;
+    AllowNativesSyntaxNoInliningNoConcurrent options;
     // Compile functions and collect to type feedback to insert ic
     // calls in the optimized code.
     i::FLAG_prepare_always_opt = true;
@@ -583,7 +587,7 @@ TEST(DeoptimizeLoadICStoreIC) {
     CompileRun("g1(new X());");
     CompileRun("f2(new X(), 'z');");
     CompileRun("g2(new X(), 'z');");
-    if (i::V8::UseCrankshaft()) {
+    if (CcTest::i_isolate()->use_crankshaft()) {
       CHECK(GetJSFunction(env->Global(), "f1")->IsOptimized());
       CHECK(GetJSFunction(env->Global(), "g1")->IsOptimized());
       CHECK(GetJSFunction(env->Global(), "f2")->IsOptimized());
@@ -605,7 +609,7 @@ TEST(DeoptimizeLoadICStoreIC) {
   CHECK(!GetJSFunction(env->Global(), "g2")->IsOptimized());
   CHECK_EQ(4, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(13, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }
 
 
@@ -620,7 +624,7 @@ TEST(DeoptimizeLoadICStoreICNested) {
   const char* g2_source = "function g2(x, y) { x[y] = 1; };";
 
   {
-    AllowNativesSyntaxNoInlining options;
+    AllowNativesSyntaxNoInliningNoConcurrent options;
     // Compile functions and collect to type feedback to insert ic
     // calls in the optimized code.
     i::FLAG_prepare_always_opt = true;
@@ -667,7 +671,7 @@ TEST(DeoptimizeLoadICStoreICNested) {
     CompileRun("g1(new X());");
     CompileRun("f2(new X(), 'z');");
     CompileRun("g2(new X(), 'z');");
-    if (i::V8::UseCrankshaft()) {
+    if (CcTest::i_isolate()->use_crankshaft()) {
       CHECK(GetJSFunction(env->Global(), "f1")->IsOptimized());
       CHECK(GetJSFunction(env->Global(), "g1")->IsOptimized());
       CHECK(GetJSFunction(env->Global(), "f2")->IsOptimized());
@@ -686,5 +690,5 @@ TEST(DeoptimizeLoadICStoreICNested) {
   CHECK(!GetJSFunction(env->Global(), "g2")->IsOptimized());
   CHECK_EQ(1, env->Global()->Get(v8_str("count"))->Int32Value());
   CHECK_EQ(13, env->Global()->Get(v8_str("result"))->Int32Value());
-  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(Isolate::Current()));
+  CHECK_EQ(0, Deoptimizer::GetDeoptimizedCodeCount(CcTest::i_isolate()));
 }

@@ -112,6 +112,7 @@ enum BindingFlags {
   V(JSON_OBJECT_INDEX, JSObject, json_object) \
   V(REGEXP_FUNCTION_INDEX, JSFunction, regexp_function) \
   V(INITIAL_OBJECT_PROTOTYPE_INDEX, JSObject, initial_object_prototype) \
+  V(INITIAL_ARRAY_PROTOTYPE_INDEX, JSObject, initial_array_prototype) \
   V(CREATE_DATE_FUN_INDEX, JSFunction,  create_date_fun) \
   V(TO_NUMBER_FUN_INDEX, JSFunction, to_number_fun) \
   V(TO_STRING_FUN_INDEX, JSFunction, to_string_fun) \
@@ -123,14 +124,22 @@ enum BindingFlags {
   V(GLOBAL_EVAL_FUN_INDEX, JSFunction, global_eval_fun) \
   V(INSTANTIATE_FUN_INDEX, JSFunction, instantiate_fun) \
   V(CONFIGURE_INSTANCE_FUN_INDEX, JSFunction, configure_instance_fun) \
+  V(ARRAY_BUFFER_FUN_INDEX, JSFunction, array_buffer_fun) \
+  V(UINT8_ARRAY_FUN_INDEX, JSFunction, uint8_array_fun) \
+  V(INT8_ARRAY_FUN_INDEX, JSFunction, int8_array_fun) \
+  V(UINT16_ARRAY_FUN_INDEX, JSFunction, uint16_array_fun) \
+  V(INT16_ARRAY_FUN_INDEX, JSFunction, int16_array_fun) \
+  V(UINT32_ARRAY_FUN_INDEX, JSFunction, uint32_array_fun) \
+  V(INT32_ARRAY_FUN_INDEX, JSFunction, int32_array_fun) \
+  V(FLOAT_ARRAY_FUN_INDEX, JSFunction, float_array_fun) \
+  V(DOUBLE_ARRAY_FUN_INDEX, JSFunction, double_array_fun) \
+  V(UINT8C_ARRAY_FUN_INDEX, JSFunction, uint8c_array_fun) \
+  V(DATA_VIEW_FUN_INDEX, JSFunction, data_view_fun) \
   V(FUNCTION_MAP_INDEX, Map, function_map) \
   V(STRICT_MODE_FUNCTION_MAP_INDEX, Map, strict_mode_function_map) \
   V(FUNCTION_WITHOUT_PROTOTYPE_MAP_INDEX, Map, function_without_prototype_map) \
   V(STRICT_MODE_FUNCTION_WITHOUT_PROTOTYPE_MAP_INDEX, Map, \
     strict_mode_function_without_prototype_map) \
-  V(FUNCTION_INSTANCE_MAP_INDEX, Map, function_instance_map) \
-  V(STRICT_MODE_FUNCTION_INSTANCE_MAP_INDEX, Map, \
-    strict_mode_function_instance_map) \
   V(REGEXP_RESULT_MAP_INDEX, Map, regexp_result_map)\
   V(ARGUMENTS_BOILERPLATE_INDEX, JSObject, arguments_boilerplate) \
   V(ALIASED_ARGUMENTS_BOILERPLATE_INDEX, JSObject, \
@@ -164,12 +173,18 @@ enum BindingFlags {
   V(DERIVED_SET_TRAP_INDEX, JSFunction, derived_set_trap) \
   V(PROXY_ENUMERATE_INDEX, JSFunction, proxy_enumerate) \
   V(OBSERVERS_NOTIFY_CHANGE_INDEX, JSFunction, observers_notify_change) \
+  V(OBSERVERS_ENQUEUE_SPLICE_INDEX, JSFunction, observers_enqueue_splice) \
+  V(OBSERVERS_BEGIN_SPLICE_INDEX, JSFunction, \
+    observers_begin_perform_splice) \
+  V(OBSERVERS_END_SPLICE_INDEX, JSFunction, \
+    observers_end_perform_splice) \
   V(OBSERVERS_DELIVER_CHANGES_INDEX, JSFunction, observers_deliver_changes) \
   V(GENERATOR_FUNCTION_MAP_INDEX, Map, generator_function_map) \
   V(STRICT_MODE_GENERATOR_FUNCTION_MAP_INDEX, Map, \
     strict_mode_generator_function_map) \
   V(GENERATOR_OBJECT_PROTOTYPE_MAP_INDEX, Map, \
     generator_object_prototype_map) \
+  V(GENERATOR_RESULT_MAP_INDEX, Map, generator_result_map) \
   V(RANDOM_SEED_INDEX, ByteArray, random_seed)
 
 // JSFunctions are pairs (context, function code), sometimes also called
@@ -249,9 +264,8 @@ class Context: public FixedArray {
     STRICT_MODE_FUNCTION_MAP_INDEX,
     FUNCTION_WITHOUT_PROTOTYPE_MAP_INDEX,
     STRICT_MODE_FUNCTION_WITHOUT_PROTOTYPE_MAP_INDEX,
-    FUNCTION_INSTANCE_MAP_INDEX,
-    STRICT_MODE_FUNCTION_INSTANCE_MAP_INDEX,
     INITIAL_OBJECT_PROTOTYPE_INDEX,
+    INITIAL_ARRAY_PROTOTYPE_INDEX,
     BOOLEAN_FUNCTION_INDEX,
     NUMBER_FUNCTION_INDEX,
     STRING_FUNCTION_INDEX,
@@ -276,6 +290,17 @@ class Context: public FixedArray {
     GLOBAL_EVAL_FUN_INDEX,
     INSTANTIATE_FUN_INDEX,
     CONFIGURE_INSTANCE_FUN_INDEX,
+    ARRAY_BUFFER_FUN_INDEX,
+    UINT8_ARRAY_FUN_INDEX,
+    INT8_ARRAY_FUN_INDEX,
+    UINT16_ARRAY_FUN_INDEX,
+    INT16_ARRAY_FUN_INDEX,
+    UINT32_ARRAY_FUN_INDEX,
+    INT32_ARRAY_FUN_INDEX,
+    FLOAT_ARRAY_FUN_INDEX,
+    DOUBLE_ARRAY_FUN_INDEX,
+    UINT8C_ARRAY_FUN_INDEX,
+    DATA_VIEW_FUN_INDEX,
     MESSAGE_LISTENERS_INDEX,
     MAKE_MESSAGE_FUN_INDEX,
     GET_STACK_TRACE_LINE_INDEX,
@@ -299,17 +324,23 @@ class Context: public FixedArray {
     DERIVED_SET_TRAP_INDEX,
     PROXY_ENUMERATE_INDEX,
     OBSERVERS_NOTIFY_CHANGE_INDEX,
+    OBSERVERS_ENQUEUE_SPLICE_INDEX,
+    OBSERVERS_BEGIN_SPLICE_INDEX,
+    OBSERVERS_END_SPLICE_INDEX,
     OBSERVERS_DELIVER_CHANGES_INDEX,
     GENERATOR_FUNCTION_MAP_INDEX,
     STRICT_MODE_GENERATOR_FUNCTION_MAP_INDEX,
     GENERATOR_OBJECT_PROTOTYPE_MAP_INDEX,
+    GENERATOR_RESULT_MAP_INDEX,
     RANDOM_SEED_INDEX,
 
     // Properties from here are treated as weak references by the full GC.
     // Scavenge treats them as strong references.
     OPTIMIZED_FUNCTIONS_LIST,  // Weak.
-    MAP_CACHE_INDEX,  // Weak.
-    NEXT_CONTEXT_LINK,  // Weak.
+    OPTIMIZED_CODE_LIST,       // Weak.
+    DEOPTIMIZED_CODE_LIST,     // Weak.
+    MAP_CACHE_INDEX,           // Weak.
+    NEXT_CONTEXT_LINK,         // Weak.
 
     // Total number of slots.
     NATIVE_CONTEXT_SLOTS,
@@ -341,7 +372,7 @@ class Context: public FixedArray {
 
   GlobalObject* global_object() {
     Object* result = get(GLOBAL_OBJECT_INDEX);
-    ASSERT(IsBootstrappingOrGlobalObject(result));
+    ASSERT(IsBootstrappingOrGlobalObject(this->GetIsolate(), result));
     return reinterpret_cast<GlobalObject*>(result);
   }
   void set_global_object(GlobalObject* object) {
@@ -399,11 +430,19 @@ class Context: public FixedArray {
   // Mark the native context with out of memory.
   inline void mark_out_of_memory();
 
-  // A native context hold a list of all functions which have been optimized.
+  // A native context holds a list of all functions with optimized code.
   void AddOptimizedFunction(JSFunction* function);
   void RemoveOptimizedFunction(JSFunction* function);
+  void SetOptimizedFunctionsListHead(Object* head);
   Object* OptimizedFunctionsListHead();
-  void ClearOptimizedFunctions();
+
+  // The native context also stores a list of all optimized code and a
+  // list of all deoptimized code, which are needed by the deoptimizer.
+  void AddOptimizedCode(Code* code);
+  void SetOptimizedCodeListHead(Object* head);
+  Object* OptimizedCodeListHead();
+  void SetDeoptimizedCodeListHead(Object* head);
+  Object* DeoptimizedCodeListHead();
 
   Handle<Object> ErrorMessageForCodeGenerationFromStrings();
 
@@ -411,6 +450,10 @@ class Context: public FixedArray {
   void  set_##name(type* value) {                         \
     ASSERT(IsNativeContext());                            \
     set(index, value);                                    \
+  }                                                       \
+  bool is_##name(type* value) {                           \
+    ASSERT(IsNativeContext());                            \
+    return type::cast(get(index)) == value;               \
   }                                                       \
   type* name() {                                          \
     ASSERT(IsNativeContext());                            \
@@ -475,7 +518,7 @@ class Context: public FixedArray {
 #ifdef DEBUG
   // Bootstrapping-aware type checks.
   static bool IsBootstrappingOrValidParentContext(Object* object, Context* kid);
-  static bool IsBootstrappingOrGlobalObject(Object* object);
+  static bool IsBootstrappingOrGlobalObject(Isolate* isolate, Object* object);
 #endif
 
   STATIC_CHECK(kHeaderSize == Internals::kContextHeaderSize);

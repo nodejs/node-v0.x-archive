@@ -26,6 +26,7 @@
 // of the startup process, so many dependencies are invoked lazily.
 (function(process) {
   this.global = this;
+  var _errorHandler;
 
   function startup() {
     var EventEmitter = NativeModule.require('events').EventEmitter;
@@ -46,6 +47,7 @@
     startup.globalTimeouts();
     startup.globalConsole();
 
+    startup.processAsyncListener();
     startup.processAssert();
     startup.processConfig();
     startup.processNextTick();
@@ -54,6 +56,8 @@
     startup.processSignalHandlers();
 
     startup.processChannel();
+
+    startup.processRawDebug();
 
     startup.resolveArgv0();
 
@@ -83,7 +87,7 @@
       var path = NativeModule.require('path');
       process.argv[1] = path.resolve(process.argv[1]);
 
-      // If this is a worker in cluster mode, start up the communiction
+      // If this is a worker in cluster mode, start up the communication
       // channel.
       if (process.env.NODE_UNIQUE_ID) {
         var cluster = NativeModule.require('cluster');
@@ -163,7 +167,6 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
-    process.binding('buffer').setFastBufferConstructor(global.Buffer);
     process.domain = null;
     process._exiting = false;
   };
@@ -217,62 +220,15 @@
   };
 
   startup.processFatal = function() {
-    // call into the active domain, or emit uncaughtException,
-    // and exit if there are no listeners.
     process._fatalException = function(er) {
-      var caught = false;
-      if (process.domain) {
-        var domain = process.domain;
-        var domainModule = NativeModule.require('domain');
-        var domainStack = domainModule._stack;
+      // First run through error handlers from asyncListener.
+      var caught = _errorHandler(er);
 
-        // ignore errors on disposed domains.
-        //
-        // XXX This is a bit stupid.  We should probably get rid of
-        // domain.dispose() altogether.  It's almost always a terrible
-        // idea.  --isaacs
-        if (domain._disposed)
-          return true;
-
-        er.domain = domain;
-        er.domainThrown = true;
-        // wrap this in a try/catch so we don't get infinite throwing
-        try {
-          // One of three things will happen here.
-          //
-          // 1. There is a handler, caught = true
-          // 2. There is no handler, caught = false
-          // 3. It throws, caught = false
-          //
-          // If caught is false after this, then there's no need to exit()
-          // the domain, because we're going to crash the process anyway.
-          caught = domain.emit('error', er);
-
-          // Exit all domains on the stack.  Uncaught exceptions end the
-          // current tick and no domains should be left on the stack
-          // between ticks.
-          var domainModule = NativeModule.require('domain');
-          domainStack.length = 0;
-          domainModule.active = process.domain = null;
-        } catch (er2) {
-          // The domain error handler threw!  oh no!
-          // See if another domain can catch THIS error,
-          // or else crash on the original one.
-          // If the user already exited it, then don't double-exit.
-          if (domain === domainModule.active)
-            domainStack.pop();
-          if (domainStack.length) {
-            var parentDomain = domainStack[domainStack.length - 1];
-            process.domain = domainModule.active = parentDomain;
-            caught = process._fatalException(er2);
-          } else
-            caught = false;
-        }
-      } else {
+      if (!caught)
         caught = process.emit('uncaughtException', er);
-      }
-      // if someone handled it, then great.  otherwise, die in C++ land
-      // since that means that we'll exit the process, emit the 'exit' event
+
+      // If someone handled it, then great. Otherwise die in C++ since
+      // that means we'll exit the process, emit the 'exit' event.
       if (!caught) {
         try {
           if (!process._exiting) {
@@ -282,19 +238,294 @@
         } catch (er) {
           // nothing to be done about it at this point.
         }
-      }
+
       // if we handled an error, then make sure any ticks get processed
-      if (caught)
-        process._needTickCallback();
+      } else {
+        var t = setImmediate(process._tickCallback);
+        // Complete hack to make sure any errors thrown from async
+        // listeners don't cause an infinite loop.
+        if (t._asyncQueue)
+          t._asyncQueue = [];
+      }
+
       return caught;
     };
   };
 
+  startup.processAsyncListener = function() {
+    var asyncStack = [];
+    var asyncQueue = [];
+    var uid = 0;
+
+    // Stateful flags shared with Environment for quick JS/C++
+    // communication.
+    var asyncFlags = {};
+
+    // Prevent accidentally suppressed thrown errors from before/after.
+    var inAsyncTick = false;
+
+    // To prevent infinite recursion when an error handler also throws
+    // flag when an error is currenly being handled.
+    var inErrorTick = false;
+
+    // Needs to be the same as src/env.h
+    var kCount = 0;
+
+    // _errorHandler is scoped so it's also accessible by _fatalException.
+    _errorHandler = errorHandler;
+
+    // Needs to be accessible from lib/timers.js so they know when async
+    // listeners are currently in queue. They'll be cleaned up once
+    // references there are made.
+    process._asyncFlags = asyncFlags;
+    process._runAsyncQueue = runAsyncQueue;
+    process._loadAsyncQueue = loadAsyncQueue;
+    process._unloadAsyncQueue = unloadAsyncQueue;
+
+    // Public API.
+    process.createAsyncListener = createAsyncListener;
+    process.addAsyncListener = addAsyncListener;
+    process.removeAsyncListener = removeAsyncListener;
+
+    // Setup shared objects/callbacks with native layer.
+    process._setupAsyncListener(asyncFlags,
+                                runAsyncQueue,
+                                loadAsyncQueue,
+                                unloadAsyncQueue,
+                                pushListener,
+                                stripListener);
+
+    function popQueue() {
+      if (asyncStack.length > 0)
+        asyncQueue = asyncStack.pop();
+      else
+        asyncQueue = [];
+    }
+
+    // Run all the async listeners attached when an asynchronous event is
+    // instantiated.
+    function runAsyncQueue(context) {
+      var queue = [];
+      var queueItem, item, i, value;
+
+      inAsyncTick = true;
+      for (i = 0; i < asyncQueue.length; i++) {
+        queueItem = asyncQueue[i];
+        // Not passing "this" context because it hasn't actually been
+        // instantiated yet, so accessing some of the object properties
+        // can cause a segfault.
+        // Passing the original value will allow users to manipulate the
+        // original value object, while also allowing them to return a
+        // new value for current async call tracking.
+        value = queueItem.listener(queueItem.value);
+        if (typeof value !== 'undefined') {
+          item = {
+            callbacks: queueItem.callbacks,
+            value: value,
+            listener: queueItem.listener,
+            uid: queueItem.uid
+          };
+        } else {
+          item = queueItem;
+        }
+        queue[i] = item;
+      }
+      inAsyncTick = false;
+
+      context._asyncQueue = queue;
+    }
+
+    // Uses the _asyncQueue object attached by runAsyncQueue.
+    function loadAsyncQueue(context) {
+      var queue = context._asyncQueue;
+      var item, before, i;
+
+      asyncStack.push(asyncQueue);
+      asyncQueue = queue.slice();
+      // Since the async listener callback is required, the number of
+      // objects in the asyncQueue implies the number of async listeners
+      // there are to be processed.
+      asyncFlags[kCount] = queue.length;
+
+      // Run "before" callbacks.
+      inAsyncTick = true;
+      for (i = 0; i < queue.length; i++) {
+        item = queue[i];
+        if (!item.callbacks)
+          continue;
+        before = item.callbacks.before;
+        if (typeof before === 'function')
+          before(context, item.value);
+      }
+      inAsyncTick = false;
+    }
+
+    // Unload one level of the async stack. Returns true if there are
+    // still listeners somewhere in the stack.
+    function unloadAsyncQueue(context) {
+      var queue = context._asyncQueue;
+      var item, after, i;
+
+      // Run "after" callbacks.
+      inAsyncTick = true;
+      for (i = 0; i < queue.length; i++) {
+        item = queue[i];
+        if (!item.callbacks)
+          continue;
+        after = item.callbacks.after;
+        if (typeof after === 'function')
+          after(context, item.value);
+      }
+      inAsyncTick = false;
+
+      // Unload the current queue from the stack.
+      popQueue();
+
+      asyncFlags[kCount] = asyncQueue.length;
+
+      return asyncQueue.length > 0 || asyncStack.length > 0;
+    }
+
+    // Create new async listener object. Useful when instantiating a new
+    // object and want the listener instance, but not add it to the stack.
+    function createAsyncListener(listener, callbacks, value) {
+      return {
+        callbacks: callbacks,
+        value: value,
+        listener: listener,
+        uid: uid++
+      };
+    }
+
+    // Add a listener to the current queue.
+    function addAsyncListener(listener, callbacks, value) {
+      // Accept new listeners or previous created listeners.
+      if (typeof listener === 'function')
+        callbacks = createAsyncListener(listener, callbacks, value);
+      else
+        callbacks = listener;
+
+      var inQueue = false;
+      // The asyncQueue will be small. Probably always <= 3 items.
+      for (var i = 0; i < asyncQueue.length; i++) {
+        if (callbacks.uid === asyncQueue[i].uid) {
+          inQueue = true;
+          break;
+        }
+      }
+
+      // Make sure the callback doesn't already exist in the queue.
+      if (!inQueue)
+        asyncQueue.push(callbacks);
+
+      asyncFlags[kCount] = asyncQueue.length;
+      return callbacks;
+    }
+
+    // Remove listener from the current queue and the entire stack.
+    function removeAsyncListener(obj) {
+      var i, j;
+
+      for (i = 0; i < asyncQueue.length; i++) {
+        if (obj.uid === asyncQueue[i].uid) {
+          asyncQueue.splice(i, 1);
+          break;
+        }
+      }
+
+      for (i = 0; i < asyncStack.length; i++) {
+        for (j = 0; j < asyncStack[i].length; j++) {
+          if (obj.uid === asyncStack[i][j].uid) {
+            asyncStack[i].splice(j, 1);
+            break;
+          }
+        }
+      }
+
+      asyncFlags[kCount] = asyncQueue.length;
+    }
+
+    // Error handler used by _fatalException to run through all error
+    // callbacks in the current asyncQueue.
+    function errorHandler(er) {
+      var handled = false;
+      var error, item, i;
+
+      if (inErrorTick)
+        return false;
+
+      inErrorTick = true;
+      for (i = 0; i < asyncQueue.length; i++) {
+        item = asyncQueue[i];
+        if (!item.callbacks)
+          continue;
+        error = item.callbacks.error;
+        if (typeof error === 'function') {
+          try {
+            var threw = true;
+            handled = error(item.value, er) || handled;
+            threw = false;
+          } finally {
+            // If the error callback throws then we're going to die
+            // quickly with no chance of recovery. Only thing we're going
+            // to allow is execution of process exit event callbacks.
+            if (threw) {
+              process._exiting = true;
+              process.emit('exit', 1);
+            }
+          }
+        }
+      }
+      inErrorTick = false;
+
+      // Unload the current queue from the stack.
+      popQueue();
+
+      return handled && !inAsyncTick;
+    }
+
+    // Used by AsyncWrap::AddAsyncListener() to add an individual listener
+    // to the async queue. It will check the uid of the listener and only
+    // allow it to be added once.
+    function pushListener(obj) {
+      if (!this._asyncQueue)
+        this._asyncQueue = [];
+
+      var queue = this._asyncQueue;
+      var inQueue = false;
+      // The asyncQueue will be small. Probably always <= 3 items.
+      for (var i = 0; i < queue.length; i++) {
+        if (obj.uid === queue.uid) {
+          inQueue = true;
+          break;
+        }
+      }
+
+      if (!inQueue)
+        queue.push(obj);
+    }
+
+    // Used by AsyncWrap::RemoveAsyncListener() to remove an individual
+    // listener from the async queue, and return whether there are still
+    // listeners in the queue.
+    function stripListener(obj) {
+      if (!this._asyncQueue || this._asyncQueue.length === 0)
+        return false;
+
+      // The asyncQueue will be small. Probably always <= 3 items.
+      for (var i = 0; i < this._asyncQueue.length; i++) {
+        if (obj.uid === this._asyncQueue[i].uid) {
+          this._asyncQueue.splice(i, 1);
+          break;
+        }
+      }
+
+      return this._asyncQueue.length > 0;
+    }
+  };
+
   var assert;
   startup.processAssert = function() {
-    // Note that calls to assert() are pre-processed out by JS2C for the
-    // normal build of node. They persist only in the node_g build.
-    // Similarly for debug().
     assert = process.assert = function(x, msg) {
       if (!x) throw new Error(msg || 'assertion error');
     };
@@ -316,196 +547,85 @@
   };
 
   startup.processNextTick = function() {
-    var _needTickCallback = process._needTickCallback;
     var nextTickQueue = [];
-    var needSpinner = true;
-    var inTick = false;
+    var asyncFlags = process._asyncFlags;
+    var _runAsyncQueue = process._runAsyncQueue;
+    var _loadAsyncQueue = process._loadAsyncQueue;
+    var _unloadAsyncQueue = process._unloadAsyncQueue;
 
-    // this infobox thing is used so that the C++ code in src/node.cc
+    // This tickInfo thing is used so that the C++ code in src/node.cc
     // can have easy accesss to our nextTick state, and avoid unnecessary
-    // calls into process._tickCallback.
-    // order is [length, index, depth]
-    // Never write code like this without very good reason!
-    var infoBox = process._tickInfoBox;
-    var length = 0;
-    var index = 1;
-    var depth = 2;
+    var tickInfo = {};
+
+    // *Must* match Environment::TickInfo::Fields in src/env.h.
+    var kIndex = 0;
+    var kLength = 1;
+
+    // For asyncFlags.
+    // *Must* match Environment::AsyncListeners::Fields in src/env.h
+    var kCount = 0;
 
     process.nextTick = nextTick;
-    // needs to be accessible from cc land
-    process._nextDomainTick = _nextDomainTick;
+    // Needs to be accessible from beyond this scope.
     process._tickCallback = _tickCallback;
-    process._tickDomainCallback = _tickDomainCallback;
-    process._tickFromSpinner = _tickFromSpinner;
 
-    // the maximum number of times it'll process something like
-    // nextTick(function f(){nextTick(f)})
-    // It's unlikely, but not illegal, to hit this limit.  When
-    // that happens, it yields to libuv's tick spinner.
-    // This is a loop counter, not a stack depth, so we aren't using
-    // up lots of memory here.  I/O can sneak in before nextTick if this
-    // limit is hit, which is not ideal, but not terrible.
-    process.maxTickDepth = 1000;
+    process._setupNextTick(tickInfo, _tickCallback);
 
-    function tickDone(tickDepth_) {
-      if (infoBox[length] !== 0) {
-        if (infoBox[length] <= infoBox[index]) {
+    function tickDone() {
+      if (tickInfo[kLength] !== 0) {
+        if (tickInfo[kLength] <= tickInfo[kIndex]) {
           nextTickQueue = [];
-          infoBox[length] = 0;
+          tickInfo[kLength] = 0;
         } else {
-          nextTickQueue.splice(0, infoBox[index]);
-          infoBox[length] = nextTickQueue.length;
-          if (needSpinner) {
-            _needTickCallback();
-            needSpinner = false;
-          }
+          nextTickQueue.splice(0, tickInfo[kIndex]);
+          tickInfo[kLength] = nextTickQueue.length;
         }
       }
-      inTick = false;
-      infoBox[index] = 0;
-      infoBox[depth] = tickDepth_;
+      tickInfo[kIndex] = 0;
     }
 
-    function maxTickWarn() {
-      // XXX Remove all this maxTickDepth stuff in 0.11
-      var msg = '(node) warning: Recursive process.nextTick detected. ' +
-                'This will break in the next version of node. ' +
-                'Please use setImmediate for recursive deferral.';
-      if (process.throwDeprecation)
-        throw new Error(msg);
-      else if (process.traceDeprecation)
-        console.trace(msg);
-      else
-        console.error(msg);
-    }
-
-    function _tickFromSpinner() {
-      needSpinner = true;
-      // coming from spinner, reset!
-      if (infoBox[depth] !== 0)
-        infoBox[depth] = 0;
-      // no callbacks to run
-      if (infoBox[length] === 0)
-        return infoBox[index] = infoBox[depth] = 0;
-      process._tickCallback();
-    }
-
-    // run callbacks that have no domain
-    // using domains will cause this to be overridden
+    // Run callbacks that have no domain.
     function _tickCallback() {
-      var callback, nextTickLength, threw;
+      var callback, hasQueue, threw, tock;
 
-      if (inTick) return;
-      if (infoBox[length] === 0) {
-        infoBox[index] = 0;
-        infoBox[depth] = 0;
-        return;
-      }
-      inTick = true;
-
-      while (infoBox[depth]++ < process.maxTickDepth) {
-        nextTickLength = infoBox[length];
-        if (infoBox[index] === nextTickLength)
-          return tickDone(0);
-
-        while (infoBox[index] < nextTickLength) {
-          callback = nextTickQueue[infoBox[index]++].callback;
-          threw = true;
-          try {
-            callback();
-            threw = false;
-          } finally {
-            if (threw) tickDone(infoBox[depth]);
-          }
+      while (tickInfo[kIndex] < tickInfo[kLength]) {
+        tock = nextTickQueue[tickInfo[kIndex]++];
+        callback = tock.callback;
+        threw = true;
+        hasQueue = !!tock._asyncQueue;
+        if (hasQueue)
+          _loadAsyncQueue(tock);
+        try {
+          callback();
+          threw = false;
+        } finally {
+          if (threw)
+            tickDone();
         }
+        if (hasQueue)
+          _unloadAsyncQueue(tock);
+        if (1e4 < tickInfo[kIndex])
+          tickDone();
       }
 
-      tickDone(0);
-    }
-
-    function _tickDomainCallback() {
-      var nextTickLength, tock, callback, threw;
-
-      // if you add a nextTick in a domain's error handler, then
-      // it's possible to cycle indefinitely.  Normally, the tickDone
-      // in the finally{} block below will prevent this, however if
-      // that error handler ALSO triggers multiple MakeCallbacks, then
-      // it'll try to keep clearing the queue, since the finally block
-      // fires *before* the error hits the top level and is handled.
-      if (infoBox[depth] >= process.maxTickDepth)
-        return _needTickCallback();
-
-      if (inTick) return;
-      inTick = true;
-
-      // always do this at least once.  otherwise if process.maxTickDepth
-      // is set to some negative value, or if there were repeated errors
-      // preventing depth from being cleared, we'd never process any
-      // of them.
-      while (infoBox[depth]++ < process.maxTickDepth) {
-        nextTickLength = infoBox[length];
-        if (infoBox[index] === nextTickLength)
-          return tickDone(0);
-
-        while (infoBox[index] < nextTickLength) {
-          tock = nextTickQueue[infoBox[index]++];
-          callback = tock.callback;
-          if (tock.domain) {
-            if (tock.domain._disposed) continue;
-            tock.domain.enter();
-          }
-          threw = true;
-          try {
-            callback();
-            threw = false;
-          } finally {
-            // finally blocks fire before the error hits the top level,
-            // so we can't clear the depth at this point.
-            if (threw) tickDone(infoBox[depth]);
-          }
-          if (tock.domain) {
-            tock.domain.exit();
-          }
-        }
-      }
-
-      tickDone(0);
+      tickDone();
     }
 
     function nextTick(callback) {
       // on the way out, don't bother. it won't get fired anyway.
       if (process._exiting)
         return;
-      if (infoBox[depth] >= process.maxTickDepth)
-        maxTickWarn();
 
-      var obj = { callback: callback, domain: null };
+      var obj = {
+        callback: callback,
+        _asyncQueue: undefined
+      };
 
-      nextTickQueue.push(obj);
-      infoBox[length]++;
-
-      if (needSpinner) {
-        _needTickCallback();
-        needSpinner = false;
-      }
-    }
-
-    function _nextDomainTick(callback) {
-      // on the way out, don't bother. it won't get fired anyway.
-      if (process._exiting)
-        return;
-      if (infoBox[depth] >= process.maxTickDepth)
-        maxTickWarn();
-
-      var obj = { callback: callback, domain: process.domain };
+      if (asyncFlags[kCount] > 0)
+        _runAsyncQueue(obj);
 
       nextTickQueue.push(obj);
-      infoBox[length]++;
-
-      if (needSpinner) {
-        _needTickCallback();
-        needSpinner = false;
-      }
+      tickInfo[kLength]++;
     }
   };
 
@@ -526,21 +646,11 @@
                'global.__dirname = __dirname;\n' +
                'global.require = require;\n' +
                'return require("vm").runInThisContext(' +
-               JSON.stringify(body) + ', ' +
-               JSON.stringify(name) + ', true);\n';
+               JSON.stringify(body) + ', { filename: ' +
+               JSON.stringify(name) + ' });\n';
     }
     var result = module._compile(script, name + '-wrapper');
     if (process._print_eval) console.log(result);
-  }
-
-  function errnoException(errorno, syscall) {
-    // TODO make this more compatible with ErrnoException from src/node.cc
-    // Once all of Node is using this function the ErrnoException from
-    // src/node.cc should be removed.
-    var e = new Error(syscall + ' ' + errorno);
-    e.errno = e.code = errorno;
-    e.syscall = syscall;
-    return e;
   }
 
   function createWritableStdioStream(fd) {
@@ -701,31 +811,37 @@
   };
 
   startup.processKillAndExit = function() {
+    process.exitCode = 0;
     process.exit = function(code) {
+      if (code || code === 0)
+        process.exitCode = code;
+
       if (!process._exiting) {
         process._exiting = true;
-        process.emit('exit', code || 0);
+        process.emit('exit', process.exitCode || 0);
       }
-      process.reallyExit(code || 0);
+      process.reallyExit(process.exitCode || 0);
     };
 
     process.kill = function(pid, sig) {
-      var r;
+      var err;
 
       // preserve null signal
       if (0 === sig) {
-        r = process._kill(pid, 0);
+        err = process._kill(pid, 0);
       } else {
         sig = sig || 'SIGTERM';
-        if (startup.lazyConstants()[sig]) {
-          r = process._kill(pid, startup.lazyConstants()[sig]);
+        if (startup.lazyConstants()[sig] &&
+            sig.slice(0, 3) === 'SIG') {
+          err = process._kill(pid, startup.lazyConstants()[sig]);
         } else {
           throw new Error('Unknown signal: ' + sig);
         }
       }
 
-      if (r) {
-        throw errnoException(process._errno, 'kill');
+      if (err) {
+        var errnoException = NativeModule.require('util')._errnoException;
+        throw errnoException(err, 'kill');
       }
 
       return true;
@@ -756,10 +872,11 @@
         wrap.onsignal = function() { process.emit(type); };
 
         var signum = startup.lazyConstants()[type];
-        var r = wrap.start(signum);
-        if (r) {
+        var err = wrap.start(signum);
+        if (err) {
           wrap.close();
-          throw errnoException(process._errno, 'uv_signal_start');
+          var errnoException = NativeModule.require('util')._errnoException;
+          throw errnoException(err, 'uv_signal_start');
         }
 
         signalWraps[type] = wrap;
@@ -804,7 +921,17 @@
       cp._forkChild(fd);
       assert(process.send);
     }
-  }
+  };
+
+
+  startup.processRawDebug = function() {
+    var format = NativeModule.require('util').format;
+    var rawDebug = process._rawDebug;
+    process._rawDebug = function() {
+      rawDebug(format.apply(null, arguments));
+    };
+  };
+
 
   startup.resolveArgv0 = function() {
     var cwd = process.cwd();
@@ -826,8 +953,11 @@
   // core modules found in lib/*.js. All core modules are compiled into the
   // node binary, so they can be loaded faster.
 
-  var Script = process.binding('evals').NodeScript;
-  var runInThisContext = Script.runInThisContext;
+  var ContextifyScript = process.binding('contextify').ContextifyScript;
+  function runInThisContext(code, options) {
+    var script = new ContextifyScript(code, options);
+    return script.runInThisContext();
+  }
 
   function NativeModule(id) {
     this.filename = id + '.js';
@@ -888,7 +1018,7 @@
     var source = NativeModule.getSource(this.id);
     source = NativeModule.wrap(source);
 
-    var fn = runInThisContext(source, this.filename, true);
+    var fn = runInThisContext(source, { filename: this.filename });
     fn(this.exports, NativeModule.require, this, this.filename);
 
     this.loaded = true;

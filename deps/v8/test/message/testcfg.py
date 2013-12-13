@@ -35,6 +35,7 @@ from testrunner.objects import testcase
 
 
 FLAGS_PATTERN = re.compile(r"//\s+Flags:(.*)")
+INVALID_FLAGS = ["--enable-slow-asserts"]
 
 
 class MessageTestSuite(testsuite.TestSuite):
@@ -62,6 +63,7 @@ class MessageTestSuite(testsuite.TestSuite):
     for match in flags_match:
       result += match.strip().split()
     result += context.mode_flags
+    result = [x for x in result if x not in INVALID_FLAGS]
     result.append(os.path.join(self.root, testcase.path + ".js"))
     return testcase.flags + result
 
@@ -95,7 +97,8 @@ class MessageTestSuite(testsuite.TestSuite):
     env = { "basename": os.path.basename(testpath + ".js") }
     if len(expected_lines) != len(actual_lines):
       return True
-    for (expected, actual) in itertools.izip(expected_lines, actual_lines):
+    for (expected, actual) in itertools.izip_longest(
+        expected_lines, actual_lines, fillvalue=''):
       pattern = re.escape(expected.rstrip() % env)
       pattern = pattern.replace("\\*", ".*")
       pattern = "^%s$" % pattern

@@ -104,7 +104,7 @@ Variable* VariableMap::Lookup(Handle<String> name) {
 // ----------------------------------------------------------------------------
 // Implementation of Scope
 
-Scope::Scope(Scope* outer_scope, ScopeType type, Zone* zone)
+Scope::Scope(Scope* outer_scope, ScopeType scope_type, Zone* zone)
     : isolate_(zone->isolate()),
       inner_scopes_(4, zone),
       variables_(zone),
@@ -114,22 +114,22 @@ Scope::Scope(Scope* outer_scope, ScopeType type, Zone* zone)
       unresolved_(16, zone),
       decls_(4, zone),
       interface_(FLAG_harmony_modules &&
-                 (type == MODULE_SCOPE || type == GLOBAL_SCOPE)
+                 (scope_type == MODULE_SCOPE || scope_type == GLOBAL_SCOPE)
                      ? Interface::NewModule(zone) : NULL),
       already_resolved_(false),
       zone_(zone) {
-  SetDefaults(type, outer_scope, Handle<ScopeInfo>::null());
+  SetDefaults(scope_type, outer_scope, Handle<ScopeInfo>::null());
   // The outermost scope must be a global scope.
-  ASSERT(type == GLOBAL_SCOPE || outer_scope != NULL);
+  ASSERT(scope_type == GLOBAL_SCOPE || outer_scope != NULL);
   ASSERT(!HasIllegalRedeclaration());
 }
 
 
 Scope::Scope(Scope* inner_scope,
-             ScopeType type,
+             ScopeType scope_type,
              Handle<ScopeInfo> scope_info,
              Zone* zone)
-    : isolate_(Isolate::Current()),
+    : isolate_(zone->isolate()),
       inner_scopes_(4, zone),
       variables_(zone),
       internals_(4, zone),
@@ -140,7 +140,7 @@ Scope::Scope(Scope* inner_scope,
       interface_(NULL),
       already_resolved_(true),
       zone_(zone) {
-  SetDefaults(type, NULL, scope_info);
+  SetDefaults(scope_type, NULL, scope_info);
   if (!scope_info.is_null()) {
     num_heap_slots_ = scope_info_->ContextLength();
   }
@@ -152,7 +152,7 @@ Scope::Scope(Scope* inner_scope,
 
 
 Scope::Scope(Scope* inner_scope, Handle<String> catch_variable_name, Zone* zone)
-    : isolate_(Isolate::Current()),
+    : isolate_(zone->isolate()),
       inner_scopes_(1, zone),
       variables_(zone),
       internals_(0, zone),
@@ -177,11 +177,11 @@ Scope::Scope(Scope* inner_scope, Handle<String> catch_variable_name, Zone* zone)
 }
 
 
-void Scope::SetDefaults(ScopeType type,
+void Scope::SetDefaults(ScopeType scope_type,
                         Scope* outer_scope,
                         Handle<ScopeInfo> scope_info) {
   outer_scope_ = outer_scope;
-  type_ = type;
+  scope_type_ = scope_type;
   scope_name_ = isolate_->factory()->empty_string();
   dynamics_ = NULL;
   receiver_ = NULL;
@@ -437,8 +437,8 @@ Variable* Scope::LookupFunctionVar(Handle<String> name,
         this, name, mode, true /* is valid LHS */,
         Variable::NORMAL, kCreatedInitialized);
     VariableProxy* proxy = factory->NewVariableProxy(var);
-    VariableDeclaration* declaration =
-        factory->NewVariableDeclaration(proxy, mode, this);
+    VariableDeclaration* declaration = factory->NewVariableDeclaration(
+        proxy, mode, this, RelocInfo::kNoPosition);
     DeclareFunctionVar(declaration);
     var->AllocateTo(Variable::CONTEXT, index);
     return var;
@@ -726,7 +726,10 @@ int Scope::ContextChainLength(Scope* scope) {
   int n = 0;
   for (Scope* s = this; s != scope; s = s->outer_scope_) {
     ASSERT(s != NULL);  // scope must be in the scope chain
-    if (s->num_heap_slots() > 0) n++;
+    if (s->is_with_scope() || s->num_heap_slots() > 0) n++;
+    // Catch and module scopes always have heap slots.
+    ASSERT(!s->is_catch_scope() || s->num_heap_slots() > 0);
+    ASSERT(!s->is_module_scope() || s->num_heap_slots() > 0);
   }
   return n;
 }
@@ -777,8 +780,8 @@ void Scope::GetNestedScopeChain(
 
 
 #ifdef DEBUG
-static const char* Header(ScopeType type) {
-  switch (type) {
+static const char* Header(ScopeType scope_type) {
+  switch (scope_type) {
     case EVAL_SCOPE: return "eval";
     case FUNCTION_SCOPE: return "function";
     case MODULE_SCOPE: return "module";
@@ -852,7 +855,7 @@ void Scope::Print(int n) {
   int n1 = n0 + 2;  // indentation
 
   // Print header.
-  Indent(n0, Header(type_));
+  Indent(n0, Header(scope_type_));
   if (scope_name_->length() > 0) {
     PrintF(" ");
     PrintName(scope_name_);
@@ -904,26 +907,32 @@ void Scope::Print(int n) {
   PrintF("%d heap slots\n", num_heap_slots_); }
 
   // Print locals.
-  Indent(n1, "// function var\n");
   if (function_ != NULL) {
+    Indent(n1, "// function var:\n");
     PrintVar(n1, function_->proxy()->var());
   }
 
-  Indent(n1, "// temporary vars\n");
-  for (int i = 0; i < temps_.length(); i++) {
-    PrintVar(n1, temps_[i]);
+  if (temps_.length() > 0) {
+    Indent(n1, "// temporary vars:\n");
+    for (int i = 0; i < temps_.length(); i++) {
+      PrintVar(n1, temps_[i]);
+    }
   }
 
-  Indent(n1, "// internal vars\n");
-  for (int i = 0; i < internals_.length(); i++) {
-    PrintVar(n1, internals_[i]);
+  if (internals_.length() > 0) {
+    Indent(n1, "// internal vars:\n");
+    for (int i = 0; i < internals_.length(); i++) {
+      PrintVar(n1, internals_[i]);
+    }
   }
 
-  Indent(n1, "// local vars\n");
-  PrintMap(n1, &variables_);
+  if (variables_.Start() != NULL) {
+    Indent(n1, "// local vars:\n");
+    PrintMap(n1, &variables_);
+  }
 
-  Indent(n1, "// dynamic vars\n");
   if (dynamics_ != NULL) {
+    Indent(n1, "// dynamic vars:\n");
     PrintMap(n1, dynamics_->GetMap(DYNAMIC));
     PrintMap(n1, dynamics_->GetMap(DYNAMIC_LOCAL));
     PrintMap(n1, dynamics_->GetMap(DYNAMIC_GLOBAL));
@@ -967,6 +976,13 @@ Variable* Scope::LookupRecursive(Handle<String> name,
                                  BindingKind* binding_kind,
                                  AstNodeFactory<AstNullVisitor>* factory) {
   ASSERT(binding_kind != NULL);
+  if (already_resolved() && is_with_scope()) {
+    // Short-cut: if the scope is deserialized from a scope info, variable
+    // allocation is already fixed.  We can simply return with dynamic lookup.
+    *binding_kind = DYNAMIC_LOOKUP;
+    return NULL;
+  }
+
   // Try to find the variable in this scope.
   Variable* var = LocalLookup(name);
 
@@ -995,6 +1011,7 @@ Variable* Scope::LookupRecursive(Handle<String> name,
   }
 
   if (is_with_scope()) {
+    ASSERT(!already_resolved());
     // The current scope is a with scope, so the variable binding can not be
     // statically resolved. However, note that it was necessary to do a lookup
     // in the outer scope anyway, because if a binding exists in an outer scope,
@@ -1075,7 +1092,7 @@ bool Scope::ResolveVariable(CompilationInfo* info,
     // Assignment to const. Throw a syntax error.
     MessageLocation location(
         info->script(), proxy->position(), proxy->position());
-    Isolate* isolate = Isolate::Current();
+    Isolate* isolate = info->isolate();
     Factory* factory = isolate->factory();
     Handle<JSArray> array = factory->NewJSArray(0);
     Handle<Object> result =
@@ -1106,7 +1123,7 @@ bool Scope::ResolveVariable(CompilationInfo* info,
       // TODO(rossberg): generate more helpful error message.
       MessageLocation location(
           info->script(), proxy->position(), proxy->position());
-      Isolate* isolate = Isolate::Current();
+      Isolate* isolate = info->isolate();
       Factory* factory = isolate->factory();
       Handle<JSArray> array = factory->NewJSArray(1);
       USE(JSObject::SetElement(array, 0, var->name(), NONE, kStrictMode));

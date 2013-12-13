@@ -45,7 +45,7 @@
  */
 
 
-v8::Persistent<v8::Context> CreateShellContext();
+v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate);
 void RunShell(v8::Handle<v8::Context> context);
 int RunMain(v8::Isolate* isolate, int argc, char* argv[]);
 bool ExecuteString(v8::Isolate* isolate,
@@ -53,11 +53,11 @@ bool ExecuteString(v8::Isolate* isolate,
                    v8::Handle<v8::Value> name,
                    bool print_result,
                    bool report_exceptions);
-v8::Handle<v8::Value> Print(const v8::Arguments& args);
-v8::Handle<v8::Value> Read(const v8::Arguments& args);
-v8::Handle<v8::Value> Load(const v8::Arguments& args);
-v8::Handle<v8::Value> Quit(const v8::Arguments& args);
-v8::Handle<v8::Value> Version(const v8::Arguments& args);
+void Print(const v8::FunctionCallbackInfo<v8::Value>& args);
+void Read(const v8::FunctionCallbackInfo<v8::Value>& args);
+void Load(const v8::FunctionCallbackInfo<v8::Value>& args);
+void Quit(const v8::FunctionCallbackInfo<v8::Value>& args);
+void Version(const v8::FunctionCallbackInfo<v8::Value>& args);
 v8::Handle<v8::String> ReadFile(const char* name);
 void ReportException(v8::Isolate* isolate, v8::TryCatch* handler);
 
@@ -66,13 +66,14 @@ static bool run_shell;
 
 
 int main(int argc, char* argv[]) {
+  v8::V8::InitializeICU();
   v8::V8::SetFlagsFromCommandLine(&argc, argv, true);
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   run_shell = (argc == 1);
   int result;
   {
     v8::HandleScope handle_scope(isolate);
-    v8::Persistent<v8::Context> context = CreateShellContext();
+    v8::Handle<v8::Context> context = CreateShellContext(isolate);
     if (context.IsEmpty()) {
       fprintf(stderr, "Error creating context\n");
       return 1;
@@ -81,7 +82,6 @@ int main(int argc, char* argv[]) {
     result = RunMain(isolate, argc, argv);
     if (run_shell) RunShell(context);
     context->Exit();
-    context.Dispose(isolate);
   }
   v8::V8::Dispose();
   return result;
@@ -96,7 +96,7 @@ const char* ToCString(const v8::String::Utf8Value& value) {
 
 // Creates a new execution environment containing the built-in
 // functions.
-v8::Persistent<v8::Context> CreateShellContext() {
+v8::Handle<v8::Context> CreateShellContext(v8::Isolate* isolate) {
   // Create a template for the global object.
   v8::Handle<v8::ObjectTemplate> global = v8::ObjectTemplate::New();
   // Bind the global 'print' function to the C++ Print callback.
@@ -110,14 +110,14 @@ v8::Persistent<v8::Context> CreateShellContext() {
   // Bind the 'version' function
   global->Set(v8::String::New("version"), v8::FunctionTemplate::New(Version));
 
-  return v8::Context::New(NULL, global);
+  return v8::Context::New(isolate, NULL, global);
 }
 
 
 // The callback that is invoked by v8 whenever the JavaScript 'print'
 // function is called.  Prints its arguments on stdout separated by
 // spaces and ending with a newline.
-v8::Handle<v8::Value> Print(const v8::Arguments& args) {
+void Print(const v8::FunctionCallbackInfo<v8::Value>& args) {
   bool first = true;
   for (int i = 0; i < args.Length(); i++) {
     v8::HandleScope handle_scope(args.GetIsolate());
@@ -132,70 +132,79 @@ v8::Handle<v8::Value> Print(const v8::Arguments& args) {
   }
   printf("\n");
   fflush(stdout);
-  return v8::Undefined();
 }
 
 
 // The callback that is invoked by v8 whenever the JavaScript 'read'
 // function is called.  This function loads the content of the file named in
 // the argument into a JavaScript string.
-v8::Handle<v8::Value> Read(const v8::Arguments& args) {
+void Read(const v8::FunctionCallbackInfo<v8::Value>& args) {
   if (args.Length() != 1) {
-    return v8::ThrowException(v8::String::New("Bad parameters"));
+    args.GetIsolate()->ThrowException(
+        v8::String::New("Bad parameters"));
+    return;
   }
   v8::String::Utf8Value file(args[0]);
   if (*file == NULL) {
-    return v8::ThrowException(v8::String::New("Error loading file"));
+    args.GetIsolate()->ThrowException(
+        v8::String::New("Error loading file"));
+    return;
   }
   v8::Handle<v8::String> source = ReadFile(*file);
   if (source.IsEmpty()) {
-    return v8::ThrowException(v8::String::New("Error loading file"));
+    args.GetIsolate()->ThrowException(
+        v8::String::New("Error loading file"));
+    return;
   }
-  return source;
+  args.GetReturnValue().Set(source);
 }
 
 
 // The callback that is invoked by v8 whenever the JavaScript 'load'
 // function is called.  Loads, compiles and executes its argument
 // JavaScript file.
-v8::Handle<v8::Value> Load(const v8::Arguments& args) {
+void Load(const v8::FunctionCallbackInfo<v8::Value>& args) {
   for (int i = 0; i < args.Length(); i++) {
     v8::HandleScope handle_scope(args.GetIsolate());
     v8::String::Utf8Value file(args[i]);
     if (*file == NULL) {
-      return v8::ThrowException(v8::String::New("Error loading file"));
+      args.GetIsolate()->ThrowException(
+          v8::String::New("Error loading file"));
+      return;
     }
     v8::Handle<v8::String> source = ReadFile(*file);
     if (source.IsEmpty()) {
-      return v8::ThrowException(v8::String::New("Error loading file"));
+      args.GetIsolate()->ThrowException(
+           v8::String::New("Error loading file"));
+      return;
     }
     if (!ExecuteString(args.GetIsolate(),
                        source,
                        v8::String::New(*file),
                        false,
                        false)) {
-      return v8::ThrowException(v8::String::New("Error executing file"));
+      args.GetIsolate()->ThrowException(
+          v8::String::New("Error executing file"));
+      return;
     }
   }
-  return v8::Undefined();
 }
 
 
 // The callback that is invoked by v8 whenever the JavaScript 'quit'
 // function is called.  Quits.
-v8::Handle<v8::Value> Quit(const v8::Arguments& args) {
+void Quit(const v8::FunctionCallbackInfo<v8::Value>& args) {
   // If not arguments are given args[0] will yield undefined which
   // converts to the integer value 0.
   int exit_code = args[0]->Int32Value();
   fflush(stdout);
   fflush(stderr);
   exit(exit_code);
-  return v8::Undefined();
 }
 
 
-v8::Handle<v8::Value> Version(const v8::Arguments& args) {
-  return v8::String::New(v8::V8::GetVersion());
+void Version(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  args.GetReturnValue().Set(v8::String::New(v8::V8::GetVersion()));
 }
 
 

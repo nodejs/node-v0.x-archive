@@ -294,20 +294,6 @@ function BIT_XOR(y) {
 }
 
 
-// ECMA-262, section 11.4.7, page 47.
-function UNARY_MINUS() {
-  var x = IS_NUMBER(this) ? this : %NonNumberToNumber(this);
-  return %NumberUnaryMinus(x);
-}
-
-
-// ECMA-262, section 11.4.8, page 48.
-function BIT_NOT() {
-  var x = IS_NUMBER(this) ? this : %NonNumberToNumber(this);
-  return %NumberNot(x);
-}
-
-
 // ECMA-262, section 11.7.1, page 51.
 function SHL(y) {
   var x = IS_NUMBER(this) ? this : %NonNumberToNumber(this);
@@ -540,8 +526,8 @@ function ToNumber(x) {
                                     : %StringToNumber(x);
   }
   if (IS_BOOLEAN(x)) return x ? 1 : 0;
-  if (IS_UNDEFINED(x)) return $NaN;
-  if (IS_SYMBOL(x)) return $NaN;
+  if (IS_UNDEFINED(x)) return NAN;
+  if (IS_SYMBOL(x)) return NAN;
   return (IS_NULL(x)) ? 0 : ToNumber(%DefaultNumber(x));
 }
 
@@ -551,8 +537,8 @@ function NonNumberToNumber(x) {
                                     : %StringToNumber(x);
   }
   if (IS_BOOLEAN(x)) return x ? 1 : 0;
-  if (IS_UNDEFINED(x)) return $NaN;
-  if (IS_SYMBOL(x)) return $NaN;
+  if (IS_UNDEFINED(x)) return NAN;
+  if (IS_SYMBOL(x)) return NAN;
   return (IS_NULL(x)) ? 0 : ToNumber(%DefaultNumber(x));
 }
 
@@ -587,7 +573,7 @@ function ToObject(x) {
   if (IS_NUMBER(x)) return new $Number(x);
   if (IS_BOOLEAN(x)) return new $Boolean(x);
   if (IS_NULL_OR_UNDEFINED(x) && !IS_UNDETECTABLE(x)) {
-    throw %MakeTypeError('null_to_object', []);
+    throw %MakeTypeError('undefined_or_null_to_object', []);
   }
   return x;
 }
@@ -658,7 +644,6 @@ function DefaultNumber(x) {
   throw %MakeTypeError('cannot_convert_to_primitive', []);
 }
 
-
 // ECMA-262, section 8.6.2.6, page 28.
 function DefaultString(x) {
   var toString = x.toString;
@@ -674,6 +659,12 @@ function DefaultString(x) {
   }
 
   throw %MakeTypeError('cannot_convert_to_primitive', []);
+}
+
+function ToPositiveInteger(x, rangeErrorName) {
+  var i = TO_INTEGER(x);
+  if (i < 0) throw %MakeRangeError(rangeErrorName);
+  return i;
 }
 
 

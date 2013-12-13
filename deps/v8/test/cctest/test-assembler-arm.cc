@@ -47,7 +47,7 @@ typedef Object* (*F4)(void* p0, void* p1, int p2, int p3, int p4);
 
 TEST(0) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -74,7 +74,7 @@ TEST(0) {
 
 TEST(1) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -112,7 +112,7 @@ TEST(1) {
 
 TEST(2) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -133,7 +133,7 @@ TEST(2) {
 
   // some relocated stuff here, not executed
   __ RecordComment("dead code, just testing relocations");
-  __ mov(r0, Operand(FACTORY->true_value()));
+  __ mov(r0, Operand(isolate->factory()->true_value()));
   __ RecordComment("dead code, just testing immediate operands");
   __ mov(r0, Operand(-1));
   __ mov(r0, Operand(0xFF000000));
@@ -159,7 +159,7 @@ TEST(2) {
 
 TEST(3) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -215,7 +215,7 @@ TEST(3) {
 TEST(4) {
   // Test the VFP floating point instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -228,6 +228,7 @@ TEST(4) {
     double g;
     double h;
     int i;
+    double j;
     double m;
     double n;
     float x;
@@ -290,6 +291,12 @@ TEST(4) {
     __ vcvt_f64_s32(d4, s31);
     __ vstr(d4, r4, OFFSET_OF(T, f));
 
+    // Convert from fixed point to floating point.
+    __ mov(lr, Operand(1234));
+    __ vmov(s8, lr);
+    __ vcvt_f64_s32(d4, 1);
+    __ vstr(d4, r4, OFFSET_OF(T, j));
+
     // Test vabs.
     __ vldr(d1, r4, OFFSET_OF(T, g));
     __ vabs(d0, d1);
@@ -328,6 +335,7 @@ TEST(4) {
     t.g = -2718.2818;
     t.h = 31415926.5;
     t.i = 0;
+    t.j = 0;
     t.m = -2718.2818;
     t.n = 123.456;
     t.x = 4.5;
@@ -341,6 +349,7 @@ TEST(4) {
     CHECK_EQ(2, t.i);
     CHECK_EQ(2718.2818, t.g);
     CHECK_EQ(31415926.5, t.h);
+    CHECK_EQ(617.0, t.j);
     CHECK_EQ(42.0, t.f);
     CHECK_EQ(1.0, t.e);
     CHECK_EQ(1.000000059604644775390625, t.d);
@@ -354,7 +363,7 @@ TEST(4) {
 TEST(5) {
   // Test the ARMv7 bitfield instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -391,7 +400,7 @@ TEST(5) {
 TEST(6) {
   // Test saturating instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -434,8 +443,7 @@ static void TestRoundingMode(VCVTTypes types,
                              double value,
                              int expected,
                              bool expected_exception = false) {
-  CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -502,6 +510,7 @@ static void TestRoundingMode(VCVTTypes types,
 
 
 TEST(7) {
+  CcTest::InitializeVM();
   // Test vfp rounding modes.
 
   // s32_f64 (double to integer).
@@ -610,10 +619,11 @@ TEST(7) {
   TestRoundingMode(u32_f64, RN, (kMaxUInt + 1.0), kMaxUInt, true);
 }
 
+
 TEST(8) {
   // Test VFP multi load/store with ia_w.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -721,7 +731,7 @@ TEST(8) {
 TEST(9) {
   // Test VFP multi load/store with ia.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -833,7 +843,7 @@ TEST(9) {
 TEST(10) {
   // Test VFP multi load/store with db_w.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -941,7 +951,7 @@ TEST(10) {
 TEST(11) {
   // Test instructions using the carry flag.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1007,7 +1017,7 @@ TEST(11) {
 TEST(12) {
   // Test chaining of label usages within instructions (issue 1644).
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -1022,7 +1032,7 @@ TEST(12) {
 TEST(13) {
   // Test VFP instructions using registers d16-d31.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   if (!CpuFeatures::IsSupported(VFP32DREGS)) {
@@ -1039,6 +1049,8 @@ TEST(13) {
     double i;
     double j;
     double k;
+    uint32_t low;
+    uint32_t high;
   } T;
   T t;
 
@@ -1103,6 +1115,11 @@ TEST(13) {
     __ vmov(d22, VmovIndexHi, r2);
     __ add(r4, r0, Operand(OFFSET_OF(T, i)));
     __ vstm(ia_w, r4, d20, d22);
+    // Move d22 into low and high.
+    __ vmov(r4, VmovIndexLo, d22);
+    __ str(r4, MemOperand(r0, OFFSET_OF(T, low)));
+    __ vmov(r4, VmovIndexHi, d22);
+    __ str(r4, MemOperand(r0, OFFSET_OF(T, high)));
 
     __ ldm(ia_w, sp, r4.bit() | pc.bit());
 
@@ -1134,6 +1151,8 @@ TEST(13) {
     CHECK_EQ(14.7610017472335499, t.i);
     CHECK_EQ(16.0, t.j);
     CHECK_EQ(73.8818412254460241, t.k);
+    CHECK_EQ(372106121, t.low);
+    CHECK_EQ(1079146608, t.high);
   }
 }
 
@@ -1141,7 +1160,7 @@ TEST(13) {
 TEST(14) {
   // Test the VFP Canonicalized Nan mode.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1215,6 +1234,280 @@ TEST(14) {
   CHECK_EQ(kArmNanLower32, BitCast<int64_t>(t.mul_result) & 0xffffffffu);
   CHECK_EQ(kArmNanUpper32, (BitCast<int64_t>(t.div_result) >> 32) & 0x7fffffff);
   CHECK_EQ(kArmNanLower32, BitCast<int64_t>(t.div_result) & 0xffffffffu);
+}
+
+
+TEST(15) {
+  // Test the Neon instructions.
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
+
+  typedef struct {
+    uint32_t src0;
+    uint32_t src1;
+    uint32_t src2;
+    uint32_t src3;
+    uint32_t src4;
+    uint32_t src5;
+    uint32_t src6;
+    uint32_t src7;
+    uint32_t dst0;
+    uint32_t dst1;
+    uint32_t dst2;
+    uint32_t dst3;
+    uint32_t dst4;
+    uint32_t dst5;
+    uint32_t dst6;
+    uint32_t dst7;
+    uint32_t srcA0;
+    uint32_t srcA1;
+    uint32_t dstA0;
+    uint32_t dstA1;
+    uint32_t dstA2;
+    uint32_t dstA3;
+  } T;
+  T t;
+
+  // Create a function that accepts &t, and loads, manipulates, and stores
+  // the doubles and floats.
+  Assembler assm(isolate, NULL, 0);
+
+
+  if (CpuFeatures::IsSupported(NEON)) {
+    CpuFeatureScope scope(&assm, NEON);
+
+    __ stm(db_w, sp, r4.bit() | lr.bit());
+    // Move 32 bytes with neon.
+    __ add(r4, r0, Operand(OFFSET_OF(T, src0)));
+    __ vld1(Neon8, NeonListOperand(d0, 4), NeonMemOperand(r4));
+    __ add(r4, r0, Operand(OFFSET_OF(T, dst0)));
+    __ vst1(Neon8, NeonListOperand(d0, 4), NeonMemOperand(r4));
+
+    // Expand 8 bytes into 8 words(16 bits).
+    __ add(r4, r0, Operand(OFFSET_OF(T, srcA0)));
+    __ vld1(Neon8, NeonListOperand(d0), NeonMemOperand(r4));
+    __ vmovl(NeonU8, q0, d0);
+    __ add(r4, r0, Operand(OFFSET_OF(T, dstA0)));
+    __ vst1(Neon8, NeonListOperand(d0, 2), NeonMemOperand(r4));
+
+  __ ldm(ia_w, sp, r4.bit() | pc.bit());
+
+    CodeDesc desc;
+    assm.GetCode(&desc);
+    Object* code = isolate->heap()->CreateCode(
+        desc,
+        Code::ComputeFlags(Code::STUB),
+        Handle<Code>())->ToObjectChecked();
+    CHECK(code->IsCode());
+#ifdef DEBUG
+    Code::cast(code)->Print();
+#endif
+    F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+    t.src0 = 0x01020304;
+    t.src1 = 0x11121314;
+    t.src2 = 0x21222324;
+    t.src3 = 0x31323334;
+    t.src4 = 0x41424344;
+    t.src5 = 0x51525354;
+    t.src6 = 0x61626364;
+    t.src7 = 0x71727374;
+    t.dst0 = 0;
+    t.dst1 = 0;
+    t.dst2 = 0;
+    t.dst3 = 0;
+    t.dst4 = 0;
+    t.dst5 = 0;
+    t.dst6 = 0;
+    t.dst7 = 0;
+    t.srcA0 = 0x41424344;
+    t.srcA1 = 0x81828384;
+    t.dstA0 = 0;
+    t.dstA1 = 0;
+    t.dstA2 = 0;
+    t.dstA3 = 0;
+    Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+    USE(dummy);
+    CHECK_EQ(0x01020304, t.dst0);
+    CHECK_EQ(0x11121314, t.dst1);
+    CHECK_EQ(0x21222324, t.dst2);
+    CHECK_EQ(0x31323334, t.dst3);
+    CHECK_EQ(0x41424344, t.dst4);
+    CHECK_EQ(0x51525354, t.dst5);
+    CHECK_EQ(0x61626364, t.dst6);
+    CHECK_EQ(0x71727374, t.dst7);
+    CHECK_EQ(0x00430044, t.dstA0);
+    CHECK_EQ(0x00410042, t.dstA1);
+    CHECK_EQ(0x00830084, t.dstA2);
+    CHECK_EQ(0x00810082, t.dstA3);
+  }
+}
+
+
+TEST(16) {
+  // Test the pkh, uxtb, uxtab and uxtb16 instructions.
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
+
+  typedef struct {
+    uint32_t src0;
+    uint32_t src1;
+    uint32_t src2;
+    uint32_t dst0;
+    uint32_t dst1;
+    uint32_t dst2;
+    uint32_t dst3;
+    uint32_t dst4;
+  } T;
+  T t;
+
+  // Create a function that accepts &t, and loads, manipulates, and stores
+  // the doubles and floats.
+  Assembler assm(isolate, NULL, 0);
+
+  __ stm(db_w, sp, r4.bit() | lr.bit());
+
+  __ mov(r4, Operand(r0));
+  __ ldr(r0, MemOperand(r4, OFFSET_OF(T, src0)));
+  __ ldr(r1, MemOperand(r4, OFFSET_OF(T, src1)));
+
+  __ pkhbt(r2, r0, Operand(r1, LSL, 8));
+  __ str(r2, MemOperand(r4, OFFSET_OF(T, dst0)));
+
+  __ pkhtb(r2, r0, Operand(r1, ASR, 8));
+  __ str(r2, MemOperand(r4, OFFSET_OF(T, dst1)));
+
+  __ uxtb16(r2, Operand(r0, ROR, 8));
+  __ str(r2, MemOperand(r4, OFFSET_OF(T, dst2)));
+
+  __ uxtb(r2, Operand(r0, ROR, 8));
+  __ str(r2, MemOperand(r4, OFFSET_OF(T, dst3)));
+
+  __ ldr(r0, MemOperand(r4, OFFSET_OF(T, src2)));
+  __ uxtab(r2, r0, Operand(r1, ROR, 8));
+  __ str(r2, MemOperand(r4, OFFSET_OF(T, dst4)));
+
+  __ ldm(ia_w, sp, r4.bit() | pc.bit());
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = isolate->heap()->CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Code>())->ToObjectChecked();
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.src0 = 0x01020304;
+  t.src1 = 0x11121314;
+  t.src2 = 0x11121300;
+  t.dst0 = 0;
+  t.dst1 = 0;
+  t.dst2 = 0;
+  t.dst3 = 0;
+  t.dst4 = 0;
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+  CHECK_EQ(0x12130304, t.dst0);
+  CHECK_EQ(0x01021213, t.dst1);
+  CHECK_EQ(0x00010003, t.dst2);
+  CHECK_EQ(0x00000003, t.dst3);
+  CHECK_EQ(0x11121313, t.dst4);
+}
+
+
+TEST(17) {
+  // Test generating labels at high addresses.
+  // Should not assert.
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
+
+  // Generate a code segment that will be longer than 2^24 bytes.
+  Assembler assm(isolate, NULL, 0);
+  for (size_t i = 0; i < 1 << 23 ; ++i) {  // 2^23
+    __ nop();
+  }
+
+  Label target;
+  __ b(eq, &target);
+  __ bind(&target);
+  __ nop();
+}
+
+
+TEST(code_relative_offset) {
+  // Test extracting the offset of a label from the beginning of the code
+  // in a register.
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
+  // Initialize a code object that will contain the code.
+  Handle<Object> code_object(isolate->heap()->undefined_value(), isolate);
+
+  Assembler assm(isolate, NULL, 0);
+
+  Label start, target_away, target_faraway;
+
+  __ stm(db_w, sp, r4.bit() | r5.bit() | lr.bit());
+
+  // r3 is used as the address zero, the test will crash when we load it.
+  __ mov(r3, Operand::Zero());
+
+  // r5 will be a pointer to the start of the code.
+  __ mov(r5, Operand(code_object));
+  __ mov_label_offset(r4, &start);
+
+  __ mov_label_offset(r1, &target_faraway);
+  __ str(r1, MemOperand(sp, kPointerSize, NegPreIndex));
+
+  __ mov_label_offset(r1, &target_away);
+
+  // Jump straight to 'target_away' the first time and use the relative
+  // position the second time. This covers the case when extracting the
+  // position of a label which is linked.
+  __ mov(r2, Operand::Zero());
+  __ bind(&start);
+  __ cmp(r2, Operand::Zero());
+  __ b(eq, &target_away);
+  __ add(pc, r5, r1);
+  // Emit invalid instructions to push the label between 2^8 and 2^16
+  // instructions away. The test will crash if they are reached.
+  for (int i = 0; i < (1 << 10); i++) {
+    __ ldr(r3, MemOperand(r3));
+  }
+  __ bind(&target_away);
+  // This will be hit twice: r0 = r0 + 5 + 5.
+  __ add(r0, r0, Operand(5));
+
+  __ ldr(r1, MemOperand(sp, kPointerSize, PostIndex), ne);
+  __ add(pc, r5, r4, LeaveCC, ne);
+
+  __ mov(r2, Operand(1));
+  __ b(&start);
+  // Emit invalid instructions to push the label between 2^16 and 2^24
+  // instructions away. The test will crash if they are reached.
+  for (int i = 0; i < (1 << 21); i++) {
+    __ ldr(r3, MemOperand(r3));
+  }
+  __ bind(&target_faraway);
+  // r0 = r0 + 5 + 5 + 11
+  __ add(r0, r0, Operand(11));
+
+  __ ldm(ia_w, sp, r4.bit() | r5.bit() | pc.bit());
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Handle<Code> code = isolate->factory()->NewCode(desc,
+      Code::ComputeFlags(Code::STUB), code_object);
+  CHECK(code->IsCode());
+  F1 f = FUNCTION_CAST<F1>(code->entry());
+  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 21, 0, 0, 0, 0));
+  ::printf("f() = %d\n", res);
+  CHECK_EQ(42, res);
 }
 
 #undef __

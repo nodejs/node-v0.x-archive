@@ -26,11 +26,10 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "gc-extension.h"
+#include "platform.h"
 
 namespace v8 {
 namespace internal {
-
-const char* const GCExtension::kSource = "native function gc();";
 
 
 v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunction(
@@ -39,18 +38,26 @@ v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunction(
 }
 
 
-v8::Handle<v8::Value> GCExtension::GC(const v8::Arguments& args) {
+void GCExtension::GC(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(args.GetIsolate());
   if (args[0]->BooleanValue()) {
-    HEAP->CollectGarbage(NEW_SPACE, "gc extension");
+    isolate->heap()->CollectGarbage(NEW_SPACE, "gc extension");
   } else {
-    HEAP->CollectAllGarbage(Heap::kNoGCFlags, "gc extension");
+    isolate->heap()->CollectAllGarbage(Heap::kNoGCFlags, "gc extension");
   }
-  return v8::Undefined();
 }
 
 
 void GCExtension::Register() {
-  static GCExtension gc_extension;
+  static char buffer[50];
+  Vector<char> temp_vector(buffer, sizeof(buffer));
+  if (FLAG_expose_gc_as != NULL && strlen(FLAG_expose_gc_as) != 0) {
+    OS::SNPrintF(temp_vector, "native function %s();", FLAG_expose_gc_as);
+  } else {
+    OS::SNPrintF(temp_vector, "native function gc();");
+  }
+
+  static GCExtension gc_extension(buffer);
   static v8::DeclareExtension declaration(&gc_extension);
 }
 

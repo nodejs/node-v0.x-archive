@@ -30,7 +30,7 @@ The process object. See the [process object][] section.
 
 * {Object}
 
-Used to print to stdout and stderr. See the [stdio][] section.
+Used to print to stdout and stderr. See the [console][] section.
 
 ## Class: Buffer
 
@@ -63,13 +63,25 @@ value from this object, the next `require` will reload the module.
 
 ### require.extensions
 
-* {Array}
+    Stability: 0 - Deprecated
+
+* {Object}
 
 Instruct `require` on how to handle certain file extensions.
 
 Process files with the extension `.sjs` as `.js`:
 
     require.extensions['.sjs'] = require.extensions['.js'];
+
+**Deprecated**  In the past, this list has been used to load
+non-JavaScript modules into Node by compiling them on-demand.
+However, in practice, there are much better ways to do this, such as
+loading modules via some other Node program, or compiling them to
+JavaScript ahead of time.
+
+Since the Module system is locked, this feature will probably never go
+away.  However, it may have subtle bugs and complexities that are best
+left untouched.
 
 ## __filename
 
@@ -112,7 +124,9 @@ Example: running `node example.js` from `/Users/mjr`
 * {Object}
 
 A reference to the current module. In particular
-`module.exports` is the same as the `exports` object.
+`module.exports` is used for defining what a module exports and makes
+available through `require()`.
+
 `module` isn't actually a global but rather local to each module.
 
 See the [module system documentation][] for more information.
@@ -121,9 +135,10 @@ See the [module system documentation][] for more information.
 
 <!-- type=var -->
 
-An object which is shared between all instances of the current module and
-made accessible through `require()`.
-`exports` is the same as the `module.exports` object.
+A reference to the `module.exports` that is shorter to type.
+See [module system documentation][] for details on when to use `exports` and
+when to use `module.exports`.
+
 `exports` isn't actually a global but rather local to each module.
 
 See the [module system documentation][] for more information.
@@ -172,5 +187,5 @@ The timer functions are global variables. See the [timers][] section.
 [module system documentation]: modules.html
 [Modules]: modules.html#modules_modules
 [process object]: process.html#process_process
-[stdio]: stdio.html
+[console]: console.html
 [timers]: timers.html

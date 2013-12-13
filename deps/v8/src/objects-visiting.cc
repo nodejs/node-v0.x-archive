@@ -82,6 +82,9 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case FIXED_DOUBLE_ARRAY_TYPE:
       return kVisitFixedDoubleArray;
 
+    case CONSTANT_POOL_ARRAY_TYPE:
+      return kVisitConstantPoolArray;
+
     case ODDBALL_TYPE:
       return kVisitOddball;
 
@@ -91,7 +94,10 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case CODE_TYPE:
       return kVisitCode;
 
-    case JS_GLOBAL_PROPERTY_CELL_TYPE:
+    case CELL_TYPE:
+      return kVisitCell;
+
+    case PROPERTY_CELL_TYPE:
       return kVisitPropertyCell;
 
     case JS_SET_TYPE:
@@ -106,6 +112,9 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
 
     case JS_WEAK_MAP_TYPE:
       return kVisitJSWeakMap;
+
+    case JS_WEAK_SET_TYPE:
+      return kVisitJSWeakSet;
 
     case JS_REGEXP_TYPE:
       return kVisitJSRegExp;
@@ -134,6 +143,15 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case FILLER_TYPE:
       return kVisitDataObjectGeneric;
 
+    case JS_ARRAY_BUFFER_TYPE:
+      return kVisitJSArrayBuffer;
+
+    case JS_TYPED_ARRAY_TYPE:
+      return kVisitJSTypedArray;
+
+    case JS_DATA_VIEW_TYPE:
+      return kVisitJSDataView;
+
     case JS_OBJECT_TYPE:
     case JS_CONTEXT_EXTENSION_OBJECT_TYPE:
     case JS_GENERATOR_OBJECT_TYPE:
@@ -145,8 +163,6 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case JS_GLOBAL_OBJECT_TYPE:
     case JS_BUILTINS_OBJECT_TYPE:
     case JS_MESSAGE_OBJECT_TYPE:
-    case JS_ARRAY_BUFFER_TYPE:
-    case JS_TYPED_ARRAY_TYPE:
       return GetVisitorIdForSize(kVisitJSObject,
                                  kVisitJSObjectGeneric,
                                  instance_size);
@@ -172,6 +188,10 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
         case NAME##_TYPE:
       STRUCT_LIST(MAKE_STRUCT_CASE)
 #undef MAKE_STRUCT_CASE
+          if (instance_type == ALLOCATION_SITE_TYPE) {
+            return kVisitAllocationSite;
+          }
+
           return GetVisitorIdForSize(kVisitStruct,
                                      kVisitStructGeneric,
                                      instance_size);

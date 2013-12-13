@@ -104,6 +104,13 @@ Vector<T> List<T, P>::AddBlock(T value, int count, P alloc) {
 
 
 template<typename T, class P>
+void List<T, P>::Set(int index, const T& elm) {
+  ASSERT(index >= 0 && index <= length_);
+  data_[index] = elm;
+}
+
+
+template<typename T, class P>
 void List<T, P>::InsertAt(int index, const T& elm, P alloc) {
   ASSERT(index >= 0 && index <= length_);
   Add(elm, alloc);
@@ -216,7 +223,7 @@ void List<T, P>::Sort(int (*cmp)(const T* x, const T* y)) {
 
 template<typename T, class P>
 void List<T, P>::Sort() {
-  Sort(PointerValueCompare<T>);
+  ToVector().Sort();
 }
 
 

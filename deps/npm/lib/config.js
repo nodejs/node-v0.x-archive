@@ -11,11 +11,13 @@ config.usage = "npm config set <key> <value>"
 
 var log = require("npmlog")
   , npm = require("./npm.js")
-  , exec = require("./utils/exec.js")
+  , spawn = require("child_process").spawn
   , fs = require("graceful-fs")
   , npmconf = require("npmconf")
   , types = npmconf.defs.types
   , ini = require("ini")
+  , editor = require("editor")
+  , os = require("os")
 
 config.completion = function (opts, cb) {
   var argv = opts.conf.argv.remain
@@ -62,7 +64,6 @@ function edit (cb) {
   var e = npm.config.get("editor")
     , which = npm.config.get("global") ? "global" : "user"
     , f = npm.config.get(which + "config")
-    , eol = process.platform === "win32" ? "\r\n" : "\n"
   if (!e) return cb(new Error("No EDITOR config or environ set."))
   npm.config.save(which, function (er) {
     if (er) return cb(er)
@@ -82,18 +83,26 @@ function edit (cb) {
                        , ";;;;"
                        ]
                      )
-              .concat(Object.keys(npmconf.defaults).map(function (k) {
-                return "; " + k + " = " + npmconf.defaults[k]
-              }))
+              .concat(Object.keys(npmconf.defaults).reduce(function (arr, key) {
+                var obj = {};
+                obj[key] = npmconf.defaults[key]
+                if (key === "logstream") return arr
+                return arr.concat(
+                  ini.stringify(obj)
+                    .replace(/\n$/m, '')
+                    .replace(/^/g, '; ')
+                    .replace(/\n/g, '\n; ')
+                    .split('\n'))
+              }, []))
               .concat([""])
-              .join(eol)
+              .join(os.EOL)
       fs.writeFile
         ( f
         , data
         , "utf8"
         , function (er) {
             if (er) return cb(er)
-            exec(e, [f], cb)
+            editor(f, { editor: e }, cb)
           }
         )
     })

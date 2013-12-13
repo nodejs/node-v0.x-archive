@@ -34,6 +34,10 @@ Date2.prototype.foo = 'bar';
 var after = util.inspect(d);
 assert.equal(orig, after);
 
+// test positive/negative zero
+assert.equal(util.inspect(0), '0');
+assert.equal(util.inspect(-0), '-0');
+
 // test for sparse array
 var a = ['foo', 'bar', 'baz'];
 assert.equal(util.inspect(a), '[ \'foo\', \'bar\', \'baz\' ]');
@@ -160,6 +164,12 @@ assert(util.inspect(subject, { customInspect: false }).indexOf('inspect') !== -1
 subject.inspect = function() { return { foo: 'bar' }; };
 
 assert.equal(util.inspect(subject), '{ foo: \'bar\' }');
+
+subject.inspect = function(depth, opts) {
+  assert.strictEqual(opts.customInspectOptions, true);
+};
+
+util.inspect(subject, { customInspectOptions: true });
 
 // util.inspect with "colors" option should produce as many lines as without it
 function test_lines(input) {

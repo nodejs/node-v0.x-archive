@@ -36,7 +36,7 @@ const char* const StatisticsExtension::kSource =
 
 v8::Handle<v8::FunctionTemplate> StatisticsExtension::GetNativeFunction(
     v8::Handle<v8::String> str) {
-  ASSERT(strcmp(*v8::String::AsciiValue(str), "getV8Statistics") == 0);
+  ASSERT(strcmp(*v8::String::Utf8Value(str), "getV8Statistics") == 0);
   return v8::FunctionTemplate::New(StatisticsExtension::GetCounters);
 }
 
@@ -58,9 +58,9 @@ static void AddNumber(v8::Local<v8::Object> object,
 }
 
 
-v8::Handle<v8::Value> StatisticsExtension::GetCounters(
-    const v8::Arguments& args) {
-  Isolate* isolate = Isolate::Current();
+void StatisticsExtension::GetCounters(
+    const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Isolate* isolate = reinterpret_cast<Isolate*>(args.GetIsolate());
   Heap* heap = isolate->heap();
 
   if (args.Length() > 0) {  // GC if first argument evaluates to true.
@@ -133,6 +133,12 @@ v8::Handle<v8::Value> StatisticsExtension::GetCounters(
             "cell_space_available_bytes");
   AddNumber(result, heap->cell_space()->CommittedMemory(),
             "cell_space_commited_bytes");
+  AddNumber(result, heap->property_cell_space()->Size(),
+            "property_cell_space_live_bytes");
+  AddNumber(result, heap->property_cell_space()->Available(),
+            "property_cell_space_available_bytes");
+  AddNumber(result, heap->property_cell_space()->CommittedMemory(),
+            "property_cell_space_commited_bytes");
   AddNumber(result, heap->lo_space()->Size(),
             "lo_space_live_bytes");
   AddNumber(result, heap->lo_space()->Available(),
@@ -141,7 +147,7 @@ v8::Handle<v8::Value> StatisticsExtension::GetCounters(
             "lo_space_commited_bytes");
   AddNumber(result, heap->amount_of_external_allocated_memory(),
             "amount_of_external_allocated_memory");
-  return result;
+  args.GetReturnValue().Set(result);
 }
 
 

@@ -8,7 +8,6 @@ var readInstalled = require("read-installed")
   , npm = require("./npm.js")
   , asyncMap = require("slide").asyncMap
   , fs = require("graceful-fs")
-  , exec = require("./utils/exec.js")
 
 rebuild.usage = "npm rebuild [<name>[@<version>] [name[@<version>] ...]]"
 
@@ -53,7 +52,7 @@ function filter (data, args, set, seen) {
         , n = nv.shift()
         , v = nv.join("@")
       if (n !== data.name) continue
-      if (!semver.satisfies(data.version, v)) continue
+      if (!semver.satisfies(data.version, v, true)) continue
       pass = true
       break
     }

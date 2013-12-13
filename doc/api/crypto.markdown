@@ -100,7 +100,9 @@ Returned by `crypto.createHash`.
 
 Updates the hash content with the given `data`, the encoding of which
 is given in `input_encoding` and can be `'utf8'`, `'ascii'` or
-`'binary'`.  If no encoding is provided, then a buffer is expected.
+`'binary'`.  If no encoding is provided and the input is a string an
+encoding of `'binary'` is enforced. If `data` is a `Buffer` then
+`input_encoding` is ignored.
 
 This can be called many times with new data as it is streamed.
 
@@ -191,6 +193,7 @@ methods are also supported.
 Updates the cipher with `data`, the encoding of which is given in
 `input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.  If no
 encoding is provided, then a buffer is expected.
+If `data` is a `Buffer` then `input_encoding` is ignored.
 
 The `output_encoding` specifies the output format of the enciphered
 data, and can be `'binary'`, `'base64'` or `'hex'`.  If no encoding is
@@ -215,6 +218,13 @@ You can disable automatic padding of the input data to block size. If
 multiple of the cipher's block size or `final` will fail.  Useful for
 non-standard padding, e.g. using `0x0` instead of PKCS padding. You
 must call this before `cipher.final`.
+
+### cipher.getAuthTag()
+
+For authenticated encryption modes (currently supported: GCM), this
+method returns a `Buffer` that represents the _authentication tag_ that
+has been computed from the given data. Should be called after
+encryption has been completed using the `final` method!
 
 
 ## crypto.createDecipher(algorithm, password)
@@ -243,6 +253,7 @@ plain-text data on the the readable side.  The legacy `update` and
 Updates the decipher with `data`, which is encoded in `'binary'`,
 `'base64'` or `'hex'`.  If no encoding is provided, then a buffer is
 expected.
+If `data` is a `Buffer` then `input_encoding` is ignored.
 
 The `output_decoding` specifies in what format to return the
 deciphered plaintext: `'binary'`, `'ascii'` or `'utf8'`.  If no
@@ -264,6 +275,15 @@ standard block padding to prevent `decipher.final` from checking and
 removing it. Can only work if the input data's length is a multiple of
 the ciphers block size. You must call this before streaming data to
 `decipher.update`.
+
+### decipher.setAuthTag(buffer)
+
+For authenticated encryption modes (currently supported: GCM), this
+method must be used to pass in the received _authentication tag_.
+If no tag is provided or if the ciphertext has been tampered with,
+`final` will throw, thus indicating that the ciphertext should
+be discarded due to failed authentication.
+
 
 ## crypto.createSign(algorithm)
 
@@ -290,8 +310,15 @@ with new data as it is streamed.
 ### sign.sign(private_key, [output_format])
 
 Calculates the signature on all the updated data passed through the
-sign.  `private_key` is a string containing the PEM encoded private
-key for signing.
+sign.
+
+`private_key` can be an object or a string. If `private_key` is a string, it is
+treated as the key with no passphrase.
+
+`private_key`:
+
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : A string of passphrase for the private key
 
 Returns the signature in `output_format` which can be `'binary'`,
 `'hex'` or `'base64'`. If no encoding is provided, then a buffer is
@@ -462,7 +489,13 @@ Generates cryptographically strong pseudo-random data. Usage:
       console.log('Have %d bytes of random data: %s', buf.length, buf);
     } catch (ex) {
       // handle error
+      // most likely, entropy sources are drained
     }
+
+NOTE: Will throw error or invoke callback with error, if there is not enough
+accumulated entropy to generate cryptographically strong data. In other words,
+`crypto.randomBytes` without callback will not block even if all entropy sources
+are drained.
 
 ## crypto.pseudoRandomBytes(size, [callback])
 
@@ -473,6 +506,26 @@ function should never be used where unpredictability is important,
 such as in the generation of encryption keys.
 
 Usage is otherwise identical to `crypto.randomBytes`.
+
+## Class: Certificate
+
+The class used for working with signed public key & challenges. The most
+common usage for this series of functions is when dealing with the `<keygen>`
+element. http://www.openssl.org/docs/apps/spkac.html
+
+Returned by `crypto.Certificate`.
+
+### Certificate.verifySpkac(spkac)
+
+Returns true of false based on the validity of the SPKAC.
+
+### Certificate.exportChallenge(spkac)
+
+Exports the encoded public key from the supplied SPKAC.
+
+### Certificate.exportPublicKey(spkac)
+
+Exports the encoded challenge associated with the SPKAC.
 
 ## crypto.DEFAULT_ENCODING
 

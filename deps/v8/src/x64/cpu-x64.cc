@@ -33,7 +33,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_X64)
+#if V8_TARGET_ARCH_X64
 
 #include "cpu.h"
 #include "macro-assembler.h"
@@ -69,18 +69,6 @@ void CPU::FlushICache(void* start, size_t size) {
 #ifdef VALGRIND_DISCARD_TRANSLATIONS
   unsigned res = VALGRIND_DISCARD_TRANSLATIONS(start, size);
   USE(res);
-#endif
-}
-
-
-void CPU::DebugBreak() {
-#ifdef _MSC_VER
-  // To avoid Visual Studio runtime support the following code can be used
-  // instead
-  // __asm { int 3 }
-  __debugbreak();
-#else
-  asm("int $3");
 #endif
 }
 

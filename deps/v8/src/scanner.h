@@ -34,6 +34,8 @@
 #include "char-predicates.h"
 #include "checks.h"
 #include "globals.h"
+#include "hashmap.h"
+#include "list.h"
 #include "token.h"
 #include "unicode-inl.h"
 #include "utils.h"
@@ -121,9 +123,10 @@ class Utf16CharacterStream {
 };
 
 
-class UnicodeCache {
 // ---------------------------------------------------------------------
 // Caching predicates used by scanners.
+
+class UnicodeCache {
  public:
   UnicodeCache() {}
   typedef unibrow::Utf8Decoder<512> Utf8Decoder;
@@ -145,6 +148,56 @@ class UnicodeCache {
   StaticResource<Utf8Decoder> utf8_decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(UnicodeCache);
+};
+
+
+// ---------------------------------------------------------------------
+// DuplicateFinder discovers duplicate symbols.
+
+class DuplicateFinder {
+ public:
+  explicit DuplicateFinder(UnicodeCache* constants)
+      : unicode_constants_(constants),
+        backing_store_(16),
+        map_(&Match) { }
+
+  int AddAsciiSymbol(Vector<const char> key, int value);
+  int AddUtf16Symbol(Vector<const uint16_t> key, int value);
+  // Add a a number literal by converting it (if necessary)
+  // to the string that ToString(ToNumber(literal)) would generate.
+  // and then adding that string with AddAsciiSymbol.
+  // This string is the actual value used as key in an object literal,
+  // and the one that must be different from the other keys.
+  int AddNumber(Vector<const char> key, int value);
+
+ private:
+  int AddSymbol(Vector<const byte> key, bool is_ascii, int value);
+  // Backs up the key and its length in the backing store.
+  // The backup is stored with a base 127 encoding of the
+  // length (plus a bit saying whether the string is ASCII),
+  // followed by the bytes of the key.
+  byte* BackupKey(Vector<const byte> key, bool is_ascii);
+
+  // Compare two encoded keys (both pointing into the backing store)
+  // for having the same base-127 encoded lengths and ASCII-ness,
+  // and then having the same 'length' bytes following.
+  static bool Match(void* first, void* second);
+  // Creates a hash from a sequence of bytes.
+  static uint32_t Hash(Vector<const byte> key, bool is_ascii);
+  // Checks whether a string containing a JS number is its canonical
+  // form.
+  static bool IsNumberCanonical(Vector<const char> key);
+
+  // Size of buffer. Sufficient for using it to call DoubleToCString in
+  // from conversions.h.
+  static const int kBufferSize = 100;
+
+  UnicodeCache* unicode_constants_;
+  // Backing store used to store strings used as hashmap keys.
+  SequenceCollector<unsigned char> backing_store_;
+  HashMap map_;
+  // Buffer used for string->number->canonical string conversions.
+  char number_buffer_[kBufferSize];
 };
 
 
@@ -177,6 +230,11 @@ class LiteralBuffer {
   }
 
   bool is_ascii() { return is_ascii_; }
+
+  bool is_contextual_keyword(Vector<const char> keyword) {
+    return is_ascii() && keyword.length() == position_ &&
+        (memcmp(keyword.start(), backing_store_.start(), position_) == 0);
+  }
 
   Vector<const uc16> utf16_literal() {
     ASSERT(!is_ascii_);
@@ -325,6 +383,10 @@ class Scanner {
     ASSERT_NOT_NULL(current_.literal_chars);
     return current_.literal_chars->is_ascii();
   }
+  bool is_literal_contextual_keyword(Vector<const char> keyword) {
+    ASSERT_NOT_NULL(current_.literal_chars);
+    return current_.literal_chars->is_contextual_keyword(keyword);
+  }
   int literal_length() const {
     ASSERT_NOT_NULL(current_.literal_chars);
     return current_.literal_chars->length();
@@ -361,6 +423,10 @@ class Scanner {
     ASSERT_NOT_NULL(next_.literal_chars);
     return next_.literal_chars->is_ascii();
   }
+  bool is_next_contextual_keyword(Vector<const char> keyword) {
+    ASSERT_NOT_NULL(next_.literal_chars);
+    return next_.literal_chars->is_contextual_keyword(keyword);
+  }
   int next_literal_length() const {
     ASSERT_NOT_NULL(next_.literal_chars);
     return next_.literal_chars->length();
@@ -395,7 +461,12 @@ class Scanner {
   void SetHarmonyModules(bool modules) {
     harmony_modules_ = modules;
   }
-
+  bool HarmonyNumericLiterals() const {
+    return harmony_numeric_literals_;
+  }
+  void SetHarmonyNumericLiterals(bool numeric_literals) {
+    harmony_numeric_literals_ = numeric_literals;
+  }
 
   // Returns true if there was a line terminator before the peek'ed token,
   // possibly inside a multi-line comment.
@@ -544,6 +615,8 @@ class Scanner {
   bool harmony_scoping_;
   // Whether we scan 'module', 'import', 'export' as keywords.
   bool harmony_modules_;
+  // Whether we scan 0o777 and 0b111 as numbers.
+  bool harmony_numeric_literals_;
 };
 
 } }  // namespace v8::internal

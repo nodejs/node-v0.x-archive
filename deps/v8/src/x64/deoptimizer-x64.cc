@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_X64)
+#if V8_TARGET_ARCH_X64
 
 #include "codegen.h"
 #include "deoptimizer.h"
@@ -42,26 +42,11 @@ const int Deoptimizer::table_entry_size_ = 10;
 
 
 int Deoptimizer::patch_size() {
-  return Assembler::kCallInstructionLength;
+  return Assembler::kCallSequenceLength;
 }
 
 
-void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
-    JSFunction* function) {
-  Isolate* isolate = function->GetIsolate();
-  HandleScope scope(isolate);
-  AssertNoAllocation no_allocation;
-
-  ASSERT(function->IsOptimized());
-  ASSERT(function->FunctionsInFunctionListShareSameCode());
-
-  // The optimized code is going to be patched, so we cannot use it
-  // any more.  Play safe and reset the whole cache.
-  function->shared()->ClearOptimizedCodeMap();
-
-  // Get the optimized code.
-  Code* code = function->code();
-
+void Deoptimizer::PatchCodeForDeoptimization(Isolate* isolate, Code* code) {
   // Invalidate the relocation information, as it will become invalid by the
   // code patching below, and is not needed any more.
   code->InvalidateRelocation();
@@ -72,7 +57,7 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
   // before the safepoint table (space was allocated there when the Code
   // object was created, if necessary).
 
-  Address instruction_start = function->code()->instruction_start();
+  Address instruction_start = code->instruction_start();
 #ifdef DEBUG
   Address prev_call_address = NULL;
 #endif
@@ -84,7 +69,7 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
     Address call_address = instruction_start + deopt_data->Pc(i)->value();
     // There is room enough to write a long call instruction because we pad
     // LLazyBailout instructions with nops if necessary.
-    CodePatcher patcher(call_address, Assembler::kCallInstructionLength);
+    CodePatcher patcher(call_address, Assembler::kCallSequenceLength);
     patcher.masm()->Call(GetDeoptimizationEntry(isolate, i, LAZY),
                          RelocInfo::NONE64);
     ASSERT(prev_call_address == NULL ||
@@ -93,449 +78,6 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
 #ifdef DEBUG
     prev_call_address = call_address;
 #endif
-  }
-
-  // Add the deoptimizing code to the list.
-  DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = isolate->deoptimizer_data();
-  node->set_next(data->deoptimizing_code_list_);
-  data->deoptimizing_code_list_ = node;
-
-  // We might be in the middle of incremental marking with compaction.
-  // Tell collector to treat this code object in a special way and
-  // ignore all slots that might have been recorded on it.
-  isolate->heap()->mark_compact_collector()->InvalidateCode(code);
-
-  ReplaceCodeForRelatedFunctions(function, code);
-
-  if (FLAG_trace_deopt) {
-    PrintF("[forced deoptimization: ");
-    function->PrintName();
-    PrintF(" / %" V8PRIxPTR "]\n", reinterpret_cast<intptr_t>(function));
-  }
-}
-
-
-static const byte kJnsInstruction = 0x79;
-static const byte kJnsOffset = 0x1d;
-static const byte kCallInstruction = 0xe8;
-static const byte kNopByteOne = 0x66;
-static const byte kNopByteTwo = 0x90;
-
-// The back edge bookkeeping code matches the pattern:
-//
-//     add <profiling_counter>, <-delta>
-//     jns ok
-//     call <stack guard>
-//   ok:
-//
-// We will patch away the branch so the code is:
-//
-//     add <profiling_counter>, <-delta>  ;; Not changed
-//     nop
-//     nop
-//     call <on-stack replacment>
-//   ok:
-
-void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
-                                       Address pc_after,
-                                       Code* interrupt_code,
-                                       Code* replacement_code) {
-  ASSERT(!InterruptCodeIsPatched(unoptimized_code,
-                                 pc_after,
-                                 interrupt_code,
-                                 replacement_code));
-  // Turn the jump into nops.
-  Address call_target_address = pc_after - kIntSize;
-  *(call_target_address - 3) = kNopByteOne;
-  *(call_target_address - 2) = kNopByteTwo;
-  // Replace the call address.
-  Assembler::set_target_address_at(call_target_address,
-                                   replacement_code->entry());
-
-  unoptimized_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
-      unoptimized_code, call_target_address, replacement_code);
-}
-
-
-void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
-                                        Address pc_after,
-                                        Code* interrupt_code,
-                                        Code* replacement_code) {
-  ASSERT(InterruptCodeIsPatched(unoptimized_code,
-                                pc_after,
-                                interrupt_code,
-                                replacement_code));
-  // Restore the original jump.
-  Address call_target_address = pc_after - kIntSize;
-  *(call_target_address - 3) = kJnsInstruction;
-  *(call_target_address - 2) = kJnsOffset;
-  // Restore the original call address.
-  Assembler::set_target_address_at(call_target_address,
-                                   interrupt_code->entry());
-
-  interrupt_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
-      unoptimized_code, call_target_address, interrupt_code);
-}
-
-
-#ifdef DEBUG
-bool Deoptimizer::InterruptCodeIsPatched(Code* unoptimized_code,
-                                         Address pc_after,
-                                         Code* interrupt_code,
-                                         Code* replacement_code) {
-  Address call_target_address = pc_after - kIntSize;
-  ASSERT_EQ(kCallInstruction, *(call_target_address - 1));
-  if (*(call_target_address - 3) == kNopByteOne) {
-    ASSERT(replacement_code->entry() ==
-           Assembler::target_address_at(call_target_address));
-    ASSERT_EQ(kNopByteTwo,      *(call_target_address - 2));
-    return true;
-  } else {
-    ASSERT_EQ(interrupt_code->entry(),
-              Assembler::target_address_at(call_target_address));
-    ASSERT_EQ(kJnsInstruction,  *(call_target_address - 3));
-    ASSERT_EQ(kJnsOffset,       *(call_target_address - 2));
-    return false;
-  }
-}
-#endif  // DEBUG
-
-
-static int LookupBailoutId(DeoptimizationInputData* data, BailoutId ast_id) {
-  ByteArray* translations = data->TranslationByteArray();
-  int length = data->DeoptCount();
-  for (int i = 0; i < length; i++) {
-    if (data->AstId(i) == ast_id) {
-      TranslationIterator it(translations,  data->TranslationIndex(i)->value());
-      int value = it.Next();
-      ASSERT(Translation::BEGIN == static_cast<Translation::Opcode>(value));
-      // Read the number of frames.
-      value = it.Next();
-      if (value == 1) return i;
-    }
-  }
-  UNREACHABLE();
-  return -1;
-}
-
-
-void Deoptimizer::DoComputeOsrOutputFrame() {
-  DeoptimizationInputData* data = DeoptimizationInputData::cast(
-      compiled_code_->deoptimization_data());
-  unsigned ast_id = data->OsrAstId()->value();
-  // TODO(kasperl): This should not be the bailout_id_. It should be
-  // the ast id. Confusing.
-  ASSERT(bailout_id_ == ast_id);
-
-  int bailout_id = LookupBailoutId(data, BailoutId(ast_id));
-  unsigned translation_index = data->TranslationIndex(bailout_id)->value();
-  ByteArray* translations = data->TranslationByteArray();
-
-  TranslationIterator iterator(translations, translation_index);
-  Translation::Opcode opcode =
-      static_cast<Translation::Opcode>(iterator.Next());
-  ASSERT(Translation::BEGIN == opcode);
-  USE(opcode);
-  int count = iterator.Next();
-  iterator.Skip(1);  // Drop JS frame count.
-  ASSERT(count == 1);
-  USE(count);
-
-  opcode = static_cast<Translation::Opcode>(iterator.Next());
-  USE(opcode);
-  ASSERT(Translation::JS_FRAME == opcode);
-  unsigned node_id = iterator.Next();
-  USE(node_id);
-  ASSERT(node_id == ast_id);
-  int closure_id = iterator.Next();
-  USE(closure_id);
-  ASSERT_EQ(Translation::kSelfLiteralId, closure_id);
-  unsigned height = iterator.Next();
-  unsigned height_in_bytes = height * kPointerSize;
-  USE(height_in_bytes);
-
-  unsigned fixed_size = ComputeFixedSize(function_);
-  unsigned input_frame_size = input_->GetFrameSize();
-  ASSERT(fixed_size + height_in_bytes == input_frame_size);
-
-  unsigned stack_slot_size = compiled_code_->stack_slots() * kPointerSize;
-  unsigned outgoing_height = data->ArgumentsStackHeight(bailout_id)->value();
-  unsigned outgoing_size = outgoing_height * kPointerSize;
-  unsigned output_frame_size = fixed_size + stack_slot_size + outgoing_size;
-  ASSERT(outgoing_size == 0);  // OSR does not happen in the middle of a call.
-
-  if (FLAG_trace_osr) {
-    PrintF("[on-stack replacement: begin 0x%08" V8PRIxPTR " ",
-           reinterpret_cast<intptr_t>(function_));
-    function_->PrintName();
-    PrintF(" => node=%u, frame=%d->%d]\n",
-           ast_id,
-           input_frame_size,
-           output_frame_size);
-  }
-
-  // There's only one output frame in the OSR case.
-  output_count_ = 1;
-  output_ = new FrameDescription*[1];
-  output_[0] = new(output_frame_size) FrameDescription(
-      output_frame_size, function_);
-  output_[0]->SetFrameType(StackFrame::JAVA_SCRIPT);
-
-  // Clear the incoming parameters in the optimized frame to avoid
-  // confusing the garbage collector.
-  unsigned output_offset = output_frame_size - kPointerSize;
-  int parameter_count = function_->shared()->formal_parameter_count() + 1;
-  for (int i = 0; i < parameter_count; ++i) {
-    output_[0]->SetFrameSlot(output_offset, 0);
-    output_offset -= kPointerSize;
-  }
-
-  // Translate the incoming parameters. This may overwrite some of the
-  // incoming argument slots we've just cleared.
-  int input_offset = input_frame_size - kPointerSize;
-  bool ok = true;
-  int limit = input_offset - (parameter_count * kPointerSize);
-  while (ok && input_offset > limit) {
-    ok = DoOsrTranslateCommand(&iterator, &input_offset);
-  }
-
-  // There are no translation commands for the caller's pc and fp, the
-  // context, and the function.  Set them up explicitly.
-  for (int i = StandardFrameConstants::kCallerPCOffset;
-       ok && i >=  StandardFrameConstants::kMarkerOffset;
-       i -= kPointerSize) {
-    intptr_t input_value = input_->GetFrameSlot(input_offset);
-    if (FLAG_trace_osr) {
-      const char* name = "UNKNOWN";
-      switch (i) {
-        case StandardFrameConstants::kCallerPCOffset:
-          name = "caller's pc";
-          break;
-        case StandardFrameConstants::kCallerFPOffset:
-          name = "fp";
-          break;
-        case StandardFrameConstants::kContextOffset:
-          name = "context";
-          break;
-        case StandardFrameConstants::kMarkerOffset:
-          name = "function";
-          break;
-      }
-      PrintF("    [rsp + %d] <- 0x%08" V8PRIxPTR " ; [rsp + %d] "
-             "(fixed part - %s)\n",
-             output_offset,
-             input_value,
-             input_offset,
-             name);
-    }
-    output_[0]->SetFrameSlot(output_offset, input_->GetFrameSlot(input_offset));
-    input_offset -= kPointerSize;
-    output_offset -= kPointerSize;
-  }
-
-  // Translate the rest of the frame.
-  while (ok && input_offset >= 0) {
-    ok = DoOsrTranslateCommand(&iterator, &input_offset);
-  }
-
-  // If translation of any command failed, continue using the input frame.
-  if (!ok) {
-    delete output_[0];
-    output_[0] = input_;
-    output_[0]->SetPc(reinterpret_cast<intptr_t>(from_));
-  } else {
-    // Set up the frame pointer and the context pointer.
-    output_[0]->SetRegister(rbp.code(), input_->GetRegister(rbp.code()));
-    output_[0]->SetRegister(rsi.code(), input_->GetRegister(rsi.code()));
-
-    unsigned pc_offset = data->OsrPcOffset()->value();
-    intptr_t pc = reinterpret_cast<intptr_t>(
-        compiled_code_->entry() + pc_offset);
-    output_[0]->SetPc(pc);
-  }
-  Code* continuation =
-      function_->GetIsolate()->builtins()->builtin(Builtins::kNotifyOSR);
-  output_[0]->SetContinuation(
-      reinterpret_cast<intptr_t>(continuation->entry()));
-
-  if (FLAG_trace_osr) {
-    PrintF("[on-stack replacement translation %s: 0x%08" V8PRIxPTR " ",
-           ok ? "finished" : "aborted",
-           reinterpret_cast<intptr_t>(function_));
-    function_->PrintName();
-    PrintF(" => pc=0x%0" V8PRIxPTR "]\n", output_[0]->GetPc());
-  }
-}
-
-
-void Deoptimizer::DoComputeJSFrame(TranslationIterator* iterator,
-                                   int frame_index) {
-  BailoutId node_id = BailoutId(iterator->Next());
-  JSFunction* function;
-  if (frame_index != 0) {
-    function = JSFunction::cast(ComputeLiteral(iterator->Next()));
-  } else {
-    int closure_id = iterator->Next();
-    USE(closure_id);
-    ASSERT_EQ(Translation::kSelfLiteralId, closure_id);
-    function = function_;
-  }
-  unsigned height = iterator->Next();
-  unsigned height_in_bytes = height * kPointerSize;
-  if (trace_) {
-    PrintF("  translating ");
-    function->PrintName();
-    PrintF(" => node=%d, height=%d\n", node_id.ToInt(), height_in_bytes);
-  }
-
-  // The 'fixed' part of the frame consists of the incoming parameters and
-  // the part described by JavaScriptFrameConstants.
-  unsigned fixed_frame_size = ComputeFixedSize(function);
-  unsigned input_frame_size = input_->GetFrameSize();
-  unsigned output_frame_size = height_in_bytes + fixed_frame_size;
-
-  // Allocate and store the output frame description.
-  FrameDescription* output_frame =
-      new(output_frame_size) FrameDescription(output_frame_size, function);
-  output_frame->SetFrameType(StackFrame::JAVA_SCRIPT);
-
-  bool is_bottommost = (0 == frame_index);
-  bool is_topmost = (output_count_ - 1 == frame_index);
-  ASSERT(frame_index >= 0 && frame_index < output_count_);
-  ASSERT(output_[frame_index] == NULL);
-  output_[frame_index] = output_frame;
-
-  // The top address for the bottommost output frame can be computed from
-  // the input frame pointer and the output frame's height.  For all
-  // subsequent output frames, it can be computed from the previous one's
-  // top address and the current frame's size.
-  intptr_t top_address;
-  if (is_bottommost) {
-    // 2 = context and function in the frame.
-    top_address =
-        input_->GetRegister(rbp.code()) - (2 * kPointerSize) - height_in_bytes;
-  } else {
-    top_address = output_[frame_index - 1]->GetTop() - output_frame_size;
-  }
-  output_frame->SetTop(top_address);
-
-  // Compute the incoming parameter translation.
-  int parameter_count = function->shared()->formal_parameter_count() + 1;
-  unsigned output_offset = output_frame_size;
-  unsigned input_offset = input_frame_size;
-  for (int i = 0; i < parameter_count; ++i) {
-    output_offset -= kPointerSize;
-    DoTranslateCommand(iterator, frame_index, output_offset);
-  }
-  input_offset -= (parameter_count * kPointerSize);
-
-  // There are no translation commands for the caller's pc and fp, the
-  // context, and the function.  Synthesize their values and set them up
-  // explicitly.
-  //
-  // The caller's pc for the bottommost output frame is the same as in the
-  // input frame.  For all subsequent output frames, it can be read from the
-  // previous one.  This frame's pc can be computed from the non-optimized
-  // function code and AST id of the bailout.
-  output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
-  intptr_t value;
-  if (is_bottommost) {
-    value = input_->GetFrameSlot(input_offset);
-  } else {
-    value = output_[frame_index - 1]->GetPc();
-  }
-  output_frame->SetFrameSlot(output_offset, value);
-  if (trace_) {
-    PrintF("    0x%08" V8PRIxPTR ": [top + %d] <- 0x%08"
-           V8PRIxPTR  " ; caller's pc\n",
-           top_address + output_offset, output_offset, value);
-  }
-
-  // The caller's frame pointer for the bottommost output frame is the same
-  // as in the input frame.  For all subsequent output frames, it can be
-  // read from the previous one.  Also compute and set this frame's frame
-  // pointer.
-  output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
-  if (is_bottommost) {
-    value = input_->GetFrameSlot(input_offset);
-  } else {
-    value = output_[frame_index - 1]->GetFp();
-  }
-  output_frame->SetFrameSlot(output_offset, value);
-  intptr_t fp_value = top_address + output_offset;
-  ASSERT(!is_bottommost || input_->GetRegister(rbp.code()) == fp_value);
-  output_frame->SetFp(fp_value);
-  if (is_topmost) output_frame->SetRegister(rbp.code(), fp_value);
-  if (trace_) {
-    PrintF("    0x%08" V8PRIxPTR ": [top + %d] <- 0x%08"
-           V8PRIxPTR " ; caller's fp\n",
-           fp_value, output_offset, value);
-  }
-
-  // For the bottommost output frame the context can be gotten from the input
-  // frame. For all subsequent output frames it can be gotten from the function
-  // so long as we don't inline functions that need local contexts.
-  output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
-  if (is_bottommost) {
-    value = input_->GetFrameSlot(input_offset);
-  } else {
-    value = reinterpret_cast<intptr_t>(function->context());
-  }
-  output_frame->SetFrameSlot(output_offset, value);
-  output_frame->SetContext(value);
-  if (is_topmost) output_frame->SetRegister(rsi.code(), value);
-  if (trace_) {
-    PrintF("    0x%08" V8PRIxPTR ": [top + %d] <- 0x%08"
-           V8PRIxPTR "; context\n",
-           top_address + output_offset, output_offset, value);
-  }
-
-  // The function was mentioned explicitly in the BEGIN_FRAME.
-  output_offset -= kPointerSize;
-  input_offset -= kPointerSize;
-  value = reinterpret_cast<intptr_t>(function);
-  // The function for the bottommost output frame should also agree with the
-  // input frame.
-  ASSERT(!is_bottommost || input_->GetFrameSlot(input_offset) == value);
-  output_frame->SetFrameSlot(output_offset, value);
-  if (trace_) {
-    PrintF("    0x%08" V8PRIxPTR ": [top + %d] <- 0x%08"
-           V8PRIxPTR "; function\n",
-           top_address + output_offset, output_offset, value);
-  }
-
-  // Translate the rest of the frame.
-  for (unsigned i = 0; i < height; ++i) {
-    output_offset -= kPointerSize;
-    DoTranslateCommand(iterator, frame_index, output_offset);
-  }
-  ASSERT(0 == output_offset);
-
-  // Compute this frame's PC, state, and continuation.
-  Code* non_optimized_code = function->shared()->code();
-  FixedArray* raw_data = non_optimized_code->deoptimization_data();
-  DeoptimizationOutputData* data = DeoptimizationOutputData::cast(raw_data);
-  Address start = non_optimized_code->instruction_start();
-  unsigned pc_and_state = GetOutputInfo(data, node_id, function->shared());
-  unsigned pc_offset = FullCodeGenerator::PcField::decode(pc_and_state);
-  intptr_t pc_value = reinterpret_cast<intptr_t>(start + pc_offset);
-  output_frame->SetPc(pc_value);
-
-  FullCodeGenerator::State state =
-      FullCodeGenerator::StateField::decode(pc_and_state);
-  output_frame->SetState(Smi::FromInt(state));
-
-  // Set the continuation for the topmost frame.
-  if (is_topmost && bailout_type_ != DEBUGGER) {
-    Code* continuation = (bailout_type_ == EAGER)
-        ? isolate_->builtins()->builtin(Builtins::kNotifyDeoptimized)
-        : isolate_->builtins()->builtin(Builtins::kNotifyLazyDeoptimized);
-    output_frame->SetContinuation(
-        reinterpret_cast<intptr_t>(continuation->entry()));
   }
 }
 
@@ -564,10 +106,7 @@ void Deoptimizer::SetPlatformCompiledStubRegisters(
     FrameDescription* output_frame, CodeStubInterfaceDescriptor* descriptor) {
   intptr_t handler =
       reinterpret_cast<intptr_t>(descriptor->deoptimization_handler_);
-  int params = descriptor->register_param_count_;
-  if (descriptor->stack_parameter_count_ != NULL) {
-    params++;
-  }
+  int params = descriptor->environment_length();
   output_frame->SetRegister(rax.code(), params);
   output_frame->SetRegister(rbx.code(), handler);
 }
@@ -578,6 +117,12 @@ void Deoptimizer::CopyDoubleRegisters(FrameDescription* output_frame) {
     double double_value = input_->GetDoubleRegister(i);
     output_frame->SetDoubleRegister(i, double_value);
   }
+}
+
+
+bool Deoptimizer::HasAlignmentPadding(JSFunction* function) {
+  // There is no dynamic alignment padding on x64 in the input frame.
+  return false;
 }
 
 
@@ -609,39 +154,19 @@ void Deoptimizer::EntryGenerator::Generate() {
   const int kSavedRegistersAreaSize = kNumberOfRegisters * kPointerSize +
                                       kDoubleRegsSize;
 
-  // When calling new_deoptimizer_function we need to pass the last argument
-  // on the stack on windows and in r8 on linux. The remaining arguments are
-  // all passed in registers (different ones on linux and windows though).
-
-#ifdef _WIN64
-  Register arg4 = r9;
-  Register arg3 = r8;
-  Register arg2 = rdx;
-  Register arg1 = rcx;
-#else
-  Register arg4 = rcx;
-  Register arg3 = rdx;
-  Register arg2 = rsi;
-  Register arg1 = rdi;
-#endif
-
   // We use this to keep the value of the fifth argument temporarily.
   // Unfortunately we can't store it directly in r8 (used for passing
   // this on linux), since it is another parameter passing register on windows.
   Register arg5 = r11;
 
   // Get the bailout id from the stack.
-  __ movq(arg3, Operand(rsp, kSavedRegistersAreaSize));
+  __ movq(arg_reg_3, Operand(rsp, kSavedRegistersAreaSize));
 
-  // Get the address of the location in the code object if possible
+  // Get the address of the location in the code object
   // and compute the fp-to-sp delta in register arg5.
-  if (type() == EAGER) {
-    __ Set(arg4, 0);
-    __ lea(arg5, Operand(rsp, kSavedRegistersAreaSize + 1 * kPointerSize));
-  } else {
-    __ movq(arg4, Operand(rsp, kSavedRegistersAreaSize + 1 * kPointerSize));
-    __ lea(arg5, Operand(rsp, kSavedRegistersAreaSize + 2 * kPointerSize));
-  }
+  __ movq(arg_reg_4,
+          Operand(rsp, kSavedRegistersAreaSize + 1 * kPointerSize));
+  __ lea(arg5, Operand(rsp, kSavedRegistersAreaSize + 2 * kPointerSize));
 
   __ subq(arg5, rbp);
   __ neg(arg5);
@@ -649,26 +174,23 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Allocate a new deoptimizer object.
   __ PrepareCallCFunction(6);
   __ movq(rax, Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
-  __ movq(arg1, rax);
-  __ Set(arg2, type());
+  __ movq(arg_reg_1, rax);
+  __ Set(arg_reg_2, type());
   // Args 3 and 4 are already in the right registers.
 
   // On windows put the arguments on the stack (PrepareCallCFunction
   // has created space for this). On linux pass the arguments in r8 and r9.
 #ifdef _WIN64
   __ movq(Operand(rsp, 4 * kPointerSize), arg5);
-  __ LoadAddress(arg5, ExternalReference::isolate_address());
+  __ LoadAddress(arg5, ExternalReference::isolate_address(isolate()));
   __ movq(Operand(rsp, 5 * kPointerSize), arg5);
 #else
   __ movq(r8, arg5);
-  __ LoadAddress(r9, ExternalReference::isolate_address());
+  __ LoadAddress(r9, ExternalReference::isolate_address(isolate()));
 #endif
 
-  Isolate* isolate = masm()->isolate();
-
-  {
-    AllowExternalCallThatCantCauseGC scope(masm());
-    __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
+  { AllowExternalCallThatCantCauseGC scope(masm());
+    __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate()), 6);
   }
   // Preserve deoptimizer object in register rax and get the input
   // frame descriptor pointer.
@@ -687,12 +209,8 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ pop(Operand(rbx, dst_offset));
   }
 
-  // Remove the bailout id from the stack.
-  if (type() == EAGER) {
-    __ addq(rsp, Immediate(kPointerSize));
-  } else {
-    __ addq(rsp, Immediate(2 * kPointerSize));
-  }
+  // Remove the bailout id and return address from the stack.
+  __ addq(rsp, Immediate(2 * kPointerSize));
 
   // Compute a pointer to the unwinding limit in register rcx; that is
   // the first stack slot not part of the input frame.
@@ -716,12 +234,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Compute the output frame in the deoptimizer.
   __ push(rax);
   __ PrepareCallCFunction(2);
-  __ movq(arg1, rax);
-  __ LoadAddress(arg2, ExternalReference::isolate_address());
+  __ movq(arg_reg_1, rax);
+  __ LoadAddress(arg_reg_2, ExternalReference::isolate_address(isolate()));
   {
     AllowExternalCallThatCantCauseGC scope(masm());
     __ CallCFunction(
-        ExternalReference::compute_output_frames_function(isolate), 2);
+        ExternalReference::compute_output_frames_function(isolate()), 2);
   }
   __ pop(rax);
 
@@ -732,7 +250,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // last FrameDescription**.
   __ movl(rdx, Operand(rax, Deoptimizer::output_count_offset()));
   __ movq(rax, Operand(rax, Deoptimizer::output_offset()));
-  __ lea(rdx, Operand(rax, rdx, times_8, 0));
+  __ lea(rdx, Operand(rax, rdx, times_pointer_size, 0));
   __ jmp(&outer_loop_header);
   __ bind(&outer_push_loop);
   // Inner loop state: rbx = current FrameDescription*, rcx = loop index.
@@ -757,9 +275,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   }
 
   // Push state, pc, and continuation from the last output frame.
-  if (type() != OSR) {
-    __ push(Operand(rbx, FrameDescription::state_offset()));
-  }
+  __ push(Operand(rbx, FrameDescription::state_offset()));
   __ push(Operand(rbx, FrameDescription::pc_offset()));
   __ push(Operand(rbx, FrameDescription::continuation_offset()));
 
@@ -802,6 +318,17 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   }
   __ bind(&done);
 }
+
+
+void FrameDescription::SetCallerPc(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
+
+void FrameDescription::SetCallerFp(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
 
 #undef __
 

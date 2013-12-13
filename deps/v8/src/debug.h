@@ -38,6 +38,7 @@
 #include "frames-inl.h"
 #include "hashmap.h"
 #include "platform.h"
+#include "platform/socket.h"
 #include "string-stream.h"
 #include "v8threads.h"
 
@@ -79,6 +80,14 @@ enum BreakLocatorType {
 };
 
 
+// The different types of breakpoint position alignments.
+// Must match Debug.BreakPositionAlignment in debug-debugger.js
+enum BreakPositionAlignment {
+  STATEMENT_ALIGNED = 0,
+  BREAK_POSITION_ALIGNED = 1
+};
+
+
 // Class for iterating through the break points in a function and changing
 // them.
 class BreakLocationIterator {
@@ -90,13 +99,15 @@ class BreakLocationIterator {
   void Next();
   void Next(int count);
   void FindBreakLocationFromAddress(Address pc);
-  void FindBreakLocationFromPosition(int position);
+  void FindBreakLocationFromPosition(int position,
+      BreakPositionAlignment alignment);
   void Reset();
   bool Done() const;
   void SetBreakPoint(Handle<Object> break_point_object);
   void ClearBreakPoint(Handle<Object> break_point_object);
   void SetOneShot();
   void ClearOneShot();
+  bool IsStepInLocation(Isolate* isolate);
   void PrepareStepIn(Isolate* isolate);
   bool IsExit() const;
   bool HasBreakPoint();
@@ -164,7 +175,8 @@ class BreakLocationIterator {
 // the cache is the script id.
 class ScriptCache : private HashMap {
  public:
-  ScriptCache() : HashMap(ScriptMatch), collected_scripts_(10) {}
+  explicit ScriptCache(Isolate* isolate)
+    : HashMap(ScriptMatch), isolate_(isolate), collected_scripts_(10) {}
   virtual ~ScriptCache() { Clear(); }
 
   // Add script to the cache.
@@ -190,9 +202,10 @@ class ScriptCache : private HashMap {
 
   // Weak handle callback for scripts in the cache.
   static void HandleWeakScript(v8::Isolate* isolate,
-                               v8::Persistent<v8::Value> obj,
+                               v8::Persistent<v8::Value>* obj,
                                void* data);
 
+  Isolate* isolate_;
   // List used during GC to temporarily store id's of collected scripts.
   List<int> collected_scripts_;
 };
@@ -240,7 +253,8 @@ class Debug {
                      int* source_position);
   bool SetBreakPointForScript(Handle<Script> script,
                               Handle<Object> break_point_object,
-                              int* source_position);
+                              int* source_position,
+                              BreakPositionAlignment alignment);
   void ClearBreakPoint(Handle<Object> break_point_object);
   void ClearAllBreakPoints();
   void FloodWithOneShot(Handle<JSFunction> function);
@@ -248,7 +262,9 @@ class Debug {
   void FloodHandlerWithOneShot();
   void ChangeBreakOnException(ExceptionBreakType type, bool enable);
   bool IsBreakOnException(ExceptionBreakType type);
-  void PrepareStep(StepAction step_action, int step_count);
+  void PrepareStep(StepAction step_action,
+                   int step_count,
+                   StackFrame::Id frame_id);
   void ClearStepping();
   void ClearStepOut();
   bool IsStepping() { return thread_local_.step_count_ > 0; }
@@ -283,7 +299,8 @@ class Debug {
   static Handle<Code> FindDebugBreak(Handle<Code> code, RelocInfo::Mode mode);
 
   static Handle<Object> GetSourceBreakLocations(
-      Handle<SharedFunctionInfo> shared);
+      Handle<SharedFunctionInfo> shared,
+      BreakPositionAlignment position_aligment);
 
   // Getter for the debug_context.
   inline Handle<Context> debug_context() { return debug_context_; }
@@ -387,7 +404,7 @@ class Debug {
 
   // Passed to MakeWeak.
   static void HandleWeakDebugInfo(v8::Isolate* isolate,
-                                  v8::Persistent<v8::Value> obj,
+                                  v8::Persistent<v8::Value>* obj,
                                   void* data);
 
   friend class Debugger;
@@ -418,6 +435,7 @@ class Debug {
   static void GenerateStoreICDebugBreak(MacroAssembler* masm);
   static void GenerateKeyedLoadICDebugBreak(MacroAssembler* masm);
   static void GenerateKeyedStoreICDebugBreak(MacroAssembler* masm);
+  static void GenerateCompareNilICDebugBreak(MacroAssembler* masm);
   static void GenerateReturnDebugBreak(MacroAssembler* masm);
   static void GenerateCallFunctionStubDebugBreak(MacroAssembler* masm);
   static void GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm);
@@ -519,7 +537,7 @@ class Debug {
   explicit Debug(Isolate* isolate);
   ~Debug();
 
-  static bool CompileDebuggerScript(int index);
+  static bool CompileDebuggerScript(Isolate* isolate, int index);
   void ClearOneShot();
   void ActivateStepIn(StackFrame* frame);
   void ClearStepIn();
@@ -651,6 +669,7 @@ class MessageImpl: public v8::Debug::Message {
   virtual v8::Handle<v8::String> GetJSON() const;
   virtual v8::Handle<v8::Context> GetEventContext() const;
   virtual v8::Debug::ClientData* GetClientData() const;
+  virtual v8::Isolate* GetIsolate() const;
 
  private:
   MessageImpl(bool is_event,
@@ -749,7 +768,6 @@ class MessageDispatchHelperThread;
 class LockingCommandMessageQueue BASE_EMBEDDED {
  public:
   LockingCommandMessageQueue(Logger* logger, int size);
-  ~LockingCommandMessageQueue();
   bool IsEmpty() const;
   CommandMessage Get();
   void Put(const CommandMessage& message);
@@ -757,7 +775,7 @@ class LockingCommandMessageQueue BASE_EMBEDDED {
  private:
   Logger* logger_;
   CommandMessageQueue queue_;
-  Mutex* lock_;
+  mutable Mutex mutex_;
   DISALLOW_COPY_AND_ASSIGN(LockingCommandMessageQueue);
 };
 
@@ -808,7 +826,7 @@ class Debugger {
   void SetEventListener(Handle<Object> callback, Handle<Object> data);
   void SetMessageHandler(v8::Debug::MessageHandler2 handler);
   void SetHostDispatchHandler(v8::Debug::HostDispatchHandler handler,
-                              int period);
+                              TimeDelta period);
   void SetDebugMessageDispatchHandler(
       v8::Debug::DebugMessageDispatchHandler handler,
       bool provide_locker);
@@ -850,7 +868,7 @@ class Debugger {
   friend void ForceUnloadDebugger();  // In test-debug.cc
 
   inline bool EventActive(v8::DebugEvent event) {
-    ScopedLock with(debugger_access_);
+    LockGuard<RecursiveMutex> lock_guard(debugger_access_);
 
     // Check whether the message handler was been cleared.
     if (debugger_unload_pending_) {
@@ -905,7 +923,7 @@ class Debugger {
                            Handle<Object> event_data);
   void ListenersChanged();
 
-  Mutex* debugger_access_;  // Mutex guarding debugger variables.
+  RecursiveMutex* debugger_access_;  // Mutex guarding debugger variables.
   Handle<Object> event_listener_;  // Global handle to listener.
   Handle<Object> event_listener_data_;
   bool compiling_natives_;  // Are we compiling natives?
@@ -916,16 +934,16 @@ class Debugger {
   v8::Debug::MessageHandler2 message_handler_;
   bool debugger_unload_pending_;  // Was message handler cleared?
   v8::Debug::HostDispatchHandler host_dispatch_handler_;
-  Mutex* dispatch_handler_access_;  // Mutex guarding dispatch handler.
+  Mutex dispatch_handler_access_;  // Mutex guarding dispatch handler.
   v8::Debug::DebugMessageDispatchHandler debug_message_dispatch_handler_;
   MessageDispatchHelperThread* message_dispatch_helper_thread_;
-  int host_dispatch_micros_;
+  TimeDelta host_dispatch_period_;
 
   DebuggerAgent* agent_;
 
   static const int kQueueInitialSize = 4;
   LockingCommandMessageQueue command_queue_;
-  Semaphore* command_received_;  // Signaled for each command received.
+  Semaphore command_received_;  // Signaled for each command received.
   LockingCommandMessageQueue event_command_queue_;
 
   Isolate* isolate_;
@@ -943,7 +961,7 @@ class Debugger {
 // some reason could not be entered FailedToEnter will return true.
 class EnterDebugger BASE_EMBEDDED {
  public:
-  EnterDebugger();
+  explicit EnterDebugger(Isolate* isolate);
   ~EnterDebugger();
 
   // Check whether the debugger could be entered.
@@ -970,12 +988,12 @@ class EnterDebugger BASE_EMBEDDED {
 // Stack allocated class for disabling break.
 class DisableBreak BASE_EMBEDDED {
  public:
-  explicit DisableBreak(bool disable_break) : isolate_(Isolate::Current()) {
+  explicit DisableBreak(Isolate* isolate, bool disable_break)
+    : isolate_(isolate) {
     prev_disable_break_ = isolate_->debug()->disable_break();
     isolate_->debug()->set_disable_break(disable_break);
   }
   ~DisableBreak() {
-    ASSERT(Isolate::Current() == isolate_);
     isolate_->debug()->set_disable_break(prev_disable_break_);
   }
 
@@ -1034,7 +1052,7 @@ class Debug_Address {
 class MessageDispatchHelperThread: public Thread {
  public:
   explicit MessageDispatchHelperThread(Isolate* isolate);
-  ~MessageDispatchHelperThread();
+  ~MessageDispatchHelperThread() {}
 
   void Schedule();
 
@@ -1042,8 +1060,8 @@ class MessageDispatchHelperThread: public Thread {
   void Run();
 
   Isolate* isolate_;
-  Semaphore* const sem_;
-  Mutex* const mutex_;
+  Semaphore sem_;
+  Mutex mutex_;
   bool already_signalled_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageDispatchHelperThread);

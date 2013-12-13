@@ -37,17 +37,6 @@ encoding method.  Here are the different string encodings.
 
 * `'hex'` - Encode each byte as two hexadecimal characters.
 
-A `Buffer` object can also be used with typed arrays.  The buffer object is
-cloned to an `ArrayBuffer` that is used as the backing store for the typed
-array.  The memory of the buffer and the `ArrayBuffer` is not shared.
-
-NOTE: Node.js v0.8 simply retained a reference to the buffer in `array.buffer`
-instead of cloning it.
-
-While more efficient, it introduces subtle incompatibilities with the typed
-arrays specification.  `ArrayBuffer#slice()` makes a copy of the slice while
-`Buffer#slice()` creates a view.
-
 ## Class: Buffer
 
 The Buffer class is a global type for dealing with binary data directly.
@@ -79,6 +68,69 @@ Allocates a new buffer containing the given `str`.
 
 Returns true if the `encoding` is a valid encoding argument, or false
 otherwise.
+
+### Class Method: Buffer.isBuffer(obj)
+
+* `obj` Object
+* Return: Boolean
+
+Tests if `obj` is a `Buffer`.
+
+### Class Method: Buffer.byteLength(string, [encoding])
+
+* `string` String
+* `encoding` String, Optional, Default: 'utf8'
+* Return: Number
+
+Gives the actual byte length of a string. `encoding` defaults to `'utf8'`.
+This is not the same as `String.prototype.length` since that returns the
+number of *characters* in a string.
+
+Example:
+
+    str = '\u00bd + \u00bc = \u00be';
+
+    console.log(str + ": " + str.length + " characters, " +
+      Buffer.byteLength(str, 'utf8') + " bytes");
+
+    // ½ + ¼ = ¾: 9 characters, 12 bytes
+
+### Class Method: Buffer.concat(list, [totalLength])
+
+* `list` {Array} List of Buffer objects to concat
+* `totalLength` {Number} Total length of the buffers when concatenated
+
+Returns a buffer which is the result of concatenating all the buffers in
+the list together.
+
+If the list has no items, or if the totalLength is 0, then it returns a
+zero-length buffer.
+
+If the list has exactly one item, then the first item of the list is
+returned.
+
+If the list has more than one item, then a new Buffer is created.
+
+If totalLength is not provided, it is read from the buffers in the list.
+However, this adds an additional loop to the function, so it is faster
+to provide the length explicitly.
+
+### buf.length
+
+* Number
+
+The size of the buffer in bytes.  Note that this is not necessarily the size
+of the contents. `length` refers to the amount of memory allocated for the
+buffer object.  It does not change when the contents of the buffer are changed.
+
+    buf = new Buffer(1234);
+
+    console.log(buf.length);
+    buf.write("some string", 0, "ascii");
+    console.log(buf.length);
+
+    // 1234
+    // 1234
 
 ### buf.write(string, [offset], [length], [encoding])
 
@@ -154,69 +206,6 @@ Example: copy an ASCII string into a buffer, one byte at a time:
     console.log(buf);
 
     // node.js
-
-### Class Method: Buffer.isBuffer(obj)
-
-* `obj` Object
-* Return: Boolean
-
-Tests if `obj` is a `Buffer`.
-
-### Class Method: Buffer.byteLength(string, [encoding])
-
-* `string` String
-* `encoding` String, Optional, Default: 'utf8'
-* Return: Number
-
-Gives the actual byte length of a string. `encoding` defaults to `'utf8'`.
-This is not the same as `String.prototype.length` since that returns the
-number of *characters* in a string.
-
-Example:
-
-    str = '\u00bd + \u00bc = \u00be';
-
-    console.log(str + ": " + str.length + " characters, " +
-      Buffer.byteLength(str, 'utf8') + " bytes");
-
-    // ½ + ¼ = ¾: 9 characters, 12 bytes
-
-### Class Method: Buffer.concat(list, [totalLength])
-
-* `list` {Array} List of Buffer objects to concat
-* `totalLength` {Number} Total length of the buffers when concatenated
-
-Returns a buffer which is the result of concatenating all the buffers in
-the list together.
-
-If the list has no items, or if the totalLength is 0, then it returns a
-zero-length buffer.
-
-If the list has exactly one item, then the first item of the list is
-returned.
-
-If the list has more than one item, then a new Buffer is created.
-
-If totalLength is not provided, it is read from the buffers in the list.
-However, this adds an additional loop to the function, so it is faster
-to provide the length explicitly.
-
-### buf.length
-
-* Number
-
-The size of the buffer in bytes.  Note that this is not necessarily the size
-of the contents. `length` refers to the amount of memory allocated for the
-buffer object.  It does not change when the contents of the buffer are changed.
-
-    buf = new Buffer(1234);
-
-    console.log(buf.length);
-    buf.write("some string", 0, "ascii");
-    console.log(buf.length);
-
-    // 1234
-    // 1234
 
 ### buf.copy(targetBuffer, [targetStart], [sourceStart], [sourceEnd])
 
@@ -682,6 +671,10 @@ buffer.
     var b = new Buffer(50);
     b.fill("h");
 
+### buf.toArrayBuffer()
+
+Creates a new `ArrayBuffer` with the copied memory of the buffer instance.
+
 ## buffer.INSPECT_MAX_BYTES
 
 * Number, Default: 50
@@ -694,11 +687,28 @@ Note that this is a property on the buffer module returned by
 
 ## Class: SlowBuffer
 
-This class is primarily for internal use.  JavaScript programs should
-use Buffer instead of using SlowBuffer.
+Returns an un-pooled `Buffer`.
 
-In order to avoid the overhead of allocating many C++ Buffer objects for
-small blocks of memory in the lifetime of a server, Node allocates memory
-in 8Kb (8192 byte) chunks.  If a buffer is smaller than this size, then it
-will be backed by a parent SlowBuffer object.  If it is larger than this,
-then Node will allocate a SlowBuffer slab for it directly.
+In order to avoid the garbage collection overhead of creating many individually
+allocated Buffers, by default allocations under 4KB are sliced from a single
+larger allocated object. This approach improves both performance and memory
+usage since v8 does not need to track and cleanup as many `Persistent` objects.
+
+In the case where a developer may need to retain a small chunk of memory from a
+pool for an indeterminate amount of time it may be appropriate to create an
+un-pooled Buffer instance using SlowBuffer and copy out the relevant bits.
+
+    // need to keep around a few small chunks of memory
+    var store = [];
+
+    socket.on('readable', function() {
+      var data = socket.read();
+      // allocate for retained data
+      var sb = new SlowBuffer(10);
+      // copy the data into the new allocation
+      data.copy(sb, 0, 0, 10);
+      store.push(sb);
+    });
+
+Though this should used sparingly and only be a last resort *after* a developer
+has actively observed undue memory retention in their applications.

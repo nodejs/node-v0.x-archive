@@ -55,6 +55,9 @@ putIn.run([
 testMe.complete('inner.o', function(error, data) {
   assert.deepEqual(data, doesNotBreak);
 });
+testMe.complete('console.lo', function(error, data) {
+  assert.deepEqual(data, [['console.log'], 'console.lo']);
+});
 
 // Tab Complete will return globaly scoped variables
 putIn.run(['};']);
@@ -108,7 +111,7 @@ testMe.complete('inner.o', function(error, data) {
 putIn.run(['.clear']);
 
 // Tab Complete will return a complex local variable even if the function
-// has paramaters
+// has parameters
 putIn.run([
   'var top = function (one, two) {',
   'var inner = {',
@@ -137,7 +140,7 @@ testMe.complete('inner.o', function(error, data) {
 putIn.run(['.clear']);
 
 // currently does not work, but should not break note the inner function
-// def has the params and { on a seperate line
+// def has the params and { on a separate line
 putIn.run([
   'var top = function () {',
   'r = function test (',

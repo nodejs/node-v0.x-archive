@@ -1,7 +1,7 @@
 @include documentation
 @include synopsis
 @include globals
-@include stdio
+@include console
 @include timers
 @include modules
 @include addons
@@ -34,3 +34,4 @@
 @include os
 @include debugger
 @include cluster
+@include smalloc

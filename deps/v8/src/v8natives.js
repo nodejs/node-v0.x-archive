@@ -32,7 +32,6 @@
 // var $Number = global.Number;
 // var $Function = global.Function;
 // var $Array = global.Array;
-// var $NaN = 0/0;
 //
 // in math.js:
 // var $floor = MathFloor
@@ -95,7 +94,7 @@ function SetUpLockedPrototype(constructor, fields, methods) {
   }
   if (fields) {
     for (var i = 0; i < fields.length; i++) {
-      %SetProperty(prototype, fields[i], void 0, DONT_ENUM | DONT_DELETE);
+      %SetProperty(prototype, fields[i], UNDEFINED, DONT_ENUM | DONT_DELETE);
     }
   }
   for (var i = 0; i < methods.length; i += 2) {
@@ -148,7 +147,7 @@ function GlobalParseInt(string, radix) {
     string = TO_STRING_INLINE(string);
     radix = TO_INT32(radix);
     if (!(radix == 0 || (2 <= radix && radix <= 36))) {
-      return $NaN;
+      return NAN;
     }
   }
 
@@ -197,15 +196,16 @@ function GlobalEval(x) {
 function SetUpGlobal() {
   %CheckIsBootstrapping();
 
+  var attributes = DONT_ENUM | DONT_DELETE | READ_ONLY;
+
   // ECMA 262 - 15.1.1.1.
-  %SetProperty(global, "NaN", $NaN, DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty(global, "NaN", NAN, attributes);
 
   // ECMA-262 - 15.1.1.2.
-  %SetProperty(global, "Infinity", 1/0, DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty(global, "Infinity", INFINITY, attributes);
 
   // ECMA-262 - 15.1.1.3.
-  %SetProperty(global, "undefined", void 0,
-               DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty(global, "undefined", UNDEFINED, attributes);
 
   // Set up non-enumerable function on the global object.
   InstallFunctions(global, DONT_ENUM, $Array(
@@ -475,12 +475,12 @@ function ToPropertyDescriptor(obj) {
 function ToCompletePropertyDescriptor(obj) {
   var desc = ToPropertyDescriptor(obj);
   if (IsGenericDescriptor(desc) || IsDataDescriptor(desc)) {
-    if (!desc.hasValue()) desc.setValue(void 0);
+    if (!desc.hasValue()) desc.setValue(UNDEFINED);
     if (!desc.hasWritable()) desc.setWritable(false);
   } else {
     // Is accessor descriptor.
-    if (!desc.hasGetter()) desc.setGet(void 0);
-    if (!desc.hasSetter()) desc.setSet(void 0);
+    if (!desc.hasGetter()) desc.setGet(UNDEFINED);
+    if (!desc.hasSetter()) desc.setSet(UNDEFINED);
   }
   if (!desc.hasEnumerable()) desc.setEnumerable(false);
   if (!desc.hasConfigurable()) desc.setConfigurable(false);
@@ -491,7 +491,7 @@ function ToCompletePropertyDescriptor(obj) {
 function PropertyDescriptor() {
   // Initialize here so they are all in-object and have the same map.
   // Default values from ES5 8.6.1.
-  this.value_ = void 0;
+  this.value_ = UNDEFINED;
   this.hasValue_ = false;
   this.writable_ = false;
   this.hasWritable_ = false;
@@ -499,9 +499,9 @@ function PropertyDescriptor() {
   this.hasEnumerable_ = false;
   this.configurable_ = false;
   this.hasConfigurable_ = false;
-  this.get_ = void 0;
+  this.get_ = UNDEFINED;
   this.hasGetter_ = false;
-  this.set_ = void 0;
+  this.set_ = UNDEFINED;
   this.hasSetter_ = false;
 }
 
@@ -593,7 +593,7 @@ function ConvertDescriptorArrayToDescriptor(desc_array) {
   }
 
   if (IS_UNDEFINED(desc_array)) {
-    return void 0;
+    return UNDEFINED;
   }
 
   var desc = new PropertyDescriptor();
@@ -647,10 +647,11 @@ function GetOwnProperty(obj, v) {
   var p = ToName(v);
   if (%IsJSProxy(obj)) {
     // TODO(rossberg): adjust once there is a story for symbols vs proxies.
-    if (IS_SYMBOL(v)) return void 0;
+    if (IS_SYMBOL(v)) return UNDEFINED;
 
     var handler = %GetHandler(obj);
-    var descriptor = CallTrap1(handler, "getOwnPropertyDescriptor", void 0, p);
+    var descriptor = CallTrap1(
+                         handler, "getOwnPropertyDescriptor", UNDEFINED, p);
     if (IS_UNDEFINED(descriptor)) return descriptor;
     var desc = ToCompletePropertyDescriptor(descriptor);
     if (!desc.isConfigurable()) {
@@ -666,7 +667,7 @@ function GetOwnProperty(obj, v) {
   var props = %GetOwnProperty(ToObject(obj), p);
 
   // A false value here means that access checks failed.
-  if (props === false) return void 0;
+  if (props === false) return UNDEFINED;
 
   return ConvertDescriptorArrayToDescriptor(props);
 }
@@ -693,7 +694,7 @@ function DefineProxyProperty(obj, p, attributes, should_throw) {
   if (IS_SYMBOL(p)) return false;
 
   var handler = %GetHandler(obj);
-  var result = CallTrap2(handler, "defineProperty", void 0, p, attributes);
+  var result = CallTrap2(handler, "defineProperty", UNDEFINED, p, attributes);
   if (!ToBoolean(result)) {
     if (should_throw) {
       throw MakeTypeError("handler_returned_false",
@@ -710,7 +711,7 @@ function DefineProxyProperty(obj, p, attributes, should_throw) {
 function DefineObjectProperty(obj, p, desc, should_throw) {
   var current_or_access = %GetOwnProperty(ToObject(obj), ToName(p));
   // A false value here means that access checks failed.
-  if (current_or_access === false) return void 0;
+  if (current_or_access === false) return UNDEFINED;
 
   var current = ConvertDescriptorArrayToDescriptor(current_or_access);
   var extensible = %IsExtensible(ToObject(obj));
@@ -841,7 +842,7 @@ function DefineObjectProperty(obj, p, desc, should_throw) {
       flag |= READ_ONLY;
     }
 
-    var value = void 0;  // Default value is undefined.
+    var value = UNDEFINED;  // Default value is undefined.
     if (desc.hasValue()) {
       value = desc.getValue();
     } else if (!IS_UNDEFINED(current) && IsDataDescriptor(current)) {
@@ -873,6 +874,7 @@ function DefineArrayProperty(obj, p, desc, should_throw) {
   // Step 3 - Special handling for length property.
   if (p === "length") {
     var length = obj.length;
+    var old_length = length;
     if (!desc.hasValue()) {
       return DefineObjectProperty(obj, "length", desc, should_throw);
     }
@@ -889,8 +891,24 @@ function DefineArrayProperty(obj, p, desc, should_throw) {
       }
     }
     var threw = false;
+
+    var emit_splice = %IsObserved(obj) && new_length !== old_length;
+    var removed;
+    if (emit_splice) {
+      BeginPerformSplice(obj);
+      removed = [];
+      if (new_length < old_length)
+        removed.length = old_length - new_length;
+    }
+
     while (new_length < length--) {
-      if (!Delete(obj, ToString(length), false)) {
+      var index = ToString(length);
+      if (emit_splice) {
+        var deletedDesc = GetOwnProperty(obj, index);
+        if (deletedDesc && deletedDesc.hasValue())
+          removed[length - new_length] = deletedDesc.getValue();
+      }
+      if (!Delete(obj, index, false)) {
         new_length = length + 1;
         threw = true;
         break;
@@ -902,13 +920,17 @@ function DefineArrayProperty(obj, p, desc, should_throw) {
     // respective TODO in Runtime_DefineOrRedefineDataProperty.
     // For the time being, we need a hack to prevent Object.observe from
     // generating two change records.
-    var isObserved = %IsObserved(obj);
-    if (isObserved) %SetIsObserved(obj, false);
     obj.length = new_length;
-    desc.value_ = void 0;
+    desc.value_ = UNDEFINED;
     desc.hasValue_ = false;
     threw = !DefineObjectProperty(obj, "length", desc, should_throw) || threw;
-    if (isObserved) %SetIsObserved(obj, true);
+    if (emit_splice) {
+      EndPerformSplice(obj);
+      EnqueueSpliceRecord(obj,
+          new_length < old_length ? new_length : old_length,
+          removed,
+          new_length > old_length ? new_length - old_length : 0);
+    }
     if (threw) {
       if (should_throw) {
         throw MakeTypeError("redefine_disallowed", [p]);
@@ -916,27 +938,24 @@ function DefineArrayProperty(obj, p, desc, should_throw) {
         return false;
       }
     }
-    if (isObserved) {
-      var new_desc = GetOwnProperty(obj, "length");
-      var updated = length_desc.value_ !== new_desc.value_;
-      var reconfigured = length_desc.writable_ !== new_desc.writable_ ||
-          length_desc.configurable_ !== new_desc.configurable_ ||
-          length_desc.enumerable_ !== new_desc.configurable_;
-      if (updated || reconfigured) {
-        NotifyChange(reconfigured ? "reconfigured" : "updated",
-            obj, "length", length_desc.value_);
-      }
-    }
     return true;
   }
 
   // Step 4 - Special handling for array index.
   var index = ToUint32(p);
+  var emit_splice = false;
   if (ToString(index) == p && index != 4294967295) {
     var length = obj.length;
+    if (index >= length && %IsObserved(obj)) {
+      emit_splice = true;
+      BeginPerformSplice(obj);
+    }
+
     var length_desc = GetOwnProperty(obj, "length");
     if ((index >= length && !length_desc.isWritable()) ||
         !DefineObjectProperty(obj, p, desc, true)) {
+      if (emit_splice)
+        EndPerformSplice(obj);
       if (should_throw) {
         throw MakeTypeError("define_disallowed", [p]);
       } else {
@@ -945,6 +964,10 @@ function DefineArrayProperty(obj, p, desc, should_throw) {
     }
     if (index >= length) {
       obj.length = index + 1;
+    }
+    if (emit_splice) {
+      EndPerformSplice(obj);
+      EnqueueSpliceRecord(obj, length, [], index + 1 - length);
     }
     return true;
   }
@@ -1023,7 +1046,7 @@ function ObjectGetOwnPropertyNames(obj) {
   // Special handling for proxies.
   if (%IsJSProxy(obj)) {
     var handler = %GetHandler(obj);
-    var names = CallTrap0(handler, "getOwnPropertyNames", void 0);
+    var names = CallTrap0(handler, "getOwnPropertyNames", UNDEFINED);
     return ToNameArray(names, "getOwnPropertyNames", false);
   }
 
@@ -1172,7 +1195,7 @@ function ObjectDefineProperties(obj, properties) {
 // Harmony proxies.
 function ProxyFix(obj) {
   var handler = %GetHandler(obj);
-  var props = CallTrap0(handler, "fix", void 0);
+  var props = CallTrap0(handler, "fix", UNDEFINED);
   if (IS_UNDEFINED(props)) {
     throw MakeTypeError("handler_returned_undefined", [handler, "fix"]);
   }
@@ -1225,20 +1248,27 @@ function ObjectFreeze(obj) {
   if (!IS_SPEC_OBJECT(obj)) {
     throw MakeTypeError("called_on_non_object", ["Object.freeze"]);
   }
-  if (%IsJSProxy(obj)) {
-    ProxyFix(obj);
-  }
-  var names = ObjectGetOwnPropertyNames(obj);
-  for (var i = 0; i < names.length; i++) {
-    var name = names[i];
-    var desc = GetOwnProperty(obj, name);
-    if (desc.isWritable() || desc.isConfigurable()) {
-      if (IsDataDescriptor(desc)) desc.setWritable(false);
-      desc.setConfigurable(false);
-      DefineOwnProperty(obj, name, desc, true);
+  var isProxy = %IsJSProxy(obj);
+  if (isProxy || %HasNonStrictArgumentsElements(obj)) {
+    if (isProxy) {
+      ProxyFix(obj);
     }
+    var names = ObjectGetOwnPropertyNames(obj);
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i];
+      var desc = GetOwnProperty(obj, name);
+      if (desc.isWritable() || desc.isConfigurable()) {
+        if (IsDataDescriptor(desc)) desc.setWritable(false);
+        desc.setConfigurable(false);
+        DefineOwnProperty(obj, name, desc, true);
+      }
+    }
+    %PreventExtensions(obj);
+  } else {
+    // TODO(adamk): Is it worth going to this fast path if the
+    // object's properties are already in dictionary mode?
+    %ObjectFreeze(obj);
   }
-  %PreventExtensions(obj);
   return obj;
 }
 
@@ -1356,6 +1386,7 @@ function ObjectConstructor(x) {
 function SetUpObject() {
   %CheckIsBootstrapping();
 
+  %SetNativeFlag($Object);
   %SetCode($Object, ObjectConstructor);
   %FunctionSetName(ObjectPoisonProto, "__proto__");
   %FunctionRemovePrototype(ObjectPoisonProto);
@@ -1530,8 +1561,8 @@ function NumberToFixed(fractionDigits) {
   }
 
   if (NUMBER_IS_NAN(x)) return "NaN";
-  if (x == 1/0) return "Infinity";
-  if (x == -1/0) return "-Infinity";
+  if (x == INFINITY) return "Infinity";
+  if (x == -INFINITY) return "-Infinity";
 
   return %NumberToFixed(x, f);
 }
@@ -1548,11 +1579,11 @@ function NumberToExponential(fractionDigits) {
     // Get the value of this number in case it's an object.
     x = %_ValueOf(this);
   }
-  var f = IS_UNDEFINED(fractionDigits) ? void 0 : TO_INTEGER(fractionDigits);
+  var f = IS_UNDEFINED(fractionDigits) ? UNDEFINED : TO_INTEGER(fractionDigits);
 
   if (NUMBER_IS_NAN(x)) return "NaN";
-  if (x == 1/0) return "Infinity";
-  if (x == -1/0) return "-Infinity";
+  if (x == INFINITY) return "Infinity";
+  if (x == -INFINITY) return "-Infinity";
 
   if (IS_UNDEFINED(f)) {
     f = -1;  // Signal for runtime function that f is not defined.
@@ -1578,8 +1609,8 @@ function NumberToPrecision(precision) {
   var p = TO_INTEGER(precision);
 
   if (NUMBER_IS_NAN(x)) return "NaN";
-  if (x == 1/0) return "Infinity";
-  if (x == -1/0) return "-Infinity";
+  if (x == INFINITY) return "Infinity";
+  if (x == -INFINITY) return "-Infinity";
 
   if (p < 1 || p > 21) {
     throw new $RangeError("toPrecision() argument must be between 1 and 21");
@@ -1624,18 +1655,18 @@ function SetUpNumber() {
                DONT_ENUM | DONT_DELETE | READ_ONLY);
 
   // ECMA-262 section 15.7.3.3.
-  %SetProperty($Number, "NaN", $NaN, DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty($Number, "NaN", NAN, DONT_ENUM | DONT_DELETE | READ_ONLY);
 
   // ECMA-262 section 15.7.3.4.
   %SetProperty($Number,
                "NEGATIVE_INFINITY",
-               -1/0,
+               -INFINITY,
                DONT_ENUM | DONT_DELETE | READ_ONLY);
 
   // ECMA-262 section 15.7.3.5.
   %SetProperty($Number,
                "POSITIVE_INFINITY",
-               1/0,
+               INFINITY,
                DONT_ENUM | DONT_DELETE | READ_ONLY);
   %ToFastProperties($Number);
 
@@ -1665,7 +1696,6 @@ function FunctionSourceString(func) {
     func = %GetCallTrap(func);
   }
 
-  // TODO(wingo): Print source using function* for generators.
   if (!IS_FUNCTION(func)) {
     throw new $TypeError('Function.prototype.toString is not generic');
   }
@@ -1684,7 +1714,8 @@ function FunctionSourceString(func) {
   var name = %FunctionNameShouldPrintAsAnonymous(func)
       ? 'anonymous'
       : %FunctionGetName(func);
-  return 'function ' + name + source;
+  var head = %FunctionIsGenerator(func) ? 'function* ' : 'function ';
+  return head + name + source;
 }
 
 
@@ -1756,32 +1787,38 @@ function FunctionBind(this_arg) { // Length is 1.
 }
 
 
-function NewFunction(arg1) {  // length == 1
-  var n = %_ArgumentsLength();
+function NewFunctionString(arguments, function_token) {
+  var n = arguments.length;
   var p = '';
   if (n > 1) {
-    p = new InternalArray(n - 1);
-    for (var i = 0; i < n - 1; i++) p[i] = %_Arguments(i);
-    p = Join(p, n - 1, ',', NonStringToString);
+    p = ToString(arguments[0]);
+    for (var i = 1; i < n - 1; i++) {
+      p += ',' + ToString(arguments[i]);
+    }
     // If the formal parameters string include ) - an illegal
     // character - it may make the combined function expression
     // compile. We avoid this problem by checking for this early on.
-    if (p.indexOf(')') != -1) throw MakeSyntaxError('unable_to_parse',[]);
+    if (%_CallFunction(p, ')', StringIndexOf) != -1) {
+      throw MakeSyntaxError('paren_in_arg_string', []);
+    }
     // If the formal parameters include an unbalanced block comment, the
     // function must be rejected. Since JavaScript does not allow nested
     // comments we can include a trailing block comment to catch this.
     p += '\n/' + '**/';
   }
-  var body = (n > 0) ? ToString(%_Arguments(n - 1)) : '';
-  var source = '(function(' + p + ') {\n' + body + '\n})';
+  var body = (n > 0) ? ToString(arguments[n - 1]) : '';
+  return '(' + function_token + '(' + p + ') {\n' + body + '\n})';
+}
 
-  // The call to SetNewFunctionAttributes will ensure the prototype
-  // property of the resulting function is enumerable (ECMA262, 15.3.5.2).
+
+function FunctionConstructor(arg1) {  // length == 1
+  var source = NewFunctionString(arguments, 'function');
   var global_receiver = %GlobalReceiver(global);
+  // Compile the string in the constructor and not a helper so that errors
+  // appear to come from here.
   var f = %_CallFunction(global_receiver, %CompileString(source, true));
-
   %FunctionMarkNameShouldPrintAsAnonymous(f);
-  return %SetNewFunctionAttributes(f);
+  return f;
 }
 
 
@@ -1790,7 +1827,7 @@ function NewFunction(arg1) {  // length == 1
 function SetUpFunction() {
   %CheckIsBootstrapping();
 
-  %SetCode($Function, NewFunction);
+  %SetCode($Function, FunctionConstructor);
   %SetProperty($Function.prototype, "constructor", $Function, DONT_ENUM);
 
   InstallFunctions($Function.prototype, DONT_ENUM, $Array(

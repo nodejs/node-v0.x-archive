@@ -23,15 +23,14 @@ if (!process.versions.openssl) {
   console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
 }
-require('child_process').exec('openssl version', function(err) {
-  if (err !== null) {
-    console.error('Skipping because openssl command is not available.');
-    process.exit(0);
-  }
-  doTest();
+
+doTest({ tickets: false } , function() {
+  doTest({ tickets: true } , function() {
+    console.error('all done');
+  });
 });
 
-function doTest() {
+function doTest(testOptions, callback) {
   var common = require('../common');
   var assert = require('assert');
   var tls = require('tls');
@@ -50,8 +49,8 @@ function doTest() {
     requestCert: true
   };
   var requestCount = 0;
+  var resumeCount = 0;
   var session;
-  var badOpenSSL = false;
 
   var server = tls.createServer(options, function(cleartext) {
     cleartext.on('error', function(er) {
@@ -72,6 +71,7 @@ function doTest() {
     };
   });
   server.on('resumeSession', function(id, callback) {
+    ++resumeCount;
     assert.ok(session);
     assert.equal(session.id.toString('hex'), id.toString('hex'));
 
@@ -81,14 +81,14 @@ function doTest() {
     }, 100);
   });
   server.listen(common.PORT, function() {
-    var client = spawn('openssl', [
+    var client = spawn(common.opensslCli, [
       's_client',
+      '-tls1',
       '-connect', 'localhost:' + common.PORT,
       '-key', join(common.fixturesDir, 'agent.key'),
       '-cert', join(common.fixturesDir, 'agent.crt'),
-      '-reconnect',
-      '-no_ticket'
-    ], {
+      '-reconnect'
+    ].concat(testOptions.tickets ? [] : '-no_ticket'), {
       stdio: [ 0, 1, 'pipe' ]
     });
     var err = '';
@@ -97,22 +97,23 @@ function doTest() {
       err += chunk;
     });
     client.on('exit', function(code) {
-      if (/^unknown option/.test(err)) {
-        // using an incompatible version of openssl
-        assert(code);
-        badOpenSSL = true;
-      } else
-        assert.equal(code, 0);
-      server.close();
+      console.error('done');
+      assert.equal(code, 0);
+      server.close(function() {
+        setTimeout(callback, 100);
+      });
     });
   });
 
   process.on('exit', function() {
-    if (!badOpenSSL) {
-      assert.ok(session);
-
-      // initial request + reconnect requests (5 times)
+    if (testOptions.tickets) {
       assert.equal(requestCount, 6);
+      assert.equal(resumeCount, 0);
+    } else {
+      // initial request + reconnect requests (5 times)
+      assert.ok(session);
+      assert.equal(requestCount, 6);
+      assert.equal(resumeCount, 5);
     }
   });
 }

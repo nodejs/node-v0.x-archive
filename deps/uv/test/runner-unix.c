@@ -49,7 +49,7 @@ void platform_init(int argc, char **argv) {
   /* Disable stdio output buffering. */
   setvbuf(stdout, NULL, _IONBF, 0);
   setvbuf(stderr, NULL, _IONBF, 0);
-  strcpy(executable_path, argv[0]);
+  strncpy(executable_path, argv[0], sizeof(executable_path) - 1);
   signal(SIGPIPE, SIG_IGN);
 }
 
@@ -282,6 +282,34 @@ int process_copy_output(process_info_t *p, int fd) {
     return -1;
   }
 
+  return 0;
+}
+
+
+/* Copy the last line of the stdio output buffer to `buffer` */
+int process_read_last_line(process_info_t *p,
+                           char* buffer,
+                           size_t buffer_len) {
+  char* ptr;
+
+  int r = fseek(p->stdout_file, 0, SEEK_SET);
+  if (r < 0) {
+    perror("fseek");
+    return -1;
+  }
+
+  buffer[0] = '\0';
+
+  while (fgets(buffer, buffer_len, p->stdout_file) != NULL) {
+    for (ptr = buffer; *ptr && *ptr != '\r' && *ptr != '\n'; ptr++);
+    *ptr = '\0';
+  }
+
+  if (ferror(p->stdout_file)) {
+    perror("read");
+    buffer[0] = '\0';
+    return -1;
+  }
   return 0;
 }
 

@@ -49,7 +49,7 @@ typedef Object* (*F3)(void* p, int p1, int p2, int p3, int p4);
 
 TEST(MIPS0) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   MacroAssembler assm(isolate, NULL, 0);
@@ -61,7 +61,7 @@ TEST(MIPS0) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -75,7 +75,7 @@ TEST(MIPS0) {
 
 TEST(MIPS1) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   MacroAssembler assm(isolate, NULL, 0);
@@ -100,7 +100,7 @@ TEST(MIPS1) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -114,7 +114,7 @@ TEST(MIPS1) {
 
 TEST(MIPS2) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   MacroAssembler assm(isolate, NULL, 0);
@@ -241,7 +241,7 @@ TEST(MIPS2) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -256,7 +256,7 @@ TEST(MIPS2) {
 TEST(MIPS3) {
   // Test floating point instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -314,7 +314,7 @@ TEST(MIPS3) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -337,14 +337,16 @@ TEST(MIPS3) {
   CHECK_EQ(1.8066e16, t.e);
   CHECK_EQ(120.44, t.f);
   CHECK_EQ(10.97451593465515908537, t.g);
-  CHECK_EQ(6.875, t.h);
+  if (kArchVariant == kMips32r2) {
+    CHECK_EQ(6.875, t.h);
+  }
 }
 
 
 TEST(MIPS4) {
   // Test moves between floating point and integer registers.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -380,7 +382,7 @@ TEST(MIPS4) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -401,7 +403,7 @@ TEST(MIPS4) {
 TEST(MIPS5) {
   // Test conversions between doubles and integers.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -446,7 +448,7 @@ TEST(MIPS5) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -469,7 +471,7 @@ TEST(MIPS5) {
 TEST(MIPS6) {
   // Test simple memory loads and stores.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -519,7 +521,7 @@ TEST(MIPS6) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -542,7 +544,7 @@ TEST(MIPS6) {
 TEST(MIPS7) {
   // Test floating point compare and branch instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -596,7 +598,7 @@ TEST(MIPS7) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -620,7 +622,7 @@ TEST(MIPS7) {
 TEST(MIPS8) {
   // Test ROTR and ROTRV instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -695,7 +697,7 @@ TEST(MIPS8) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -725,7 +727,7 @@ TEST(MIPS8) {
 TEST(MIPS9) {
   // Test BRANCH improvements.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   MacroAssembler assm(isolate, NULL, 0);
@@ -743,7 +745,7 @@ TEST(MIPS9) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -755,7 +757,7 @@ TEST(MIPS10) {
   // Test conversions between doubles and long integers.
   // Test hos the long ints map to FP regs pairs.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -803,7 +805,7 @@ TEST(MIPS10) {
 
     CodeDesc desc;
     assm.GetCode(&desc);
-    Object* code = HEAP->CreateCode(
+    Object* code = CcTest::heap()->CreateCode(
         desc,
         Code::ComputeFlags(Code::STUB),
         Handle<Code>())->ToObjectChecked();
@@ -828,7 +830,7 @@ TEST(MIPS10) {
 TEST(MIPS11) {
   // Test LWL, LWR, SWL and SWR instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -936,7 +938,7 @@ TEST(MIPS11) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -972,7 +974,7 @@ TEST(MIPS11) {
 
 TEST(MIPS12) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1041,7 +1043,7 @@ TEST(MIPS12) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -1064,7 +1066,7 @@ TEST(MIPS12) {
 TEST(MIPS13) {
   // Test Cvt_d_uw and Trunc_uw_d macros.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1098,7 +1100,7 @@ TEST(MIPS13) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -1123,7 +1125,7 @@ TEST(MIPS13) {
 TEST(MIPS14) {
   // Test round, floor, ceil, trunc, cvt.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
 #define ROUND_STRUCT_ELEMENT(x) \
@@ -1219,7 +1221,7 @@ TEST(MIPS14) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
+  Object* code = CcTest::heap()->CreateCode(
       desc,
       Code::ComputeFlags(Code::STUB),
       Handle<Code>())->ToObjectChecked();
@@ -1256,7 +1258,7 @@ TEST(MIPS14) {
 TEST(MIPS15) {
   // Test chaining of label usages within instructions (issue 1644).
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
   Assembler assm(isolate, NULL, 0);
 

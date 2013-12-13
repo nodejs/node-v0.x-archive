@@ -27,8 +27,7 @@
 
 #include <ifaddrs.h>
 #include <net/if.h>
-
-#include <CoreFoundation/CFRunLoop.h>
+#include <net/if_dl.h>
 
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -37,150 +36,29 @@
 #include <sys/sysctl.h>
 #include <unistd.h>  /* sysconf */
 
-/* Forward declarations */
-void uv__cf_loop_runner(void* arg);
-void uv__cf_loop_cb(void* arg);
-
-typedef struct uv__cf_loop_signal_s uv__cf_loop_signal_t;
-struct uv__cf_loop_signal_s {
-  void* arg;
-  cf_loop_signal_cb cb;
-  QUEUE member;
-};
-
 
 int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
-  CFRunLoopSourceContext ctx;
-  int r;
+  loop->cf_state = NULL;
 
   if (uv__kqueue_init(loop))
-    return -1;
-
-  loop->cf_loop = NULL;
-  if ((r = uv_mutex_init(&loop->cf_mutex)))
-    return r;
-  if ((r = uv_sem_init(&loop->cf_sem, 0)))
-    return r;
-  QUEUE_INIT(&loop->cf_signals);
-
-  memset(&ctx, 0, sizeof(ctx));
-  ctx.info = loop;
-  ctx.perform = uv__cf_loop_cb;
-  loop->cf_cb = CFRunLoopSourceCreate(NULL, 0, &ctx);
-
-  if ((r = uv_thread_create(&loop->cf_thread, uv__cf_loop_runner, loop)))
-    return r;
-
-  /* Synchronize threads */
-  uv_sem_wait(&loop->cf_sem);
-  assert(ACCESS_ONCE(CFRunLoopRef, loop->cf_loop) != NULL);
+    return -errno;
 
   return 0;
 }
 
 
 void uv__platform_loop_delete(uv_loop_t* loop) {
-  QUEUE* item;
-  uv__cf_loop_signal_t* s;
-
-  assert(loop->cf_loop != NULL);
-  CFRunLoopStop(loop->cf_loop);
-  uv_thread_join(&loop->cf_thread);
-  loop->cf_loop = NULL;
-
-  uv_sem_destroy(&loop->cf_sem);
-  uv_mutex_destroy(&loop->cf_mutex);
-
-  /* Free any remaining data */
-  while (!QUEUE_EMPTY(&loop->cf_signals)) {
-    item = QUEUE_HEAD(&loop->cf_signals);
-
-    s = QUEUE_DATA(item, uv__cf_loop_signal_t, member);
-
-    QUEUE_REMOVE(item);
-    free(s);
-  }
+  uv__fsevents_loop_delete(loop);
 }
 
 
-void uv__cf_loop_runner(void* arg) {
-  uv_loop_t* loop;
+uint64_t uv__hrtime(uv_clocktype_t type) {
+  mach_timebase_info_data_t info;
 
-  loop = arg;
-
-  /* Get thread's loop */
-  ACCESS_ONCE(CFRunLoopRef, loop->cf_loop) = CFRunLoopGetCurrent();
-
-  CFRunLoopAddSource(loop->cf_loop,
-                     loop->cf_cb,
-                     kCFRunLoopDefaultMode);
-
-  uv_sem_post(&loop->cf_sem);
-
-  CFRunLoopRun();
-
-  CFRunLoopRemoveSource(loop->cf_loop,
-                        loop->cf_cb,
-                        kCFRunLoopDefaultMode);
-}
-
-
-void uv__cf_loop_cb(void* arg) {
-  uv_loop_t* loop;
-  QUEUE* item;
-  QUEUE split_head;
-  uv__cf_loop_signal_t* s;
-
-  loop = arg;
-
-  uv_mutex_lock(&loop->cf_mutex);
-  QUEUE_INIT(&split_head);
-  if (!QUEUE_EMPTY(&loop->cf_signals)) {
-    QUEUE* split_pos = QUEUE_HEAD(&loop->cf_signals);
-    QUEUE_SPLIT(&loop->cf_signals, split_pos, &split_head);
-  }
-  uv_mutex_unlock(&loop->cf_mutex);
-
-  while (!QUEUE_EMPTY(&split_head)) {
-    item = QUEUE_HEAD(&split_head);
-
-    s = QUEUE_DATA(item, uv__cf_loop_signal_t, member);
-    s->cb(s->arg);
-
-    QUEUE_REMOVE(item);
-    free(s);
-  }
-}
-
-
-void uv__cf_loop_signal(uv_loop_t* loop, cf_loop_signal_cb cb, void* arg) {
-  uv__cf_loop_signal_t* item;
-
-  item = malloc(sizeof(*item));
-  /* XXX: Fail */
-  if (item == NULL)
+  if (mach_timebase_info(&info) != KERN_SUCCESS)
     abort();
 
-  item->arg = arg;
-  item->cb = cb;
-
-  uv_mutex_lock(&loop->cf_mutex);
-  QUEUE_INSERT_TAIL(&loop->cf_signals, &item->member);
-  uv_mutex_unlock(&loop->cf_mutex);
-
-  assert(loop->cf_loop != NULL);
-  CFRunLoopSourceSignal(loop->cf_cb);
-  CFRunLoopWakeUp(loop->cf_loop);
-}
-
-
-uint64_t uv__hrtime(void) {
-    mach_timebase_info_data_t info;
-
-    if (mach_timebase_info(&info) != KERN_SUCCESS)
-      abort();
-
-    return mach_absolute_time() * info.numer / info.denom;
+  return mach_absolute_time() * info.numer / info.denom;
 }
 
 
@@ -190,9 +68,8 @@ int uv_exepath(char* buffer, size_t* size) {
   char* path;
   char* fullpath;
 
-  if (!buffer || !size) {
-    return -1;
-  }
+  if (buffer == NULL || size == NULL)
+    return -EINVAL;
 
   usize = *size;
   result = _NSGetExecutablePath(buffer, &usize);
@@ -200,10 +77,9 @@ int uv_exepath(char* buffer, size_t* size) {
 
   path = (char*)malloc(2 * PATH_MAX);
   fullpath = realpath(buffer, path);
-
   if (fullpath == NULL) {
-    free(path);
-    return -1;
+    SAVE_ERRNO(free(path));
+    return -errno;
   }
 
   strncpy(buffer, fullpath, *size);
@@ -219,7 +95,7 @@ uint64_t uv_get_free_memory(void) {
 
   if (host_statistics(mach_host_self(), HOST_VM_INFO,
                       (host_info_t)&info, &count) != KERN_SUCCESS) {
-    return -1;
+    return -EINVAL;  /* FIXME(bnoordhuis) Translate error. */
   }
 
   return (uint64_t) info.free_count * sysconf(_SC_PAGESIZE);
@@ -231,9 +107,8 @@ uint64_t uv_get_total_memory(void) {
   int which[] = {CTL_HW, HW_MEMSIZE};
   size_t size = sizeof(info);
 
-  if (sysctl(which, 2, &info, &size, NULL, 0) < 0) {
-    return -1;
-  }
+  if (sysctl(which, 2, &info, &size, NULL, 0))
+    return -errno;
 
   return (uint64_t) info;
 }
@@ -252,42 +127,43 @@ void uv_loadavg(double avg[3]) {
 }
 
 
-uv_err_t uv_resident_set_memory(size_t* rss) {
-  struct task_basic_info t_info;
-  mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
+int uv_resident_set_memory(size_t* rss) {
+  mach_msg_type_number_t count;
+  task_basic_info_data_t info;
+  kern_return_t err;
 
-  int r = task_info(mach_task_self(),
-                    TASK_BASIC_INFO,
-                    (task_info_t)&t_info,
-                    &t_info_count);
+  count = TASK_BASIC_INFO_COUNT;
+  err = task_info(mach_task_self(),
+                  TASK_BASIC_INFO,
+                  (task_info_t) &info,
+                  &count);
+  (void) &err;
+  /* task_info(TASK_BASIC_INFO) cannot really fail. Anything other than
+   * KERN_SUCCESS implies a libuv bug.
+   */
+  assert(err == KERN_SUCCESS);
+  *rss = info.resident_size;
 
-  if (r != KERN_SUCCESS) {
-    return uv__new_sys_error(errno);
-  }
-
-  *rss = t_info.resident_size;
-
-  return uv_ok_;
+  return 0;
 }
 
 
-uv_err_t uv_uptime(double* uptime) {
+int uv_uptime(double* uptime) {
   time_t now;
   struct timeval info;
   size_t size = sizeof(info);
   static int which[] = {CTL_KERN, KERN_BOOTTIME};
 
-  if (sysctl(which, 2, &info, &size, NULL, 0) < 0) {
-    return uv__new_sys_error(errno);
-  }
+  if (sysctl(which, 2, &info, &size, NULL, 0))
+    return -errno;
+
   now = time(NULL);
+  *uptime = now - info.tv_sec;
 
-  *uptime = (double)(now - info.tv_sec);
-
-  return uv_ok_;
+  return 0;
 }
 
-uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   unsigned int ticks = (unsigned int)sysconf(_SC_CLK_TCK),
                multiplier = ((uint64_t)1000L / ticks);
   char model[512];
@@ -300,25 +176,24 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   uv_cpu_info_t* cpu_info;
 
   size = sizeof(model);
-  if (sysctlbyname("machdep.cpu.brand_string", &model, &size, NULL, 0) < 0 &&
-      sysctlbyname("hw.model", &model, &size, NULL, 0) < 0) {
-    return uv__new_sys_error(errno);
+  if (sysctlbyname("machdep.cpu.brand_string", &model, &size, NULL, 0) &&
+      sysctlbyname("hw.model", &model, &size, NULL, 0)) {
+    return -errno;
   }
+
   size = sizeof(cpuspeed);
-  if (sysctlbyname("hw.cpufrequency", &cpuspeed, &size, NULL, 0) < 0) {
-    return uv__new_sys_error(errno);
-  }
+  if (sysctlbyname("hw.cpufrequency", &cpuspeed, &size, NULL, 0))
+    return -errno;
 
   if (host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &numcpus,
                           (processor_info_array_t*)&info,
                           &msg_type) != KERN_SUCCESS) {
-    return uv__new_sys_error(errno);
+    return -EINVAL;  /* FIXME(bnoordhuis) Translate error. */
   }
 
-  *cpu_infos = (uv_cpu_info_t*)malloc(numcpus * sizeof(uv_cpu_info_t));
-  if (!(*cpu_infos)) {
-    return uv__new_artificial_error(UV_ENOMEM);
-  }
+  *cpu_infos = malloc(numcpus * sizeof(**cpu_infos));
+  if (!(*cpu_infos))
+    return -ENOMEM;  /* FIXME(bnoordhuis) Deallocate info? */
 
   *count = numcpus;
 
@@ -336,7 +211,7 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   }
   vm_deallocate(mach_task_self(), (vm_address_t)info, msg_type);
 
-  return uv_ok_;
+  return 0;
 }
 
 
@@ -351,21 +226,20 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
 }
 
 
-uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
-  int* count) {
+int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
   struct ifaddrs *addrs, *ent;
-  char ip[INET6_ADDRSTRLEN];
   uv_interface_address_t* address;
+  int i;
+  struct sockaddr_dl *sa_addr;
 
-  if (getifaddrs(&addrs) != 0) {
-    return uv__new_sys_error(errno);
-  }
+  if (getifaddrs(&addrs))
+    return -errno;
 
   *count = 0;
 
   /* Count the number of interfaces */
   for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (!(ent->ifa_flags & IFF_UP && ent->ifa_flags & IFF_RUNNING) ||
+    if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)) ||
         (ent->ifa_addr == NULL) ||
         (ent->ifa_addr->sa_family == AF_LINK)) {
       continue;
@@ -374,31 +248,25 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
     (*count)++;
   }
 
-  *addresses = (uv_interface_address_t*)
-    malloc(*count * sizeof(uv_interface_address_t));
-  if (!(*addresses)) {
-    return uv__new_artificial_error(UV_ENOMEM);
-  }
+  *addresses = malloc(*count * sizeof(**addresses));
+  if (!(*addresses))
+    return -ENOMEM;
 
   address = *addresses;
 
   for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    bzero(&ip, sizeof (ip));
-    if (!(ent->ifa_flags & IFF_UP && ent->ifa_flags & IFF_RUNNING)) {
+    if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)))
       continue;
-    }
 
-    if (ent->ifa_addr == NULL) {
+    if (ent->ifa_addr == NULL)
       continue;
-    }
 
     /*
      * On Mac OS X getifaddrs returns information related to Mac Addresses for
      * various devices, such as firewire, etc. These are not relevant here.
      */
-    if (ent->ifa_addr->sa_family == AF_LINK) {
+    if (ent->ifa_addr->sa_family == AF_LINK)
       continue;
-    }
 
     address->name = strdup(ent->ifa_name);
 
@@ -414,14 +282,33 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
       address->netmask.netmask4 = *((struct sockaddr_in*) ent->ifa_netmask);
     }
 
-    address->is_internal = ent->ifa_flags & IFF_LOOPBACK ? 1 : 0;
+    address->is_internal = !!(ent->ifa_flags & IFF_LOOPBACK);
 
     address++;
   }
 
+  /* Fill in physical addresses for each interface */
+  for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
+    if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)) ||
+        (ent->ifa_addr == NULL) ||
+        (ent->ifa_addr->sa_family != AF_LINK)) {
+      continue;
+    }
+
+    address = *addresses;
+
+    for (i = 0; i < (*count); i++) {
+      if (strcmp(address->name, ent->ifa_name) == 0) {
+        sa_addr = (struct sockaddr_dl*)(ent->ifa_addr);
+        memcpy(address->phys_addr, LLADDR(sa_addr), sizeof(address->phys_addr));
+      }
+      address++;
+    }
+  }
+
   freeifaddrs(addrs);
 
-  return uv_ok_;
+  return 0;
 }
 
 

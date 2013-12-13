@@ -68,39 +68,20 @@ class Segment {
 
 
 Zone::Zone(Isolate* isolate)
-    : zone_excess_limit_(256 * MB),
+    : allocation_size_(0),
       segment_bytes_allocated_(0),
       position_(0),
       limit_(0),
-      scope_nesting_(0),
       segment_head_(NULL),
       isolate_(isolate) {
 }
-unsigned Zone::allocation_size_ = 0;
-
-ZoneScope::~ZoneScope() {
-  if (ShouldDeleteOnExit()) zone_->DeleteAll();
-  zone_->scope_nesting_--;
-}
 
 
-// Creates a new segment, sets it size, and pushes it to the front
-// of the segment chain. Returns the new segment.
-Segment* Zone::NewSegment(int size) {
-  Segment* result = reinterpret_cast<Segment*>(Malloced::New(size));
-  adjust_segment_bytes_allocated(size);
-  if (result != NULL) {
-    result->Initialize(segment_head_, size);
-    segment_head_ = result;
-  }
-  return result;
-}
+Zone::~Zone() {
+  DeleteAll();
+  DeleteKeptSegment();
 
-
-// Deletes the given segment. Does not touch the segment chain.
-void Zone::DeleteSegment(Segment* segment, int size) {
-  adjust_segment_bytes_allocated(-size);
-  Malloced::Delete(segment);
+  ASSERT(segment_bytes_allocated_ == 0);
 }
 
 
@@ -111,19 +92,15 @@ void Zone::DeleteAll() {
 #endif
 
   // Find a segment with a suitable size to keep around.
-  Segment* keep = segment_head_;
-  while (keep != NULL && keep->size() > kMaximumKeptSegmentSize) {
-    keep = keep->next();
-  }
-
+  Segment* keep = NULL;
   // Traverse the chained list of segments, zapping (in debug mode)
   // and freeing every segment except the one we wish to keep.
-  Segment* current = segment_head_;
-  while (current != NULL) {
+  for (Segment* current = segment_head_; current != NULL; ) {
     Segment* next = current->next();
-    if (current == keep) {
+    if (keep == NULL && current->size() <= kMaximumKeptSegmentSize) {
       // Unlink the segment we wish to keep from the list.
-      current->clear_next();
+      keep = current;
+      keep->clear_next();
     } else {
       int size = current->size();
 #ifdef DEBUG
@@ -157,10 +134,43 @@ void Zone::DeleteAll() {
 
 
 void Zone::DeleteKeptSegment() {
+#ifdef DEBUG
+  // Constant byte value used for zapping dead memory in debug mode.
+  static const unsigned char kZapDeadByte = 0xcd;
+#endif
+
+  ASSERT(segment_head_ == NULL || segment_head_->next() == NULL);
   if (segment_head_ != NULL) {
-    DeleteSegment(segment_head_, segment_head_->size());
+    int size = segment_head_->size();
+#ifdef DEBUG
+    // Zap the entire kept segment (including the header).
+    memset(segment_head_, kZapDeadByte, size);
+#endif
+    DeleteSegment(segment_head_, size);
     segment_head_ = NULL;
   }
+
+  ASSERT(segment_bytes_allocated_ == 0);
+}
+
+
+// Creates a new segment, sets it size, and pushes it to the front
+// of the segment chain. Returns the new segment.
+Segment* Zone::NewSegment(int size) {
+  Segment* result = reinterpret_cast<Segment*>(Malloced::New(size));
+  adjust_segment_bytes_allocated(size);
+  if (result != NULL) {
+    result->Initialize(segment_head_, size);
+    segment_head_ = result;
+  }
+  return result;
+}
+
+
+// Deletes the given segment. Does not touch the segment chain.
+void Zone::DeleteSegment(Segment* segment, int size) {
+  adjust_segment_bytes_allocated(-size);
+  Malloced::Delete(segment);
 }
 
 

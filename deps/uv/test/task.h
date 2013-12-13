@@ -27,9 +27,14 @@
 #include <stdlib.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
-# include "uv-private/stdint-msvc2008.h"
+# include "stdint-msvc2008.h"
 #else
 # include <stdint.h>
+#endif
+
+#if !defined(_WIN32)
+# include <sys/time.h>
+# include <sys/resource.h>  /* setrlimit() */
 #endif
 
 #define TEST_PORT 9123
@@ -41,6 +46,16 @@
 #else
 # define TEST_PIPENAME "/tmp/uv-test-sock"
 # define TEST_PIPENAME_2 "/tmp/uv-test-sock2"
+#endif
+
+#ifdef _WIN32
+# include <io.h>
+# ifndef S_IRUSR
+#  define S_IRUSR _S_IREAD
+# endif
+# ifndef S_IWUSR
+#  define S_IWUSR _S_IWRITE
+# endif
 #endif
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -118,5 +133,75 @@ void uv_sleep(int msec);
 
 /* Format big numbers nicely. WARNING: leaks memory. */
 const char* fmt(double d);
+
+/* Reserved test exit codes. */
+enum test_status {
+  TEST_OK = 0,
+  TEST_TODO,
+  TEST_SKIP
+};
+
+#define RETURN_OK()                                                           \
+  do {                                                                        \
+    return TEST_OK;                                                           \
+  } while (0)
+
+#define RETURN_TODO(explanation)                                              \
+  do {                                                                        \
+    LOGF("%s\n", explanation);                                                \
+    return TEST_TODO;                                                         \
+  } while (0)
+
+#define RETURN_SKIP(explanation)                                              \
+  do {                                                                        \
+    LOGF("%s\n", explanation);                                                \
+    return TEST_SKIP;                                                         \
+  } while (0)
+
+#if !defined(_WIN32)
+
+# define TEST_FILE_LIMIT(num)                                                 \
+    do {                                                                      \
+      struct rlimit lim;                                                      \
+      lim.rlim_cur = (num);                                                   \
+      lim.rlim_max = lim.rlim_cur;                                            \
+      if (setrlimit(RLIMIT_NOFILE, &lim))                                     \
+        RETURN_SKIP("File descriptor limit too low.");                        \
+    } while (0)
+
+#else  /* defined(_WIN32) */
+
+# define TEST_FILE_LIMIT(num) do {} while (0)
+
+#endif
+
+
+#if defined _WIN32 && ! defined __GNUC__
+
+#include <stdarg.h>
+
+/* Emulate snprintf() on Windows, _snprintf() doesn't zero-terminate the buffer
+ * on overflow...
+ */
+static int snprintf(char* buf, size_t len, const char* fmt, ...) {
+  va_list ap;
+  int n;
+
+  va_start(ap, fmt);
+  n = _vsprintf_p(buf, len, fmt, ap);
+  va_end(ap);
+
+  /* It's a sad fact of life that no one ever checks the return value of
+   * snprintf(). Zero-terminating the buffer hopefully reduces the risk
+   * of gaping security holes.
+   */
+  if (n < 0)
+    if (len > 0)
+      buf[0] = '\0';
+
+  return n;
+}
+
+#endif
 
 #endif /* TASK_H_ */

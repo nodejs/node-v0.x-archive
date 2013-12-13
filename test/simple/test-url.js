@@ -44,6 +44,16 @@ var parseTests = {
     'path': '/'
   },
 
+  'HTTP://www.example.com' : {
+    'href': 'http://www.example.com/',
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'www.example.com',
+    'hostname': 'www.example.com',
+    'pathname': '/',
+    'path': '/'
+  },
+
   'http://www.ExAmPlE.com/' : {
     'href': 'http://www.example.com/',
     'protocol': 'http:',
@@ -752,6 +762,45 @@ var parseTests = {
     href: 'http://x:1/%27%20%3C%3E%22%60/%7B%7D%7C%5C%5E~%60/'
   },
 
+  'http://a@b@c/': {
+    protocol: 'http:',
+    slashes: true,
+    auth: 'a@b',
+    host: 'c',
+    hostname: 'c',
+    href: 'http://a%40b@c/',
+    path: '/',
+    pathname: '/'
+  },
+
+  'http://a@b?@c': {
+    protocol: 'http:',
+    slashes: true,
+    auth: 'a',
+    host: 'b',
+    hostname: 'b',
+    href: 'http://a@b/?@c',
+    path: '/?@c',
+    pathname: '/',
+    search: '?@c',
+    query: '@c'
+  },
+
+  'http://a\r" \t\n<\'b:b@c\r\nd/e?f':{
+    protocol: 'http:',
+    slashes: true,
+    auth: 'a\r" \t\n<\'b:b',
+    host: 'c',
+    port: null,
+    hostname: 'c',
+    hash: null,
+    search: '?f',
+    query: 'f',
+    pathname: '%0D%0Ad/e',
+    path: '%0D%0Ad/e?f',
+    href: 'http://a%0D%22%20%09%0A%3C\'b:b@c/%0D%0Ad/e?f'
+  }
+
 };
 
 for (var u in parseTests) {
@@ -1393,13 +1442,13 @@ relativeTests.forEach(function(relativeTest) {
 });
 
 //format: [to, from, result]
-// the test: ['.//g', 'f:/a', 'f://g'] is a fundimental problem
+// the test: ['.//g', 'f:/a', 'f://g'] is a fundamental problem
 // url.parse('f:/a') does not have a host
-// url.resolve('f:/a', './/g') does not have a host becuase you have moved
+// url.resolve('f:/a', './/g') does not have a host because you have moved
 // down to the g directory.  i.e. f:     //g, however when this url is parsed
 // f:// will indicate that the host is g which is not the case.
 // it is unclear to me how to keep this information from being lost
-// it may be that a pathname of ////g should colapse to /g but this seems
+// it may be that a pathname of ////g should collapse to /g but this seems
 // to be a lot of work for an edge case.  Right now I remove the test
 if (relativeTests2[181][0] === './/g' &&
     relativeTests2[181][1] === 'f:/a' &&

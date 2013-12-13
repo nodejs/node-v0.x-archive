@@ -61,7 +61,7 @@ TEST(DisasmIa320) {
   __ sub(eax, Immediate(12345678));
   __ xor_(eax, 12345678);
   __ and_(eax, 12345678);
-  Handle<FixedArray> foo = FACTORY->NewFixedArray(10, TENURED);
+  Handle<FixedArray> foo = isolate->factory()->NewFixedArray(10, TENURED);
   __ cmp(eax, foo);
 
   // ---- This one caused crash
@@ -92,23 +92,14 @@ TEST(DisasmIa320) {
   __ cmp(edx, 3);
   __ cmp(edx, Operand(esp, 4));
   __ cmp(Operand(ebp, ecx, times_4, 0), Immediate(1000));
-  Handle<FixedArray> foo2 = FACTORY->NewFixedArray(10, TENURED);
+  Handle<FixedArray> foo2 = isolate->factory()->NewFixedArray(10, TENURED);
   __ cmp(ebx, foo2);
   __ cmpb(ebx, Operand(ebp, ecx, times_2, 0));
   __ cmpb(Operand(ebp, ecx, times_2, 0), ebx);
   __ or_(edx, 3);
   __ xor_(edx, 3);
   __ nop();
-  {
-    CHECK(CpuFeatures::IsSupported(CPUID));
-    CpuFeatureScope fscope(&assm, CPUID);
-    __ cpuid();
-  }
-  {
-    CHECK(CpuFeatures::IsSupported(RDTSC));
-    CpuFeatureScope fscope(&assm, RDTSC);
-    __ rdtsc();
-  }
+  __ cpuid();
   __ movsx_b(edx, ecx);
   __ movsx_w(edx, ecx);
   __ movzx_b(edx, ecx);
@@ -363,19 +354,29 @@ TEST(DisasmIa320) {
       CpuFeatureScope fscope(&assm, SSE2);
       __ cvttss2si(edx, Operand(ebx, ecx, times_4, 10000));
       __ cvtsi2sd(xmm1, Operand(ebx, ecx, times_4, 10000));
-      __ addsd(xmm1, xmm0);
-      __ mulsd(xmm1, xmm0);
-      __ subsd(xmm1, xmm0);
-      __ divsd(xmm1, xmm0);
-      __ movdbl(xmm1, Operand(ebx, ecx, times_4, 10000));
-      __ movdbl(Operand(ebx, ecx, times_4, 10000), xmm1);
-      __ ucomisd(xmm0, xmm1);
-
+      __ movsd(xmm1, Operand(ebx, ecx, times_4, 10000));
+      __ movsd(Operand(ebx, ecx, times_4, 10000), xmm1);
+      __ movaps(xmm0, xmm1);
       // 128 bit move instructions.
       __ movdqa(xmm0, Operand(ebx, ecx, times_4, 10000));
       __ movdqa(Operand(ebx, ecx, times_4, 10000), xmm0);
       __ movdqu(xmm0, Operand(ebx, ecx, times_4, 10000));
       __ movdqu(Operand(ebx, ecx, times_4, 10000), xmm0);
+
+      __ addsd(xmm1, xmm0);
+      __ mulsd(xmm1, xmm0);
+      __ subsd(xmm1, xmm0);
+      __ divsd(xmm1, xmm0);
+      __ ucomisd(xmm0, xmm1);
+      __ cmpltsd(xmm0, xmm1);
+
+      __ andps(xmm0, xmm1);
+      __ andpd(xmm0, xmm1);
+      __ psllq(xmm0, 17);
+      __ psllq(xmm0, xmm1);
+      __ psrlq(xmm0, 17);
+      __ psrlq(xmm0, xmm1);
+      __ por(xmm0, xmm1);
     }
   }
 
@@ -402,42 +403,13 @@ TEST(DisasmIa320) {
     }
   }
 
-  // andpd, cmpltsd, movaps, psllq, psrlq, por.
-  {
-    if (CpuFeatures::IsSupported(SSE2)) {
-      CpuFeatureScope fscope(&assm, SSE2);
-      __ andpd(xmm0, xmm1);
-      __ andpd(xmm1, xmm2);
-
-      __ cmpltsd(xmm0, xmm1);
-      __ cmpltsd(xmm1, xmm2);
-
-      __ movaps(xmm0, xmm1);
-      __ movaps(xmm1, xmm2);
-
-      __ psllq(xmm0, 17);
-      __ psllq(xmm1, 42);
-
-      __ psllq(xmm0, xmm1);
-      __ psllq(xmm1, xmm2);
-
-      __ psrlq(xmm0, 17);
-      __ psrlq(xmm1, 42);
-
-      __ psrlq(xmm0, xmm1);
-      __ psrlq(xmm1, xmm2);
-
-      __ por(xmm0, xmm1);
-      __ por(xmm1, xmm2);
-    }
-  }
-
   {
     if (CpuFeatures::IsSupported(SSE2) &&
         CpuFeatures::IsSupported(SSE4_1)) {
       CpuFeatureScope scope(&assm, SSE4_1);
       __ pextrd(eax, xmm0, 1);
       __ pinsrd(xmm1, eax, 0);
+      __ extractps(eax, xmm1, 0);
     }
   }
 

@@ -44,36 +44,34 @@
 #ifndef V8_PLATFORM_H_
 #define V8_PLATFORM_H_
 
+#include <cstdarg>
+
+#include "platform/mutex.h"
+#include "platform/semaphore.h"
+#include "utils.h"
+#include "v8globals.h"
+
 #ifdef __sun
 # ifndef signbit
+namespace std {
 int signbit(double x);
+}
 # endif
 #endif
 
-// GCC specific stuff
-#ifdef __GNUC__
-
-// Needed for va_list on at least MinGW and Android.
-#include <stdarg.h>
-
-#define __GNUC_VERSION__ (__GNUC__ * 10000 + __GNUC_MINOR__ * 100)
-
-#endif  // __GNUC__
-
-
-// Windows specific stuff.
-#ifdef WIN32
-
 // Microsoft Visual C++ specific stuff.
-#ifdef _MSC_VER
+#if V8_CC_MSVC
 
+#include "win32-headers.h"
 #include "win32-math.h"
 
 int strncasecmp(const char* s1, const char* s2, int n);
 
+// Visual C++ 2013 and higher implement this function.
+#if (_MSC_VER < 1800)
 inline int lrint(double flt) {
   int intgr;
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
   __asm {
     fld flt
     fistp intgr
@@ -88,27 +86,12 @@ inline int lrint(double flt) {
   return intgr;
 }
 
+#endif  // _MSC_VER < 1800
 
-#endif  // _MSC_VER
-
-#ifndef __CYGWIN__
-// Random is missing on both Visual Studio and MinGW.
-int random();
-#endif
-
-#endif  // WIN32
-
-#include "atomicops.h"
-#include "lazy-instance.h"
-#include "platform-tls.h"
-#include "utils.h"
-#include "v8globals.h"
+#endif  // V8_CC_MSVC
 
 namespace v8 {
 namespace internal {
-
-class Semaphore;
-class Mutex;
 
 double ceiling(double x);
 double modulo(double x, double y);
@@ -124,8 +107,59 @@ double fast_sqrt(double input);
 // on demand.
 void lazily_initialize_fast_exp();
 
-// Forward declarations.
-class Socket;
+// ----------------------------------------------------------------------------
+// Fast TLS support
+
+#ifndef V8_NO_FAST_TLS
+
+#if defined(_MSC_VER) && V8_HOST_ARCH_IA32
+
+#define V8_FAST_TLS_SUPPORTED 1
+
+INLINE(intptr_t InternalGetExistingThreadLocal(intptr_t index));
+
+inline intptr_t InternalGetExistingThreadLocal(intptr_t index) {
+  const intptr_t kTibInlineTlsOffset = 0xE10;
+  const intptr_t kTibExtraTlsOffset = 0xF94;
+  const intptr_t kMaxInlineSlots = 64;
+  const intptr_t kMaxSlots = kMaxInlineSlots + 1024;
+  ASSERT(0 <= index && index < kMaxSlots);
+  if (index < kMaxInlineSlots) {
+    return static_cast<intptr_t>(__readfsdword(kTibInlineTlsOffset +
+                                               kPointerSize * index));
+  }
+  intptr_t extra = static_cast<intptr_t>(__readfsdword(kTibExtraTlsOffset));
+  ASSERT(extra != 0);
+  return *reinterpret_cast<intptr_t*>(extra +
+                                      kPointerSize * (index - kMaxInlineSlots));
+}
+
+#elif defined(__APPLE__) && (V8_HOST_ARCH_IA32 || V8_HOST_ARCH_X64)
+
+#define V8_FAST_TLS_SUPPORTED 1
+
+extern intptr_t kMacTlsBaseOffset;
+
+INLINE(intptr_t InternalGetExistingThreadLocal(intptr_t index));
+
+inline intptr_t InternalGetExistingThreadLocal(intptr_t index) {
+  intptr_t result;
+#if V8_HOST_ARCH_IA32
+  asm("movl %%gs:(%1,%2,4), %0;"
+      :"=r"(result)  // Output must be a writable register.
+      :"r"(kMacTlsBaseOffset), "r"(index));
+#else
+  asm("movq %%gs:(%1,%2,8), %0;"
+      :"=r"(result)
+      :"r"(kMacTlsBaseOffset), "r"(index));
+#endif
+  return result;
+}
+
+#endif
+
+#endif  // V8_NO_FAST_TLS
+
 
 // ----------------------------------------------------------------------------
 // OS
@@ -136,25 +170,15 @@ class Socket;
 
 class OS {
  public:
-  // Initializes the platform OS support. Called once at VM startup.
-  static void SetUp();
-
   // Initializes the platform OS support that depend on CPU features. This is
   // called after CPU initialization.
   static void PostSetUp();
-
-  // Clean up platform-OS-related things. Called once at VM shutdown.
-  static void TearDown();
 
   // Returns the accumulated user time for thread. This routine
   // can be used for profiling. The implementation should
   // strive for high-precision timer resolution, preferable
   // micro-second resolution.
   static int GetUserTime(uint32_t* secs,  uint32_t* usecs);
-
-  // Get a tick counter normalized to one tick per microsecond.
-  // Used for calculating time intervals.
-  static int64_t Ticks();
 
   // Returns current time as the number of milliseconds since
   // 00:00:00 UTC, January 1, 1970.
@@ -223,26 +247,14 @@ class OS {
   // Get the Alignment guaranteed by Allocate().
   static size_t AllocateAlignment();
 
-  // Returns an indication of whether a pointer is in a space that
-  // has been allocated by Allocate().  This method may conservatively
-  // always return false, but giving more accurate information may
-  // improve the robustness of the stack dump code in the presence of
-  // heap corruption.
-  static bool IsOutsideAllocatedSpace(void* pointer);
-
   // Sleep for a number of milliseconds.
   static void Sleep(const int milliseconds);
-
-  static int NumberOfCores();
 
   // Abort the current process.
   static void Abort();
 
   // Debug break.
   static void DebugBreak();
-
-  // Dump C++ current stack trace (only functional on Linux).
-  static void DumpBacktrace();
 
   // Walk the stack.
   static const int kStackWalkError = -1;
@@ -252,20 +264,6 @@ class OS {
     void* address;
     char text[kStackWalkMaxTextLen];
   };
-
-  static int StackWalk(Vector<StackFrame> frames);
-
-  // Factory method for creating platform dependent Mutex.
-  // Please use delete to reclaim the storage for the returned Mutex.
-  static Mutex* CreateMutex();
-
-  // Factory method for creating platform dependent Semaphore.
-  // Please use delete to reclaim the storage for the returned Semaphore.
-  static Semaphore* CreateSemaphore(int count);
-
-  // Factory method for creating platform dependent Socket.
-  // Please use delete to reclaim the storage for the returned Socket.
-  static Socket* CreateSocket();
 
   class MemoryMappedFile {
    public:
@@ -288,7 +286,7 @@ class OS {
 
   // Support for the profiler.  Can do nothing, in which case ticks
   // occuring in shared libraries will not be properly accounted for.
-  static void LogSharedLibraryAddresses();
+  static void LogSharedLibraryAddresses(Isolate* isolate);
 
   // Support for the profiler.  Notifies the external profiling
   // process that a code moving garbage collection starts.  Can do
@@ -304,6 +302,9 @@ class OS {
   // positions indicated by the members of the CpuFeature enum from globals.h
   static uint64_t CpuFeaturesImpliedByPlatform();
 
+  // The total amount of physical memory available on the current system.
+  static uint64_t TotalPhysicalMemory();
+
   // Maximum size of the virtual memory.  0 means there is no artificial
   // limit.
   static intptr_t MaxVirtualMemory();
@@ -311,24 +312,13 @@ class OS {
   // Returns the double constant NAN
   static double nan_value();
 
-  // Support runtime detection of Cpu implementer
-  static CpuImplementer GetCpuImplementer();
-
-  // Support runtime detection of VFP3 on ARM CPUs.
-  static bool ArmCpuHasFeature(CpuFeature feature);
-
   // Support runtime detection of whether the hard float option of the
   // EABI is used.
   static bool ArmUsingHardFloat();
 
-  // Support runtime detection of FPU on MIPS CPUs.
-  static bool MipsCpuHasFeature(CpuFeature feature);
-
   // Returns the activation frame alignment constraint or zero if
   // the platform doesn't care. Guaranteed to be a power of two.
   static int ActivationFrameAlignment();
-
-  static void ReleaseStore(volatile AtomicWord* ptr, AtomicWord value);
 
 #if defined(V8_TARGET_ARCH_IA32)
   // Limit below which the extra overhead of the MemCopy function is likely
@@ -344,7 +334,42 @@ class OS {
   static void MemCopy(void* dest, const void* src, size_t size) {
     MemMove(dest, src, size);
   }
-#else  // V8_TARGET_ARCH_IA32
+#elif defined(V8_HOST_ARCH_ARM)
+  typedef void (*MemCopyUint8Function)(uint8_t* dest,
+                                       const uint8_t* src,
+                                       size_t size);
+  static MemCopyUint8Function memcopy_uint8_function;
+  static void MemCopyUint8Wrapper(uint8_t* dest,
+                                  const uint8_t* src,
+                                  size_t chars) {
+    memcpy(dest, src, chars);
+  }
+  // For values < 16, the assembler function is slower than the inlined C code.
+  static const int kMinComplexMemCopy = 16;
+  static void MemCopy(void* dest, const void* src, size_t size) {
+    (*memcopy_uint8_function)(reinterpret_cast<uint8_t*>(dest),
+                              reinterpret_cast<const uint8_t*>(src),
+                              size);
+  }
+  static void MemMove(void* dest, const void* src, size_t size) {
+    memmove(dest, src, size);
+  }
+
+  typedef void (*MemCopyUint16Uint8Function)(uint16_t* dest,
+                                             const uint8_t* src,
+                                             size_t size);
+  static MemCopyUint16Uint8Function memcopy_uint16_uint8_function;
+  static void MemCopyUint16Uint8Wrapper(uint16_t* dest,
+                                        const uint8_t* src,
+                                        size_t chars);
+  // For values < 12, the assembler function is slower than the inlined C code.
+  static const int kMinComplexConvertMemCopy = 12;
+  static void MemCopyUint16Uint8(uint16_t* dest,
+                                 const uint8_t* src,
+                                 size_t size) {
+    (*memcopy_uint16_uint8_function)(dest, src, size);
+  }
+#else
   // Copy memory area to disjoint memory area.
   static void MemCopy(void* dest, const void* src, size_t size) {
     memcpy(dest, src, size);
@@ -457,59 +482,6 @@ class VirtualMemory {
 
 
 // ----------------------------------------------------------------------------
-// Semaphore
-//
-// A semaphore object is a synchronization object that maintains a count. The
-// count is decremented each time a thread completes a wait for the semaphore
-// object and incremented each time a thread signals the semaphore. When the
-// count reaches zero,  threads waiting for the semaphore blocks until the
-// count becomes non-zero.
-
-class Semaphore {
- public:
-  virtual ~Semaphore() {}
-
-  // Suspends the calling thread until the semaphore counter is non zero
-  // and then decrements the semaphore counter.
-  virtual void Wait() = 0;
-
-  // Suspends the calling thread until the counter is non zero or the timeout
-  // time has passed. If timeout happens the return value is false and the
-  // counter is unchanged. Otherwise the semaphore counter is decremented and
-  // true is returned. The timeout value is specified in microseconds.
-  virtual bool Wait(int timeout) = 0;
-
-  // Increments the semaphore counter.
-  virtual void Signal() = 0;
-};
-
-template <int InitialValue>
-struct CreateSemaphoreTrait {
-  static Semaphore* Create() {
-    return OS::CreateSemaphore(InitialValue);
-  }
-};
-
-// POD Semaphore initialized lazily (i.e. the first time Pointer() is called).
-// Usage:
-//   // The following semaphore starts at 0.
-//   static LazySemaphore<0>::type my_semaphore = LAZY_SEMAPHORE_INITIALIZER;
-//
-//   void my_function() {
-//     // Do something with my_semaphore.Pointer().
-//   }
-//
-template <int InitialValue>
-struct LazySemaphore {
-  typedef typename LazyDynamicInstance<
-      Semaphore, CreateSemaphoreTrait<InitialValue>,
-      ThreadSafeInitOnceTrait>::type type;
-};
-
-#define LAZY_SEMAPHORE_INITIALIZER LAZY_DYNAMIC_INSTANCE_INITIALIZER
-
-
-// ----------------------------------------------------------------------------
 // Thread
 //
 // Thread objects are used for creating and running threads. When the start()
@@ -551,7 +523,7 @@ class Thread {
 
   // Start new thread and wait until Run() method is called on the new thread.
   void StartSynchronously() {
-    start_semaphore_ = OS::CreateSemaphore(0);
+    start_semaphore_ = new Semaphore(0);
     Start();
     start_semaphore_->Wait();
     delete start_semaphore_;
@@ -623,113 +595,6 @@ class Thread {
 
   DISALLOW_COPY_AND_ASSIGN(Thread);
 };
-
-
-// ----------------------------------------------------------------------------
-// Mutex
-//
-// Mutexes are used for serializing access to non-reentrant sections of code.
-// The implementations of mutex should allow for nested/recursive locking.
-
-class Mutex {
- public:
-  virtual ~Mutex() {}
-
-  // Locks the given mutex. If the mutex is currently unlocked, it becomes
-  // locked and owned by the calling thread, and immediately. If the mutex
-  // is already locked by another thread, suspends the calling thread until
-  // the mutex is unlocked.
-  virtual int Lock() = 0;
-
-  // Unlocks the given mutex. The mutex is assumed to be locked and owned by
-  // the calling thread on entrance.
-  virtual int Unlock() = 0;
-
-  // Tries to lock the given mutex. Returns whether the mutex was
-  // successfully locked.
-  virtual bool TryLock() = 0;
-};
-
-struct CreateMutexTrait {
-  static Mutex* Create() {
-    return OS::CreateMutex();
-  }
-};
-
-// POD Mutex initialized lazily (i.e. the first time Pointer() is called).
-// Usage:
-//   static LazyMutex my_mutex = LAZY_MUTEX_INITIALIZER;
-//
-//   void my_function() {
-//     ScopedLock my_lock(my_mutex.Pointer());
-//     // Do something.
-//   }
-//
-typedef LazyDynamicInstance<
-    Mutex, CreateMutexTrait, ThreadSafeInitOnceTrait>::type LazyMutex;
-
-#define LAZY_MUTEX_INITIALIZER LAZY_DYNAMIC_INSTANCE_INITIALIZER
-
-// ----------------------------------------------------------------------------
-// ScopedLock
-//
-// Stack-allocated ScopedLocks provide block-scoped locking and
-// unlocking of a mutex.
-class ScopedLock {
- public:
-  explicit ScopedLock(Mutex* mutex): mutex_(mutex) {
-    ASSERT(mutex_ != NULL);
-    mutex_->Lock();
-  }
-  ~ScopedLock() {
-    mutex_->Unlock();
-  }
-
- private:
-  Mutex* mutex_;
-  DISALLOW_COPY_AND_ASSIGN(ScopedLock);
-};
-
-
-// ----------------------------------------------------------------------------
-// Socket
-//
-
-class Socket {
- public:
-  virtual ~Socket() {}
-
-  // Server initialization.
-  virtual bool Bind(const int port) = 0;
-  virtual bool Listen(int backlog) const = 0;
-  virtual Socket* Accept() const = 0;
-
-  // Client initialization.
-  virtual bool Connect(const char* host, const char* port) = 0;
-
-  // Shutdown socket for both read and write. This causes blocking Send and
-  // Receive calls to exit. After Shutdown the Socket object cannot be used for
-  // any communication.
-  virtual bool Shutdown() = 0;
-
-  // Data Transimission
-  // Return 0 on failure.
-  virtual int Send(const char* data, int len) const = 0;
-  virtual int Receive(char* data, int len) const = 0;
-
-  // Set the value of the SO_REUSEADDR socket option.
-  virtual bool SetReuseAddress(bool reuse_address) = 0;
-
-  virtual bool IsValid() const = 0;
-
-  static bool SetUp();
-  static int LastError();
-  static uint16_t HToN(uint16_t value);
-  static uint16_t NToH(uint16_t value);
-  static uint32_t HToN(uint32_t value);
-  static uint32_t NToH(uint32_t value);
-};
-
 
 } }  // namespace v8::internal
 

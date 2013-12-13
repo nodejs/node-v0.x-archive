@@ -44,8 +44,8 @@ class SourceCodeCache BASE_EMBEDDED {
  public:
   explicit SourceCodeCache(Script::Type type): type_(type), cache_(NULL) { }
 
-  void Initialize(bool create_heap_objects) {
-    cache_ = create_heap_objects ? HEAP->empty_fixed_array() : NULL;
+  void Initialize(Isolate* isolate, bool create_heap_objects) {
+    cache_ = create_heap_objects ? isolate->heap()->empty_fixed_array() : NULL;
   }
 
   void Iterate(ObjectVisitor* v) {
@@ -65,13 +65,14 @@ class SourceCodeCache BASE_EMBEDDED {
   }
 
   void Add(Vector<const char> name, Handle<SharedFunctionInfo> shared) {
-    HandleScope scope(shared->GetIsolate());
+    Isolate* isolate = shared->GetIsolate();
+    Factory* factory = isolate->factory();
+    HandleScope scope(isolate);
     int length = cache_->length();
-    Handle<FixedArray> new_array =
-        FACTORY->NewFixedArray(length + 2, TENURED);
+    Handle<FixedArray> new_array = factory->NewFixedArray(length + 2, TENURED);
     cache_->CopyTo(0, *new_array, 0, cache_->length());
     cache_ = *new_array;
-    Handle<String> str = FACTORY->NewStringFromAscii(name, TENURED);
+    Handle<String> str = factory->NewStringFromAscii(name, TENURED);
     cache_->set(length, *str);
     cache_->set(length + 1, *shared);
     Script::cast(shared->script())->set_type(Smi::FromInt(type_));
@@ -88,6 +89,8 @@ class SourceCodeCache BASE_EMBEDDED {
 // context.
 class Bootstrapper {
  public:
+  static void InitializeOncePerProcess();
+
   // Requires: Heap::SetUp has been called.
   void Initialize(bool create_heap_objects);
   void TearDown();

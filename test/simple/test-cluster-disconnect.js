@@ -56,8 +56,8 @@ if (cluster.isWorker) {
     var done = 0;
 
     for (var i = 0, l = servers; i < l; i++) {
-      testConnection(common.PORT + i, function(sucess) {
-        assert.ok(sucess);
+      testConnection(common.PORT + i, function(success) {
+        assert.ok(success);
         done += 1;
         if (done === servers) {
           cb();
@@ -68,7 +68,7 @@ if (cluster.isWorker) {
 
   // start two workers and execute callback when both is listening
   var startCluster = function(cb) {
-    var workers = 2;
+    var workers = 8;
     var online = 0;
 
     for (var i = 0, l = workers; i < l; i++) {

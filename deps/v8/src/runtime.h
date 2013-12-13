@@ -87,27 +87,31 @@ namespace internal {
   F(NewStrictArgumentsFast, 3, 1) \
   F(LazyCompile, 1, 1) \
   F(LazyRecompile, 1, 1) \
-  F(ParallelRecompile, 1, 1) \
-  F(InstallRecompiledCode, 1, 1) \
+  F(ConcurrentRecompile, 1, 1) \
+  F(TryInstallRecompiledCode, 1, 1) \
   F(NotifyDeoptimized, 1, 1) \
   F(NotifyStubFailure, 0, 1) \
-  F(NotifyOSR, 0, 1) \
   F(DeoptimizeFunction, 1, 1) \
   F(ClearFunctionTypeFeedback, 1, 1) \
   F(RunningInSimulator, 0, 1) \
+  F(IsConcurrentRecompilationSupported, 0, 1) \
   F(OptimizeFunctionOnNextCall, -1, 1) \
-  F(WaitUntilOptimized, 1, 1) \
-  F(GetOptimizationStatus, 1, 1) \
+  F(NeverOptimizeFunction, 1, 1) \
+  F(GetOptimizationStatus, -1, 1) \
   F(GetOptimizationCount, 1, 1) \
-  F(CompileForOnStackReplacement, 1, 1) \
-  F(SetNewFunctionAttributes, 1, 1) \
+  F(UnblockConcurrentRecompilation, 0, 1) \
+  F(CompileForOnStackReplacement, 2, 1) \
+  F(SetAllocationTimeout, 2, 1) \
   F(AllocateInNewSpace, 1, 1) \
   F(AllocateInOldPointerSpace, 1, 1) \
+  F(AllocateInOldDataSpace, 1, 1) \
   F(SetNativeFlag, 1, 1) \
   F(StoreArrayLiteralElement, 5, 1) \
   F(DebugCallbackSupportsStepping, 1, 1) \
   F(DebugPrepareStepInIfStepping, 1, 1) \
   F(FlattenString, 1, 1) \
+  F(MigrateInstance, 1, 1) \
+  F(NotifyContextDisposed, 0, 1) \
   \
   /* Array join support */ \
   F(PushIfAbsent, 2, 1) \
@@ -145,6 +149,7 @@ namespace internal {
   F(NumberMod, 2, 1) \
   F(NumberUnaryMinus, 1, 1) \
   F(NumberAlloc, 0, 1) \
+  F(NumberImul, 2, 1) \
   \
   F(StringAdd, 2, 1) \
   F(StringBuilderConcat, 3, 1) \
@@ -155,7 +160,6 @@ namespace internal {
   F(NumberOr, 2, 1) \
   F(NumberAnd, 2, 1) \
   F(NumberXor, 2, 1) \
-  F(NumberNot, 1, 1) \
   \
   F(NumberShl, 2, 1) \
   F(NumberShr, 2, 1) \
@@ -217,7 +221,8 @@ namespace internal {
   F(NumberToRadixString, 2, 1) \
   F(NumberToFixed, 2, 1) \
   F(NumberToExponential, 2, 1) \
-  F(NumberToPrecision, 2, 1)
+  F(NumberToPrecision, 2, 1) \
+  F(IsValidSmi, 1, 1)
 
 
 #define RUNTIME_FUNCTION_LIST_ALWAYS_2(F) \
@@ -230,6 +235,7 @@ namespace internal {
   F(FunctionSetName, 2, 1) \
   F(FunctionNameShouldPrintAsAnonymous, 1, 1) \
   F(FunctionMarkNameShouldPrintAsAnonymous, 1, 1) \
+  F(FunctionIsGenerator, 1, 1) \
   F(FunctionBindArguments, 4, 1) \
   F(BoundFunctionGetBindings, 1, 1) \
   F(FunctionRemovePrototype, 1, 1) \
@@ -241,9 +247,7 @@ namespace internal {
   F(FunctionIsBuiltin, 1, 1) \
   F(GetScript, 1, 1) \
   F(CollectStackTrace, 3, 1) \
-  F(MarkOneShotGetter, 1, 1) \
-  F(GetOverflowedStackTrace, 1, 1) \
-  F(SetOverflowedStackTrace, 2, 1) \
+  F(GetAndClearOverflowedStackTrace, 1, 1) \
   F(GetV8Version, 0, 1) \
   \
   F(ClassOf, 1, 1) \
@@ -255,6 +259,7 @@ namespace internal {
   F(GetTemplateField, 2, 1) \
   F(DisableAccessChecks, 1, 1) \
   F(EnableAccessChecks, 1, 1) \
+  F(SetAccessorProperty, 6, 1) \
   \
   /* Dates */ \
   F(DateCurrentTime, 0, 1) \
@@ -285,6 +290,8 @@ namespace internal {
   F(GetArrayKeys, 2, 1) \
   F(MoveArrayContents, 2, 1) \
   F(EstimateNumberOfElements, 1, 1) \
+  F(ArrayConstructor, -1, 1) \
+  F(InternalArrayConstructor, -1, 1) \
   \
   /* Getters and Setters */ \
   F(LookupAccessor, 3, 1) \
@@ -292,12 +299,17 @@ namespace internal {
   /* Literals */ \
   F(MaterializeRegExpLiteral, 4, 1)\
   F(CreateObjectLiteral, 4, 1) \
-  F(CreateObjectLiteralShallow, 4, 1) \
   F(CreateArrayLiteral, 3, 1) \
   F(CreateArrayLiteralShallow, 3, 1) \
   \
   /* Harmony generators */ \
   F(CreateJSGeneratorObject, 0, 1) \
+  F(SuspendJSGeneratorObject, 1, 1) \
+  F(ResumeJSGeneratorObject, 3, 1) \
+  F(ThrowGeneratorStateError, 1, 1) \
+  \
+  /* ES5 */ \
+  F(ObjectFreeze, 1, 1) \
   \
   /* Harmony modules */ \
   F(IsJSModule, 1, 1) \
@@ -331,34 +343,61 @@ namespace internal {
   F(MapSet, 3, 1) \
   F(MapGetSize, 1, 1) \
   \
-  /* Harmony weakmaps */ \
-  F(WeakMapInitialize, 1, 1) \
-  F(WeakMapGet, 2, 1) \
-  F(WeakMapHas, 2, 1) \
-  F(WeakMapDelete, 2, 1) \
-  F(WeakMapSet, 3, 1) \
+  /* Harmony weak maps and sets */ \
+  F(WeakCollectionInitialize, 1, 1) \
+  F(WeakCollectionGet, 2, 1) \
+  F(WeakCollectionHas, 2, 1) \
+  F(WeakCollectionDelete, 2, 1) \
+  F(WeakCollectionSet, 3, 1) \
   \
   /* Harmony observe */ \
   F(IsObserved, 1, 1) \
-  F(SetIsObserved, 2, 1) \
+  F(SetIsObserved, 1, 1) \
   F(SetObserverDeliveryPending, 0, 1) \
   F(GetObservationState, 0, 1) \
   F(ObservationWeakMapCreate, 0, 1) \
   F(UnwrapGlobalProxy, 1, 1) \
+  F(IsAccessAllowedForObserver, 3, 1) \
   \
   /* Harmony typed arrays */ \
   F(ArrayBufferInitialize, 2, 1)\
   F(ArrayBufferGetByteLength, 1, 1)\
   F(ArrayBufferSliceImpl, 3, 1) \
+  F(ArrayBufferIsView, 1, 1) \
   \
   F(TypedArrayInitialize, 5, 1) \
+  F(TypedArrayInitializeFromArrayLike, 4, 1) \
   F(TypedArrayGetBuffer, 1, 1) \
   F(TypedArrayGetByteLength, 1, 1) \
   F(TypedArrayGetByteOffset, 1, 1) \
   F(TypedArrayGetLength, 1, 1) \
+  F(TypedArraySetFastCases, 3, 1) \
+  \
+  F(DataViewInitialize, 4, 1) \
+  F(DataViewGetBuffer, 1, 1) \
+  F(DataViewGetByteLength, 1, 1) \
+  F(DataViewGetByteOffset, 1, 1) \
+  F(DataViewGetInt8, 3, 1) \
+  F(DataViewGetUint8, 3, 1) \
+  F(DataViewGetInt16, 3, 1) \
+  F(DataViewGetUint16, 3, 1) \
+  F(DataViewGetInt32, 3, 1) \
+  F(DataViewGetUint32, 3, 1) \
+  F(DataViewGetFloat32, 3, 1) \
+  F(DataViewGetFloat64, 3, 1) \
+  \
+  F(DataViewSetInt8, 4, 1) \
+  F(DataViewSetUint8, 4, 1) \
+  F(DataViewSetInt16, 4, 1) \
+  F(DataViewSetUint16, 4, 1) \
+  F(DataViewSetInt32, 4, 1) \
+  F(DataViewSetUint32, 4, 1) \
+  F(DataViewSetFloat32, 4, 1) \
+  F(DataViewSetFloat64, 4, 1) \
   \
   /* Statements */ \
   F(NewClosure, 3, 1) \
+  F(NewClosureFromStubFailure, 1, 1) \
   F(NewObject, 1, 1) \
   F(NewObjectFromBound, 1, 1) \
   F(FinalizeInstanceSize, 1, 1) \
@@ -418,6 +457,7 @@ namespace internal {
   F(HasFastDoubleElements, 1, 1) \
   F(HasFastHoleyElements, 1, 1) \
   F(HasDictionaryElements, 1, 1) \
+  F(HasNonStrictArgumentsElements, 1, 1) \
   F(HasExternalPixelElements, 1, 1) \
   F(HasExternalArrayElements, 1, 1) \
   F(HasExternalByteElements, 1, 1) \
@@ -430,12 +470,8 @@ namespace internal {
   F(HasExternalDoubleElements, 1, 1) \
   F(HasFastProperties, 1, 1) \
   F(TransitionElementsKind, 2, 1) \
-  F(TransitionElementsSmiToDouble, 1, 1) \
-  F(TransitionElementsDoubleToObject, 1, 1) \
   F(HaveSameMap, 2, 1) \
-  /* profiler */ \
-  F(ProfilerResume, 0, 1) \
-  F(ProfilerPause, 0, 1)
+  F(IsAccessCheckNeeded, 1, 1)
 
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
@@ -455,6 +491,7 @@ namespace internal {
   F(GetFrameCount, 1, 1) \
   F(GetFrameDetails, 2, 1) \
   F(GetScopeCount, 2, 1) \
+  F(GetStepInPositions, 2, 1) \
   F(GetScopeDetails, 4, 1) \
   F(GetFunctionScopeCount, 1, 1) \
   F(GetFunctionScopeDetails, 2, 1) \
@@ -463,13 +500,13 @@ namespace internal {
   F(GetThreadCount, 1, 1) \
   F(GetThreadDetails, 2, 1) \
   F(SetDisableBreak, 1, 1) \
-  F(GetBreakLocations, 1, 1) \
+  F(GetBreakLocations, 2, 1) \
   F(SetFunctionBreakPoint, 3, 1) \
-  F(SetScriptBreakPoint, 3, 1) \
+  F(SetScriptBreakPoint, 4, 1) \
   F(ClearBreakPoint, 1, 1) \
   F(ChangeBreakOnException, 2, 1) \
   F(IsBreakOnException, 1, 1) \
-  F(PrepareStep, 3, 1) \
+  F(PrepareStep, 4, 1) \
   F(ClearStepping, 0, 1) \
   F(DebugEvaluate, 6, 1) \
   F(DebugEvaluateGlobal, 4, 1) \
@@ -504,6 +541,43 @@ namespace internal {
 #define RUNTIME_FUNCTION_LIST_DEBUGGER_SUPPORT(F)
 #endif
 
+
+#ifdef V8_I18N_SUPPORT
+#define RUNTIME_FUNCTION_LIST_I18N_SUPPORT(F) \
+  /* i18n support */ \
+  /* Standalone, helper methods. */ \
+  F(CanonicalizeLanguageTag, 1, 1) \
+  F(AvailableLocalesOf, 1, 1) \
+  F(GetDefaultICULocale, 0, 1) \
+  F(GetLanguageTagVariants, 1, 1) \
+  \
+  /* Date format and parse. */ \
+  F(CreateDateTimeFormat, 3, 1) \
+  F(InternalDateFormat, 2, 1) \
+  F(InternalDateParse, 2, 1) \
+  \
+  /* Number format and parse. */ \
+  F(CreateNumberFormat, 3, 1) \
+  F(InternalNumberFormat, 2, 1) \
+  F(InternalNumberParse, 2, 1) \
+  \
+  /* Collator. */ \
+  F(CreateCollator, 3, 1) \
+  F(InternalCompare, 3, 1) \
+  \
+  /* Break iterator. */ \
+  F(CreateBreakIterator, 3, 1) \
+  F(BreakIteratorAdoptText, 2, 1) \
+  F(BreakIteratorFirst, 1, 1) \
+  F(BreakIteratorNext, 1, 1) \
+  F(BreakIteratorCurrent, 1, 1) \
+  F(BreakIteratorBreakType, 1, 1) \
+
+#else
+#define RUNTIME_FUNCTION_LIST_I18N_SUPPORT(F)
+#endif
+
+
 #ifdef DEBUG
 #define RUNTIME_FUNCTION_LIST_DEBUG(F) \
   /* Testing */ \
@@ -521,7 +595,8 @@ namespace internal {
   RUNTIME_FUNCTION_LIST_ALWAYS_1(F) \
   RUNTIME_FUNCTION_LIST_ALWAYS_2(F) \
   RUNTIME_FUNCTION_LIST_DEBUG(F) \
-  RUNTIME_FUNCTION_LIST_DEBUGGER_SUPPORT(F)
+  RUNTIME_FUNCTION_LIST_DEBUGGER_SUPPORT(F) \
+  RUNTIME_FUNCTION_LIST_I18N_SUPPORT(F)
 
 // ----------------------------------------------------------------------------
 // INLINE_FUNCTION_LIST defines all inlined functions accessed
@@ -559,7 +634,10 @@ namespace internal {
   F(IsRegExpEquivalent, 2, 1)                                                \
   F(HasCachedArrayIndex, 1, 1)                                               \
   F(GetCachedArrayIndex, 1, 1)                                               \
-  F(FastAsciiArrayJoin, 2, 1)
+  F(FastAsciiArrayJoin, 2, 1)                                                \
+  F(GeneratorNext, 2, 1)                                                     \
+  F(GeneratorThrow, 2, 1)                                                    \
+  F(DebugBreakInOptimizedCode, 0, 1)
 
 
 // ----------------------------------------------------------------------------
@@ -694,6 +772,11 @@ class Runtime : public AllStatic {
                                                          Handle<Object> object,
                                                          uint32_t index);
 
+  MUST_USE_RESULT static MaybeObject* GetElementOrCharAtOrFail(
+      Isolate* isolate,
+      Handle<Object> object,
+      uint32_t index);
+
   MUST_USE_RESULT static MaybeObject* SetObjectProperty(
       Isolate* isolate,
       Handle<Object> object,
@@ -738,8 +821,24 @@ class Runtime : public AllStatic {
       Handle<Object> object,
       Handle<Object> key);
 
+  static void SetupArrayBuffer(Isolate* isolate,
+                               Handle<JSArrayBuffer> array_buffer,
+                               bool is_external,
+                               void* data,
+                               size_t allocated_length);
+
+  static bool SetupArrayBufferAllocatingData(
+      Isolate* isolate,
+      Handle<JSArrayBuffer> array_buffer,
+      size_t allocated_length,
+      bool initialize = true);
+
+  static void FreeArrayBuffer(
+      Isolate* isolate,
+      JSArrayBuffer* phantom_array_buffer);
+
   // Helper functions used stubs.
-  static void PerformGC(Object* result);
+  static void PerformGC(Object* result, Isolate* isolate);
 
   // Used in runtime.cc and hydrogen's VisitArrayLiteral.
   static Handle<Object> CreateArrayLiteralBoilerplate(

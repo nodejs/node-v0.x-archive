@@ -42,8 +42,8 @@ const SETTER = 1;
 # These definitions must match the index of the properties in objects.h.
 const kApiTagOffset                 = 0;
 const kApiPropertyListOffset        = 1;
-const kApiSerialNumberOffset        = 2;
-const kApiConstructorOffset         = 2;
+const kApiSerialNumberOffset        = 3;
+const kApiConstructorOffset         = 3;
 const kApiPrototypeTemplateOffset   = 5;
 const kApiParentTemplateOffset      = 6;
 const kApiFlagOffset                = 14;
@@ -67,7 +67,9 @@ const msPerMonth       = 2592000000;
 
 # For apinatives.js
 const kUninitialized = -1;
-const kReadOnlyPrototypeBit = 3;  # For FunctionTemplateInfo, matches objects.h
+const kReadOnlyPrototypeBit = 3;
+const kRemovePrototypeBit = 4;  # For FunctionTemplateInfo, matches objects.h
+const kDoNotCacheBit = 5;  # For FunctionTemplateInfo, matches objects.h
 
 # Note: kDayZeroInJulianDay = ToJulianDay(1970, 0, 1).
 const kInvalidDate        = 'Invalid Date';
@@ -107,6 +109,7 @@ macro IS_REGEXP(arg)            = (%_IsRegExp(arg));
 macro IS_SET(arg)               = (%_ClassOf(arg) === 'Set');
 macro IS_MAP(arg)               = (%_ClassOf(arg) === 'Map');
 macro IS_WEAKMAP(arg)           = (%_ClassOf(arg) === 'WeakMap');
+macro IS_WEAKSET(arg)           = (%_ClassOf(arg) === 'WeakSet');
 macro IS_DATE(arg)              = (%_ClassOf(arg) === 'Date');
 macro IS_NUMBER_WRAPPER(arg)    = (%_ClassOf(arg) === 'Number');
 macro IS_STRING_WRAPPER(arg)    = (%_ClassOf(arg) === 'String');
@@ -116,7 +119,8 @@ macro IS_ERROR(arg)             = (%_ClassOf(arg) === 'Error');
 macro IS_SCRIPT(arg)            = (%_ClassOf(arg) === 'Script');
 macro IS_ARGUMENTS(arg)         = (%_ClassOf(arg) === 'Arguments');
 macro IS_GLOBAL(arg)            = (%_ClassOf(arg) === 'global');
-macro IS_ARRAYBUFFER(arg)       = (%_ClassOf(arg) === '__ArrayBuffer');
+macro IS_ARRAYBUFFER(arg)       = (%_ClassOf(arg) === 'ArrayBuffer');
+macro IS_DATAVIEW(arg)          = (%_ClassOf(arg) === 'DataView');
 macro IS_GENERATOR(arg)         = (%_ClassOf(arg) === 'Generator');
 macro IS_UNDETECTABLE(arg)      = (%_IsUndetectableObject(arg));
 macro FLOOR(arg)                = $floor(arg);
@@ -144,7 +148,7 @@ const kBoundArgumentsStartIndex = 2;
 macro NUMBER_IS_NAN(arg) = (!%_IsSmi(%IS_VAR(arg)) && !(arg == arg));
 macro NUMBER_IS_FINITE(arg) = (%_IsSmi(%IS_VAR(arg)) || ((arg == arg) && (arg != 1/0) && (arg != -1/0)));
 macro TO_INTEGER(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : %NumberToInteger(ToNumber(arg)));
-macro TO_POSITIVE_INTEGER(arg) = (%_IsSmi(%IS_VAR(arg)) ? (arg > 0 ? arg : 0) : %NumberToPositiveInteger(ToNumber(arg)));
+macro TO_INTEGER_FOR_SIDE_EFFECT(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : ToNumber(arg));
 macro TO_INTEGER_MAP_MINUS_ZERO(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : %NumberToIntegerMapMinusZero(ToNumber(arg)));
 macro TO_INT32(arg) = (%_IsSmi(%IS_VAR(arg)) ? arg : (arg >> 0));
 macro TO_UINT32(arg) = (arg >>> 0);
@@ -152,6 +156,11 @@ macro TO_STRING_INLINE(arg) = (IS_STRING(%IS_VAR(arg)) ? arg : NonStringToString
 macro TO_NUMBER_INLINE(arg) = (IS_NUMBER(%IS_VAR(arg)) ? arg : NonNumberToNumber(arg));
 macro TO_OBJECT_INLINE(arg) = (IS_SPEC_OBJECT(%IS_VAR(arg)) ? arg : ToObject(arg));
 macro JSON_NUMBER_TO_STRING(arg) = ((%_IsSmi(%IS_VAR(arg)) || arg - arg == 0) ? %_NumberToString(arg) : "null");
+
+# Constants.  The compiler constant folds them.
+const NAN = $NaN;
+const INFINITY = (1/0);
+const UNDEFINED = (void 0);
 
 # Macros implemented in Python.
 python macro CHAR_CODE(str) = ord(str[1]);

@@ -37,6 +37,8 @@
 #error Wrong environment, expected MSVC.
 #endif  // _MSC_VER
 
+// MSVC 2013+ provides implementations of all standard math functions.
+#if (_MSC_VER < 1800)
 enum {
   FP_NAN,
   FP_INFINITE,
@@ -45,17 +47,19 @@ enum {
   FP_NORMAL
 };
 
-namespace v8 {
+
+namespace std {
 
 int isfinite(double x);
-
-}  // namespace v8
-
-int isnan(double x);
 int isinf(double x);
+int isnan(double x);
 int isless(double x, double y);
 int isgreater(double x, double y);
 int fpclassify(double x);
 int signbit(double x);
+
+}  // namespace std
+
+#endif  // _MSC_VER < 1800
 
 #endif  // V8_WIN32_MATH_H_

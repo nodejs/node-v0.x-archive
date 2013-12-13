@@ -28,6 +28,7 @@
 #ifndef V8_HEAP_PROFILER_H_
 #define V8_HEAP_PROFILER_H_
 
+#include "heap-snapshot-generator-inl.h"
 #include "isolate.h"
 
 namespace v8 {
@@ -35,14 +36,6 @@ namespace internal {
 
 class HeapSnapshot;
 class HeapSnapshotsCollection;
-
-#define HEAP_PROFILE(heap, call)                                             \
-  do {                                                                       \
-    v8::internal::HeapProfiler* profiler = heap->isolate()->heap_profiler(); \
-    if (profiler != NULL && profiler->is_profiling()) {                      \
-      profiler->call;                                                        \
-    }                                                                        \
-  } while (false)
 
 class HeapProfiler {
  public:
@@ -62,14 +55,22 @@ class HeapProfiler {
 
   void StartHeapObjectsTracking();
   void StopHeapObjectsTracking();
+
+  static void RecordObjectAllocationFromMasm(Isolate* isolate,
+                                             Address obj,
+                                             int size);
+
   SnapshotObjectId PushHeapObjectsStats(OutputStream* stream);
   int GetSnapshotsCount();
   HeapSnapshot* GetSnapshot(int index);
-  HeapSnapshot* FindSnapshot(unsigned uid);
   SnapshotObjectId GetSnapshotObjectId(Handle<Object> obj);
   void DeleteAllSnapshots();
 
-  void ObjectMoveEvent(Address from, Address to);
+  void ObjectMoveEvent(Address from, Address to, int size);
+
+  void NewObjectEvent(Address addr, int size);
+
+  void UpdateObjectSizeEvent(Address addr, int size);
 
   void DefineWrapperClass(
       uint16_t class_id, v8::HeapProfiler::WrapperInfoCallback callback);
@@ -80,12 +81,28 @@ class HeapProfiler {
     return snapshots_->is_tracking_objects();
   }
 
+  void SetRetainedObjectInfo(UniqueId id, RetainedObjectInfo* info);
+
+  bool is_tracking_allocations() {
+    return is_tracking_allocations_;
+  }
+
+  void StartHeapAllocationsRecording();
+  void StopHeapAllocationsRecording();
+
+  int FindUntrackedObjects() {
+    return snapshots_->FindUntrackedObjects();
+  }
+
+  void DropCompiledCode();
+
  private:
   Heap* heap() const { return snapshots_->heap(); }
 
   HeapSnapshotsCollection* snapshots_;
   unsigned next_snapshot_uid_;
   List<v8::HeapProfiler::WrapperInfoCallback> wrapper_callbacks_;
+  bool is_tracking_allocations_;
 };
 
 } }  // namespace v8::internal

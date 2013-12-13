@@ -31,7 +31,7 @@
 #include <stddef.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
-# include "uv-private/stdint-msvc2008.h"
+# include "stdint-msvc2008.h"
 #else
 # include <stdint.h>
 #endif
@@ -40,20 +40,10 @@
 #include "tree.h"
 #include "queue.h"
 
-
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #define container_of(ptr, type, member) \
   ((type *) ((char *) (ptr) - offsetof(type, member)))
-
-#ifdef _MSC_VER
-# define UNUSED /* empty */
-# define INLINE __inline
-#else
-# define UNUSED __attribute__((unused))
-# define INLINE inline
-#endif
-
 
 #ifndef _WIN32
 enum {
@@ -69,44 +59,28 @@ enum {
 # define UV__HANDLE_CLOSING   0x01
 #endif
 
-extern const uv_err_t uv_ok_;
-
-uv_err_code uv_translate_sys_error(int sys_errno);
-int uv__set_error(uv_loop_t* loop, uv_err_code code, int sys_error);
-int uv__set_sys_error(uv_loop_t* loop, int sys_error);
-int uv__set_artificial_error(uv_loop_t* loop, uv_err_code code);
-uv_err_t uv__new_sys_error(int sys_error);
-uv_err_t uv__new_artificial_error(uv_err_code code);
-
-int uv__tcp_bind(uv_tcp_t* handle, struct sockaddr_in addr);
-int uv__tcp_bind6(uv_tcp_t* handle, struct sockaddr_in6 addr);
-
-int uv__udp_bind(uv_udp_t* handle, struct sockaddr_in addr, unsigned flags);
-int uv__udp_bind6(uv_udp_t* handle, struct sockaddr_in6 addr, unsigned flags);
+int uv__tcp_bind(uv_tcp_t* tcp,
+                 const struct sockaddr* addr,
+                 unsigned int addrlen);
 
 int uv__tcp_connect(uv_connect_t* req,
                    uv_tcp_t* handle,
-                   struct sockaddr_in address,
+                   const struct sockaddr* addr,
+                   unsigned int addrlen,
                    uv_connect_cb cb);
 
-int uv__tcp_connect6(uv_connect_t* req,
-                    uv_tcp_t* handle,
-                    struct sockaddr_in6 address,
-                    uv_connect_cb cb);
+int uv__udp_bind(uv_udp_t* handle,
+                 const struct sockaddr* addr,
+                 unsigned int  addrlen,
+                 unsigned int flags);
 
 int uv__udp_send(uv_udp_send_t* req,
                  uv_udp_t* handle,
-                 uv_buf_t bufs[],
-                 int bufcnt,
-                 struct sockaddr_in addr,
+                 const uv_buf_t bufs[],
+                 unsigned int nbufs,
+                 const struct sockaddr* addr,
+                 unsigned int addrlen,
                  uv_udp_send_cb send_cb);
-
-int uv__udp_send6(uv_udp_send_t* req,
-                  uv_udp_t* handle,
-                  uv_buf_t bufs[],
-                  int bufcnt,
-                  struct sockaddr_in6 addr,
-                  uv_udp_send_cb send_cb);
 
 int uv__udp_recv_start(uv_udp_t* handle, uv_alloc_cb alloccb,
                        uv_udp_recv_cb recv_cb);
@@ -115,6 +89,7 @@ int uv__udp_recv_stop(uv_udp_t* handle);
 
 void uv__fs_poll_close(uv_fs_poll_t* handle);
 
+int uv__getaddrinfo_translate_error(int sys_err);    /* EAI_* error. */
 
 #define uv__has_active_reqs(loop)                                             \
   (QUEUE_EMPTY(&(loop)->active_reqs) == 0)
@@ -149,6 +124,9 @@ void uv__fs_poll_close(uv_fs_poll_t* handle);
 
 #define uv__is_active(h)                                                      \
   (((h)->flags & UV__HANDLE_ACTIVE) != 0)
+
+#define uv__is_closing(h)                                                     \
+  (((h)->flags & (UV_CLOSING |  UV_CLOSED)) != 0)
 
 #define uv__handle_start(h)                                                   \
   do {                                                                        \
@@ -185,6 +163,9 @@ void uv__fs_poll_close(uv_fs_poll_t* handle);
     if (((h)->flags & UV__HANDLE_ACTIVE) != 0) uv__active_handle_rm(h);       \
   }                                                                           \
   while (0)
+
+#define uv__has_ref(h)                                                        \
+  (((h)->flags & UV__HANDLE_REF) != 0)
 
 #if defined(_WIN32)
 # define uv__handle_platform_init(h)

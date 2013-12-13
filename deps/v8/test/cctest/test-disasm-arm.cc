@@ -65,7 +65,7 @@ bool DisassembleAndCompare(byte* pc, const char* compare_string) {
 // in the rest of the macros.
 #define SET_UP()                                          \
   CcTest::InitializeVM();                                 \
-  Isolate* isolate = Isolate::Current();                  \
+  Isolate* isolate = CcTest::i_isolate();                  \
   HandleScope scope(isolate);                             \
   byte *buffer = reinterpret_cast<byte*>(malloc(4*1024)); \
   Assembler assm(isolate, buffer, 4*1024);                \
@@ -405,6 +405,17 @@ TEST(Type3) {
             "e6ff3f94       usat r3, #31, r4, lsl #31");
     COMPARE(usat(r8, 0, Operand(r5, ASR, 17)),
             "e6e088d5       usat r8, #0, r5, asr #17");
+
+    COMPARE(pkhbt(r3, r4, Operand(r5, LSL, 17)),
+            "e6843895       pkhbt r3, r4, r5, lsl #17");
+    COMPARE(pkhtb(r3, r4, Operand(r5, ASR, 17)),
+            "e68438d5       pkhtb r3, r4, r5, asr #17");
+    COMPARE(uxtb(r3, Operand(r4, ROR, 8)),
+            "e6ef3474       uxtb r3, r4, ror #8");
+    COMPARE(uxtab(r3, r4, Operand(r5, ROR, 8)),
+            "e6e43475       uxtab r3, r4, r5, ror #8");
+    COMPARE(uxtb16(r3, Operand(r4, ROR, 8)),
+            "e6cf3474       uxtb16 r3, r4, ror #8");
   }
 
   VERIFY_RUN();
@@ -488,6 +499,11 @@ TEST(Vfp) {
             "ee000b10       vmov.32 d0[0], r0");
     COMPARE(vmov(d0, VmovIndexHi, r0),
             "ee200b10       vmov.32 d0[1], r0");
+
+    COMPARE(vmov(r2, VmovIndexLo, d15),
+            "ee1f2b10       vmov.32 r2, d15[0]");
+    COMPARE(vmov(r3, VmovIndexHi, d14),
+            "ee3e3b10       vmov.32 r3, d14[1]");
 
     COMPARE(vldr(s0, r0, 0),
             "ed900a00       vldr s0, [r0 + 4*0]");
@@ -574,6 +590,8 @@ TEST(Vfp) {
             "eeb80be0       vcvt.f64.s32 d0, s1");
     COMPARE(vcvt_f32_s32(s0, s2),
             "eeb80ac1       vcvt.f32.s32 s0, s2");
+    COMPARE(vcvt_f64_s32(d0, 1),
+            "eeba0bef       vcvt.f64.s32 d0, d0, #1");
 
     if (CpuFeatures::IsSupported(VFP32DREGS)) {
       COMPARE(vmov(d3, d27),
@@ -654,6 +672,23 @@ TEST(Vfp) {
       COMPARE(vcvt_f64_u32(d16, s1),
               "eef80b60       vcvt.f64.u32 d16, s1");
     }
+  }
+
+  VERIFY_RUN();
+}
+
+
+TEST(Neon) {
+  SET_UP();
+
+  if (CpuFeatures::IsSupported(NEON)) {
+    CpuFeatureScope scope(&assm, NEON);
+      COMPARE(vld1(Neon8, NeonListOperand(d4, 4), NeonMemOperand(r1)),
+              "f421420f       vld1.8 {d4, d5, d6, d7}, [r1]");
+      COMPARE(vst1(Neon16, NeonListOperand(d17, 4), NeonMemOperand(r9)),
+              "f449124f       vst1.16 {d17, d18, d19, d20}, [r9]");
+      COMPARE(vmovl(NeonU8, q4, d2),
+              "f3884a12       vmovl.u8 q4, d2");
   }
 
   VERIFY_RUN();
@@ -856,6 +891,11 @@ TEST(LoadStore) {
             "e1eba7ff       strd r10, [fp, #+127]!");
     COMPARE(strd(ip, sp, MemOperand(sp, -127, PreIndex)),
             "e16dc7ff       strd ip, [sp, #-127]!");
+
+    COMPARE(pld(MemOperand(r1, 0)),
+            "f5d1f000       pld [r1]");
+    COMPARE(pld(MemOperand(r2, 128)),
+            "f5d2f080       pld [r2, #+128]");
   }
 
   VERIFY_RUN();

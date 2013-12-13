@@ -45,7 +45,8 @@ static void ReserveSpaceForSnapshot(Deserializer* deserializer,
   OS::SNPrintF(name, "%s.size", file_name);
   FILE* fp = OS::FOpen(name.start(), "r");
   CHECK_NE(NULL, fp);
-  int new_size, pointer_size, data_size, code_size, map_size, cell_size;
+  int new_size, pointer_size, data_size, code_size, map_size, cell_size,
+      property_cell_size;
 #ifdef _MSC_VER
   // Avoid warning about unsafe fscanf from MSVC.
   // Please note that this is only fine if %c and %s are not being used.
@@ -57,6 +58,7 @@ static void ReserveSpaceForSnapshot(Deserializer* deserializer,
   CHECK_EQ(1, fscanf(fp, "code %d\n", &code_size));
   CHECK_EQ(1, fscanf(fp, "map %d\n", &map_size));
   CHECK_EQ(1, fscanf(fp, "cell %d\n", &cell_size));
+  CHECK_EQ(1, fscanf(fp, "property cell %d\n", &property_cell_size));
 #ifdef _MSC_VER
 #undef fscanf
 #endif
@@ -67,6 +69,8 @@ static void ReserveSpaceForSnapshot(Deserializer* deserializer,
   deserializer->set_reservation(CODE_SPACE, code_size);
   deserializer->set_reservation(MAP_SPACE, map_size);
   deserializer->set_reservation(CELL_SPACE, cell_size);
+  deserializer->set_reservation(PROPERTY_CELL_SPACE,
+                                property_cell_size);
   name.Dispose();
 }
 
@@ -78,6 +82,8 @@ void Snapshot::ReserveSpaceForLinkedInSnapshot(Deserializer* deserializer) {
   deserializer->set_reservation(CODE_SPACE, code_space_used_);
   deserializer->set_reservation(MAP_SPACE, map_space_used_);
   deserializer->set_reservation(CELL_SPACE, cell_space_used_);
+  deserializer->set_reservation(PROPERTY_CELL_SPACE,
+                                property_cell_space_used_);
 }
 
 
@@ -96,10 +102,19 @@ bool Snapshot::Initialize(const char* snapshot_file) {
     DeleteArray(str);
     return success;
   } else if (size_ > 0) {
+    ElapsedTimer timer;
+    if (FLAG_profile_deserialization) {
+      timer.Start();
+    }
     SnapshotByteSource source(raw_data_, raw_size_);
     Deserializer deserializer(&source);
     ReserveSpaceForLinkedInSnapshot(&deserializer);
-    return V8::Initialize(&deserializer);
+    bool success = V8::Initialize(&deserializer);
+    if (FLAG_profile_deserialization) {
+      double ms = timer.Elapsed().InMillisecondsF();
+      PrintF("[Snapshot loading and deserialization took %0.3f ms]\n", ms);
+    }
+    return success;
   }
   return false;
 }
@@ -110,7 +125,7 @@ bool Snapshot::HaveASnapshotToStartFrom() {
 }
 
 
-Handle<Context> Snapshot::NewContextFromSnapshot() {
+Handle<Context> Snapshot::NewContextFromSnapshot(Isolate* isolate) {
   if (context_size_ == 0) {
     return Handle<Context>();
   }
@@ -124,7 +139,9 @@ Handle<Context> Snapshot::NewContextFromSnapshot() {
   deserializer.set_reservation(CODE_SPACE, context_code_space_used_);
   deserializer.set_reservation(MAP_SPACE, context_map_space_used_);
   deserializer.set_reservation(CELL_SPACE, context_cell_space_used_);
-  deserializer.DeserializePartial(&root);
+  deserializer.set_reservation(PROPERTY_CELL_SPACE,
+                               context_property_cell_space_used_);
+  deserializer.DeserializePartial(isolate, &root);
   CHECK(root->IsContext());
   return Handle<Context>(Context::cast(root));
 }

@@ -29,9 +29,9 @@
 #define V8_CONVERSIONS_INL_H_
 
 #include <limits.h>        // Required for INT_MAX etc.
-#include <math.h>
 #include <float.h>         // Required for DBL_MAX and on Win32 for finite()
 #include <stdarg.h>
+#include <cmath>
 #include "globals.h"       // Required for V8_INFINITY
 
 // ----------------------------------------------------------------------------
@@ -86,8 +86,8 @@ inline unsigned int FastD2UI(double x) {
 
 
 inline double DoubleToInteger(double x) {
-  if (isnan(x)) return 0;
-  if (!isfinite(x) || x == 0) return x;
+  if (std::isnan(x)) return 0;
+  if (!std::isfinite(x) || x == 0) return x;
   return (x >= 0) ? floor(x) : ceil(x);
 }
 
@@ -355,7 +355,7 @@ double InternalStringToInt(UnicodeCache* unicode_cache,
       return JunkStringValue();
     }
 
-    ASSERT(buffer_pos < kBufferSize);
+    SLOW_ASSERT(buffer_pos < kBufferSize);
     buffer[buffer_pos] = '\0';
     Vector<const char> buffer_vector(buffer, buffer_pos);
     return negative ? -Strtod(buffer_vector, 0) : Strtod(buffer_vector, 0);
@@ -515,6 +515,32 @@ double InternalStringToDouble(UnicodeCache* unicode_cache,
                                           end,
                                           false,
                                           allow_trailing_junk);
+
+    // It could be an explicit octal value.
+    } else if ((flags & ALLOW_OCTAL) && (*current == 'o' || *current == 'O')) {
+      ++current;
+      if (current == end || !isDigit(*current, 8) || sign != NONE) {
+        return JunkStringValue();  // "0o".
+      }
+
+      return InternalStringToIntDouble<3>(unicode_cache,
+                                          current,
+                                          end,
+                                          false,
+                                          allow_trailing_junk);
+
+    // It could be a binary value.
+    } else if ((flags & ALLOW_BINARY) && (*current == 'b' || *current == 'B')) {
+      ++current;
+      if (current == end || !isBinaryDigit(*current) || sign != NONE) {
+        return JunkStringValue();  // "0b".
+      }
+
+      return InternalStringToIntDouble<1>(unicode_cache,
+                                          current,
+                                          end,
+                                          false,
+                                          allow_trailing_junk);
     }
 
     // Ignore leading zeros in the integer part.
@@ -524,7 +550,7 @@ double InternalStringToDouble(UnicodeCache* unicode_cache,
     }
   }
 
-  bool octal = leading_zero && (flags & ALLOW_OCTALS) != 0;
+  bool octal = leading_zero && (flags & ALLOW_IMPLICIT_OCTAL) != 0;
 
   // Copy significant digits of the integer part (if any) to the buffer.
   while (*current >= '0' && *current <= '9') {
@@ -666,7 +692,7 @@ double InternalStringToDouble(UnicodeCache* unicode_cache,
     exponent--;
   }
 
-  ASSERT(buffer_pos < kBufferSize);
+  SLOW_ASSERT(buffer_pos < kBufferSize);
   buffer[buffer_pos] = '\0';
 
   double converted = Strtod(Vector<const char>(buffer, buffer_pos), exponent);

@@ -30,6 +30,7 @@
 
 #include "allocation.h"
 #include "apiutils.h"
+#include "objects.h"
 
 namespace v8 {
 namespace internal {
@@ -61,7 +62,7 @@ class Handle {
     location_ = reinterpret_cast<T**>(handle.location_);
   }
 
-  INLINE(T* operator ->() const) { return operator*(); }
+  INLINE(T* operator->() const) { return operator*(); }
 
   // Check if this handle refers to the exact same object as the other handle.
   INLINE(bool is_identical_to(const Handle<T> other) const);
@@ -73,8 +74,8 @@ class Handle {
   INLINE(T** location() const);
 
   template <class S> static Handle<T> cast(Handle<S> that) {
-    T::cast(*that);
-    return Handle<T>(reinterpret_cast<T**>(that.location()));
+    T::cast(*reinterpret_cast<T**>(that.location_));
+    return Handle<T>(reinterpret_cast<T**>(that.location_));
   }
 
   static Handle<T> null() { return Handle<T>(); }
@@ -83,6 +84,12 @@ class Handle {
   // Closes the given scope, but lets this handle escape. See
   // implementation in api.h.
   inline Handle<T> EscapeFrom(v8::HandleScope* scope);
+
+#ifdef DEBUG
+  enum DereferenceCheckMode { INCLUDE_DEFERRED_CHECK, NO_DEFERRED_CHECK };
+
+  bool IsDereferenceAllowed(DereferenceCheckMode mode) const;
+#endif  // DEBUG
 
  private:
   T** location_;
@@ -96,6 +103,13 @@ class Handle {
 template<class T>
 inline Handle<T> handle(T* t, Isolate* isolate) {
   return Handle<T>(t, isolate);
+}
+
+
+// Convenience wrapper.
+template<class T>
+inline Handle<T> handle(T* t) {
+  return Handle<T>(t, t->GetIsolate());
 }
 
 
@@ -151,18 +165,21 @@ class HandleScope {
   void* operator new(size_t size);
   void operator delete(void* size_t);
 
-  inline void CloseScope();
-
   Isolate* isolate_;
   Object** prev_next_;
   Object** prev_limit_;
 
+  // Close the handle scope resetting limits to a previous state.
+  static inline void CloseScope(Isolate* isolate,
+                                Object** prev_next,
+                                Object** prev_limit);
+
   // Extend the handle scope making room for more handles.
   static internal::Object** Extend(Isolate* isolate);
 
-#ifdef ENABLE_EXTRA_CHECKS
+#ifdef ENABLE_HANDLE_ZAPPING
   // Zaps the handles in the half-open interval [start, end).
-  static void ZapRange(internal::Object** start, internal::Object** end);
+  static void ZapRange(Object** start, Object** end);
 #endif
 
   friend class v8::HandleScope;
@@ -235,16 +252,8 @@ Handle<Object> GetProperty(Isolate* isolate,
                            Handle<Object> obj,
                            Handle<Object> key);
 
-Handle<Object> SetPrototype(Handle<JSObject> obj, Handle<Object> value);
-
 Handle<Object> LookupSingleCharacterStringFromCode(Isolate* isolate,
                                                    uint32_t index);
-
-Handle<JSObject> Copy(Handle<JSObject> obj);
-
-Handle<JSObject> DeepCopy(Handle<JSObject> obj);
-
-Handle<Object> SetAccessor(Handle<JSObject> obj, Handle<AccessorInfo> info);
 
 Handle<FixedArray> AddKeysFromJSArray(Handle<FixedArray>,
                                       Handle<JSArray> array);
@@ -290,28 +299,9 @@ Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
 Handle<FixedArray> UnionOfKeys(Handle<FixedArray> first,
                                Handle<FixedArray> second);
 
-Handle<String> SubString(Handle<String> str,
-                         int start,
-                         int end,
-                         PretenureFlag pretenure = NOT_TENURED);
-
-// Sets the expected number of properties for the function's instances.
-void SetExpectedNofProperties(Handle<JSFunction> func, int nof);
-
-// Sets the prototype property for a function instance.
-void SetPrototypeProperty(Handle<JSFunction> func, Handle<JSObject> value);
-
-// Sets the expected number of properties based on estimate from compiler.
-void SetExpectedNofPropertiesFromEstimate(Handle<SharedFunctionInfo> shared,
-                                          int estimate);
-
-
 Handle<JSGlobalProxy> ReinitializeJSGlobalProxy(
     Handle<JSFunction> constructor,
     Handle<JSGlobalProxy> global);
-
-Handle<Object> SetPrototype(Handle<JSFunction> function,
-                            Handle<Object> prototype);
 
 Handle<ObjectHashSet> ObjectHashSetAdd(Handle<ObjectHashSet> table,
                                        Handle<Object> key);
@@ -323,34 +313,24 @@ Handle<ObjectHashTable> PutIntoObjectHashTable(Handle<ObjectHashTable> table,
                                                Handle<Object> key,
                                                Handle<Object> value);
 
-class NoHandleAllocation BASE_EMBEDDED {
+void AddWeakObjectToCodeDependency(Heap* heap,
+                                   Handle<Object> object,
+                                   Handle<Code> code);
+
+// Seal off the current HandleScope so that new handles can only be created
+// if a new HandleScope is entered.
+class SealHandleScope BASE_EMBEDDED {
  public:
 #ifndef DEBUG
-  explicit NoHandleAllocation(Isolate* isolate) {}
-  ~NoHandleAllocation() {}
+  explicit SealHandleScope(Isolate* isolate) {}
+  ~SealHandleScope() {}
 #else
-  explicit inline NoHandleAllocation(Isolate* isolate);
-  inline ~NoHandleAllocation();
+  explicit inline SealHandleScope(Isolate* isolate);
+  inline ~SealHandleScope();
  private:
   Isolate* isolate_;
+  Object** limit_;
   int level_;
-  bool active_;
-#endif
-};
-
-
-class HandleDereferenceGuard BASE_EMBEDDED {
- public:
-  enum State { ALLOW, DISALLOW };
-#ifndef DEBUG
-  HandleDereferenceGuard(Isolate* isolate, State state) { }
-  ~HandleDereferenceGuard() { }
-#else
-  inline HandleDereferenceGuard(Isolate* isolate,  State state);
-  inline ~HandleDereferenceGuard();
- private:
-  Isolate* isolate_;
-  bool old_state_;
 #endif
 };
 

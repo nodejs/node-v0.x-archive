@@ -140,8 +140,8 @@ class SourceGroup {
  public:
   SourceGroup() :
 #ifndef V8_SHARED
-      next_semaphore_(v8::internal::OS::CreateSemaphore(0)),
-      done_semaphore_(v8::internal::OS::CreateSemaphore(0)),
+      next_semaphore_(0),
+      done_semaphore_(0),
       thread_(NULL),
 #endif  // V8_SHARED
       argv_(NULL),
@@ -180,8 +180,8 @@ class SourceGroup {
   static i::Thread::Options GetThreadOptions();
   void ExecuteInThread();
 
-  i::Semaphore* next_semaphore_;
-  i::Semaphore* done_semaphore_;
+  i::Semaphore next_semaphore_;
+  i::Semaphore done_semaphore_;
   i::Thread* thread_;
 #endif  // V8_SHARED
 
@@ -231,6 +231,8 @@ class ShellOptions {
      stress_deopt(false),
      interactive_shell(false),
      test_shell(false),
+     dump_heap_constants(false),
+     expected_to_throw(false),
      num_isolates(1),
      isolate_sources(NULL) { }
 
@@ -254,6 +256,8 @@ class ShellOptions {
   bool stress_deopt;
   bool interactive_shell;
   bool test_shell;
+  bool dump_heap_constants;
+  bool expected_to_throw;
   int num_isolates;
   SourceGroup* isolate_sources;
 };
@@ -273,7 +277,7 @@ class Shell : public i::AllStatic {
   static const char* ToCString(const v8::String::Utf8Value& value);
   static void ReportException(Isolate* isolate, TryCatch* try_catch);
   static Handle<String> ReadFile(Isolate* isolate, const char* name);
-  static Persistent<Context> CreateEvaluationContext(Isolate* isolate);
+  static Local<Context> CreateEvaluationContext(Isolate* isolate);
   static int RunMain(Isolate* isolate, int argc, char* argv[]);
   static int Main(int argc, char* argv[]);
   static void Exit(int exit_code);
@@ -292,38 +296,54 @@ class Shell : public i::AllStatic {
   static void MapCounters(const char* name);
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  static Handle<Object> DebugMessageDetails(Handle<String> message);
-  static Handle<Value> DebugCommandToJSONRequest(Handle<String> command);
+  static Handle<Object> DebugMessageDetails(Isolate* isolate,
+                                            Handle<String> message);
+  static Handle<Value> DebugCommandToJSONRequest(Isolate* isolate,
+                                                 Handle<String> command);
   static void DispatchDebugMessages();
 #endif  // ENABLE_DEBUGGER_SUPPORT
+
+  static void PerformanceNow(const v8::FunctionCallbackInfo<v8::Value>& args);
 #endif  // V8_SHARED
 
-  static Handle<Value> Print(const Arguments& args);
-  static Handle<Value> Write(const Arguments& args);
-  static Handle<Value> Quit(const Arguments& args);
-  static Handle<Value> Version(const Arguments& args);
-  static Handle<Value> EnableProfiler(const Arguments& args);
-  static Handle<Value> DisableProfiler(const Arguments& args);
-  static Handle<Value> Read(const Arguments& args);
-  static Handle<Value> ReadBuffer(const Arguments& args);
+  static void RealmCurrent(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmOwner(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmGlobal(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmCreate(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmDispose(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmSwitch(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmEval(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RealmSharedGet(Local<String> property,
+                             const  PropertyCallbackInfo<Value>& info);
+  static void RealmSharedSet(Local<String> property,
+                             Local<Value> value,
+                             const  PropertyCallbackInfo<void>& info);
+
+  static void Print(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Write(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Quit(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Version(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Read(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ReadBuffer(const v8::FunctionCallbackInfo<v8::Value>& args);
   static Handle<String> ReadFromStdin(Isolate* isolate);
-  static Handle<Value> ReadLine(const Arguments& args) {
-    return ReadFromStdin(args.GetIsolate());
+  static void ReadLine(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    args.GetReturnValue().Set(ReadFromStdin(args.GetIsolate()));
   }
-  static Handle<Value> Load(const Arguments& args);
-  static Handle<Value> ArrayBuffer(const Arguments& args);
-  static Handle<Value> Int8Array(const Arguments& args);
-  static Handle<Value> Uint8Array(const Arguments& args);
-  static Handle<Value> Int16Array(const Arguments& args);
-  static Handle<Value> Uint16Array(const Arguments& args);
-  static Handle<Value> Int32Array(const Arguments& args);
-  static Handle<Value> Uint32Array(const Arguments& args);
-  static Handle<Value> Float32Array(const Arguments& args);
-  static Handle<Value> Float64Array(const Arguments& args);
-  static Handle<Value> Uint8ClampedArray(const Arguments& args);
-  static Handle<Value> ArrayBufferSlice(const Arguments& args);
-  static Handle<Value> ArraySubArray(const Arguments& args);
-  static Handle<Value> ArraySet(const Arguments& args);
+  static void Load(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ArrayBuffer(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Int8Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Uint8Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Int16Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Uint16Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Int32Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Uint32Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Float32Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Float64Array(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Uint8ClampedArray(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ArrayBufferSlice(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ArraySubArray(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ArraySet(const v8::FunctionCallbackInfo<v8::Value>& args);
   // The OS object on the global object contains methods for performing
   // operating system calls:
   //
@@ -350,14 +370,14 @@ class Shell : public i::AllStatic {
   // with the current umask.  Intermediate directories are created if necessary.
   // An exception is not thrown if the directory already exists.  Analogous to
   // the "mkdir -p" command.
-  static Handle<Value> OSObject(const Arguments& args);
-  static Handle<Value> System(const Arguments& args);
-  static Handle<Value> ChangeDirectory(const Arguments& args);
-  static Handle<Value> SetEnvironment(const Arguments& args);
-  static Handle<Value> UnsetEnvironment(const Arguments& args);
-  static Handle<Value> SetUMask(const Arguments& args);
-  static Handle<Value> MakeDirectory(const Arguments& args);
-  static Handle<Value> RemoveDirectory(const Arguments& args);
+  static void OSObject(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void System(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ChangeDirectory(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetEnvironment(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void UnsetEnvironment(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetUMask(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void MakeDirectory(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RemoveDirectory(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   static void AddOSMethods(Handle<ObjectTemplate> os_template);
 
@@ -374,7 +394,8 @@ class Shell : public i::AllStatic {
   static CounterCollection local_counters_;
   static CounterCollection* counters_;
   static i::OS::MemoryMappedFile* counters_file_;
-  static i::Mutex* context_mutex_;
+  static i::Mutex context_mutex_;
+  static const i::TimeTicks kInitialTicks;
 
   static Counter* GetCounter(const char* name, bool is_histogram);
   static void InstallUtilityScript(Isolate* isolate);
@@ -384,8 +405,8 @@ class Shell : public i::AllStatic {
   static void RunShell(Isolate* isolate);
   static bool SetOptions(int argc, char* argv[]);
   static Handle<ObjectTemplate> CreateGlobalTemplate(Isolate* isolate);
-  static Handle<FunctionTemplate> CreateArrayBufferTemplate(InvocationCallback);
-  static Handle<FunctionTemplate> CreateArrayTemplate(InvocationCallback);
+  static Handle<FunctionTemplate> CreateArrayBufferTemplate(FunctionCallback);
+  static Handle<FunctionTemplate> CreateArrayTemplate(FunctionCallback);
   static Handle<Value> CreateExternalArrayBuffer(Isolate* isolate,
                                                  Handle<Object> buffer,
                                                  int32_t size);
@@ -397,12 +418,13 @@ class Shell : public i::AllStatic {
                                             int32_t byteLength,
                                             int32_t byteOffset,
                                             int32_t element_size);
-  static Handle<Value> CreateExternalArray(const Arguments& args,
-                                           ExternalArrayType type,
-                                           int32_t element_size);
+  static void CreateExternalArray(
+      const v8::FunctionCallbackInfo<v8::Value>& args,
+      ExternalArrayType type,
+      int32_t element_size);
   static void ExternalArrayWeakCallback(Isolate* isolate,
-                                        Persistent<Value> object,
-                                        void* data);
+                                        Persistent<Object>* object,
+                                        uint8_t* data);
 };
 
 

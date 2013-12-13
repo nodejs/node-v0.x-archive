@@ -26,30 +26,22 @@
 #include <assert.h>
 #include <errno.h>
 
-#if defined(__APPLE__) && defined(__MACH__)
 #include <sys/time.h>
-#endif /* defined(__APPLE__) && defined(__MACH__) */
 
 #undef NANOSEC
 #define NANOSEC ((uint64_t) 1e9)
 
 int uv_thread_join(uv_thread_t *tid) {
-  if (pthread_join(*tid, NULL))
-    return -1;
-  else
-    return 0;
+  return -pthread_join(*tid, NULL);
 }
 
 
 int uv_mutex_init(uv_mutex_t* mutex) {
-#ifdef NDEBUG
-  if (pthread_mutex_init(mutex, NULL))
-    return -1;
-  else
-    return 0;
+#if defined(NDEBUG) || !defined(PTHREAD_MUTEX_ERRORCHECK)
+  return -pthread_mutex_init(mutex, NULL);
 #else
   pthread_mutexattr_t attr;
-  int r;
+  int err;
 
   if (pthread_mutexattr_init(&attr))
     abort();
@@ -57,12 +49,12 @@ int uv_mutex_init(uv_mutex_t* mutex) {
   if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK))
     abort();
 
-  r = pthread_mutex_init(mutex, &attr);
+  err = pthread_mutex_init(mutex, &attr);
 
   if (pthread_mutexattr_destroy(&attr))
     abort();
 
-  return r ? -1 : 0;
+  return -err;
 #endif
 }
 
@@ -80,17 +72,16 @@ void uv_mutex_lock(uv_mutex_t* mutex) {
 
 
 int uv_mutex_trylock(uv_mutex_t* mutex) {
-  int r;
+  int err;
 
-  r = pthread_mutex_trylock(mutex);
-
-  if (r && r != EBUSY && r != EAGAIN)
+  /* FIXME(bnoordhuis) EAGAIN means recursive lock limit reached. Arguably
+   * a bug, should probably abort rather than return -EAGAIN.
+   */
+  err = pthread_mutex_trylock(mutex);
+  if (err && err != EBUSY && err != EAGAIN)
     abort();
 
-  if (r)
-    return -1;
-  else
-    return 0;
+  return -err;
 }
 
 
@@ -101,10 +92,7 @@ void uv_mutex_unlock(uv_mutex_t* mutex) {
 
 
 int uv_rwlock_init(uv_rwlock_t* rwlock) {
-  if (pthread_rwlock_init(rwlock, NULL))
-    return -1;
-  else
-    return 0;
+  return -pthread_rwlock_init(rwlock, NULL);
 }
 
 
@@ -121,17 +109,13 @@ void uv_rwlock_rdlock(uv_rwlock_t* rwlock) {
 
 
 int uv_rwlock_tryrdlock(uv_rwlock_t* rwlock) {
-  int r;
+  int err;
 
-  r = pthread_rwlock_tryrdlock(rwlock);
-
-  if (r && r != EBUSY && r != EAGAIN)
+  err = pthread_rwlock_tryrdlock(rwlock);
+  if (err && err != EBUSY && err != EAGAIN)
     abort();
 
-  if (r)
-    return -1;
-  else
-    return 0;
+  return -err;
 }
 
 
@@ -148,17 +132,13 @@ void uv_rwlock_wrlock(uv_rwlock_t* rwlock) {
 
 
 int uv_rwlock_trywrlock(uv_rwlock_t* rwlock) {
-  int r;
+  int err;
 
-  r = pthread_rwlock_trywrlock(rwlock);
-
-  if (r && r != EBUSY && r != EAGAIN)
+  err = pthread_rwlock_trywrlock(rwlock);
+  if (err && err != EBUSY && err != EAGAIN)
     abort();
 
-  if (r)
-    return -1;
-  else
-    return 0;
+  return -err;
 }
 
 
@@ -176,10 +156,18 @@ void uv_once(uv_once_t* guard, void (*callback)(void)) {
 #if defined(__APPLE__) && defined(__MACH__)
 
 int uv_sem_init(uv_sem_t* sem, unsigned int value) {
-  if (semaphore_create(mach_task_self(), sem, SYNC_POLICY_FIFO, value))
-    return -1;
-  else
+  kern_return_t err;
+
+  err = semaphore_create(mach_task_self(), sem, SYNC_POLICY_FIFO, value);
+  if (err == KERN_SUCCESS)
     return 0;
+  if (err == KERN_INVALID_ARGUMENT)
+    return -EINVAL;
+  if (err == KERN_RESOURCE_SHORTAGE)
+    return -ENOMEM;
+
+  abort();
+  return -EINVAL;  /* Satisfy the compiler. */
 }
 
 
@@ -209,20 +197,27 @@ void uv_sem_wait(uv_sem_t* sem) {
 
 int uv_sem_trywait(uv_sem_t* sem) {
   mach_timespec_t interval;
+  kern_return_t err;
 
   interval.tv_sec = 0;
   interval.tv_nsec = 0;
 
-  if (semaphore_timedwait(*sem, interval) == KERN_SUCCESS)
+  err = semaphore_timedwait(*sem, interval);
+  if (err == KERN_SUCCESS)
     return 0;
-  else
-    return -1;
+  if (err == KERN_OPERATION_TIMED_OUT)
+    return -EAGAIN;
+
+  abort();
+  return -EINVAL;  /* Satisfy the compiler. */
 }
 
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */
 
 int uv_sem_init(uv_sem_t* sem, unsigned int value) {
-  return sem_init(sem, 0, value);
+  if (sem_init(sem, 0, value))
+    return -errno;
+  return 0;
 }
 
 
@@ -257,10 +252,13 @@ int uv_sem_trywait(uv_sem_t* sem) {
     r = sem_trywait(sem);
   while (r == -1 && errno == EINTR);
 
-  if (r && errno != EAGAIN)
+  if (r) {
+    if (errno == EAGAIN)
+      return -EAGAIN;
     abort();
+  }
 
-  return r;
+  return 0;
 }
 
 #endif /* defined(__APPLE__) && defined(__MACH__) */
@@ -269,27 +267,31 @@ int uv_sem_trywait(uv_sem_t* sem) {
 #if defined(__APPLE__) && defined(__MACH__)
 
 int uv_cond_init(uv_cond_t* cond) {
-  if (pthread_cond_init(cond, NULL))
-    return -1;
-  else
-    return 0;
+  return -pthread_cond_init(cond, NULL);
 }
 
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */
 
 int uv_cond_init(uv_cond_t* cond) {
   pthread_condattr_t attr;
+  int err;
 
-  if (pthread_condattr_init(&attr))
-    return -1;
+  err = pthread_condattr_init(&attr);
+  if (err)
+    return -err;
 
-  if (pthread_condattr_setclock(&attr, CLOCK_MONOTONIC))
+#if !defined(__ANDROID__)
+  err = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+  if (err)
+    goto error2;
+#endif
+
+  err = pthread_cond_init(cond, &attr);
+  if (err)
     goto error2;
 
-  if (pthread_cond_init(cond, &attr))
-    goto error2;
-
-  if (pthread_condattr_destroy(&attr))
+  err = pthread_condattr_destroy(&attr);
+  if (err)
     goto error;
 
   return 0;
@@ -298,7 +300,7 @@ error:
   pthread_cond_destroy(cond);
 error2:
   pthread_condattr_destroy(&attr);
-  return -1;
+  return -err;
 }
 
 #endif /* defined(__APPLE__) && defined(__MACH__) */
@@ -333,10 +335,18 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
   ts.tv_nsec = timeout % NANOSEC;
   r = pthread_cond_timedwait_relative_np(cond, mutex, &ts);
 #else
-  timeout += uv__hrtime();
+  timeout += uv__hrtime(UV_CLOCK_PRECISE);
   ts.tv_sec = timeout / NANOSEC;
   ts.tv_nsec = timeout % NANOSEC;
+#if defined(__ANDROID__)
+  /*
+   * The bionic pthread implementation doesn't support CLOCK_MONOTONIC,
+   * but has this alternative function instead.
+   */
+  r = pthread_cond_timedwait_monotonic_np(cond, mutex, &ts);
+#else
   r = pthread_cond_timedwait(cond, mutex, &ts);
+#endif /* __ANDROID__ */
 #endif
 
 
@@ -344,26 +354,31 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
     return 0;
 
   if (r == ETIMEDOUT)
-    return -1;
+    return -ETIMEDOUT;
 
   abort();
-  return -1; /* Satisfy the compiler. */
+  return -EINVAL;  /* Satisfy the compiler. */
 }
 
 
 #if defined(__APPLE__) && defined(__MACH__)
 
 int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
+  int err;
+
   barrier->n = count;
   barrier->count = 0;
 
-  if (uv_mutex_init(&barrier->mutex))
-    return -1;
+  err = uv_mutex_init(&barrier->mutex);
+  if (err)
+    return -err;
 
-  if (uv_sem_init(&barrier->turnstile1, 0))
+  err = uv_sem_init(&barrier->turnstile1, 0);
+  if (err)
     goto error2;
 
-  if (uv_sem_init(&barrier->turnstile2, 1))
+  err = uv_sem_init(&barrier->turnstile2, 1);
+  if (err)
     goto error;
 
   return 0;
@@ -372,7 +387,7 @@ error:
   uv_sem_destroy(&barrier->turnstile1);
 error2:
   uv_mutex_destroy(&barrier->mutex);
-  return -1;
+  return -err;
 
 }
 
@@ -409,10 +424,7 @@ void uv_barrier_wait(uv_barrier_t* barrier) {
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */
 
 int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
-  if (pthread_barrier_init(barrier, NULL, count))
-    return -1;
-  else
-    return 0;
+  return -pthread_barrier_init(barrier, NULL, count);
 }
 
 
@@ -429,3 +441,24 @@ void uv_barrier_wait(uv_barrier_t* barrier) {
 }
 
 #endif /* defined(__APPLE__) && defined(__MACH__) */
+
+int uv_key_create(uv_key_t* key) {
+  return -pthread_key_create(key, NULL);
+}
+
+
+void uv_key_delete(uv_key_t* key) {
+  if (pthread_key_delete(*key))
+    abort();
+}
+
+
+void* uv_key_get(uv_key_t* key) {
+  return pthread_getspecific(*key);
+}
+
+
+void uv_key_set(uv_key_t* key, void* value) {
+  if (pthread_setspecific(*key, value))
+    abort();
+}

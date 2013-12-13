@@ -19,30 +19,37 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "v8.h"
 #include "node.h"
 #include "node_natives.h"
-#include "node_string.h"
+#include "v8.h"
+
 #include <string.h>
 #if !defined(_MSC_VER)
 #include <strings.h>
 #endif
 
-using namespace v8;
-
 namespace node {
 
+using v8::Handle;
+using v8::HandleScope;
+using v8::Local;
+using v8::Object;
+using v8::String;
+
 Handle<String> MainSource() {
-  return BUILTIN_ASCII_ARRAY(node_native, sizeof(node_native)-1);
+  return OneByteString(node_isolate, node_native, sizeof(node_native) - 1);
 }
 
-void DefineJavaScript(v8::Handle<v8::Object> target) {
+void DefineJavaScript(Handle<Object> target) {
   HandleScope scope(node_isolate);
 
   for (int i = 0; natives[i].name; i++) {
     if (natives[i].source != node_native) {
-      Local<String> name = String::New(natives[i].name);
-      Handle<String> source = BUILTIN_ASCII_ARRAY(natives[i].source, natives[i].source_len);
+      Local<String> name = String::NewFromUtf8(node_isolate, natives[i].name);
+      Handle<String> source = String::NewFromUtf8(node_isolate,
+                                                  natives[i].source,
+                                                  String::kNormalString,
+                                                  natives[i].source_len);
       target->Set(name, source);
     }
   }

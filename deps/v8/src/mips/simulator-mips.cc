@@ -26,12 +26,12 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
-#include <math.h>
 #include <limits.h>
+#include <cmath>
 #include <cstdarg>
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#if V8_TARGET_ARCH_MIPS
 
 #include "cpu.h"
 #include "disasm.h"
@@ -526,7 +526,7 @@ void MipsDebugger::Debug() {
           HeapObject* obj = reinterpret_cast<HeapObject*>(*cur);
           int value = *cur;
           Heap* current_heap = v8::internal::Isolate::Current()->heap();
-          if (current_heap->Contains(obj) || ((value & 1) == 0)) {
+          if (((value & 1) == 0) || current_heap->Contains(obj)) {
             PrintF(" (");
             if ((value & 1) == 0) {
               PrintF("smi %d", value / 2);
@@ -1155,7 +1155,7 @@ bool Simulator::test_fcsr_bit(uint32_t cc) {
 bool Simulator::set_fcsr_round_error(double original, double rounded) {
   bool ret = false;
 
-  if (!isfinite(original) || !isfinite(rounded)) {
+  if (!std::isfinite(original) || !std::isfinite(rounded)) {
     set_fcsr_bit(kFCSRInvalidOpFlagBit, true);
     ret = true;
   }
@@ -1387,11 +1387,13 @@ typedef double (*SimulatorRuntimeFPIntCall)(double darg0, int32_t arg0);
 
 // This signature supports direct call in to API function native callback
 // (refer to InvocationCallback in v8.h).
-typedef v8::Handle<v8::Value> (*SimulatorRuntimeDirectApiCall)(int32_t arg0);
+typedef void (*SimulatorRuntimeDirectApiCall)(int32_t arg0);
+typedef void (*SimulatorRuntimeProfilingApiCall)(int32_t arg0, int32_t arg1);
 
 // This signature supports direct call to accessor getter callback.
-typedef v8::Handle<v8::Value> (*SimulatorRuntimeDirectGetterCall)(int32_t arg0,
-                                                                  int32_t arg1);
+typedef void (*SimulatorRuntimeDirectGetterCall)(int32_t arg0, int32_t arg1);
+typedef void (*SimulatorRuntimeProfilingGetterCall)(
+    int32_t arg0, int32_t arg1, int32_t arg2);
 
 // Software interrupt instructions are used by the simulator to call into the
 // C-based V8 runtime. They are also used for debugging with simulator.
@@ -1537,27 +1539,40 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
         }
       }
     } else if (redirection->type() == ExternalReference::DIRECT_API_CALL) {
-      // See DirectCEntryStub::GenerateCall for explanation of register usage.
-      SimulatorRuntimeDirectApiCall target =
-                  reinterpret_cast<SimulatorRuntimeDirectApiCall>(external);
       if (::v8::internal::FLAG_trace_sim) {
         PrintF("Call to host function at %p args %08x\n",
-               FUNCTION_ADDR(target), arg1);
+            reinterpret_cast<void*>(external), arg0);
       }
-      v8::Handle<v8::Value> result = target(arg1);
-      *(reinterpret_cast<int*>(arg0)) = reinterpret_cast<int32_t>(*result);
-      set_register(v0, arg0);
-    } else if (redirection->type() == ExternalReference::DIRECT_GETTER_CALL) {
-      // See DirectCEntryStub::GenerateCall for explanation of register usage.
-      SimulatorRuntimeDirectGetterCall target =
-                  reinterpret_cast<SimulatorRuntimeDirectGetterCall>(external);
+      SimulatorRuntimeDirectApiCall target =
+          reinterpret_cast<SimulatorRuntimeDirectApiCall>(external);
+      target(arg0);
+    } else if (
+        redirection->type() == ExternalReference::PROFILING_API_CALL) {
       if (::v8::internal::FLAG_trace_sim) {
         PrintF("Call to host function at %p args %08x %08x\n",
-               FUNCTION_ADDR(target), arg1, arg2);
+            reinterpret_cast<void*>(external), arg0, arg1);
       }
-      v8::Handle<v8::Value> result = target(arg1, arg2);
-      *(reinterpret_cast<int*>(arg0)) = reinterpret_cast<int32_t>(*result);
-      set_register(v0, arg0);
+      SimulatorRuntimeProfilingApiCall target =
+          reinterpret_cast<SimulatorRuntimeProfilingApiCall>(external);
+      target(arg0, arg1);
+    } else if (
+        redirection->type() == ExternalReference::DIRECT_GETTER_CALL) {
+      if (::v8::internal::FLAG_trace_sim) {
+        PrintF("Call to host function at %p args %08x %08x\n",
+            reinterpret_cast<void*>(external), arg0, arg1);
+      }
+      SimulatorRuntimeDirectGetterCall target =
+          reinterpret_cast<SimulatorRuntimeDirectGetterCall>(external);
+      target(arg0, arg1);
+    } else if (
+        redirection->type() == ExternalReference::PROFILING_GETTER_CALL) {
+      if (::v8::internal::FLAG_trace_sim) {
+        PrintF("Call to host function at %p args %08x %08x %08x\n",
+            reinterpret_cast<void*>(external), arg0, arg1, arg2);
+      }
+      SimulatorRuntimeProfilingGetterCall target =
+          reinterpret_cast<SimulatorRuntimeProfilingGetterCall>(external);
+      target(arg0, arg1, arg2);
     } else {
       SimulatorRuntimeCall target =
                   reinterpret_cast<SimulatorRuntimeCall>(external);
@@ -2055,7 +2070,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               set_fpu_register_double(fd_reg, fs / ft);
               break;
             case ABS_D:
-              set_fpu_register_double(fd_reg, fs < 0 ? -fs : fs);
+              set_fpu_register_double(fd_reg, fabs(fs));
               break;
             case MOV_D:
               set_fpu_register_double(fd_reg, fs);
@@ -2067,25 +2082,28 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               set_fpu_register_double(fd_reg, sqrt(fs));
               break;
             case C_UN_D:
-              set_fcsr_bit(fcsr_cc, isnan(fs) || isnan(ft));
+              set_fcsr_bit(fcsr_cc, std::isnan(fs) || std::isnan(ft));
               break;
             case C_EQ_D:
               set_fcsr_bit(fcsr_cc, (fs == ft));
               break;
             case C_UEQ_D:
-              set_fcsr_bit(fcsr_cc, (fs == ft) || (isnan(fs) || isnan(ft)));
+              set_fcsr_bit(fcsr_cc,
+                           (fs == ft) || (std::isnan(fs) || std::isnan(ft)));
               break;
             case C_OLT_D:
               set_fcsr_bit(fcsr_cc, (fs < ft));
               break;
             case C_ULT_D:
-              set_fcsr_bit(fcsr_cc, (fs < ft) || (isnan(fs) || isnan(ft)));
+              set_fcsr_bit(fcsr_cc,
+                           (fs < ft) || (std::isnan(fs) || std::isnan(ft)));
               break;
             case C_OLE_D:
               set_fcsr_bit(fcsr_cc, (fs <= ft));
               break;
             case C_ULE_D:
-              set_fcsr_bit(fcsr_cc, (fs <= ft) || (isnan(fs) || isnan(ft)));
+              set_fcsr_bit(fcsr_cc,
+                           (fs <= ft) || (std::isnan(fs) || std::isnan(ft)));
               break;
             case CVT_W_D:   // Convert double to word.
               // Rounding modes are not yet supported.
@@ -2256,9 +2274,13 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case DIV:
           // Divide by zero and overflow was not checked in the configuration
-          // step - div and divu do not raise exceptions. On division by 0 and
-          // on overflow (INT_MIN/-1), the result will be UNPREDICTABLE.
-          if (rt != 0 && !(rs == INT_MIN && rt == -1)) {
+          // step - div and divu do not raise exceptions. On division by 0
+          // the result will be UNPREDICTABLE. On overflow (INT_MIN/-1),
+          // return INT_MIN which is what the hardware does.
+          if (rs == INT_MIN && rt == -1) {
+            set_register(LO, INT_MIN);
+            set_register(HI, 0);
+          } else if (rt != 0) {
             set_register(LO, rs / rt);
             set_register(HI, rs % rt);
           }
