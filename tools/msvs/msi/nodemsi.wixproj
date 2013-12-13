@@ -16,23 +16,23 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <OutputPath>..\..\..\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;ProgramFilesFolderId=ProgramFilesFolder</DefineConstants>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;IncludeSourceDir=..\..\..\out\prefix\include\node\;ProgramFilesFolderId=ProgramFilesFolder</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
     <OutputPath>..\..\..\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;ProgramFilesFolderId=ProgramFilesFolder</DefineConstants>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;IncludeSourceDir=..\..\..\out\prefix\include\node\;ProgramFilesFolderId=ProgramFilesFolder</DefineConstants>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <OutputPath>..\..\..\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;ProgramFilesFolderId=ProgramFiles64Folder</DefineConstants>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;IncludeSourceDir=..\..\..\out\prefix\include\node\;ProgramFilesFolderId=ProgramFiles64Folder</DefineConstants>
     <Cultures>en-US</Cultures>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
     <OutputPath>..\..\..\$(Configuration)\</OutputPath>
     <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;ProgramFilesFolderId=ProgramFiles64Folder</DefineConstants>
+    <DefineConstants>Debug;ProductVersion=$(NodeVersion);NoETW=$(NoETW);NoPerfCtr=$(NoPerfCtr);NpmSourceDir=..\..\..\deps\npm\;IncludeSourceDir=..\..\..\out\prefix\include\node\;ProgramFilesFolderId=ProgramFiles64Folder</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <EnableProjectHarvesting>True</EnableProjectHarvesting>
@@ -42,6 +42,7 @@
     <Compile Include="..\..\..\npm.wxs">
       <Link>npm.wxs</Link>
     </Compile>
+    <Compile Include="..\..\..\headers.wxs" />
   </ItemGroup>
   <ItemGroup>
     <WixExtension Include="WixUIExtension">
@@ -58,8 +59,8 @@
   </ItemGroup>
   <Import Project="$(WixTargetsPath)" />
   <Target Name="BeforeBuild">
-    <HeatDirectory ToolPath="$(WixToolPath)" Directory="..\..\..\deps\npm" PreprocessorVariable="var.NpmSourceDir" DirectoryRefId="NodeModulesFolder" ComponentGroupName="NpmSourceFiles" GenerateGuidsNow="true" SuppressFragments="false" OutputFile="..\..\..\npm.wxs">
-    </HeatDirectory>
+    <HeatDirectory ToolPath="$(WixToolPath)" Directory="..\..\..\deps\npm" PreprocessorVariable="var.NpmSourceDir" DirectoryRefId="NodeModulesFolder" ComponentGroupName="NpmSourceFiles" GenerateGuidsNow="true" SuppressFragments="false" OutputFile="..\..\..\npm.wxs" />
+    <HeatDirectory ToolPath="$(WixToolPath)" Directory="..\..\..\out\prefix\include\node" PreprocessorVariable="var.IncludeSourceDir" DirectoryRefId="IncludeFolder" ComponentGroupName="HeaderSourceFiles" GenerateGuidsNow="true" SuppressFragments="false" OutputFile="..\..\..\headers.wxs" />
   </Target>
   <PropertyGroup>
     <PostBuildEvent>move "!(TargetPath)" "$(TargetDir)\$(TargetFileName)"

@@ -86,10 +86,12 @@ if defined noprojgen goto msbuild
 
 if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 
+if defined msi set PREFIX=.
+
 @rem Generate the VS project.
 SETLOCAL
   if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
-  python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
+  python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG% --prefix=%PREFIX%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
   echo Project files generated.
@@ -145,6 +147,8 @@ if not defined NIGHTLY goto msibuild
 set NODE_VERSION=%NODE_VERSION%.%NIGHTLY%
 
 :msibuild
+echo Installing artifacts
+python tools/install.py install ./out/prefix
 echo Building node-%NODE_VERSION%
 msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeVersion=%NODE_VERSION% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
