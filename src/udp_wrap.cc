@@ -73,13 +73,20 @@ inline bool SendWrap::have_callback() const {
 
 
 UDPWrap::UDPWrap(Environment* env, Handle<Object> object)
-    : HandleWrap(env, object, reinterpret_cast<uv_handle_t*>(&handle_)) {
+    : HandleWrap(env, object, reinterpret_cast<uv_handle_t*>(&handle_)), 
+      default_callbacks_(this),
+      callbacks_(&default_callbacks_) {
+
   int r = uv_udp_init(env->event_loop(), &handle_);
   assert(r == 0);  // can't fail anyway
 }
 
 
 UDPWrap::~UDPWrap() {
+    if (callbacks_ != &default_callbacks_) {
+      delete callbacks_;
+      callbacks_ = NULL;
+    }		
 }
 
 
@@ -102,12 +109,14 @@ void UDPWrap::Initialize(Handle<Object> target,
                                      attributes);
 
   NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(t, "send", Send);
   NODE_SET_PROTOTYPE_METHOD(t, "bind6", Bind6);
-  NODE_SET_PROTOTYPE_METHOD(t, "send6", Send6);
-  NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
-  NODE_SET_PROTOTYPE_METHOD(t, "recvStart", RecvStart);
-  NODE_SET_PROTOTYPE_METHOD(t, "recvStop", RecvStop);
+  NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
+
+  NODE_SET_PROTOTYPE_METHOD(t, "send", UDPWrap::Send);
+  NODE_SET_PROTOTYPE_METHOD(t, "send6", UDPWrap::Send6);
+  NODE_SET_PROTOTYPE_METHOD(t, "recvStart", UDPWrap::RecvStart);
+  NODE_SET_PROTOTYPE_METHOD(t, "recvStop", UDPWrap::RecvStop);
+
   NODE_SET_PROTOTYPE_METHOD(t, "getsockname", GetSockName);
   NODE_SET_PROTOTYPE_METHOD(t, "addMembership", AddMembership);
   NODE_SET_PROTOTYPE_METHOD(t, "dropMembership", DropMembership);
@@ -123,7 +132,7 @@ void UDPWrap::Initialize(Handle<Object> target,
   AsyncWrap::AddMethods<UDPWrap>(t);
 
   target->Set(FIXED_ONE_BYTE_STRING(node_isolate, "UDP"), t->GetFunction());
-  env->set_udp_constructor_function(t->GetFunction());
+  env->set_udp_constructor_template(t);
 }
 
 
@@ -242,7 +251,7 @@ void UDPWrap::DropMembership(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void UDPWrap::DoSend(const FunctionCallbackInfo<Value>& args, int family) {
+void UDPWrap::ProceedSend(const FunctionCallbackInfo<Value>& args, int family) {
   HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
@@ -268,7 +277,7 @@ void UDPWrap::DoSend(const FunctionCallbackInfo<Value>& args, int family) {
   assert(offset < Buffer::Length(buffer_obj));
   assert(length <= Buffer::Length(buffer_obj) - offset);
 
-  SendWrap* req_wrap = new SendWrap(env, req_wrap_obj, have_callback);
+  SendWrap* send_wrap = new SendWrap(env, req_wrap_obj, have_callback);
 
   uv_buf_t buf = uv_buf_init(Buffer::Data(buffer_obj) + offset,
                              length);
@@ -288,29 +297,24 @@ void UDPWrap::DoSend(const FunctionCallbackInfo<Value>& args, int family) {
   }
 
   if (err == 0) {
-    err = uv_udp_send(&req_wrap->req_,
-                      &wrap->handle_,
-                      &buf,
-                      1,
-                      reinterpret_cast<const sockaddr*>(&addr),
-                      OnSend);
+		err = wrap->callbacks()->DoSend(send_wrap, &wrap->handle_, &buf, 1, reinterpret_cast<const sockaddr*>(&addr), UDPWrap::OnSend);  
   }
 
-  req_wrap->Dispatched();
+  send_wrap->Dispatched();
   if (err)
-    delete req_wrap;
+    delete send_wrap;
 
   args.GetReturnValue().Set(err);
 }
 
 
 void UDPWrap::Send(const FunctionCallbackInfo<Value>& args) {
-  DoSend(args, AF_INET);
+  ProceedSend(args, AF_INET);
 }
 
 
 void UDPWrap::Send6(const FunctionCallbackInfo<Value>& args) {
-  DoSend(args, AF_INET6);
+  ProceedSend(args, AF_INET6);
 }
 
 
@@ -375,14 +379,10 @@ void UDPWrap::OnSend(uv_udp_send_t* req, int status) {
 
 void UDPWrap::OnAlloc(uv_handle_t* handle,
                       size_t suggested_size,
-                      uv_buf_t* buf) {
-  buf->base = static_cast<char*>(malloc(suggested_size));
-  buf->len = suggested_size;
-
-  if (buf->base == NULL && suggested_size > 0) {
-    FatalError("node::UDPWrap::OnAlloc(uv_handle_t*, size_t, uv_buf_t*)",
-               "Out Of Memory");
-  }
+                      uv_buf_t* buf) 
+{
+  UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
+  wrap->callbacks()->DoAlloc(handle, suggested_size, buf);
 }
 
 
@@ -391,51 +391,103 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
                      const uv_buf_t* buf,
                      const struct sockaddr* addr,
                      unsigned int flags) {
-  if (nread == 0) {
-    if (buf->base != NULL)
-      free(buf->base);
-    return;
-  }
 
   UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
-  Environment* env = wrap->env();
 
-  HandleScope handle_scope(env->isolate());
-  Context::Scope context_scope(env->context());
+  // We should not be getting this callback if someone as already called
+  // uv_close() on the handle.
+  assert(wrap->persistent().IsEmpty() == false);
 
-  Local<Object> wrap_obj = wrap->object();
-  Local<Value> argv[] = {
-    Integer::New(nread, node_isolate),
-    wrap_obj,
-    Undefined(env->isolate()),
-    Undefined(env->isolate())
-  };
-
-  if (nread < 0) {
-    if (buf->base != NULL)
-      free(buf->base);
-    wrap->MakeCallback(env->onmessage_string(), ARRAY_SIZE(argv), argv);
-    return;
+  if (nread > 0) {
+	//NODE_COUNT_UDP_BYTES_RECV(nread);
   }
 
-  char* base = static_cast<char*>(realloc(buf->base, nread));
-  argv[2] = Buffer::Use(env, base, nread);
-  argv[3] = AddressToJS(env, addr);
-  wrap->MakeCallback(env->onmessage_string(), ARRAY_SIZE(argv), argv);
+  wrap->callbacks()->DoRecv(handle, nread, buf, addr, flags);
 }
 
 
 Local<Object> UDPWrap::Instantiate(Environment* env) {
-  // If this assert fires then Initialize hasn't been called yet.
-  assert(env->udp_constructor_function().IsEmpty() == false);
-  return env->udp_constructor_function()->NewInstance();
-}
+	HandleScope handle_scope(env->isolate());
 
+	// If this assert fires then Initialize hasn't been called yet.
+	assert(env->tcp_constructor_template().IsEmpty() == false);
+
+	Local<Function> constructor = env->tcp_constructor_template()->GetFunction();
+	assert(constructor.IsEmpty() == false);
+	Local<Object> instance = constructor->NewInstance();
+	assert(instance.IsEmpty() == false);
+	return handle_scope.Close(instance);
+}
 
 uv_udp_t* UDPWrap::UVHandle() {
   return &handle_;
 }
 
+void UDPWrapCallbacks::DoRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned int flags)
+{
+	if (nread == 0) {
+		if (buf->base != NULL)
+			free(buf->base);
+		return;
+	}
+
+	UDPWrap* wrap = static_cast<UDPWrap*>(handle->data);
+	Environment* env = wrap->env();
+
+	HandleScope handle_scope(env->isolate());
+	Context::Scope context_scope(env->context());
+
+	Local<Object> wrap_obj = wrap->object();
+	Local<Value> argv[] = {
+	Integer::New(nread, node_isolate),
+	wrap_obj,
+	Undefined(env->isolate()),
+	Undefined(env->isolate())
+	};
+
+	if (nread < 0) {
+	if (buf->base != NULL)
+		free(buf->base);
+	wrap->MakeCallback(env->onmessage_string(), ARRAY_SIZE(argv), argv);
+	return;
+	}
+
+	char* base = static_cast<char*>(realloc(buf->base, nread));
+	argv[2] = Buffer::Use(env, base, nread);
+	argv[3] = AddressToJS(env, addr);
+	wrap->MakeCallback(env->onmessage_string(), ARRAY_SIZE(argv), argv);
+}
+
+int UDPWrapCallbacks::DoSend(SendWrap* s, uv_udp_t* handle, uv_buf_t* buf, size_t count, const struct sockaddr* addr, uv_udp_send_cb cb)
+{
+	return uv_udp_send(&s->req_,
+				handle,
+                buf,
+                count,
+                addr,
+                cb);
+}
+
+void UDPWrapCallbacks::DoAlloc(uv_handle_t* handle,
+                                  size_t suggested_size,
+                                  uv_buf_t* buf) {
+  buf->base = static_cast<char*>(malloc(suggested_size));
+  buf->len = suggested_size;
+
+  if (buf->base == NULL && suggested_size > 0) {
+    FatalError(
+        "node::UDPWrapCallbacks::DoAlloc(uv_handle_t*, size_t, uv_buf_t*)",
+        "Out Of Memory");
+  }
+}
+
+int UDPWrapCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
+  return 0; //uv_shutdown(&req_wrap->req_, wrap()->stream(), cb);
+}
+
+Handle<Object> UDPWrapCallbacks::Self() {
+  return wrap()->object();
+}
 
 }  // namespace node
 

@@ -25,10 +25,41 @@
 #include "env.h"
 #include "handle_wrap.h"
 #include "req_wrap.h"
+#include "callback_wrap.h"
 #include "uv.h"
 #include "v8.h"
 
 namespace node {
+
+// Forward declaration
+class UDPWrap;
+
+class UDPWrapCallbacks : public WrapCallbacks {
+ public:
+  explicit UDPWrapCallbacks(UDPWrap* wrap) : WrapCallbacks(reinterpret_cast<HandleWrap*>(wrap)) {
+  }
+
+  explicit UDPWrapCallbacks(UDPWrapCallbacks* old) : WrapCallbacks(old) {
+  }
+
+  virtual ~UDPWrapCallbacks() {
+  }
+
+  virtual void DoAlloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+
+  virtual void DoRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned int flags);
+  virtual int DoSend(SendWrap* s, uv_udp_t* handle, uv_buf_t* buf, size_t count, const struct sockaddr* addr, uv_udp_send_cb cb);
+
+  virtual int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
+
+  v8::Handle<v8::Object> Self();
+
+ protected:
+  inline UDPWrap* wrap() const {
+    return (UDPWrap *) wrap_;
+  }
+
+};
 
 class UDPWrap: public HandleWrap {
  public:
@@ -53,6 +84,17 @@ class UDPWrap: public HandleWrap {
   static void SetBroadcast(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTTL(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+  void OverrideCallbacks(WrapCallbacks* callbacks) {
+    UDPWrapCallbacks* old = callbacks_;
+    callbacks_ = reinterpret_cast<UDPWrapCallbacks*>(callbacks);
+    if (old != &default_callbacks_)
+      delete old;
+  }
+
+  inline UDPWrapCallbacks* callbacks() const {
+    return callbacks_;
+  }
+
   static v8::Local<v8::Object> Instantiate(Environment* env);
   uv_udp_t* UVHandle();
 
@@ -62,7 +104,7 @@ class UDPWrap: public HandleWrap {
 
   static void DoBind(const v8::FunctionCallbackInfo<v8::Value>& args,
                      int family);
-  static void DoSend(const v8::FunctionCallbackInfo<v8::Value>& args,
+  static void ProceedSend(const v8::FunctionCallbackInfo<v8::Value>& args,
                      int family);
   static void SetMembership(const v8::FunctionCallbackInfo<v8::Value>& args,
                             uv_membership membership);
@@ -77,7 +119,12 @@ class UDPWrap: public HandleWrap {
                      const struct sockaddr* addr,
                      unsigned int flags);
 
+  UDPWrapCallbacks default_callbacks_;
+  UDPWrapCallbacks* callbacks_;  // Overridable callbacks
+
   uv_udp_t handle_;
+
+  friend class UDPWrapCallbacks;
 };
 
 }  // namespace node

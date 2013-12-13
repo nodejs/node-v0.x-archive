@@ -2164,6 +2164,9 @@ static Handle<Object> GetFeatures() {
   obj->Set(FIXED_ONE_BYTE_STRING(node_isolate, "tls"),
            Boolean::New(get_builtin_module("crypto") != NULL));
 
+  obj->Set(FIXED_ONE_BYTE_STRING(node_isolate, "dtls"),
+           Boolean::New(get_builtin_module("crypto") != NULL));
+
   return scope.Close(obj);
 }
 

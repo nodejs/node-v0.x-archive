@@ -30,6 +30,8 @@
       'lib/dgram.js',
       'lib/dns.js',
       'lib/domain.js',
+      #'lib/dtls.js',
+      #'lib/_dtls_wrap.js',
       'lib/events.js',
       'lib/freelist.js',
       'lib/fs.js',

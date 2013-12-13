@@ -28,7 +28,9 @@
 #include "async-wrap.h"
 #include "env.h"
 #include "queue.h"
+#include "callback_wrap.h"
 #include "stream_wrap.h"
+#include "udp_wrap.h"
 #include "v8.h"
 
 #include <openssl/ssl.h>
@@ -37,13 +39,14 @@ namespace node {
 
 // Forward-declarations
 class NodeBIO;
+class SendWrap;
 class WriteWrap;
 namespace crypto {
   class SecureContext;
 }
 
 class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
-                     public StreamWrapCallbacks,
+                     public WrapCallbacks,
                      public AsyncWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target,
@@ -59,17 +62,27 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   void DoAlloc(uv_handle_t* handle,
                size_t suggested_size,
                uv_buf_t* buf);
+  void DoRecv(uv_udp_t* handle, 
+			  ssize_t nread, 
+			  const uv_buf_t* buf, 
+			  const struct sockaddr* addr, 
+			  unsigned int flags);
+  int DoSend(SendWrap* s, 
+	          uv_udp_t* handle, 
+			  uv_buf_t* bufs, 
+			  size_t count,
+			  const struct sockaddr* addr,
+			  uv_udp_send_cb cb);
   void DoRead(uv_stream_t* handle,
               ssize_t nread,
               const uv_buf_t* buf,
               uv_handle_type pending);
   int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
 
+v8::Handle<v8::Object> Self();
+
  protected:
   static const int kClearOutChunkSize = 1024;
-
-  // Maximum number of buffers passed to uv_write()
-  static const int kSimultaneousBufferCount = 10;
 
   // Write callback queue's item
   class WriteItem {
@@ -86,24 +99,48 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
     QUEUE member_;
   };
 
+  class SendItem {
+   public:
+    SendItem(SendWrap* s, uv_udp_send_cb cb) : s_(s), cb_(cb) {
+    }
+    ~SendItem() {
+      s_ = NULL;
+      cb_ = NULL;
+    }
+
+    SendWrap* s_;
+    uv_udp_send_cb cb_;
+    QUEUE member_;
+  };
+
+  union ExtraInfo {
+    struct {
+         const struct sockaddr* addr;
+    };
+  };
+
   TLSCallbacks(Environment* env,
                Kind kind,
                v8::Handle<v8::Object> sc,
-               StreamWrapCallbacks* old);
+               WrapCallbacks* old, bool isstream);
   ~TLSCallbacks();
 
   static void SSLInfoCallback(const SSL* ssl_, int where, int ret);
   void InitSSL();
-  void EncOut();
-  static void EncOutCb(uv_write_t* req, int status);
-  bool ClearIn();
-  void ClearOut();
+  void EncOut(const ExtraInfo * extraInfo = NULL);
+    
+  static void EncOutStreamCb(uv_write_t* req, int status);
+  static void EncOutHandleCb(uv_udp_send_t* req, int status);
+  static void EncOutCb(TLSCallbacks* callbacks, int status);
+
+  bool ClearIn(const ExtraInfo * extraInfo = NULL);
+  void ClearOut(const ExtraInfo * extraInfo = NULL);
   void InvokeQueued(int status);
 
-  inline void Cycle() {
-    ClearIn();
-    ClearOut();
-    EncOut();
+  inline void Cycle(const ExtraInfo * extraInfo = NULL) {
+    ClearIn(extraInfo);
+    ClearOut(extraInfo);
+    EncOut(extraInfo);
   }
 
   v8::Local<v8::Value> GetSSLError(int status, int* err);
@@ -129,17 +166,16 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   BIO* enc_out_;
   NodeBIO* clear_in_;
   uv_write_t write_req_;
+  uv_udp_send_t send_req_;
   size_t write_size_;
   size_t write_queue_size_;
+  QUEUE send_item_queue_;
   QUEUE write_item_queue_;
   WriteItem* pending_write_item_;
   bool started_;
   bool established_;
   bool shutdown_;
-
-  // If true - delivered EOF to the js-land, either after `close_notify`, or
-  // after the `UV_EOF` on socket.
-  bool eof_;
+  bool isstream_;
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   v8::Persistent<v8::Value> sni_context_;

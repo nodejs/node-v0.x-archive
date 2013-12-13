@@ -61,9 +61,10 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
 TLSCallbacks::TLSCallbacks(Environment* env,
                            Kind kind,
                            Handle<Object> sc,
-                           StreamWrapCallbacks* old)
+                           WrapCallbacks* old,
+						   bool isstream)
     : SSLWrap<TLSCallbacks>(env, Unwrap<SecureContext>(sc), kind),
-      StreamWrapCallbacks(old),
+      WrapCallbacks(old),
       AsyncWrap(env, env->tls_wrap_constructor_function()->NewInstance()),
       sc_(Unwrap<SecureContext>(sc)),
       sc_handle_(env->isolate(), sc),
@@ -75,11 +76,13 @@ TLSCallbacks::TLSCallbacks(Environment* env,
       started_(false),
       established_(false),
       shutdown_(false),
-      eof_(false) {
+	  isstream_(isstream)
+{
   node::Wrap<TLSCallbacks>(object(), this);
 
   // Initialize queue for clearIn writes
   QUEUE_INIT(&write_item_queue_);
+  QUEUE_INIT(&send_item_queue_);
 
   // We've our own session callbacks
   SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<TLSCallbacks>::GetSessionCallback);
@@ -182,10 +185,35 @@ void TLSCallbacks::Wrap(const FunctionCallbackInfo<Value>& args) {
                                   SSLWrap<TLSCallbacks>::kClient;
 
   TLSCallbacks* callbacks = NULL;
+
+      if (env->tcp_constructor_template().IsEmpty() == false &&               
+          env->tcp_constructor_template()->HasInstance(stream)) {                
+        TCPWrap* const wrap = Unwrap<TCPWrap>(stream);                                   
+		callbacks = new TLSCallbacks(env, kind, sc, wrap->callbacks(), true);
+		wrap->OverrideCallbacks(callbacks);		
+      } else if (env->udp_constructor_template().IsEmpty() == false &&        
+                 env->udp_constructor_template()->HasInstance(stream)) {         
+        UDPWrap* const wrap = Unwrap<UDPWrap>(stream);                           
+		callbacks = new TLSCallbacks(env, kind, sc, wrap->callbacks(), false);
+ 		wrap->OverrideCallbacks(callbacks);
+      } else if (env->tty_constructor_template().IsEmpty() == false &&        
+                 env->tty_constructor_template()->HasInstance(stream)) {         
+        TTYWrap* const wrap = Unwrap<TTYWrap>(stream);                           
+		callbacks = new TLSCallbacks(env, kind, sc, wrap->callbacks(), true);
+		wrap->OverrideCallbacks(callbacks);
+      } else if (env->pipe_constructor_template().IsEmpty() == false &&       
+                 env->pipe_constructor_template()->HasInstance(stream)) {        
+        PipeWrap* const wrap = Unwrap<PipeWrap>(stream);                         
+		callbacks = new TLSCallbacks(env, kind, sc, wrap->callbacks(), true);
+		wrap->OverrideCallbacks(callbacks);
+      }
+
+  /*
   WITH_GENERIC_STREAM(env, stream, {
     callbacks = new TLSCallbacks(env, kind, sc, wrap->callbacks());
     wrap->OverrideCallbacks(callbacks);
   });
+  */
 
   if (callbacks == NULL) {
     return args.GetReturnValue().SetNull();
@@ -241,7 +269,7 @@ void TLSCallbacks::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
 }
 
 
-void TLSCallbacks::EncOut() {
+void TLSCallbacks::EncOut(const ExtraInfo * extraInfo) {
   // Ignore cycling data if ClientHello wasn't yet parsed
   if (!hello_parser_.IsEnded())
     return;
@@ -264,31 +292,61 @@ void TLSCallbacks::EncOut() {
     return;
   }
 
-  char* data[kSimultaneousBufferCount];
-  size_t size[ARRAY_SIZE(data)];
-  size_t count = ARRAY_SIZE(data);
-  write_size_ = NodeBIO::FromBIO(enc_out_)->PeekMultiple(data, size, &count);
-  assert(write_size_ != 0 && count != 0);
+  char* data = NodeBIO::FromBIO(enc_out_)->Peek(&write_size_);
+  assert(write_size_ != 0);
 
-  write_req_.data = this;
-  uv_buf_t buf[ARRAY_SIZE(data)];
-  for (size_t i = 0; i < count; i++)
-    buf[i] = uv_buf_init(data[i], size[i]);
-  int r = uv_write(&write_req_, wrap()->stream(), buf, count, EncOutCb);
+  uv_buf_t buf = uv_buf_init(data, write_size_);
+  
 
-  // Ignore errors, this should be already handled in js
-  if (!r) {
-    if (wrap()->is_tcp()) {
-      NODE_COUNT_NET_BYTES_SENT(write_size_);
-    } else if (wrap()->is_named_pipe()) {
-      NODE_COUNT_PIPE_BYTES_SENT(write_size_);
-    }
+  //UDPWrap * udpWrap = reinterpret_cast<UDPWrap *>(wrap());
+  
+  // Check for DTLS
+  // TODO: Check if it exists a better way rather 
+  // than putting a flag, direct to the SSL context
+  //if (sc_->ctx_->method == ) ???
+  if (isstream_) {
+    
+	write_req_.data = this;
+
+	StreamWrap * streamWrap = reinterpret_cast<StreamWrap *>(wrap());
+	int r = uv_write(&write_req_, streamWrap->stream(), &buf, 1, EncOutStreamCb);
+
+	  // Ignore errors, this should be already handled in js
+	  if (!r) {
+		if (streamWrap->is_tcp()) {
+		  NODE_COUNT_NET_BYTES_SENT(write_size_);
+		} else if (streamWrap->is_named_pipe()) {
+		  NODE_COUNT_PIPE_BYTES_SENT(write_size_);
+		}
+	  }
+  }
+  else {
+	  UDPWrap * udpWrap = reinterpret_cast<UDPWrap *>(wrap());
+	  send_req_.data = this;
+
+	  int r = uv_udp_send(&send_req_,
+						  udpWrap->UVHandle(),
+						  &buf,
+						  1,
+						  reinterpret_cast<const sockaddr*>(extraInfo->addr),
+						  EncOutHandleCb);
+
+	  if (!r) {
+		  //NODE_COUNT_UDP_BYTES_SENT(write_size_);
+	  }
   }
 }
 
 
-void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
-  TLSCallbacks* callbacks = static_cast<TLSCallbacks*>(req->data);
+void TLSCallbacks::EncOutStreamCb(uv_write_t* req, int status) {
+  EncOutCb(static_cast<TLSCallbacks*>(req->data), status);
+}
+
+void TLSCallbacks::EncOutHandleCb(uv_udp_send_t* req, int status) {
+	EncOutCb(static_cast<TLSCallbacks*>(req->data), status);  
+}
+
+void TLSCallbacks::EncOutCb(TLSCallbacks* callbacks, int status) {
   Environment* env = callbacks->env();
 
   // Handle error
@@ -352,7 +410,7 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err) {
 }
 
 
-void TLSCallbacks::ClearOut() {
+void TLSCallbacks::ClearOut(const ExtraInfo * extraInfo) {
   // Ignore cycling data if ClientHello wasn't yet parsed
   if (!hello_parser_.IsEnded())
     return;
@@ -366,21 +424,34 @@ void TLSCallbacks::ClearOut() {
   int read;
   do {
     read = SSL_read(ssl_, out, sizeof(out));
+
+	//
+	// Depending of a stream or a dgram (invoke onread or onmessage)
+	//
     if (read > 0) {
-      Local<Value> argv[] = {
-        Integer::New(read, node_isolate),
-        Buffer::New(env(), out, read)
-      };
-      wrap()->MakeCallback(env()->onread_string(), ARRAY_SIZE(argv), argv);
+
+		if (extraInfo) {
+			Local<Object> wrap_obj = wrap()->object();
+			Local<Value> argv[] = {
+				Integer::New(read, node_isolate),
+				wrap_obj,
+				Undefined(env()->isolate()),
+				Undefined(env()->isolate())
+			};
+
+			argv[2] = Buffer::New(env(), out, read);
+			argv[3] = AddressToJS(env(), extraInfo->addr);
+			wrap()->MakeCallback(env()->onmessage_string(), ARRAY_SIZE(argv), argv);
+		}
+		else {
+		  Local<Value> argv[] = {
+			Integer::New(read, node_isolate),
+			Buffer::New(env(), out, read)
+		  };
+		  wrap()->MakeCallback(env()->onread_string(), ARRAY_SIZE(argv), argv);
+		}
     }
   } while (read > 0);
-
-  int flags = SSL_get_shutdown(ssl_);
-  if (!eof_ && flags & SSL_RECEIVED_SHUTDOWN) {
-    eof_ = true;
-    Local<Value> arg = Integer::New(UV_EOF, node_isolate);
-    wrap()->MakeCallback(env()->onread_string(), 1, &arg);
-  }
 
   if (read == -1) {
     int err;
@@ -392,8 +463,13 @@ void TLSCallbacks::ClearOut() {
   }
 }
 
+Handle<Object> TLSCallbacks::Self() {
+	wrap()->GetHandle()->type;
+	return Handle<Object>();
+}
 
-bool TLSCallbacks::ClearIn() {
+
+bool TLSCallbacks::ClearIn(const ExtraInfo * extraInfo) {
   // Ignore cycling data if ClientHello wasn't yet parsed
   if (!hello_parser_.IsEnded())
     return false;
@@ -452,7 +528,7 @@ int TLSCallbacks::DoWrite(WriteWrap* w,
     // However if there any data that should be written to socket,
     // callback should not be invoked immediately
     if (BIO_pending(enc_out_) == 0)
-      return uv_write(&w->req_, wrap()->stream(), bufs, count, cb);
+      return uv_write(&w->req_, reinterpret_cast<StreamWrap *>(wrap())->stream(), bufs, count, cb);
   }
 
   QUEUE_INSERT_TAIL(&write_item_queue_, &wi->member_);
@@ -513,7 +589,6 @@ void TLSCallbacks::DoAlloc(uv_handle_t* handle,
   buf->len = suggested_size;
 }
 
-
 void TLSCallbacks::DoRead(uv_stream_t* handle,
                           ssize_t nread,
                           const uv_buf_t* buf,
@@ -521,14 +596,6 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
   if (nread < 0)  {
     // Error should be emitted only after all data was read
     ClearOut();
-
-    // Ignore EOF if received close_notify
-    if (nread == UV_EOF) {
-      if (eof_)
-        return;
-      eof_ = true;
-    }
-
     HandleScope handle_scope(env()->isolate());
     Context::Scope context_scope(env()->context());
     Local<Value> arg = Integer::New(nread, node_isolate);
@@ -556,12 +623,139 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
 }
 
 
+void TLSCallbacks::DoRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned int flags)
+{
+  if (nread < 0)  {
+    // Error should be emitted only after all data was read
+    ClearOut();
+    HandleScope handle_scope(env()->isolate());
+    Context::Scope context_scope(env()->context());
+
+	Local<Object> wrap_obj = wrap()->object();
+	Local<Value> argv[] = {
+		Integer::New(nread, node_isolate),
+		wrap_obj,
+		Undefined(env()->isolate()),
+		Undefined(env()->isolate())
+	};
+
+
+	if (nread < 0) {
+		if (buf->base != NULL)
+			free(buf->base);
+		wrap()->MakeCallback(env()->onmessage_string(), ARRAY_SIZE(argv), argv);
+		return;
+	}
+
+	char* base = static_cast<char*>(realloc(buf->base, nread));
+	argv[2] = Buffer::Use(env(), base, nread);
+	argv[3] = AddressToJS(env(), addr);
+	wrap()->MakeCallback(env()->onmessage_string(), ARRAY_SIZE(argv), argv);
+    return;
+  }
+
+  // Only client connections can receive data
+  assert(ssl_ != NULL);
+
+  // Commit read data
+  NodeBIO* enc_in = NodeBIO::FromBIO(enc_in_);
+  enc_in->Commit(nread);
+
+  // Parse ClientHello first
+  if (!hello_parser_.IsEnded()) {
+    size_t avail = 0;
+    uint8_t* data = reinterpret_cast<uint8_t*>(enc_in->Peek(&avail));
+    assert(avail == 0 || data != NULL);
+    return hello_parser_.Parse(data, avail);
+  }
+
+  ExtraInfo extraInfo = { addr };
+
+  // Cycle OpenSSL's state
+  Cycle(&extraInfo);
+}
+
+int TLSCallbacks::DoSend(SendWrap* s, uv_udp_t* handle, uv_buf_t* bufs, size_t count, const struct sockaddr* addr, uv_udp_send_cb cb) 
+{
+  ExtraInfo extraInfo = { addr };
+
+  // Queue callback to execute it on next tick
+  SendItem* si = new SendItem(s, cb);
+  bool empty = true;
+  UDPWrap * udpWrap = NULL;
+
+  // Empty writes should not go through encryption process
+  size_t i;
+  for (i = 0; i < count; i++)
+    if (bufs[i].len > 0) {
+      empty = false;
+      break;
+    }
+  if (empty) {
+    ClearOut(&extraInfo);
+    // However if there any data that should be written to socket,
+    // callback should not be invoked immediately
+    if (BIO_pending(enc_out_) == 0)
+		udpWrap = reinterpret_cast<UDPWrap *>(wrap());
+		return uv_udp_send(NULL,
+					udpWrap->UVHandle(),
+					bufs,
+					count,
+					addr,
+					cb);
+  }
+
+  QUEUE_INSERT_TAIL(&write_item_queue_, &si->member_);
+
+  // Write queued data
+  if (empty) {
+    EncOut(&extraInfo);
+    return 0;
+  }
+
+  // Process enqueued data first
+  if (!ClearIn(&extraInfo)) {
+    // If there're still data to process - enqueue current one
+    for (i = 0; i < count; i++)
+      clear_in_->Write(bufs[i].base, bufs[i].len);
+    return 0;
+  }
+
+  int written = 0;
+  for (i = 0; i < count; i++) {
+    written = SSL_write(ssl_, bufs[i].base, bufs[i].len);
+    assert(written == -1 || written == static_cast<int>(bufs[i].len));
+    if (written == -1)
+      break;
+  }
+
+  if (i != count) {
+    int err;
+    HandleScope handle_scope(env()->isolate());
+    Context::Scope context_scope(env()->context());
+    Handle<Value> arg = GetSSLError(written, &err);
+    if (!arg.IsEmpty()) {
+      MakeCallback(env()->onerror_string(), 1, &arg);
+      return -1;
+    }
+
+    // No errors, queue rest
+    for (; i < count; i++)
+      clear_in_->Write(bufs[i].base, bufs[i].len);
+  }
+
+  // Try writing data immediately
+  EncOut(&extraInfo);
+
+  return 0;
+};
+
 int TLSCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
   if (SSL_shutdown(ssl_) == 0)
     SSL_shutdown(ssl_);
   shutdown_ = true;
   EncOut();
-  return StreamWrapCallbacks::DoShutdown(req_wrap, cb);
+  return WrapCallbacks::DoShutdown(req_wrap, cb);
 }
 
 
