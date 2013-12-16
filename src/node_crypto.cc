@@ -4106,11 +4106,8 @@ void SetEngine(const v8::FunctionCallbackInfo<v8::Value>& args) {
     }
   }
 
-  if (engine == NULL) {
-    char tmp[1024];
-    snprintf(tmp, sizeof(tmp), "Engine \"%s\" was not found", *engine_id);
-    return ThrowError(tmp);
-  }
+  if (engine == NULL)
+    return ThrowCryptoError(ERR_get_error());
 
   int r = ENGINE_set_default(engine, flags);
   ENGINE_free(engine);
