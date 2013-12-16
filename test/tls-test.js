@@ -2,8 +2,8 @@ var tls = require('tls');
 var fs = require('fs');
 
 var options = {
-  key: fs.readFileSync('c:\\temp\\mpp-key.pem'),
-  cert: fs.readFileSync('c:\\temp\\mpp-cert-self-signed.pem'),
+  key: fs.readFileSync('c:\\temp\\dtls-key.pem'),
+  cert: fs.readFileSync('c:\\temp\\dtls-cert-self-signed.pem'),
 
   // This is necessary only if using the client certificate authentication.
   //requestCert: true,
