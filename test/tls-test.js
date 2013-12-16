@@ -1,6 +1,8 @@
 var tls = require('tls');
 var fs = require('fs');
 
+debugger;
+
 var options = {
   key: fs.readFileSync('c:\\temp\\dtls-key.pem'),
   cert: fs.readFileSync('c:\\temp\\dtls-cert-self-signed.pem'),
