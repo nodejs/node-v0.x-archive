@@ -721,4 +721,4 @@ void TLSCallbacks::Initialize(Handle<Object> target,
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE(node_tls_wrap, node::TLSCallbacks::Initialize)
+NODE_MODULE_CONTEXT_AWARE_BUILTIN(tls_wrap, node::TLSCallbacks::Initialize)
