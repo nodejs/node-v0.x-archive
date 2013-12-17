@@ -61,7 +61,8 @@ fire until the next event loop iteration.
 
 `setImmediate` is useful in developing APIs where you want to give the user the
 chance to assign event handlers after an object has been constructed, but before
-any I/O has occurred.
+you've kicked off any asynchronous operations of your own (e.g., started a TCP
+connection):
 
     function MyThing(options) {
       this.setupOptions(options);
