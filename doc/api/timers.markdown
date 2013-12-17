@@ -55,9 +55,60 @@ callbacks and before `setTimeout` and `setInterval` . Returns an
 can also pass arguments to the callback.
 
 Callbacks for immediates are queued in the order in which they were created.
-The entire callback queue is processed every event loop iteration. If you queue
-an immediate from a inside an executing callback that immediate won't fire
-until the next event loop iteration.
+The entire callback queue is processed every event loop iteration.  However, if
+you queue an immediate from a inside an executing callback, that immediate won't
+fire until the next event loop iteration.
+
+`setImmediate` is useful in developing APIs where you want to give the user the
+chance to assign event handlers after an object has been constructed, but before
+any I/O has occurred.
+
+    function MyThing(options) {
+      this.setupOptions(options);
+
+      setImmediate(function() {
+        this.startDoingStuff();
+      }.bind(this));
+    }
+
+    var thing = new MyThing();
+    thing.getReadyForStuff();
+
+    // thing.startDoingStuff() gets called now, not before.
+
+It is very important for APIs to be either 100% synchronous or 100%
+asynchronous.  Consider this example:
+
+    // WARNING!  DO NOT USE!  BAD UNSAFE HAZARD!
+    function maybeSync(arg, cb) {
+      if (arg) {
+        cb();
+        return;
+      }
+
+      fs.stat('file', cb);
+    }
+
+This API is hazardous.  If you do this:
+
+    maybeSync(true, function() {
+      foo();
+    });
+    bar();
+
+then it's not clear whether `foo()` or `bar()` will be called first.
+
+This approach is much better:
+
+    function definitelyAsync(arg, cb) {
+      if (arg) {
+        setImmediate(cb);
+        return;
+      }
+
+      fs.stat('file', cb);
+    }
+
 
 ## clearImmediate(immediateId)
 
