@@ -570,10 +570,11 @@ sooner if nextTick handlers are currently being processed (i.e., if the caller
 is part of a nextTick handler).
 
 At the end of each tick the `process.nextTick` handlers are executed until there
-are none left.  Because of this, it's dangerous to invoke `process.nextTick`
-*from* a nextTick handler.  If you do this enough times, you can starve the main
-event loop, meaning that filesystem and network I/O events will not be processed
-(because nextTick handlers keep being added).
+are none left -- and that includes any handlers which were added as part of
+processing earlier handlers.  Because of this, it's dangerous to invoke
+`process.nextTick` *from* a nextTick handler.  If you do this enough times, you
+can starve the main event loop, meaning that filesystem and network I/O events
+will not be processed (because nextTick handlers keep being added).
 
 **You should not use `process.nextTick` to invoke an arbitrary callback that
 you've been given by a caller.**  For that, use `setImmediate`, which avoids
