@@ -280,7 +280,14 @@ class XcodeSettings(object):
     return out.rstrip('\n')
 
   def _GetSdkVersionInfoItem(self, sdk, infoitem):
-    return self._GetStdout(['xcodebuild', '-version', '-sdk', sdk, infoitem])
+    # xcodebuild requires Xcode and can't run on Command Line Tools-only
+    # systems from 10.7 onward.
+    # Since the CLT has no SDK paths anyway, returning None is the
+    # most sensible route and should still do the right thing.
+    try:
+      return self._GetStdout(['xcodebuild', '-version', '-sdk', sdk, infoitem])
+    except:
+      pass
 
   def _SdkRoot(self, configname):
     if configname is None:
@@ -409,10 +416,11 @@ class XcodeSettings(object):
 
     cflags += self._Settings().get('WARNING_CFLAGS', [])
 
-    config = self.spec['configurations'][self.configname]
-    framework_dirs = config.get('mac_framework_dirs', [])
-    for directory in framework_dirs:
-      cflags.append('-F' + directory.replace('$(SDKROOT)', sdk_root))
+    if 'SDKROOT' in self._Settings():
+      config = self.spec['configurations'][self.configname]
+      framework_dirs = config.get('mac_framework_dirs', [])
+      for directory in framework_dirs:
+        cflags.append('-F' + directory.replace('$(SDKROOT)', sdk_root))
 
     self.configname = None
     return cflags
@@ -659,10 +667,11 @@ class XcodeSettings(object):
     for rpath in self._Settings().get('LD_RUNPATH_SEARCH_PATHS', []):
       ldflags.append('-Wl,-rpath,' + rpath)
 
-    config = self.spec['configurations'][self.configname]
-    framework_dirs = config.get('mac_framework_dirs', [])
-    for directory in framework_dirs:
-      ldflags.append('-F' + directory.replace('$(SDKROOT)', self._SdkPath()))
+    if 'SDKROOT' in self._Settings():
+      config = self.spec['configurations'][self.configname]
+      framework_dirs = config.get('mac_framework_dirs', [])
+      for directory in framework_dirs:
+        ldflags.append('-F' + directory.replace('$(SDKROOT)', self._SdkPath()))
 
     self.configname = None
     return ldflags
@@ -820,9 +829,11 @@ class XcodeSettings(object):
           ['security', 'find-identity', '-p', 'codesigning', '-v'])
       for line in output.splitlines():
         if identity in line:
-          assert identity not in XcodeSettings._codesigning_key_cache, (
-              "Multiple codesigning identities for identity: %s" % identity)
-          XcodeSettings._codesigning_key_cache[identity] = line.split()[1]
+          fingerprint = line.split()[1]
+          cache = XcodeSettings._codesigning_key_cache
+          assert identity not in cache or fingerprint == cache[identity], (
+              "Multiple codesigning fingerprints for identity: %s" % identity)
+          XcodeSettings._codesigning_key_cache[identity] = fingerprint
     return XcodeSettings._codesigning_key_cache.get(identity, '')
 
   def AddImplicitPostbuilds(self, configname, output, output_binary,
@@ -843,7 +854,10 @@ class XcodeSettings(object):
         l = '-l' + m.group(1)
       else:
         l = library
-    return l.replace('$(SDKROOT)', self._SdkPath(config_name))
+    if self._SdkPath():
+      return l.replace('$(SDKROOT)', self._SdkPath(config_name))
+    else:
+      return l
 
   def AdjustLibraries(self, libraries, config_name=None):
     """Transforms entries like 'Cocoa.framework' in libraries into entries like
