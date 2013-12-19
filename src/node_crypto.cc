@@ -4051,8 +4051,7 @@ void Certificate::ExportChallenge(const FunctionCallbackInfo<Value>& args) {
 
 void InitCryptoOnce() {
   SSL_library_init();
-  OpenSSL_add_all_algorithms();
-  OpenSSL_add_all_digests();
+  OpenSSL_add_all_algorithms(); 
   SSL_load_error_strings();
   ERR_load_crypto_strings();
 
