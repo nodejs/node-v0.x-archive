@@ -125,9 +125,27 @@ NODE_EXTERN v8::Handle<v8::Value> MakeCallback(
 
 namespace node {
 
+class Environment;
+
 NODE_EXTERN extern bool no_deprecation;
 
 NODE_EXTERN int Start(int argc, char *argv[]);
+NODE_EXTERN void Init(int* argc,
+                      const char** argv,
+                      int* exec_argc,
+                      const char*** exec_argv);
+NODE_EXTERN void SetupProcessObject(Environment* env,
+                                    int argc,
+                                    const char* const* argv,
+                                    int exec_argc,
+                                    const char* const* exec_argv);
+NODE_EXTERN void Load(Environment* env);
+NODE_EXTERN void EmitExit(Environment* env);
+NODE_EXTERN Environment* CreateEnvironment(v8::Isolate* isolate,
+                                           int argc,
+                                           const char* const* argv,
+                                           int exec_argc,
+                                           const char* const* exec_argv);
 
 /* Converts a unixtime to V8 Date */
 #define NODE_UNIXTIME_V8(t) v8::Date::New(1000*static_cast<double>(t))
