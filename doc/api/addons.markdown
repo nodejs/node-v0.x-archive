@@ -320,6 +320,7 @@ Then in `myobject.h` make your wrapper inherit from `node::ObjectWrap`:
     #define MYOBJECT_H
 
     #include <node.h>
+    #include <node_object_wrap.h>
 
     class MyObject : public node::ObjectWrap {
      public:
@@ -342,7 +343,6 @@ Here we expose the method `plusOne` by adding it to the constructor's
 prototype:
 
     #include <node.h>
-    #include <node_object_wrap.h>
     #include "myobject.h"
 
     using namespace v8;
