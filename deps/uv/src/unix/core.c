@@ -419,7 +419,6 @@ int uv__close(int fd) {
   int rc;
 
   assert(fd > -1);  /* Catch uninitialized io_watcher.fd bugs. */
-  assert(fd > STDERR_FILENO);  /* Catch stdio close bugs. */
 
   saved_errno = errno;
   rc = close(fd);

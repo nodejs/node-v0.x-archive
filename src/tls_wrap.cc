@@ -429,6 +429,12 @@ bool TLSCallbacks::ClearIn() {
 }
 
 
+int TLSCallbacks::TryWrite(uv_buf_t** bufs, size_t* count) {
+  // TODO(indutny): Support it
+  return -1;
+}
+
+
 int TLSCallbacks::DoWrite(WriteWrap* w,
                           uv_buf_t* bufs,
                           size_t count,
