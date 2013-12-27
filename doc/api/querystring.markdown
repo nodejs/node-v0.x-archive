@@ -7,11 +7,14 @@
 This module provides utilities for dealing with query strings.
 It provides the following methods:
 
-## querystring.stringify(obj, [sep], [eq])
+## querystring.stringify(obj, [sep], [eq], [name])
 
 Serialize an object to a query string.
 Optionally override the default separator (`'&'`) and assignment (`'='`)
-characters.
+characters. Another way to use this function, passing a primitive, an
+assignment character and a string as the `name`, maybe help you to create
+a simple querystring more quickly.
+
 
 Example:
 
@@ -22,6 +25,10 @@ Example:
     querystring.stringify({foo: 'bar', baz: 'qux'}, ';', ':')
     // returns
     'foo:bar;baz:qux'
+
+    querystring.stringify(true, ';', 'foo')
+    // returns
+    'foo;true'
 
 ## querystring.parse(str, [sep], [eq], [options])
 
