@@ -302,10 +302,25 @@
         asyncQueue = [];
     }
 
+    function doneCallback(queue) {
+      function asyncDone() {
+        inAsyncTick = true;
+        for (var i = 0; i < queue.length; i++) {
+          var item = queue[i];
+          if (item.callbacks.done)
+            item.callbacks.done(item.value);
+        }
+        inAsyncTick = false;
+      }
+
+      return asyncDone;
+    }
+
     // Run all the async listeners attached when an asynchronous event is
     // instantiated.
     function runAsyncQueue(context) {
       var queue = [];
+      var hasDoneCb = false;
       var queueItem, item, i, value;
 
       inAsyncTick = true;
@@ -321,18 +336,25 @@
         if (typeof value !== 'undefined') {
           item = {
             callbacks: queueItem.callbacks,
-            value: value,
             listener: queueItem.listener,
-            uid: queueItem.uid
+            uid: queueItem.uid,
+            value: value
           };
         } else {
           item = queueItem;
         }
+
+        if (!hasDoneCb && queueItem.callbacks && queueItem.callbacks.done) {
+          hasDoneCb = true;
+        }
+
         queue[i] = item;
       }
       inAsyncTick = false;
 
       context._asyncQueue = queue;
+
+      return hasDoneCb ? doneCallback(queue) : null;
     }
 
     // Uses the _asyncQueue object attached by runAsyncQueue.
