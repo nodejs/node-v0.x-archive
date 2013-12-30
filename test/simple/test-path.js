@@ -380,7 +380,10 @@ if (isWindows) {
        ['c:/aaaa/bbbb', 'c:/aaaa/cccc', '..\\cccc'],
        ['c:/aaaa/', 'c:/aaaa/cccc', 'cccc'],
        ['c:/', 'c:\\aaaa\\bbbb', 'aaaa\\bbbb'],
-       ['c:/aaaa/bbbb', 'd:\\', 'd:\\']];
+       ['c:/aaaa/bbbb', 'd:\\', 'd:\\'],
+       ['\\\\aaaa\bbbb', '\\\\aaaa', '..'],
+       ['\\\\aaaa', '\\\\aaaa\\cccc', 'cccc'],
+       ['\\\\aaaa', '\\\\aaaa\\bbbb\\cccc', 'bbbb\\cccc']];
 } else {
   // posix
   var relativeTests =
