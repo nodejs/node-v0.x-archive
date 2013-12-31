@@ -17,9 +17,6 @@ var options = {
 
 var server = dtls.createServer(options, function(cleartextStream) {
   console.log('server connected', cleartextStream.authorized ? 'authorized' : 'unauthorized');
-  //cleartextStream.write("welcome!\n");
-  //cleartextStream.setEncoding('utf8');
-  //cleartextStream.pipe(cleartextStream);
 });
 
 // TODO:

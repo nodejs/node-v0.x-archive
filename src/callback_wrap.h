@@ -39,11 +39,16 @@ class WriteWrap;
 
 // Overridable callbacks' types
 class WrapCallbacks {
+
  public:
-  explicit WrapCallbacks(HandleWrap* wrap) : wrap_(wrap), stream_type(false) {
+  typedef int(WrapCallbacks::*DoShutdownCallback)(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
+
+  explicit WrapCallbacks(HandleWrap* wrap) : wrap_(wrap) {
+	  oldCallback_ = NULL;
   }
 
-  explicit WrapCallbacks(WrapCallbacks* old) : wrap_(old->wrap()), stream_type(false) {
+  explicit WrapCallbacks(WrapCallbacks* old) : wrap_(old->wrap()) {
+	  oldCallback_ = old;
   }
 
   virtual ~WrapCallbacks() {
@@ -51,34 +56,35 @@ class WrapCallbacks {
 
   virtual v8::Handle<v8::Object> Self() = 0;
 
+  // Common
   virtual void DoAlloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) = 0;
+  virtual int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
+	if (oldCallback_) {
+		return oldCallback_->DoShutdown(req_wrap, cb);
+	}
+
+	return 0;
+  };
 
   // UDP
   virtual void DoRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned int flags) {};
   virtual int DoSend(SendWrap* s, uv_udp_t* handle, uv_buf_t* buf, size_t count, const struct sockaddr* addr, uv_udp_send_cb cb) { return -1; };
 
   // Stream
-  
-  //
-  // TODO: Add a throw in the non implemented handler ?
-  //
   virtual void DoRead(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf, uv_handle_type pending) { /* throw .... */ };
   virtual int DoWrite(WriteWrap* w, uv_buf_t* bufs, size_t count, uv_stream_t* send_handle, uv_write_cb cb) { return -1; };
   virtual void AfterWrite(WriteWrap* w) {};
 
-  virtual int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) { return -1; };
 
  protected:
   inline HandleWrap* wrap() const {
     return wrap_;
   }
 
-  inline bool IsStream() const {
-    return stream_type;
-  }
-
-  bool stream_type;
   HandleWrap* const wrap_;
+
+  private:
+	WrapCallbacks* oldCallback_;
 };
 
 
