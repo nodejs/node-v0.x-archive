@@ -4072,22 +4072,17 @@ void InitCryptoOnce() {
 #endif
 
 #ifndef OPENSSL_NO_ENGINE
-  ENGINE_load_openssl();
-  ENGINE_load_dynamic();
+  ENGINE_load_builtin_engines();
 #endif  // !OPENSSL_NO_ENGINE
 }
 
 
 #ifndef OPENSSL_NO_ENGINE
 void SetEngine(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  if (args.Length() < 1 || !args[0]->IsString())
-    return ThrowError("First argument should be a string");
-
+  CHECK(args.Length() >= 1 && args[0]->IsString());
   unsigned int flags = ENGINE_METHOD_ALL;
   if (args.Length() >= 2) {
-    if (!args[1]->IsNumber())
-      return ThrowError("Second argument should be a number if present");
-
+    CHECK(args[1]->IsUint32());
     flags = args[1]->Uint32Value();
   }
 
