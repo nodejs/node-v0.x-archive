@@ -25,25 +25,28 @@ var assert = require('assert');
 var active = null;
 var cntr = 0;
 
-function onAsync0() {
-  return 0;
-}
-
-function onAsync1() {
-  return 1;
+function onError(stor) {
+  results.push(stor);
+  return true;
 }
 
 var results = [];
-var asyncNoHandleError = {
-  error: function(stor) {
-    results.push(stor);
-    return true;
-  }
+var asyncNoHandleError0 = {
+  create: function onCreate0() {
+    return 0;
+  },
+  error: onError
+};
+var asyncNoHandleError1 = {
+  create: function onCreate1() {
+    return 1;
+  },
+  error: onError
 };
 
 var listeners = [
-  process.addAsyncListener(onAsync0, asyncNoHandleError),
-  process.addAsyncListener(onAsync1, asyncNoHandleError)
+  process.addAsyncListener(asyncNoHandleError0),
+  process.addAsyncListener(asyncNoHandleError1)
 ];
 
 process.nextTick(function() {

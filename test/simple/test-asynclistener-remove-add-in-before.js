@@ -22,19 +22,20 @@
 var common = require('../common');
 var assert = require('assert');
 var val;
-var callbacks = {
-  before: function() {
+var asyncCallback = {
+  create: function asyncCreate() {
+    return 66;
+  },
+  before: function asyncBefore() {
     process.removeAsyncListener(listener);
     process.addAsyncListener(listener);
   },
-  after: function(context, storage) {
+  after: function asyncAfter(context, storage) {
     val = storage;
   }
 };
 
-var listener = process.addAsyncListener(function() {
-  return 66;
-}, callbacks);
+var listener = process.addAsyncListener(asyncCallbacks);
 
 process.nextTick(function() {});
 

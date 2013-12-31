@@ -30,11 +30,13 @@ var removeListener = process.removeAsyncListener;
 var actualAsync = 0;
 var expectAsync = 0;
 
-function onAsync() {
-  actualAsync++;
+var asyncCallbacks = {
+  create: function asyncCreate() {
+    actualAsync++;
+  }
 }
 
-var listener = process.createAsyncListener(onAsync);
+var listener = process.createAsyncListener(asyncCallbacks);
 
 process.on('exit', function() {
   process._rawDebug('expected', expectAsync);
