@@ -26,10 +26,10 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --expose-debug-as debug --allow-natives-syntax
-// Flags: --parallel-recompilation-delay=300
+// Flags: --block-concurrent-recompilation
 
-if (!%IsParallelRecompilationSupported()) {
-  print("Parallel recompilation is disabled. Skipping this test.");
+if (!%IsConcurrentRecompilationSupported()) {
+  print("Concurrent recompilation is disabled. Skipping this test.");
   quit();
 }
 
@@ -46,17 +46,22 @@ function bar() {
 }
 
 foo();
-// Mark and trigger parallel optimization.
-%OptimizeFunctionOnNextCall(foo, "parallel");
+// Mark and kick off recompilation.
+%OptimizeFunctionOnNextCall(foo, "concurrent");
 foo();
 
 // Set break points on an unrelated function. This clears both optimized
 // and (shared) unoptimized code on foo, and sets both to lazy-compile builtin.
 // Clear the break point immediately after to deactivate the debugger.
+// Do all of this after compile graph has been created.
 Debug.setBreakPoint(bar, 0, 0);
 Debug.clearAllBreakPoints();
 
-// Install optimized code when parallel optimization finishes.
+// At this point, concurrent recompilation is still blocked.
+assertUnoptimized(foo, "no sync");
+// Let concurrent recompilation proceed.
+%UnblockConcurrentRecompilation();
+
+// Install optimized code when concurrent optimization finishes.
 // This needs to be able to deal with shared code being a builtin.
 assertUnoptimized(foo, "sync");
-

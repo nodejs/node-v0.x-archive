@@ -52,14 +52,13 @@ inline void Environment::IsolateData::Put() {
 }
 
 inline Environment::IsolateData::IsolateData(v8::Isolate* isolate)
-    : event_loop_(uv_default_loop())
-    , isolate_(isolate)
+    : event_loop_(uv_default_loop()),
+      isolate_(isolate),
 #define V(PropertyName, StringValue)                                          \
-    , PropertyName ## _index_(                                                \
-        FIXED_ONE_BYTE_STRING(isolate, StringValue).Eternalize(isolate))
+    PropertyName ## _(isolate, FIXED_ONE_BYTE_STRING(isolate, StringValue)),
     PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V
-    , ref_count_(0) {
+    ref_count_(0) {
 }
 
 inline uv_loop_t* Environment::IsolateData::event_loop() const {
@@ -70,24 +69,26 @@ inline v8::Isolate* Environment::IsolateData::isolate() const {
   return isolate_;
 }
 
-inline Environment::DomainFlag::DomainFlag() {
-  for (int i = 0; i < kFieldsCount; ++i) fields_[i] = 0;
+inline Environment::AsyncListener::AsyncListener() {
+  for (int i = 0; i < kFieldsCount; ++i)
+    fields_[i] = 0;
 }
 
-inline uint32_t* Environment::DomainFlag::fields() {
+inline uint32_t* Environment::AsyncListener::fields() {
   return fields_;
 }
 
-inline int Environment::DomainFlag::fields_count() const {
+inline int Environment::AsyncListener::fields_count() const {
   return kFieldsCount;
 }
 
-inline uint32_t Environment::DomainFlag::count() const {
+inline uint32_t Environment::AsyncListener::count() const {
   return fields_[kCount];
 }
 
-inline Environment::TickInfo::TickInfo() {
-  for (int i = 0; i < kFieldsCount; ++i) fields_[i] = 0;
+inline Environment::TickInfo::TickInfo() : in_tick_(false), last_threw_(false) {
+  for (int i = 0; i < kFieldsCount; ++i)
+    fields_[i] = 0;
 }
 
 inline uint32_t* Environment::TickInfo::fields() {
@@ -98,28 +99,32 @@ inline int Environment::TickInfo::fields_count() const {
   return kFieldsCount;
 }
 
-inline uint32_t Environment::TickInfo::in_tick() const {
-  return fields_[kInTick];
+inline bool Environment::TickInfo::in_tick() const {
+  return in_tick_;
 }
 
 inline uint32_t Environment::TickInfo::index() const {
   return fields_[kIndex];
 }
 
-inline uint32_t Environment::TickInfo::last_threw() const {
-  return fields_[kLastThrew];
+inline bool Environment::TickInfo::last_threw() const {
+  return last_threw_;
 }
 
 inline uint32_t Environment::TickInfo::length() const {
   return fields_[kLength];
 }
 
+inline void Environment::TickInfo::set_in_tick(bool value) {
+  in_tick_ = value;
+}
+
 inline void Environment::TickInfo::set_index(uint32_t value) {
   fields_[kIndex] = value;
 }
 
-inline void Environment::TickInfo::set_last_threw(uint32_t value) {
-  fields_[kLastThrew] = value;
+inline void Environment::TickInfo::set_last_threw(bool value) {
+  last_threw_ = value;
 }
 
 inline Environment* Environment::New(v8::Local<v8::Context> context) {
@@ -155,14 +160,13 @@ inline Environment* Environment::GetCurrentChecked(
 }
 
 inline Environment::Environment(v8::Local<v8::Context> context)
-    : isolate_(context->GetIsolate())
-    , isolate_data_(IsolateData::GetOrCreate(context->GetIsolate()))
-    , using_smalloc_alloc_cb_(false)
-    , using_domains_(false)
-    , context_(context->GetIsolate(), context) {
+    : isolate_(context->GetIsolate()),
+      isolate_data_(IsolateData::GetOrCreate(context->GetIsolate())),
+      using_smalloc_alloc_cb_(false),
+      context_(context->GetIsolate(), context) {
   // We'll be creating new objects so make sure we've entered the context.
-  v8::Context::Scope context_scope(context);
   v8::HandleScope handle_scope(isolate());
+  v8::Context::Scope context_scope(context);
   set_binding_cache_object(v8::Object::New());
   set_module_load_list_array(v8::Array::New());
   RB_INIT(&cares_task_list_);
@@ -184,10 +188,9 @@ inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
 
-inline bool Environment::in_domain() const {
+inline bool Environment::has_async_listeners() const {
   // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return using_domains() &&
-         const_cast<Environment*>(this)->domain_flag()->count() > 0;
+  return const_cast<Environment*>(this)->async_listener()->count() > 0;
 }
 
 inline Environment* Environment::from_immediate_check_handle(
@@ -203,12 +206,29 @@ inline uv_idle_t* Environment::immediate_idle_handle() {
   return &immediate_idle_handle_;
 }
 
+inline Environment* Environment::from_idle_prepare_handle(
+    uv_prepare_t* handle) {
+  return CONTAINER_OF(handle, Environment, idle_prepare_handle_);
+}
+
+inline uv_prepare_t* Environment::idle_prepare_handle() {
+  return &idle_prepare_handle_;
+}
+
+inline Environment* Environment::from_idle_check_handle(uv_check_t* handle) {
+  return CONTAINER_OF(handle, Environment, idle_check_handle_);
+}
+
+inline uv_check_t* Environment::idle_check_handle() {
+  return &idle_check_handle_;
+}
+
 inline uv_loop_t* Environment::event_loop() const {
   return isolate_data()->event_loop();
 }
 
-inline Environment::DomainFlag* Environment::domain_flag() {
-  return &domain_flag_;
+inline Environment::AsyncListener* Environment::async_listener() {
+  return &async_listener_count_;
 }
 
 inline Environment::TickInfo* Environment::tick_info() {
@@ -221,14 +241,6 @@ inline bool Environment::using_smalloc_alloc_cb() const {
 
 inline void Environment::set_using_smalloc_alloc_cb(bool value) {
   using_smalloc_alloc_cb_ = value;
-}
-
-inline bool Environment::using_domains() const {
-  return using_domains_;
-}
-
-inline void Environment::set_using_domains(bool value) {
-  using_domains_ = value;
 }
 
 inline Environment* Environment::from_cares_timer_handle(uv_timer_t* handle) {
@@ -259,8 +271,8 @@ inline Environment::IsolateData* Environment::isolate_data() const {
 #define V(PropertyName, StringValue)                                          \
   inline                                                                      \
   v8::Local<v8::String> Environment::IsolateData::PropertyName() const {      \
-    return v8::Local<v8::String>::GetEternal(isolate(),                       \
-                                             PropertyName ## _index_);        \
+    /* Strings are immutable so casting away const-ness here is okay. */      \
+    return const_cast<IsolateData*>(this)->PropertyName ## _.Get(isolate());  \
   }
   PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V

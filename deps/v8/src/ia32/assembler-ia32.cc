@@ -53,6 +53,7 @@ bool CpuFeatures::initialized_ = false;
 #endif
 uint64_t CpuFeatures::supported_ = 0;
 uint64_t CpuFeatures::found_by_runtime_probing_only_ = 0;
+uint64_t CpuFeatures::cross_compile_ = 0;
 
 
 ExternalReference ExternalReference::cpu_features() {
@@ -101,80 +102,28 @@ void CpuFeatures::Probe() {
     return;  // No features if we might serialize.
   }
 
-  const int kBufferSize = 4 * KB;
-  VirtualMemory* memory = new VirtualMemory(kBufferSize);
-  if (!memory->IsReserved()) {
-    delete memory;
-    return;
+  uint64_t probed_features = 0;
+  CPU cpu;
+  if (cpu.has_sse41()) {
+    probed_features |= static_cast<uint64_t>(1) << SSE4_1;
   }
-  ASSERT(memory->size() >= static_cast<size_t>(kBufferSize));
-  if (!memory->Commit(memory->address(), kBufferSize, true/*executable*/)) {
-    delete memory;
-    return;
+  if (cpu.has_sse3()) {
+    probed_features |= static_cast<uint64_t>(1) << SSE3;
+  }
+  if (cpu.has_sse2()) {
+    probed_features |= static_cast<uint64_t>(1) << SSE2;
+  }
+  if (cpu.has_cmov()) {
+    probed_features |= static_cast<uint64_t>(1) << CMOV;
   }
 
-  Assembler assm(NULL, memory->address(), kBufferSize);
-  Label cpuid, done;
-#define __ assm.
-  // Save old esp, since we are going to modify the stack.
-  __ push(ebp);
-  __ pushfd();
-  __ push(ecx);
-  __ push(ebx);
-  __ mov(ebp, esp);
+  // SAHF must be available in compat/legacy mode.
+  ASSERT(cpu.has_sahf());
+  probed_features |= static_cast<uint64_t>(1) << SAHF;
 
-  // If we can modify bit 21 of the EFLAGS register, then CPUID is supported.
-  __ pushfd();
-  __ pop(eax);
-  __ mov(edx, eax);
-  __ xor_(eax, 0x200000);  // Flip bit 21.
-  __ push(eax);
-  __ popfd();
-  __ pushfd();
-  __ pop(eax);
-  __ xor_(eax, edx);  // Different if CPUID is supported.
-  __ j(not_zero, &cpuid);
-
-  // CPUID not supported. Clear the supported features in edx:eax.
-  __ xor_(eax, eax);
-  __ xor_(edx, edx);
-  __ jmp(&done);
-
-  // Invoke CPUID with 1 in eax to get feature information in
-  // ecx:edx. Temporarily enable CPUID support because we know it's
-  // safe here.
-  __ bind(&cpuid);
-  __ mov(eax, 1);
-  supported_ = (1 << CPUID);
-  { CpuFeatureScope fscope(&assm, CPUID);
-    __ cpuid();
-  }
-  supported_ = 0;
-
-  // Move the result from ecx:edx to edx:eax and make sure to mark the
-  // CPUID feature as supported.
-  __ mov(eax, edx);
-  __ or_(eax, 1 << CPUID);
-  __ mov(edx, ecx);
-
-  // Done.
-  __ bind(&done);
-  __ mov(esp, ebp);
-  __ pop(ebx);
-  __ pop(ecx);
-  __ popfd();
-  __ pop(ebp);
-  __ ret(0);
-#undef __
-
-  typedef uint64_t (*F0)();
-  F0 probe = FUNCTION_CAST<F0>(reinterpret_cast<Address>(memory->address()));
-  uint64_t probed_features = probe();
   uint64_t platform_features = OS::CpuFeaturesImpliedByPlatform();
   supported_ = probed_features | platform_features;
   found_by_runtime_probing_only_ = probed_features & ~platform_features;
-
-  delete memory;
 }
 
 
@@ -474,7 +423,6 @@ void Assembler::CodeTargetAlign() {
 
 
 void Assembler::cpuid() {
-  ASSERT(IsEnabled(CPUID));
   EnsureSpace ensure_space(this);
   EMIT(0x0F);
   EMIT(0xA2);
@@ -1184,30 +1132,21 @@ void Assembler::sub(const Operand& dst, Register src) {
 
 
 void Assembler::test(Register reg, const Immediate& imm) {
-  EnsureSpace ensure_space(this);
-  // Only use test against byte for registers that have a byte
-  // variant: eax, ebx, ecx, and edx.
-  if (RelocInfo::IsNone(imm.rmode_) &&
-      is_uint8(imm.x_) &&
-      reg.is_byte_register()) {
-    uint8_t imm8 = imm.x_;
-    if (reg.is(eax)) {
-      EMIT(0xA8);
-      EMIT(imm8);
-    } else {
-      emit_arith_b(0xF6, 0xC0, reg, imm8);
-    }
-  } else {
-    // This is not using emit_arith because test doesn't support
-    // sign-extension of 8-bit operands.
-    if (reg.is(eax)) {
-      EMIT(0xA9);
-    } else {
-      EMIT(0xF7);
-      EMIT(0xC0 | reg.code());
-    }
-    emit(imm);
+  if (RelocInfo::IsNone(imm.rmode_) && is_uint8(imm.x_)) {
+    test_b(reg, imm.x_);
+    return;
   }
+
+  EnsureSpace ensure_space(this);
+  // This is not using emit_arith because test doesn't support
+  // sign-extension of 8-bit operands.
+  if (reg.is(eax)) {
+    EMIT(0xA9);
+  } else {
+    EMIT(0xF7);
+    EMIT(0xC0 | reg.code());
+  }
+  emit(imm);
 }
 
 
@@ -1231,6 +1170,9 @@ void Assembler::test(const Operand& op, const Immediate& imm) {
     test(op.reg(), imm);
     return;
   }
+  if (RelocInfo::IsNone(imm.rmode_) && is_uint8(imm.x_)) {
+    return test_b(op, imm.x_);
+  }
   EnsureSpace ensure_space(this);
   EMIT(0xF7);
   emit_operand(eax, op);
@@ -1238,9 +1180,26 @@ void Assembler::test(const Operand& op, const Immediate& imm) {
 }
 
 
+void Assembler::test_b(Register reg, uint8_t imm8) {
+  EnsureSpace ensure_space(this);
+  // Only use test against byte for registers that have a byte
+  // variant: eax, ebx, ecx, and edx.
+  if (reg.is(eax)) {
+    EMIT(0xA8);
+    EMIT(imm8);
+  } else if (reg.is_byte_register()) {
+    emit_arith_b(0xF6, 0xC0, reg, imm8);
+  } else {
+    EMIT(0xF7);
+    EMIT(0xC0 | reg.code());
+    emit(imm8);
+  }
+}
+
+
 void Assembler::test_b(const Operand& op, uint8_t imm8) {
-  if (op.is_reg_only() && !op.reg().is_byte_register()) {
-    test(op, Immediate(imm8));
+  if (op.is_reg_only()) {
+    test_b(op.reg(), imm8);
     return;
   }
   EnsureSpace ensure_space(this);
@@ -1307,14 +1266,6 @@ void Assembler::int3() {
 void Assembler::nop() {
   EnsureSpace ensure_space(this);
   EMIT(0x90);
-}
-
-
-void Assembler::rdtsc() {
-  ASSERT(IsEnabled(RDTSC));
-  EnsureSpace ensure_space(this);
-  EMIT(0x0F);
-  EMIT(0x31);
 }
 
 
@@ -1463,7 +1414,8 @@ void Assembler::call(Handle<Code> code,
                      TypeFeedbackId ast_id) {
   positions_recorder()->WriteRecordedPositions();
   EnsureSpace ensure_space(this);
-  ASSERT(RelocInfo::IsCodeTarget(rmode));
+  ASSERT(RelocInfo::IsCodeTarget(rmode)
+      || rmode == RelocInfo::CODE_AGE_SEQUENCE);
   EMIT(0xE8);
   emit(code, rmode, ast_id);
 }
@@ -1641,6 +1593,13 @@ void Assembler::fstp_s(const Operand& adr) {
 }
 
 
+void Assembler::fst_s(const Operand& adr) {
+  EnsureSpace ensure_space(this);
+  EMIT(0xD9);
+  emit_operand(edx, adr);
+}
+
+
 void Assembler::fstp_d(const Operand& adr) {
   EnsureSpace ensure_space(this);
   EMIT(0xDD);
@@ -1775,9 +1734,21 @@ void Assembler::fadd(int i) {
 }
 
 
+void Assembler::fadd_i(int i) {
+  EnsureSpace ensure_space(this);
+  emit_farith(0xD8, 0xC0, i);
+}
+
+
 void Assembler::fsub(int i) {
   EnsureSpace ensure_space(this);
   emit_farith(0xDC, 0xE8, i);
+}
+
+
+void Assembler::fsub_i(int i) {
+  EnsureSpace ensure_space(this);
+  emit_farith(0xD8, 0xE0, i);
 }
 
 
@@ -1803,6 +1774,12 @@ void Assembler::fmul(int i) {
 void Assembler::fdiv(int i) {
   EnsureSpace ensure_space(this);
   emit_farith(0xDC, 0xF8, i);
+}
+
+
+void Assembler::fdiv_i(int i) {
+  EnsureSpace ensure_space(this);
+  emit_farith(0xD8, 0xF0, i);
 }
 
 
@@ -2091,6 +2068,7 @@ void Assembler::xorps(XMMRegister dst, XMMRegister src) {
 
 
 void Assembler::sqrtsd(XMMRegister dst, XMMRegister src) {
+  ASSERT(IsEnabled(SSE2));
   EnsureSpace ensure_space(this);
   EMIT(0xF2);
   EMIT(0x0F);
@@ -2100,6 +2078,7 @@ void Assembler::sqrtsd(XMMRegister dst, XMMRegister src) {
 
 
 void Assembler::andpd(XMMRegister dst, XMMRegister src) {
+  ASSERT(IsEnabled(SSE2));
   EnsureSpace ensure_space(this);
   EMIT(0x66);
   EMIT(0x0F);
@@ -2109,6 +2088,7 @@ void Assembler::andpd(XMMRegister dst, XMMRegister src) {
 
 
 void Assembler::orpd(XMMRegister dst, XMMRegister src) {
+  ASSERT(IsEnabled(SSE2));
   EnsureSpace ensure_space(this);
   EMIT(0x66);
   EMIT(0x0F);
@@ -2271,18 +2251,6 @@ void Assembler::prefetch(const Operand& src, int level) {
 }
 
 
-void Assembler::movdbl(XMMRegister dst, const Operand& src) {
-  EnsureSpace ensure_space(this);
-  movsd(dst, src);
-}
-
-
-void Assembler::movdbl(const Operand& dst, XMMRegister src) {
-  EnsureSpace ensure_space(this);
-  movsd(dst, src);
-}
-
-
 void Assembler::movsd(const Operand& dst, XMMRegister src ) {
   ASSERT(IsEnabled(SSE2));
   EnsureSpace ensure_space(this);
@@ -2371,8 +2339,16 @@ void Assembler::extractps(Register dst, XMMRegister src, byte imm8) {
   EMIT(0x0F);
   EMIT(0x3A);
   EMIT(0x17);
-  emit_sse_operand(dst, src);
+  emit_sse_operand(src, dst);
   EMIT(imm8);
+}
+
+
+void Assembler::andps(XMMRegister dst, XMMRegister src) {
+  EnsureSpace ensure_space(this);
+  EMIT(0x0F);
+  EMIT(0x54);
+  emit_sse_operand(dst, src);
 }
 
 
@@ -2507,6 +2483,11 @@ void Assembler::emit_sse_operand(XMMRegister dst, XMMRegister src) {
 
 void Assembler::emit_sse_operand(Register dst, XMMRegister src) {
   EMIT(0xC0 | dst.code() << 3 | src.code());
+}
+
+
+void Assembler::emit_sse_operand(XMMRegister dst, Register src) {
+  EMIT(0xC0 | (dst.code() << 3) | src.code());
 }
 
 

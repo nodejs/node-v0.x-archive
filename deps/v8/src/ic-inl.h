@@ -43,7 +43,6 @@ Address IC::address() const {
   Address result = Assembler::target_address_from_return_address(pc());
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  ASSERT(Isolate::Current() == isolate());
   Debug* debug = isolate()->debug();
   // First check if any break points are active if not just return the address
   // of the call.
@@ -103,30 +102,12 @@ void IC::SetTargetAtAddress(Address address, Code* target) {
 
 InlineCacheHolderFlag IC::GetCodeCacheForObject(Object* object,
                                                 JSObject* holder) {
-  if (object->IsJSObject()) {
-    return GetCodeCacheForObject(JSObject::cast(object), holder);
-  }
+  if (object->IsJSObject()) return OWN_MAP;
+
   // If the object is a value, we use the prototype map for the cache.
   ASSERT(object->IsString() || object->IsSymbol() ||
          object->IsNumber() || object->IsBoolean());
   return PROTOTYPE_MAP;
-}
-
-
-InlineCacheHolderFlag IC::GetCodeCacheForObject(JSObject* object,
-                                                JSObject* holder) {
-  // Fast-properties and global objects store stubs in their own maps.
-  // Slow properties objects use prototype's map (unless the property is its own
-  // when holder == object). It works because slow properties objects having
-  // the same prototype (or a prototype with the same map) and not having
-  // the property are interchangeable for such a stub.
-  if (holder != object &&
-      !object->HasFastProperties() &&
-      !object->IsJSGlobalProxy() &&
-      !object->IsJSGlobalObject()) {
-    return PROTOTYPE_MAP;
-  }
-  return OWN_MAP;
 }
 
 

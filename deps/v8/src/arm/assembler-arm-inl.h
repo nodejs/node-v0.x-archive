@@ -208,6 +208,13 @@ void RelocInfo::set_target_cell(Cell* cell, WriteBarrierMode mode) {
 
 static const int kNoCodeAgeSequenceLength = 3;
 
+
+Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
+  UNREACHABLE();  // This should never be reached on Arm.
+  return Handle<Object>();
+}
+
+
 Code* RelocInfo::code_age_stub() {
   ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
   return Code::GetCodeFromTargetAddress(
@@ -279,7 +286,7 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 }
 
 
-void RelocInfo::Visit(ObjectVisitor* visitor) {
+void RelocInfo::Visit(Isolate* isolate, ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     visitor->VisitEmbeddedPointer(this);
@@ -292,12 +299,11 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   } else if (RelocInfo::IsCodeAgeSequence(mode)) {
     visitor->VisitCodeAgeSequence(this);
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  // TODO(isolates): Get a cached isolate below.
   } else if (((RelocInfo::IsJSReturn(mode) &&
               IsPatchedReturnSequence()) ||
              (RelocInfo::IsDebugBreakSlot(mode) &&
               IsPatchedDebugBreakSlotSequence())) &&
-             Isolate::Current()->debug()->has_break_points()) {
+             isolate->debug()->has_break_points()) {
     visitor->VisitDebugTarget(this);
 #endif
   } else if (RelocInfo::IsRuntimeEntry(mode)) {

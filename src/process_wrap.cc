@@ -23,6 +23,8 @@
 #include "env-inl.h"
 #include "handle_wrap.h"
 #include "node_wrap.h"
+#include "util.h"
+#include "util-inl.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -70,8 +72,8 @@ class ProcessWrap : public HandleWrap {
     // Therefore we assert that we are not trying to call this as a
     // normal function.
     assert(args.IsConstructCall());
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
     new ProcessWrap(env, args.This());
   }
 
@@ -108,7 +110,7 @@ class ProcessWrap : public HandleWrap {
         Local<Object> handle = stdio->Get(handle_key).As<Object>();
         options->stdio[i].data.stream =
             reinterpret_cast<uv_stream_t*>(
-                PipeWrap::Unwrap(handle)->UVHandle());
+                Unwrap<PipeWrap>(handle)->UVHandle());
       } else if (type->Equals(FIXED_ONE_BYTE_STRING(node_isolate, "wrap"))) {
         Local<String> handle_key =
             FIXED_ONE_BYTE_STRING(node_isolate, "handle");
@@ -128,11 +130,10 @@ class ProcessWrap : public HandleWrap {
   }
 
   static void Spawn(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
 
-    ProcessWrap* wrap;
-    NODE_UNWRAP(args.This(), ProcessWrap, wrap);
+    ProcessWrap* wrap = Unwrap<ProcessWrap>(args.This());
 
     Local<Object> js_options = args[0]->ToObject();
 
@@ -260,8 +261,7 @@ class ProcessWrap : public HandleWrap {
 
   static void Kill(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
-    ProcessWrap* wrap;
-    NODE_UNWRAP(args.This(), ProcessWrap, wrap);
+    ProcessWrap* wrap = Unwrap<ProcessWrap>(args.This());
 
     int signal = args[0]->Int32Value();
     int err = uv_process_kill(&wrap->process_, signal);
@@ -276,19 +276,15 @@ class ProcessWrap : public HandleWrap {
     assert(&wrap->process_ == handle);
 
     Environment* env = wrap->env();
-    Context::Scope context_scope(env->context());
     HandleScope handle_scope(env->isolate());
+    Context::Scope context_scope(env->context());
 
     Local<Value> argv[] = {
       Number::New(node_isolate, static_cast<double>(exit_status)),
       OneByteString(node_isolate, signo_string(term_signal))
     };
 
-    MakeCallback(env,
-                 wrap->object(),
-                 env->onexit_string(),
-                 ARRAY_SIZE(argv),
-                 argv);
+    wrap->MakeCallback(env->onexit_string(), ARRAY_SIZE(argv), argv);
   }
 
   uv_process_t process_;

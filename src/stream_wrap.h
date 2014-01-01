@@ -38,8 +38,8 @@ typedef class ReqWrap<uv_shutdown_t> ShutdownWrap;
 class WriteWrap: public ReqWrap<uv_write_t> {
  public:
   WriteWrap(Environment* env, v8::Local<v8::Object> obj, StreamWrap* wrap)
-      : ReqWrap<uv_write_t>(env, obj)
-      , wrap_(wrap) {
+      : ReqWrap<uv_write_t>(env, obj),
+        wrap_(wrap) {
   }
 
   void* operator new(size_t size, char* storage) { return storage; }
@@ -87,8 +87,6 @@ class StreamWrapCallbacks {
                       const uv_buf_t* buf,
                       uv_handle_type pending);
   virtual int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
-
-  v8::Handle<v8::Object> Self();
 
  protected:
   inline StreamWrap* wrap() const {

@@ -16,6 +16,15 @@ Unix/Macintosh:
     make
     make install
 
+With libicu i18n support:
+
+    svn checkout --force --revision 214189 \
+        http://src.chromium.org/svn/trunk/deps/third_party/icu46 \
+        deps/v8/third_party/icu46
+    ./configure --with-icu-path=deps/v8/third_party/icu46/icu.gyp
+    make
+    make install
+
 If your python binary is in a non-standard location or has a
 non-standard name, run the following instead:
 
@@ -32,6 +41,19 @@ Prerequisites (Windows only):
 Windows:
 
     vcbuild nosign
+
+You can download pre-built binaries for various operating systems from
+[http://nodejs.org/download/](http://nodejs.org/download/).  The Windows
+and OS X installers will prompt you for the location to install to.
+The tarballs are self-contained; you can extract them to a local directory
+with:
+
+    tar xzf /path/to/node-<version>-<platform>-<arch>.tar.gz
+
+Or system-wide with:
+
+    cd /usr/local && tar --strip-components 1 -xzf \
+                         /path/to/node-<version>-<platform>-<arch>.tar.gz
 
 ### To run the tests:
 

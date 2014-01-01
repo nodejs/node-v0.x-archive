@@ -107,6 +107,12 @@ careful. Cryptic errors may arise in applications that are difficult to trace.
 
 `dispose()` does not support Buffers, and will throw if passed.
 
+## smalloc.hasExternalData(obj)
+
+* `obj` {Object}
+
+Returns `true` if the `obj` has externally allocated memory.
+
 ## smalloc.kMaxLength
 
 Size of maximum allocation. This is also applicable to Buffer creation.

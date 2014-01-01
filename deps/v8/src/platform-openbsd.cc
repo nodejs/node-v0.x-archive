@@ -42,7 +42,6 @@
 #include <sys/stat.h>   // open
 #include <fcntl.h>      // open
 #include <unistd.h>     // sysconf
-#include <execinfo.h>   // backtrace, backtrace_symbols
 #include <strings.h>    // index
 #include <errno.h>
 #include <stdarg.h>
@@ -51,7 +50,6 @@
 
 #include "v8.h"
 
-#include "platform-posix.h"
 #include "platform.h"
 #include "v8threads.h"
 #include "vm-state-inl.h"
@@ -59,9 +57,6 @@
 
 namespace v8 {
 namespace internal {
-
-
-static Mutex* limit_mutex = NULL;
 
 
 const char* OS::LocalTimezone(double time) {
@@ -82,31 +77,6 @@ double OS::LocalTimeOffset() {
 }
 
 
-// We keep the lowest and highest addresses mapped as a quick way of
-// determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, i.e., not all addresses in
-// 'allocated' space are actually allocated to our heap.  The range is
-// [lowest, highest), inclusive on the low and and exclusive on the high end.
-static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
-static void* highest_ever_allocated = reinterpret_cast<void*>(0);
-
-
-static void UpdateAllocatedSpaceLimits(void* address, int size) {
-  ASSERT(limit_mutex != NULL);
-  ScopedLock lock(limit_mutex);
-
-  lowest_ever_allocated = Min(lowest_ever_allocated, address);
-  highest_ever_allocated =
-      Max(highest_ever_allocated,
-          reinterpret_cast<void*>(reinterpret_cast<char*>(address) + size));
-}
-
-
-bool OS::IsOutsideAllocatedSpace(void* address) {
-  return address < lowest_ever_allocated || address >= highest_ever_allocated;
-}
-
-
 void* OS::Allocate(const size_t requested,
                    size_t* allocated,
                    bool is_executable) {
@@ -120,13 +90,7 @@ void* OS::Allocate(const size_t requested,
     return NULL;
   }
   *allocated = msize;
-  UpdateAllocatedSpaceLimits(mbase, msize);
   return mbase;
-}
-
-
-void OS::DumpBacktrace() {
-  // Currently unsupported.
 }
 
 
@@ -178,7 +142,7 @@ PosixMemoryMappedFile::~PosixMemoryMappedFile() {
 }
 
 
-void OS::LogSharedLibraryAddresses() {
+void OS::LogSharedLibraryAddresses(Isolate* isolate) {
   // This function assumes that the layout of the file is as follows:
   // hex_start_addr-hex_end_addr rwxp <unused data> [binary_file_name]
   // If we encounter an unexpected situation we abort scanning further entries.
@@ -189,7 +153,6 @@ void OS::LogSharedLibraryAddresses() {
   const int kLibNameLen = FILENAME_MAX + 1;
   char* lib_name = reinterpret_cast<char*>(malloc(kLibNameLen));
 
-  i::Isolate* isolate = ISOLATE;
   // This loop will terminate once the scanning hits an EOF.
   while (true) {
     uintptr_t start, end;
@@ -260,34 +223,6 @@ void OS::SignalCodeMovingGC() {
   fclose(f);
 }
 
-
-int OS::StackWalk(Vector<OS::StackFrame> frames) {
-  // backtrace is a glibc extension.
-  int frames_size = frames.length();
-  ScopedVector<void*> addresses(frames_size);
-
-  int frames_count = backtrace(addresses.start(), frames_size);
-
-  char** symbols = backtrace_symbols(addresses.start(), frames_count);
-  if (symbols == NULL) {
-    return kStackWalkError;
-  }
-
-  for (int i = 0; i < frames_count; i++) {
-    frames[i].address = addresses[i];
-    // Format a text representation of the frame based on the information
-    // available.
-    SNPrintF(MutableCStrVector(frames[i].text, kStackWalkMaxTextLen),
-             "%s",
-             symbols[i]);
-    // Make sure line termination is in place.
-    frames[i].text[kStackWalkMaxTextLen - 1] = '\0';
-  }
-
-  free(symbols);
-
-  return frames_count;
-}
 
 
 // Constants used for mmap.
@@ -402,8 +337,6 @@ bool VirtualMemory::CommitRegion(void* base, size_t size, bool is_executable) {
                          kMmapFdOffset)) {
     return false;
   }
-
-  UpdateAllocatedSpaceLimits(base, size);
   return true;
 }
 
@@ -427,88 +360,5 @@ bool VirtualMemory::HasLazyCommits() {
   // TODO(alph): implement for the platform.
   return false;
 }
-
-
-class OpenBSDSemaphore : public Semaphore {
- public:
-  explicit OpenBSDSemaphore(int count) {  sem_init(&sem_, 0, count); }
-  virtual ~OpenBSDSemaphore() { sem_destroy(&sem_); }
-
-  virtual void Wait();
-  virtual bool Wait(int timeout);
-  virtual void Signal() { sem_post(&sem_); }
- private:
-  sem_t sem_;
-};
-
-
-void OpenBSDSemaphore::Wait() {
-  while (true) {
-    int result = sem_wait(&sem_);
-    if (result == 0) return;  // Successfully got semaphore.
-    CHECK(result == -1 && errno == EINTR);  // Signal caused spurious wakeup.
-  }
-}
-
-
-#ifndef TIMEVAL_TO_TIMESPEC
-#define TIMEVAL_TO_TIMESPEC(tv, ts) do {                            \
-    (ts)->tv_sec = (tv)->tv_sec;                                    \
-    (ts)->tv_nsec = (tv)->tv_usec * 1000;                           \
-} while (false)
-#endif
-
-
-bool OpenBSDSemaphore::Wait(int timeout) {
-  const long kOneSecondMicros = 1000000;  // NOLINT
-
-  // Split timeout into second and nanosecond parts.
-  struct timeval delta;
-  delta.tv_usec = timeout % kOneSecondMicros;
-  delta.tv_sec = timeout / kOneSecondMicros;
-
-  struct timeval current_time;
-  // Get the current time.
-  if (gettimeofday(&current_time, NULL) == -1) {
-    return false;
-  }
-
-  // Calculate time for end of timeout.
-  struct timeval end_time;
-  timeradd(&current_time, &delta, &end_time);
-
-  struct timespec ts;
-  TIMEVAL_TO_TIMESPEC(&end_time, &ts);
-
-  int to = ts.tv_sec;
-
-  while (true) {
-    int result = sem_trywait(&sem_);
-    if (result == 0) return true;  // Successfully got semaphore.
-    if (!to) return false;  // Timeout.
-    CHECK(result == -1 && errno == EINTR);  // Signal caused spurious wakeup.
-    usleep(ts.tv_nsec / 1000);
-    to--;
-  }
-}
-
-
-Semaphore* OS::CreateSemaphore(int count) {
-  return new OpenBSDSemaphore(count);
-}
-
-
-void OS::SetUp() {
-  // Seed the random number generator. We preserve microsecond resolution.
-  uint64_t seed = Ticks() ^ (getpid() << 16);
-  srandom(static_cast<unsigned int>(seed));
-  limit_mutex = CreateMutex();
-}
-
-
-void OS::TearDown() {
-  delete limit_mutex;
-}
-
 
 } }  // namespace v8::internal

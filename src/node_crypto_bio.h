@@ -38,6 +38,9 @@ class NodeBIO {
 
   static BIO* New();
 
+  // Move read head to next buffer if needed
+  void TryMoveReadHead();
+
   // Allocate new buffer for write if needed
   void TryAllocateForWrite();
 
@@ -51,6 +54,10 @@ class NodeBIO {
   // Return pointer to internal data and amount of
   // contiguous data available to read
   char* Peek(size_t* size);
+
+  // Return pointers and sizes of multiple internal data chunks available for
+  // reading
+  size_t PeekMultiple(char** out, size_t* size, size_t* count);
 
   // Find first appearance of `delim` in buffer or `limit` if `delim`
   // wasn't found.

@@ -43,6 +43,7 @@ namespace internal {
 
 
 static const byte kCallOpcode = 0xE8;
+static const int kNoCodeAgeSequenceLength = 6;
 
 
 void Assembler::emitl(uint32_t x) {
@@ -61,11 +62,8 @@ void Assembler::emitp(void* x, RelocInfo::Mode rmode) {
 }
 
 
-void Assembler::emitq(uint64_t x, RelocInfo::Mode rmode) {
+void Assembler::emitq(uint64_t x) {
   Memory::uint64_at(pc_) = x;
-  if (!RelocInfo::IsNone(rmode)) {
-    RecordRelocInfo(rmode, x);
-  }
   pc_ += sizeof(uint64_t);
 }
 
@@ -79,7 +77,8 @@ void Assembler::emitw(uint16_t x) {
 void Assembler::emit_code_target(Handle<Code> target,
                                  RelocInfo::Mode rmode,
                                  TypeFeedbackId ast_id) {
-  ASSERT(RelocInfo::IsCodeTarget(rmode));
+  ASSERT(RelocInfo::IsCodeTarget(rmode) ||
+      rmode == RelocInfo::CODE_AGE_SEQUENCE);
   if (rmode == RelocInfo::CODE_TARGET && !ast_id.IsNone()) {
     RecordRelocInfo(RelocInfo::CODE_TARGET_WITH_ID, ast_id.ToInt());
   } else {
@@ -392,6 +391,13 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 }
 
 
+Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
+  ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  ASSERT(*pc_ == kCallOpcode);
+  return origin->code_target_object_handle_at(pc_ + 1);
+}
+
+
 Code* RelocInfo::code_age_stub() {
   ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
   ASSERT(*pc_ == kCallOpcode);
@@ -448,7 +454,7 @@ Object** RelocInfo::call_object_address() {
 }
 
 
-void RelocInfo::Visit(ObjectVisitor* visitor) {
+void RelocInfo::Visit(Isolate* isolate, ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     visitor->VisitEmbeddedPointer(this);
@@ -463,12 +469,11 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   } else if (RelocInfo::IsCodeAgeSequence(mode)) {
     visitor->VisitCodeAgeSequence(this);
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  // TODO(isolates): Get a cached isolate below.
   } else if (((RelocInfo::IsJSReturn(mode) &&
               IsPatchedReturnSequence()) ||
              (RelocInfo::IsDebugBreakSlot(mode) &&
               IsPatchedDebugBreakSlotSequence())) &&
-             Isolate::Current()->debug()->has_break_points()) {
+             isolate->debug()->has_break_points()) {
     visitor->VisitDebugTarget(this);
 #endif
   } else if (RelocInfo::IsRuntimeEntry(mode)) {

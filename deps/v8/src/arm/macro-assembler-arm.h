@@ -45,8 +45,9 @@ inline MemOperand FieldMemOperand(Register object, int offset) {
 
 
 // Give alias names to registers
-const Register cp = { 8 };  // JavaScript context pointer
-const Register kRootRegister = { 10 };  // Roots array pointer.
+const Register pp = { kRegister_r7_Code };  // Constant pool pointer.
+const Register cp = { kRegister_r8_Code };  // JavaScript context pointer.
+const Register kRootRegister = { kRegister_r10_Code };  // Roots array pointer.
 
 // Flags used for AllocateHeapNumber
 enum TaggingMode {
@@ -60,6 +61,14 @@ enum TaggingMode {
 enum RememberedSetAction { EMIT_REMEMBERED_SET, OMIT_REMEMBERED_SET };
 enum SmiCheck { INLINE_SMI_CHECK, OMIT_SMI_CHECK };
 enum LinkRegisterStatus { kLRHasNotBeenSaved, kLRHasBeenSaved };
+
+
+Register GetRegisterThatIsNotOneOf(Register reg1,
+                                   Register reg2 = no_reg,
+                                   Register reg3 = no_reg,
+                                   Register reg4 = no_reg,
+                                   Register reg5 = no_reg,
+                                   Register reg6 = no_reg);
 
 
 #ifdef DEBUG
@@ -160,17 +169,6 @@ class MacroAssembler: public Assembler {
   void StoreRoot(Register source,
                  Heap::RootListIndex index,
                  Condition cond = al);
-
-  void LoadHeapObject(Register dst, Handle<HeapObject> object);
-
-  void LoadObject(Register result, Handle<Object> object) {
-    AllowDeferredHandleDereference heap_object_check;
-    if (object->IsHeapObject()) {
-      LoadHeapObject(result, Handle<HeapObject>::cast(object));
-    } else {
-      Move(result, object);
-    }
-  }
 
   // ---------------------------------------------------------------------------
   // GC Support
@@ -461,8 +459,13 @@ class MacroAssembler: public Assembler {
   void VFPEnsureFPSCRState(Register scratch);
 
   // If the value is a NaN, canonicalize the value else, do nothing.
-  void VFPCanonicalizeNaN(const DwVfpRegister value,
+  void VFPCanonicalizeNaN(const DwVfpRegister dst,
+                          const DwVfpRegister src,
                           const Condition cond = al);
+  void VFPCanonicalizeNaN(const DwVfpRegister value,
+                          const Condition cond = al) {
+    VFPCanonicalizeNaN(value, value, cond);
+  }
 
   // Compare double values and move the result to the normal condition flags.
   void VFPCompareAndSetFlags(const DwVfpRegister src1,
@@ -490,19 +493,6 @@ class MacroAssembler: public Assembler {
   void VmovHigh(DwVfpRegister dst, Register src);
   void VmovLow(Register dst, DwVfpRegister src);
   void VmovLow(DwVfpRegister dst, Register src);
-
-  // Converts the smi or heap number in object to an int32 using the rules
-  // for ToInt32 as described in ECMAScript 9.5.: the value is truncated
-  // and brought into the range -2^31 .. +2^31 - 1.
-  void ConvertNumberToInt32(Register object,
-                            Register dst,
-                            Register heap_number_map,
-                            Register scratch1,
-                            Register scratch2,
-                            Register scratch3,
-                            DwVfpRegister double_scratch1,
-                            LowDwVfpRegister double_scratch2,
-                            Label* not_int32);
 
   // Loads the number from object into dst register.
   // If |object| is neither smi nor heap number, |not_number| is jumped to
@@ -538,6 +528,8 @@ class MacroAssembler: public Assembler {
                          LowDwVfpRegister double_scratch1,
                          Label* not_int32);
 
+  // Generates function and stub prologue code.
+  void Prologue(PrologueFrameMode frame_mode);
 
   // Enter exit frame.
   // stack_space - extra stack space, used for alignment before call to C.
@@ -546,7 +538,9 @@ class MacroAssembler: public Assembler {
   // Leave the current exit frame. Expects the return value in r0.
   // Expect the number of values, pushed prior to the exit frame, to
   // remove in a register (or no_reg, if there is nothing to remove).
-  void LeaveExitFrame(bool save_doubles, Register argument_count);
+  void LeaveExitFrame(bool save_doubles,
+                      Register argument_count,
+                      bool restore_context);
 
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
@@ -989,15 +983,34 @@ class MacroAssembler: public Assembler {
                      Label* exact);
 
   // Performs a truncating conversion of a floating point number as used by
+  // the JS bitwise operations. See ECMA-262 9.5: ToInt32. Goes to 'done' if it
+  // succeeds, otherwise falls through if result is saturated. On return
+  // 'result' either holds answer, or is clobbered on fall through.
+  //
+  // Only public for the test code in test-code-stubs-arm.cc.
+  void TryInlineTruncateDoubleToI(Register result,
+                                  DwVfpRegister input,
+                                  Label* done);
+
+  // Performs a truncating conversion of a floating point number as used by
   // the JS bitwise operations. See ECMA-262 9.5: ToInt32.
-  // Double_scratch must be between d0 and d15.
-  // Exits with 'result' holding the answer and all other registers clobbered.
-  void ECMAToInt32(Register result,
-                   DwVfpRegister double_input,
-                   Register scratch,
-                   Register scratch_high,
-                   Register scratch_low,
-                   LowDwVfpRegister double_scratch);
+  // Exits with 'result' holding the answer.
+  void TruncateDoubleToI(Register result, DwVfpRegister double_input);
+
+  // Performs a truncating conversion of a heap number as used by
+  // the JS bitwise operations. See ECMA-262 9.5: ToInt32. 'result' and 'input'
+  // must be different registers.  Exits with 'result' holding the answer.
+  void TruncateHeapNumberToI(Register result, Register object);
+
+  // Converts the smi or heap number in object to an int32 using the rules
+  // for ToInt32 as described in ECMAScript 9.5.: the value is truncated
+  // and brought into the range -2^31 .. +2^31 - 1. 'result' and 'input' must be
+  // different registers.
+  void TruncateNumberToI(Register object,
+                         Register result,
+                         Register heap_number_map,
+                         Register scratch1,
+                         Label* not_int32);
 
   // Check whether d16-d31 are available on the CPU. The result is given by the
   // Z condition flag: Z==0 if d16-d31 available, Z==1 otherwise.
@@ -1023,11 +1036,18 @@ class MacroAssembler: public Assembler {
   void TailCallStub(CodeStub* stub, Condition cond = al);
 
   // Call a runtime routine.
-  void CallRuntime(const Runtime::Function* f, int num_arguments);
-  void CallRuntimeSaveDoubles(Runtime::FunctionId id);
+  void CallRuntime(const Runtime::Function* f,
+                   int num_arguments,
+                   SaveFPRegsMode save_doubles = kDontSaveFPRegs);
+  void CallRuntimeSaveDoubles(Runtime::FunctionId id) {
+    const Runtime::Function* function = Runtime::FunctionForId(id);
+    CallRuntime(function, function->nargs, kSaveFPRegs);
+  }
 
   // Convenience function: Same as above, but takes the fid instead.
-  void CallRuntime(Runtime::FunctionId fid, int num_arguments);
+  void CallRuntime(Runtime::FunctionId id, int num_arguments) {
+    CallRuntime(Runtime::FunctionForId(id), num_arguments);
+  }
 
   // Convenience function: call an external reference.
   void CallExternalReference(const ExternalReference& ext,
@@ -1097,8 +1117,8 @@ class MacroAssembler: public Assembler {
                                 ExternalReference thunk_ref,
                                 Register thunk_last_arg,
                                 int stack_space,
-                                bool returns_handle,
-                                int return_value_offset_from_fp);
+                                MemOperand return_value_operand,
+                                MemOperand* context_restore_operand);
 
   // Jump to a runtime routine.
   void JumpToExternalReference(const ExternalReference& builtin);
@@ -1273,6 +1293,18 @@ class MacroAssembler: public Assembler {
   // ---------------------------------------------------------------------------
   // String utilities
 
+  // Generate code to do a lookup in the number string cache. If the number in
+  // the register object is found in the cache the generated code falls through
+  // with the result in the result register. The object and the result register
+  // can be the same. If the number is not found in the cache the code jumps to
+  // the label not_found with only the content of register object unchanged.
+  void LookupNumberStringCache(Register object,
+                               Register result,
+                               Register scratch1,
+                               Register scratch2,
+                               Register scratch3,
+                               Label* not_found);
+
   // Checks if both objects are sequential ASCII strings and jumps to label
   // if either is not. Assumes that neither object is a smi.
   void JumpIfNonSmisNotBothSequentialAsciiStrings(Register object1,
@@ -1347,9 +1379,20 @@ class MacroAssembler: public Assembler {
   // to another type.
   // On entry, receiver_reg should point to the array object.
   // scratch_reg gets clobbered.
-  // If allocation info is present, condition flags are set to eq
+  // If allocation info is present, condition flags are set to eq.
   void TestJSArrayForAllocationMemento(Register receiver_reg,
-                                       Register scratch_reg);
+                                       Register scratch_reg,
+                                       Label* no_memento_found);
+
+  void JumpIfJSArrayHasAllocationMemento(Register receiver_reg,
+                                         Register scratch_reg,
+                                         Label* memento_found) {
+    Label no_memento_found;
+    TestJSArrayForAllocationMemento(receiver_reg, scratch_reg,
+                                    &no_memento_found);
+    b(eq, memento_found);
+    bind(&no_memento_found);
+  }
 
  private:
   void CallCFunctionHelper(Register function,
@@ -1416,7 +1459,14 @@ class MacroAssembler: public Assembler {
 // an assertion to fail.
 class CodePatcher {
  public:
-  CodePatcher(byte* address, int instructions);
+  enum FlushICache {
+    FLUSH,
+    DONT_FLUSH
+  };
+
+  CodePatcher(byte* address,
+              int instructions,
+              FlushICache flush_cache = FLUSH);
   virtual ~CodePatcher();
 
   // Macro assembler to emit code.
@@ -1436,6 +1486,7 @@ class CodePatcher {
   byte* address_;  // The address of the code being patched.
   int size_;  // Number of bytes of the expected patch size.
   MacroAssembler masm_;  // Macro assembler used to generate the code.
+  FlushICache flush_cache_;  // Whether to flush the I cache after patching.
 };
 
 

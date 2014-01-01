@@ -36,6 +36,10 @@ Emitted when:
 2. The process could not be killed, or
 3. Sending a message to the child process failed for whatever reason.
 
+Note that the `exit`-event may or may not fire after an error has occured. If
+you are listening on both events to fire a function, remember to guard against
+calling your function twice.
+
 See also [`ChildProcess#kill()`](#child_process_child_kill_signal) and
 [`ChildProcess#send()`](#child_process_child_send_message_sendhandle).
 
@@ -52,6 +56,9 @@ of the signal, otherwise `null`.
 
 Note that the child process stdio streams might still be open.
 
+Also, note that node establishes signal handlers for `'SIGINT'` and `'SIGTERM`',
+so it will not terminate due to receipt of those signals, it will exit.
+
 See `waitpid(2)`.
 
 ### Event: 'close'
@@ -66,10 +73,9 @@ might share the same stdio streams.
 
 ### Event: 'disconnect'
 
-This event is emitted after using the `.disconnect()` method in the parent or
-in the child. After disconnecting it is no longer possible to send messages.
-An alternative way to check if you can send messages is to see if the
-`child.connected` property is `true`.
+This event is emitted after calling the `.disconnect()` method in the parent
+or in the child. After disconnecting it is no longer possible to send messages,
+and the `.connected` property is false.
 
 ### Event: 'message'
 
@@ -120,6 +126,12 @@ Example:
 
     console.log('Spawned child pid: ' + grep.pid);
     grep.stdin.end();
+
+### child.connected
+
+* {Boolean} Set to false after `.disconnect' is called
+
+If `.connected` is false, it is no longer possible to send messages.
 
 ### child.kill([signal])
 
@@ -181,6 +193,11 @@ And then the child script, `'sub.js'` might look like this:
 
 In the child the `process` object will have a `send()` method, and `process`
 will emit objects each time it receives a message on its channel.
+
+Please note that the `send()` method on both the parent and child are
+synchronous - sending large chunks of data is not advised (pipes can be used
+instead, see
+[`child_process.spawn`](#child_process_child_process_spawn_command_args_options)).
 
 There is a special case when sending a `{cmd: 'NODE_foo'}` message. All messages
 containing a `NODE_` prefix in its `cmd` property will not be emitted in
@@ -265,12 +282,15 @@ It is also recommended not to use `.maxConnections` in this condition.
 
 ### child.disconnect()
 
-To close the IPC connection between parent and child use the
-`child.disconnect()` method. This allows the child to exit gracefully since
-there is no IPC channel keeping it alive. When calling this method the
-`disconnect` event will be emitted in both parent and child, and the
-`connected` flag will be set to `false`. Please note that you can also call
-`process.disconnect()` in the child process.
+Close the IPC channel between parent and child, allowing the child to exit
+gracefully once there are no other connections keeping it alive. After calling
+this method the `.connected` flag will be set to `false` in both the parent and
+child, and it is no longer possible to send messages.
+
+The 'disconnect' event will be emitted when there are no messages in the process
+of being received, most likely immediately.
+
+Note that you can also call `process.disconnect()` in the child process.
 
 ## child_process.spawn(command, [args], [options])
 
@@ -469,7 +489,7 @@ See also: `child_process.exec()` and `child_process.fork()`
      understand the `-c` switch on UNIX or `/s /c` on Windows. On Windows,
      command line parsing should be compatible with `cmd.exe`.)
   * `timeout` {Number} (Default: 0)
-  * `maxBuffer` {Number} (Default: 200*1024)
+  * `maxBuffer` {Number} (Default: `200*1024`)
   * `killSignal` {String} (Default: 'SIGTERM')
 * `callback` {Function} called with the output when process terminates
   * `error` {Error}
@@ -535,7 +555,7 @@ subshell but rather the specified file directly. This makes it slightly
 leaner than `child_process.exec`. It has the same options.
 
 
-## child\_process.fork(modulePath, [args], [options])
+## child_process.fork(modulePath, [args], [options])
 
 * `modulePath` {String} The module to run in the child
 * `args` {Array} List of string arguments
@@ -544,19 +564,16 @@ leaner than `child_process.exec`. It has the same options.
   * `env` {Object} Environment key-value pairs
   * `encoding` {String} (Default: 'utf8')
   * `execPath` {String} Executable used to create the child process
+  * `execArgv` {Array} List of string arguments passed to the executable
+    (Default: `process.execArgv`)
+  * `silent` {Boolean} If true, prevent stdout and stderr in the spawned node
+    process from being associated with the parent's (default is false)
 * Return: ChildProcess object
 
 This is a special case of the `spawn()` functionality for spawning Node
 processes. In addition to having all the methods in a normal ChildProcess
 instance, the returned object has a communication channel built-in. See
 `child.send(message, [sendHandle])` for details.
-
-By default the spawned Node process will have the stdout, stderr associated
-with the parent's. To change this behavior set the `silent` property in the
-`options` object to `true`.
-
-The child process does not automatically exit once it's done, you need to call
-`process.exit()` explicitly. This limitation may be lifted in the future.
 
 These child Nodes are still whole new instances of V8. Assume at least 30ms
 startup and 10mb memory for each new Node. That is, you cannot create many

@@ -117,9 +117,9 @@ automatically set as a listener for the [secureConnection][] event.  The
     conjunction with the `honorCipherOrder` option described below to
     prioritize the non-CBC cipher.
 
-    Defaults to `AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH`.
+    Defaults to `ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH`.
     Consult the [OpenSSL cipher list format documentation] for details on the
-    format. ECDH (Elliptic Curve Diffie-Hellman) ciphers are not yet supported.
+    format.
 
 
     `AES128-GCM-SHA256` is used when node.js is linked against OpenSSL 1.0.1
@@ -128,6 +128,17 @@ automatically set as a listener for the [secureConnection][] event.  The
     **NOTE**: Previous revisions of this section suggested `AES256-SHA` as an
     acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
     susceptible to BEAST attacks. Do *not* use it.
+
+  - `ecdhCurve`: A string describing a named curve to use for ECDH ciphers or
+    false to disable all ECDH ciphers.
+
+    This is required to support ECDH (Elliptic Curve Diffie-Hellman) ciphers.
+    ECDH ciphers are a newer alternative to RSA. The advantages of ECDH over
+    RSA is that it offers [Forward secrecy]. Forward secrecy means that for an
+    attacker it won't be possible to decrypt your previous data exchanges if
+    they get access to your private key.
+
+    Defaults to `prime256v1`. Consult [RFC 4492] for more details.
 
   - `handshakeTimeout`: Abort the connection if the SSL/TLS handshake does not
     finish in this many milliseconds. The default is 120 seconds.
@@ -529,6 +540,11 @@ If `tlsSocket.authorized === false` then the error can be found in
 `tlsSocket.authorizationError`. Also if NPN was used - you can check
 `tlsSocket.npnProtocol` for negotiated protocol.
 
+### tlsSocket.encrypted
+
+Static boolean value, always `true`. May be used to distinguish TLS sockets
+from regular ones.
+
 ### tlsSocket.authorized
 
 A boolean that is `true` if the peer certificate was signed by one of the
@@ -562,7 +578,8 @@ Example:
          CN: 'localhost' },
       valid_from: 'Nov 11 09:52:22 2009 GMT',
       valid_to: 'Nov  6 09:52:22 2029 GMT',
-      fingerprint: '2A:7A:C2:DD:E5:F9:CC:53:72:35:99:7A:02:5A:71:38:52:EC:8A:DF' }
+      fingerprint: '2A:7A:C2:DD:E5:F9:CC:53:72:35:99:7A:02:5A:71:38:52:EC:8A:DF',
+      serialNumber: 'B9B0D332A1AA5635' }
 
 If the peer does not provide a certificate, it returns `null` or an empty
 object.
@@ -629,3 +646,5 @@ The numeric representation of the local port.
 [SSL_METHODS]: http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_PROTOCOL_METHODS
 [tls.Server]: #tls_class_tls_server
 [SSL_CTX_set_timeout]: http://www.openssl.org/docs/ssl/SSL_CTX_set_timeout.html
+[RFC 4492]: http://www.rfc-editor.org/rfc/rfc4492.txt
+[Forward secrecy]: http://en.wikipedia.org/wiki/Perfect_forward_secrecy

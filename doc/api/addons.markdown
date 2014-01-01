@@ -326,12 +326,13 @@ Then in `myobject.h` make your wrapper inherit from `node::ObjectWrap`:
       static void Init(v8::Handle<v8::Object> exports);
 
      private:
-      MyObject();
+      explicit MyObject(double value = 0);
       ~MyObject();
 
       static v8::Handle<v8::Value> New(const v8::Arguments& args);
       static v8::Handle<v8::Value> PlusOne(const v8::Arguments& args);
-      double counter_;
+      static v8::Persistent<v8::Function> constructor;
+      double value_;
     };
 
     #endif
@@ -341,12 +342,18 @@ Here we expose the method `plusOne` by adding it to the constructor's
 prototype:
 
     #include <node.h>
+    #include <node_object_wrap.h>
     #include "myobject.h"
 
     using namespace v8;
 
-    MyObject::MyObject() {};
-    MyObject::~MyObject() {};
+    Persistent<Function> MyObject::constructor;
+
+    MyObject::MyObject(double value) : value_(value) {
+    }
+
+    MyObject::~MyObject() {
+    }
 
     void MyObject::Init(Handle<Object> exports) {
       Isolate* isolate = Isolate::GetCurrent();
@@ -370,11 +377,18 @@ prototype:
       Isolate* isolate = Isolate::GetCurrent();
       HandleScope scope(isolate);
 
-      MyObject* obj = new MyObject();
-      obj->counter_ = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
-      obj->Wrap(args.This());
-
-      return args.This();
+      if (args.IsConstructCall()) {
+        // Invoked as constructor: `new MyObject(...)`
+        double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
+        MyObject* obj = new MyObject(value);
+        obj->Wrap(args.This());
+        return args.This();
+      } else {
+        // Invoked as plain function `MyObject(...)`, turn into construct call.
+        const int argc = 1;
+        Local<Value> argv[argc] = { args[0] };
+        return scope.Close(constructor->NewInstance(argc, argv));
+      }
     }
 
     Handle<Value> MyObject::PlusOne(const Arguments& args) {
@@ -382,9 +396,9 @@ prototype:
       HandleScope scope(isolate);
 
       MyObject* obj = ObjectWrap::Unwrap<MyObject>(args.This());
-      obj->counter_ += 1;
+      obj->value_ += 1;
 
-      return scope.Close(Number::New(obj->counter_));
+      return scope.Close(Number::New(obj->value_));
     }
 
 Test it with:
@@ -441,13 +455,13 @@ care of instantiating the object (i.e. it does the job of `new` in JavaScript):
       static v8::Handle<v8::Value> NewInstance(const v8::Arguments& args);
 
      private:
-      MyObject();
+      explicit MyObject(double value = 0);
       ~MyObject();
 
-      static v8::Persistent<v8::Function> constructor;
       static v8::Handle<v8::Value> New(const v8::Arguments& args);
       static v8::Handle<v8::Value> PlusOne(const v8::Arguments& args);
-      double counter_;
+      static v8::Persistent<v8::Function> constructor;
+      double value_;
     };
 
     #endif
@@ -459,10 +473,13 @@ The implementation is similar to the above in `myobject.cc`:
 
     using namespace v8;
 
-    MyObject::MyObject() {};
-    MyObject::~MyObject() {};
-
     Persistent<Function> MyObject::constructor;
+
+    MyObject::MyObject(double value) : value_(value) {
+    }
+
+    MyObject::~MyObject() {
+    }
 
     void MyObject::Init() {
       Isolate* isolate = Isolate::GetCurrent();
@@ -482,11 +499,18 @@ The implementation is similar to the above in `myobject.cc`:
       Isolate* isolate = Isolate::GetCurrent();
       HandleScope scope(isolate);
 
-      MyObject* obj = new MyObject();
-      obj->counter_ = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
-      obj->Wrap(args.This());
-
-      return args.This();
+      if (args.IsConstructCall()) {
+        // Invoked as constructor: `new MyObject(...)`
+        double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
+        MyObject* obj = new MyObject(value);
+        obj->Wrap(args.This());
+        return args.This();
+      } else {
+        // Invoked as plain function `MyObject(...)`, turn into construct call.
+        const int argc = 1;
+        Local<Value> argv[argc] = { args[0] };
+        return scope.Close(constructor->NewInstance(argc, argv));
+      }
     }
 
     Handle<Value> MyObject::NewInstance(const Arguments& args) {
@@ -505,9 +529,9 @@ The implementation is similar to the above in `myobject.cc`:
       HandleScope scope(isolate);
 
       MyObject* obj = ObjectWrap::Unwrap<MyObject>(args.This());
-      obj->counter_ += 1;
+      obj->value_ += 1;
 
-      return scope.Close(Number::New(obj->counter_));
+      return scope.Close(Number::New(obj->value_));
     }
 
 Test it with:
@@ -533,6 +557,7 @@ In the following `addon.cc` we introduce a function `add()` that can take on two
 `MyObject` objects:
 
     #include <node.h>
+    #include <node_object_wrap.h>
     #include "myobject.h"
 
     using namespace v8;
@@ -552,7 +577,7 @@ In the following `addon.cc` we introduce a function `add()` that can take on two
       MyObject* obj2 = node::ObjectWrap::Unwrap<MyObject>(
           args[1]->ToObject());
 
-      double sum = obj1->Val() + obj2->Val();
+      double sum = obj1->Value() + obj2->Value();
       return scope.Close(Number::New(sum));
     }
 
@@ -575,20 +600,21 @@ can probe private values after unwrapping the object:
     #define MYOBJECT_H
 
     #include <node.h>
+    #include <node_object_wrap.h>
 
     class MyObject : public node::ObjectWrap {
      public:
       static void Init();
       static v8::Handle<v8::Value> NewInstance(const v8::Arguments& args);
-      double Val() const { return val_; }
+      double Value() const { return value_; }
 
      private:
-      MyObject();
+      explicit MyObject(double value = 0);
       ~MyObject();
 
-      static v8::Persistent<v8::Function> constructor;
       static v8::Handle<v8::Value> New(const v8::Arguments& args);
-      double val_;
+      static v8::Persistent<v8::Function> constructor;
+      double value_;
     };
 
     #endif
@@ -600,10 +626,13 @@ The implementation of `myobject.cc` is similar as before:
 
     using namespace v8;
 
-    MyObject::MyObject() {};
-    MyObject::~MyObject() {};
-
     Persistent<Function> MyObject::constructor;
+
+    MyObject::MyObject(double value) : value_(value) {
+    }
+
+    MyObject::~MyObject() {
+    }
 
     void MyObject::Init() {
       Isolate* isolate = Isolate::GetCurrent();
@@ -620,11 +649,18 @@ The implementation of `myobject.cc` is similar as before:
       Isolate* isolate = Isolate::GetCurrent();
       HandleScope scope(isolate);
 
-      MyObject* obj = new MyObject();
-      obj->val_ = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
-      obj->Wrap(args.This());
-
-      return args.This();
+      if (args.IsConstructCall()) {
+        // Invoked as constructor: `new MyObject(...)`
+        double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
+        MyObject* obj = new MyObject(value);
+        obj->Wrap(args.This());
+        return args.This();
+      } else {
+        // Invoked as plain function `MyObject(...)`, turn into construct call.
+        const int argc = 1;
+        Local<Value> argv[argc] = { args[0] };
+        return scope.Close(constructor->NewInstance(argc, argv));
+      }
     }
 
     Handle<Value> MyObject::NewInstance(const Arguments& args) {

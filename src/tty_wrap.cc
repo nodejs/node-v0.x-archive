@@ -28,6 +28,8 @@
 #include "node_wrap.h"
 #include "req_wrap.h"
 #include "stream_wrap.h"
+#include "util.h"
+#include "util-inl.h"
 
 namespace node {
 
@@ -88,13 +90,6 @@ void TTYWrap::Initialize(Handle<Object> target,
 }
 
 
-TTYWrap* TTYWrap::Unwrap(Local<Object> obj) {
-  TTYWrap* wrap;
-  NODE_UNWRAP(obj, TTYWrap, wrap);
-  return wrap;
-}
-
-
 uv_tty_t* TTYWrap::UVHandle() {
   return &handle_;
 }
@@ -135,8 +130,7 @@ void TTYWrap::IsTTY(const FunctionCallbackInfo<Value>& args) {
 void TTYWrap::GetWindowSize(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TTYWrap* wrap;
-  NODE_UNWRAP(args.This(), TTYWrap, wrap);
+  TTYWrap* wrap = Unwrap<TTYWrap>(args.This());
   assert(args[0]->IsArray());
 
   int width, height;
@@ -155,8 +149,7 @@ void TTYWrap::GetWindowSize(const FunctionCallbackInfo<Value>& args) {
 void TTYWrap::SetRawMode(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TTYWrap* wrap;
-  NODE_UNWRAP(args.This(), TTYWrap, wrap);
+  TTYWrap* wrap = Unwrap<TTYWrap>(args.This());
 
   int err = uv_tty_set_mode(&wrap->handle_, args[0]->IsTrue());
   args.GetReturnValue().Set(err);
@@ -164,8 +157,8 @@ void TTYWrap::SetRawMode(const FunctionCallbackInfo<Value>& args) {
 
 
 void TTYWrap::New(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   // This constructor should not be exposed to public javascript.
   // Therefore we assert that we are not trying to call this as a

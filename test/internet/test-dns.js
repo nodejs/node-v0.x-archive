@@ -244,6 +244,40 @@ TEST(function test_resolveNaptr(done) {
   checkWrap(req);
 });
 
+TEST(function test_resolveSoa(done) {
+  var req = dns.resolveSoa('nodejs.org', function(err, result) {
+    if (err) throw err;
+    
+    assert.ok(result);
+    assert.ok(typeof result === 'object');
+    
+    assert.ok(typeof result.nsname === 'string');
+    assert.ok(result.nsname.length > 0);
+    
+    assert.ok(typeof result.hostmaster === 'string');
+    assert.ok(result.hostmaster.length > 0);
+    
+    assert.ok(typeof result.serial === 'number');
+    assert.ok((result.serial > 0) && (result.serial < 4294967295));
+    
+    assert.ok(typeof result.refresh === 'number');
+    assert.ok((result.refresh > 0) && (result.refresh < 2147483647)); 
+    
+    assert.ok(typeof result.retry === 'number');
+    assert.ok((result.retry > 0) && (result.retry < 2147483647));
+    
+    assert.ok(typeof result.expire === 'number');
+    assert.ok((result.expire > 0) && (result.expire < 2147483647));
+    
+    assert.ok(typeof result.minttl === 'number');
+    assert.ok((result.minttl >= 0) && (result.minttl < 2147483647));
+
+    done();
+  });
+  
+  checkWrap(req);
+});
+
 TEST(function test_resolveCname(done) {
   var req = dns.resolveCname('www.microsoft.com', function(err, names) {
     if (err) throw err;
@@ -385,6 +419,45 @@ TEST(function test_lookup_localhost_ipv4(done) {
     if (err) throw err;
     assert.strictEqual(ip, '127.0.0.1');
     assert.strictEqual(family, 4);
+
+    done();
+  });
+
+  checkWrap(req);
+});
+
+
+TEST(function test_reverse_failure(done) {
+  var req = dns.reverse('0.0.0.0', function(err) {
+    assert(err instanceof Error);
+    assert.strictEqual(err.code, 'ENOTFOUND');  // Silly error code...
+    assert.strictEqual(err.hostname, '0.0.0.0');
+
+    done();
+  });
+
+  checkWrap(req);
+});
+
+
+TEST(function test_lookup_failure(done) {
+  var req = dns.lookup('nosuchhostimsure', function(err) {
+    assert(err instanceof Error);
+    assert.strictEqual(err.code, 'ENOTFOUND');  // Silly error code...
+    assert.strictEqual(err.hostname, 'nosuchhostimsure');
+
+    done();
+  });
+
+  checkWrap(req);
+});
+
+
+TEST(function test_resolve_failure(done) {
+  var req = dns.resolve4('nosuchhostimsure', function(err) {
+    assert(err instanceof Error);
+    assert.strictEqual(err.code, 'ENOTFOUND');  // Silly error code...
+    assert.strictEqual(err.hostname, 'nosuchhostimsure');
 
     done();
   });

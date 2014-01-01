@@ -212,8 +212,8 @@ Synchronous link(2).
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
 to the completion callback.
-`type` argument can be either `'dir'`, `'file'`, or `'junction'` (default is `'file'`).  It is only 
-used on Windows (ignored on other platforms).
+The `type` argument can be set to `'dir'`, `'file'`, or `'junction'` (default
+is `'file'`) and is only available on Windows (ignored on other platforms).
 Note that Windows junction points require the destination path to be absolute.  When using
 `'junction'`, the `destination` argument will automatically be normalized to absolute path.
 
@@ -575,10 +575,14 @@ no-op, not an error.
 Watch for changes on `filename`, where `filename` is either a file or a
 directory.  The returned object is a [fs.FSWatcher](#fs_class_fs_fswatcher).
 
-The second argument is optional. The `options` if provided should be an object
-containing a boolean member `persistent`, which indicates whether the process
-should continue to run as long as files are being watched. The default is
-`{ persistent: true }`.
+The second argument is optional. The `options` if provided should be an object.
+The supported boolean members are `persistent` and `recursive`. `persistent`
+indicates whether the process should continue to run as long as files are being
+watched. `recursive` indicates whether all subdirectories should be watched, or
+only the current directory. This applies when a directory is specified, and only
+on supported platforms (See Caveats below).
+
+The default is `{ persistent: true, recursive: false }`.
 
 The listener callback gets two arguments `(event, filename)`.  `event` is either
 'rename' or 'change', and `filename` is the name of the file which triggered
@@ -591,6 +595,10 @@ the event.
 The `fs.watch` API is not 100% consistent across platforms, and is
 unavailable in some situations.
 
+The recursive option is currently supported on OS X. Only FSEvents supports this
+type of file watching so it is unlikely any additional platforms will be added
+soon.
+
 #### Availability
 
 <!--type=misc-->
@@ -599,7 +607,8 @@ This feature depends on the underlying operating system providing a way
 to be notified of filesystem changes.
 
 * On Linux systems, this uses `inotify`.
-* On BSD systems (including OS X), this uses `kqueue`.
+* On BSD systems, this uses `kqueue`.
+* On OS X, this uses `kqueue` for files and 'FSEvents' for directories.
 * On SunOS systems (including Solaris and SmartOS), this uses `event ports`.
 * On Windows systems, this feature depends on `ReadDirectoryChangesW`.
 
@@ -639,6 +648,13 @@ Then call the `callback` argument with either true or false.  Example:
       util.debug(exists ? "it's there" : "no passwd!");
     });
 
+`fs.exists()` is an anachronism and exists only for historical reasons.
+There should almost never be a reason to use it in your own code.
+
+In particular, checking if a file exists before opening it is an anti-pattern
+that leaves you vulnerable to race conditions: another process may remove the
+file between the calls to `fs.exists()` and `fs.open()`.  Just open the file
+and handle the error when it's not there.
 
 ## fs.existsSync(path)
 
@@ -680,7 +696,7 @@ instances of [Date][MDN-Date] object and to compare the values of
 these objects you should use appropriate methods. For most general
 uses [getTime()][MDN-Date-getTime] will return the number of
 milliseconds elapsed since _1 January 1970 00:00:00 UTC_ and this
-integer should be sufficient for any comparison, however there
+integer should be sufficient for any comparison, however there are
 additional methods which can be used for displaying fuzzy information.
 More details can be found in the [MDN JavaScript Reference][MDN-Date]
 page.

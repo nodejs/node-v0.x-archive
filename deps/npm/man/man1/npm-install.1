@@ -1,7 +1,7 @@
 .\" Generated with Ronnjs 0.3.8
 .\" http://github.com/kapouer/ronnjs/
 .
-.TH "NPM\-INSTALL" "1" "September 2013" "" ""
+.TH "NPM\-INSTALL" "1" "December 2013" "" ""
 .
 .SH "NAME"
 \fBnpm-install\fR \-\- Install a package
@@ -68,6 +68,11 @@ Install the dependencies in the local node_modules folder\.
 In global mode (ie, with \fB\-g\fR or \fB\-\-global\fR appended to the command),
 it installs the current package context (ie, the current working
 directory) as a global package\.
+.
+.IP
+By default, \fBnpm install\fR will install all modules listed as
+dependencies\. With the \fB\-\-production\fR flag,
+npm will not install modules listed in \fBdevDependencies\fR\|\.
 .
 .IP "\(bu" 4
 \fBnpm install <folder>\fR:
@@ -264,7 +269,9 @@ npm install sax@">=0\.1\.0 <0\.2\.0" bench supervisor
 .IP "" 0
 .
 .P
-The \fB\-\-tag\fR argument will apply to all of the specified install targets\.
+The \fB\-\-tag\fR argument will apply to all of the specified install targets\. If a
+tag with the given name exists, the tagged version is preferred over newer
+versions\.
 .
 .P
 The \fB\-\-force\fR argument will force npm to fetch remote resources even if a
@@ -290,6 +297,10 @@ local space in some cases\.
 .P
 The \fB\-\-no\-bin\-links\fR argument will prevent npm from creating symlinks for
 any binaries the package might contain\.
+.
+.P
+The \fB\-\-no\-optional\fR argument will prevent optional dependencies from
+being installed\.
 .
 .P
 The \fB\-\-no\-shrinkwrap\fR argument, which will ignore an available

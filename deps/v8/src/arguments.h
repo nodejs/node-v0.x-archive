@@ -83,115 +83,48 @@ class Arguments BASE_EMBEDDED {
 };
 
 
-// mappings from old property callbacks to new ones
-// F(old name, new name, return value, parameters...)
-//
+// For each type of callback, we have a list of arguments
+// They are used to generate the Call() functions below
 // These aren't included in the list as they have duplicate signatures
-// F(NamedPropertyEnumerator, NamedPropertyEnumeratorCallback, ...)
-// F(NamedPropertyGetter, NamedPropertyGetterCallback, ...)
+// F(NamedPropertyEnumeratorCallback, ...)
+// F(NamedPropertyGetterCallback, ...)
 
 #define FOR_EACH_CALLBACK_TABLE_MAPPING_0(F) \
-  F(IndexedPropertyEnumerator, IndexedPropertyEnumeratorCallback, v8::Array) \
+  F(IndexedPropertyEnumeratorCallback, v8::Array) \
 
 #define FOR_EACH_CALLBACK_TABLE_MAPPING_1(F) \
-  F(AccessorGetter, AccessorGetterCallback, v8::Value, v8::Local<v8::String>) \
-  F(NamedPropertyQuery, \
-    NamedPropertyQueryCallback, \
+  F(AccessorGetterCallback, v8::Value, v8::Local<v8::String>) \
+  F(NamedPropertyQueryCallback, \
     v8::Integer, \
     v8::Local<v8::String>) \
-  F(NamedPropertyDeleter, \
-    NamedPropertyDeleterCallback, \
+  F(NamedPropertyDeleterCallback, \
     v8::Boolean, \
     v8::Local<v8::String>) \
-  F(IndexedPropertyGetter, \
-    IndexedPropertyGetterCallback, \
+  F(IndexedPropertyGetterCallback, \
     v8::Value, \
     uint32_t) \
-  F(IndexedPropertyQuery, \
-    IndexedPropertyQueryCallback, \
+  F(IndexedPropertyQueryCallback, \
     v8::Integer, \
     uint32_t) \
-  F(IndexedPropertyDeleter, \
-    IndexedPropertyDeleterCallback, \
+  F(IndexedPropertyDeleterCallback, \
     v8::Boolean, \
     uint32_t) \
 
 #define FOR_EACH_CALLBACK_TABLE_MAPPING_2(F) \
-  F(NamedPropertySetter, \
-    NamedPropertySetterCallback, \
+  F(NamedPropertySetterCallback, \
     v8::Value, \
     v8::Local<v8::String>, \
     v8::Local<v8::Value>) \
-  F(IndexedPropertySetter, \
-    IndexedPropertySetterCallback, \
+  F(IndexedPropertySetterCallback, \
     v8::Value, \
     uint32_t, \
     v8::Local<v8::Value>) \
 
 #define FOR_EACH_CALLBACK_TABLE_MAPPING_2_VOID_RETURN(F) \
-  F(AccessorSetter, \
-    AccessorSetterCallback, \
+  F(AccessorSetterCallback, \
     void, \
     v8::Local<v8::String>, \
     v8::Local<v8::Value>) \
-
-// All property callbacks as well as invocation callbacks
-#define FOR_EACH_CALLBACK_TABLE_MAPPING(F) \
-  F(InvocationCallback, FunctionCallback) \
-  F(AccessorGetter, AccessorGetterCallback) \
-  F(AccessorSetter, AccessorSetterCallback) \
-  F(NamedPropertySetter, NamedPropertySetterCallback) \
-  F(NamedPropertyQuery, NamedPropertyQueryCallback) \
-  F(NamedPropertyDeleter, NamedPropertyDeleterCallback) \
-  F(IndexedPropertyGetter, IndexedPropertyGetterCallback) \
-  F(IndexedPropertySetter, IndexedPropertySetterCallback) \
-  F(IndexedPropertyQuery, IndexedPropertyQueryCallback) \
-  F(IndexedPropertyDeleter, IndexedPropertyDeleterCallback) \
-  F(IndexedPropertyEnumerator, IndexedPropertyEnumeratorCallback) \
-
-
-// TODO(dcarney): Remove this class when old callbacks are gone.
-class CallbackTable {
- public:
-  static const bool kStoreVoidFunctions = false;
-  static inline bool ReturnsVoid(Isolate* isolate, void* function) {
-    CallbackTable* table = isolate->callback_table();
-    bool contains =
-        table != NULL &&
-        table->map_.occupancy() != 0 &&
-        table->Contains(function);
-    return contains == kStoreVoidFunctions;
-  }
-
-  STATIC_ASSERT(sizeof(intptr_t) == sizeof(AccessorGetterCallback));
-
-  template<typename F>
-  static inline void* FunctionToVoidPtr(F function) {
-    return reinterpret_cast<void*>(reinterpret_cast<intptr_t>(function));
-  }
-
-#define WRITE_REGISTER(OldFunction, NewFunction)                    \
-  static NewFunction Register(Isolate* isolate, OldFunction f) {    \
-    InsertCallback(isolate, FunctionToVoidPtr(f), false);           \
-    return reinterpret_cast<NewFunction>(f);                        \
-  }                                                                 \
-                                                                    \
-  static NewFunction Register(Isolate* isolate, NewFunction f) {    \
-    InsertCallback(isolate, FunctionToVoidPtr(f), true);            \
-    return f;                                                       \
-  }
-  FOR_EACH_CALLBACK_TABLE_MAPPING(WRITE_REGISTER)
-#undef WRITE_REGISTER
-
- private:
-  CallbackTable();
-  bool Contains(void* function);
-  static void InsertCallback(Isolate* isolate,
-                             void* function,
-                             bool returns_void);
-  HashMap map_;
-  DISALLOW_COPY_AND_ASSIGN(CallbackTable);
-};
 
 
 // Custom arguments replicate a small segment of stack that can be
@@ -204,7 +137,7 @@ class CustomArgumentsBase : public Relocatable {
     v->VisitPointers(values_, values_ + kArrayLength);
   }
  protected:
-  inline Object** end() { return values_ + kArrayLength - 1; }
+  inline Object** begin() { return values_; }
   explicit inline CustomArgumentsBase(Isolate* isolate)
       : Relocatable(isolate) {}
   Object* values_[kArrayLength];
@@ -218,8 +151,7 @@ class CustomArguments : public CustomArgumentsBase<T::kArgsLength> {
 
   typedef CustomArgumentsBase<T::kArgsLength> Super;
   ~CustomArguments() {
-    // TODO(dcarney): create a new zap value for this.
-    this->end()[kReturnValueOffset] =
+    this->begin()[kReturnValueOffset] =
         reinterpret_cast<Object*>(kHandleZapValue);
   }
 
@@ -230,7 +162,7 @@ class CustomArguments : public CustomArgumentsBase<T::kArgsLength> {
   v8::Handle<V> GetReturnValue(Isolate* isolate);
 
   inline Isolate* isolate() {
-    return reinterpret_cast<Isolate*>(this->end()[T::kIsolateIndex]);
+    return reinterpret_cast<Isolate*>(this->begin()[T::kIsolateIndex]);
   }
 };
 
@@ -243,13 +175,17 @@ class PropertyCallbackArguments
   static const int kArgsLength = T::kArgsLength;
   static const int kThisIndex = T::kThisIndex;
   static const int kHolderIndex = T::kHolderIndex;
+  static const int kDataIndex = T::kDataIndex;
+  static const int kReturnValueDefaultValueIndex =
+      T::kReturnValueDefaultValueIndex;
+  static const int kIsolateIndex = T::kIsolateIndex;
 
   PropertyCallbackArguments(Isolate* isolate,
                             Object* data,
                             Object* self,
                             JSObject* holder)
       : Super(isolate) {
-    Object** values = this->end();
+    Object** values = this->begin();
     values[T::kThisIndex] = self;
     values[T::kHolderIndex] = holder;
     values[T::kDataIndex] = data;
@@ -271,17 +207,17 @@ class PropertyCallbackArguments
    * and used if it's been set to anything inside the callback.
    * New style callbacks always use the return value.
    */
-#define WRITE_CALL_0(OldFunction, NewFunction, ReturnValue)                  \
-  v8::Handle<ReturnValue> Call(OldFunction f);                               \
+#define WRITE_CALL_0(Function, ReturnValue)                                  \
+  v8::Handle<ReturnValue> Call(Function f);                                  \
 
-#define WRITE_CALL_1(OldFunction, NewFunction, ReturnValue, Arg1)            \
-  v8::Handle<ReturnValue> Call(OldFunction f, Arg1 arg1);                    \
+#define WRITE_CALL_1(Function, ReturnValue, Arg1)                            \
+  v8::Handle<ReturnValue> Call(Function f, Arg1 arg1);                       \
 
-#define WRITE_CALL_2(OldFunction, NewFunction, ReturnValue, Arg1, Arg2)      \
-  v8::Handle<ReturnValue> Call(OldFunction f, Arg1 arg1, Arg2 arg2);         \
+#define WRITE_CALL_2(Function, ReturnValue, Arg1, Arg2)                      \
+  v8::Handle<ReturnValue> Call(Function f, Arg1 arg1, Arg2 arg2);            \
 
-#define WRITE_CALL_2_VOID(OldFunction, NewFunction, ReturnValue, Arg1, Arg2) \
-  void Call(OldFunction f, Arg1 arg1, Arg2 arg2);                            \
+#define WRITE_CALL_2_VOID(Function, ReturnValue, Arg1, Arg2)                 \
+  void Call(Function f, Arg1 arg1, Arg2 arg2);                               \
 
 FOR_EACH_CALLBACK_TABLE_MAPPING_0(WRITE_CALL_0)
 FOR_EACH_CALLBACK_TABLE_MAPPING_1(WRITE_CALL_1)
@@ -301,6 +237,13 @@ class FunctionCallbackArguments
   typedef FunctionCallbackInfo<Value> T;
   typedef CustomArguments<T> Super;
   static const int kArgsLength = T::kArgsLength;
+  static const int kHolderIndex = T::kHolderIndex;
+  static const int kDataIndex = T::kDataIndex;
+  static const int kReturnValueDefaultValueIndex =
+      T::kReturnValueDefaultValueIndex;
+  static const int kIsolateIndex = T::kIsolateIndex;
+  static const int kCalleeIndex = T::kCalleeIndex;
+  static const int kContextSaveIndex = T::kContextSaveIndex;
 
   FunctionCallbackArguments(internal::Isolate* isolate,
       internal::Object* data,
@@ -313,10 +256,11 @@ class FunctionCallbackArguments
           argv_(argv),
           argc_(argc),
           is_construct_call_(is_construct_call) {
-    Object** values = end();
+    Object** values = begin();
     values[T::kDataIndex] = data;
     values[T::kCalleeIndex] = callee;
     values[T::kHolderIndex] = holder;
+    values[T::kContextSaveIndex] = isolate->heap()->the_hole_value();
     values[T::kIsolateIndex] = reinterpret_cast<internal::Object*>(isolate);
     // Here the hole is set as default value.
     // It cannot escape into js as it's remove in Call below.
@@ -336,7 +280,7 @@ class FunctionCallbackArguments
    * and used if it's been set to anything inside the callback.
    * New style callbacks always use the return value.
    */
-  v8::Handle<v8::Value> Call(InvocationCallback f);
+  v8::Handle<v8::Value> Call(FunctionCallback f);
 
  private:
   internal::Object** argv_;

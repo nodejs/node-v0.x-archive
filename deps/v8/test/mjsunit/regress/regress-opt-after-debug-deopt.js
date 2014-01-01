@@ -26,10 +26,10 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --expose-debug-as debug --allow-natives-syntax
-// Flags: --parallel-recompilation --parallel-recompilation-delay=100
+// Flags: --concurrent-recompilation --block-concurrent-recompilation
 
-if (!%IsParallelRecompilationSupported()) {
-  print("Parallel recompilation is disabled. Skipping this test.");
+if (!%IsConcurrentRecompilationSupported()) {
+  print("Concurrent recompilation is disabled. Skipping this test.");
   quit();
 }
 
@@ -57,12 +57,18 @@ var f = function() {
 
 f();
 f();
-%OptimizeFunctionOnNextCall(f, "parallel");  // Mark with builtin.
-f();                           // Kick off parallel recompilation.
+%OptimizeFunctionOnNextCall(f, "concurrent");  // Mark with builtin.
+f();                           // Kick off concurrent recompilation.
 
+// After compile graph has been created...
 Debug.setListener(listener);   // Activate debugger.
 Debug.setBreakPoint(f, 2, 0);  // Force deopt.
-// Sync with parallel optimization thread.  But no optimized code is installed.
+
+// At this point, concurrent recompilation is still being blocked.
+assertUnoptimized(f, "no sync");
+// Let concurrent recompilation proceed.
+%UnblockConcurrentRecompilation();
+// Sync with optimization thread.  But no optimized code is installed.
 assertUnoptimized(f, "sync");
 
 f();                           // Trigger break point.

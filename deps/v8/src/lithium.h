@@ -43,7 +43,7 @@ namespace internal {
   V(DoubleRegister,  DOUBLE_REGISTER)
 
 
-class LOperand: public ZoneObject {
+class LOperand : public ZoneObject {
  public:
   enum Kind {
     INVALID,
@@ -90,7 +90,7 @@ class LOperand: public ZoneObject {
 };
 
 
-class LUnallocated: public LOperand {
+class LUnallocated : public LOperand {
  public:
   enum BasicPolicy {
     FIXED_SLOT,
@@ -271,7 +271,7 @@ class LUnallocated: public LOperand {
 };
 
 
-class LMoveOperands BASE_EMBEDDED {
+class LMoveOperands V8_FINAL BASE_EMBEDDED {
  public:
   LMoveOperands(LOperand* source, LOperand* destination)
       : source_(source), destination_(destination) {
@@ -317,7 +317,7 @@ class LMoveOperands BASE_EMBEDDED {
 };
 
 
-class LConstantOperand: public LOperand {
+class LConstantOperand V8_FINAL : public LOperand {
  public:
   static LConstantOperand* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
@@ -342,7 +342,7 @@ class LConstantOperand: public LOperand {
 };
 
 
-class LArgument: public LOperand {
+class LArgument V8_FINAL : public LOperand {
  public:
   explicit LArgument(int index) : LOperand(ARGUMENT, index) { }
 
@@ -353,7 +353,7 @@ class LArgument: public LOperand {
 };
 
 
-class LStackSlot: public LOperand {
+class LStackSlot V8_FINAL : public LOperand {
  public:
   static LStackSlot* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
@@ -378,7 +378,7 @@ class LStackSlot: public LOperand {
 };
 
 
-class LDoubleStackSlot: public LOperand {
+class LDoubleStackSlot V8_FINAL : public LOperand {
  public:
   static LDoubleStackSlot* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
@@ -403,7 +403,7 @@ class LDoubleStackSlot: public LOperand {
 };
 
 
-class LRegister: public LOperand {
+class LRegister V8_FINAL : public LOperand {
  public:
   static LRegister* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
@@ -428,7 +428,7 @@ class LRegister: public LOperand {
 };
 
 
-class LDoubleRegister: public LOperand {
+class LDoubleRegister V8_FINAL : public LOperand {
  public:
   static LDoubleRegister* Create(int index, Zone* zone) {
     ASSERT(index >= 0);
@@ -453,7 +453,7 @@ class LDoubleRegister: public LOperand {
 };
 
 
-class LParallelMove : public ZoneObject {
+class LParallelMove V8_FINAL : public ZoneObject {
  public:
   explicit LParallelMove(Zone* zone) : move_operands_(4, zone) { }
 
@@ -474,12 +474,11 @@ class LParallelMove : public ZoneObject {
 };
 
 
-class LPointerMap: public ZoneObject {
+class LPointerMap V8_FINAL : public ZoneObject {
  public:
-  explicit LPointerMap(int position, Zone* zone)
+  explicit LPointerMap(Zone* zone)
       : pointer_operands_(8, zone),
         untagged_operands_(0, zone),
-        position_(position),
         lithium_position_(-1) { }
 
   const ZoneList<LOperand*>* GetNormalizedOperands() {
@@ -489,7 +488,6 @@ class LPointerMap: public ZoneObject {
     untagged_operands_.Clear();
     return &pointer_operands_;
   }
-  int position() const { return position_; }
   int lithium_position() const { return lithium_position_; }
 
   void set_lithium_position(int pos) {
@@ -505,12 +503,11 @@ class LPointerMap: public ZoneObject {
  private:
   ZoneList<LOperand*> pointer_operands_;
   ZoneList<LOperand*> untagged_operands_;
-  int position_;
   int lithium_position_;
 };
 
 
-class LEnvironment: public ZoneObject {
+class LEnvironment V8_FINAL : public ZoneObject {
  public:
   LEnvironment(Handle<JSFunction> closure,
                FrameType frame_type,
@@ -655,7 +652,7 @@ class LEnvironment: public ZoneObject {
 
 
 // Iterates over the non-null, non-constant operands in an environment.
-class ShallowIterator BASE_EMBEDDED {
+class ShallowIterator V8_FINAL BASE_EMBEDDED {
  public:
   explicit ShallowIterator(LEnvironment* env)
       : env_(env),
@@ -699,7 +696,7 @@ class ShallowIterator BASE_EMBEDDED {
 
 
 // Iterator for non-null, non-constant operands incl. outer environments.
-class DeepIterator BASE_EMBEDDED {
+class DeepIterator V8_FINAL BASE_EMBEDDED {
  public:
   explicit DeepIterator(LEnvironment* env)
       : current_iterator_(env) {
@@ -736,7 +733,7 @@ class LLabel;
 
 // Superclass providing data and behavior common to all the
 // arch-specific LPlatformChunk classes.
-class LChunk: public ZoneObject {
+class LChunk : public ZoneObject {
  public:
   static LChunk* NewChunk(HGraph* graph);
 
@@ -794,7 +791,6 @@ class LChunk: public ZoneObject {
 };
 
 
-int ElementsKindToShiftSize(ElementsKind elements_kind);
 int StackSlotOffset(int index);
 
 enum NumberUntagDMode {

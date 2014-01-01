@@ -1764,6 +1764,10 @@ def CheckSpacing(filename, clean_lines, linenum, error):
     error(filename, linenum, 'whitespace/operators', 4,
           'Missing spaces around =')
 
+  if Match(r'^\s*(if|while) .*[^\{,)&|\\]$', line):
+    error(filename, linenum, 'whitespace/if-one-line', 4,
+          'If\'s body on the same line as if itself')
+
   # It's ok not to have spaces around binary operators like + - * /, but if
   # there's too little whitespace, we get concerned.  It's hard to tell,
   # though, so we punt on this one for now.  TODO.
@@ -2108,6 +2112,9 @@ def CheckStyle(filename, clean_lines, linenum, file_extension, error):
           'the base class list in a class definition, the colon should '
           'be on the following line.')
 
+  if len(line) > initial_spaces and line[initial_spaces] == ',':
+    error(filename, linenum, 'whitespace/commafirst', 4,
+          'Comma-first style is not allowed')
 
   # Check if the line is a header guard.
   is_header_guard = False

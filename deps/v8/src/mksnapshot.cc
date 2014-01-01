@@ -43,49 +43,6 @@
 
 using namespace v8;
 
-static const unsigned int kMaxCounters = 256;
-
-// A single counter in a counter collection.
-class Counter {
- public:
-  static const int kMaxNameSize = 64;
-  int32_t* Bind(const char* name) {
-    int i;
-    for (i = 0; i < kMaxNameSize - 1 && name[i]; i++) {
-      name_[i] = name[i];
-    }
-    name_[i] = '\0';
-    return &counter_;
-  }
- private:
-  int32_t counter_;
-  uint8_t name_[kMaxNameSize];
-};
-
-
-// A set of counters and associated information.  An instance of this
-// class is stored directly in the memory-mapped counters file if
-// the --save-counters options is used
-class CounterCollection {
- public:
-  CounterCollection() {
-    magic_number_ = 0xDEADFACE;
-    max_counters_ = kMaxCounters;
-    max_name_size_ = Counter::kMaxNameSize;
-    counters_in_use_ = 0;
-  }
-  Counter* GetNextCounter() {
-    if (counters_in_use_ == kMaxCounters) return NULL;
-    return &counters_[counters_in_use_++];
-  }
- private:
-  uint32_t magic_number_;
-  uint32_t max_counters_;
-  uint32_t max_name_size_;
-  uint32_t counters_in_use_;
-  Counter counters_[kMaxCounters];
-};
-
 
 class Compressor {
  public:
@@ -310,12 +267,10 @@ void DumpException(Handle<Message> message) {
 
 int main(int argc, char** argv) {
   V8::InitializeICU();
+  i::Isolate::SetCrashIfDefaultIsolateInitialized();
 
   // By default, log code create information in the snapshot.
   i::FLAG_log_code = true;
-
-  // Disable the i18n extension, as it doesn't support being snapshotted yet.
-  i::FLAG_enable_i18n = false;
 
   // Print the usage if an error occurs when parsing the command line
   // flags or if the help flag is set.
@@ -333,8 +288,12 @@ int main(int argc, char** argv) {
     exit(1);
   }
 #endif
-  i::Serializer::Enable();
-  Isolate* isolate = Isolate::GetCurrent();
+  i::FLAG_logfile_per_isolate = false;
+
+  Isolate* isolate = v8::Isolate::New();
+  isolate->Enter();
+  i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i::Serializer::Enable(internal_isolate);
   Persistent<Context> context;
   {
     HandleScope handle_scope(isolate);
@@ -391,21 +350,23 @@ int main(int argc, char** argv) {
   // Make sure all builtin scripts are cached.
   { HandleScope scope(isolate);
     for (int i = 0; i < i::Natives::GetBuiltinsCount(); i++) {
-      i::Isolate::Current()->bootstrapper()->NativesSourceLookup(i);
+      internal_isolate->bootstrapper()->NativesSourceLookup(i);
     }
   }
   // If we don't do this then we end up with a stray root pointing at the
   // context even after we have disposed of the context.
-  HEAP->CollectAllGarbage(i::Heap::kNoGCFlags, "mksnapshot");
+  internal_isolate->heap()->CollectAllGarbage(
+      i::Heap::kNoGCFlags, "mksnapshot");
   i::Object* raw_context = *v8::Utils::OpenPersistent(context);
-  context.Dispose(isolate);
+  context.Dispose();
   CppByteSink sink(argv[1]);
   // This results in a somewhat smaller snapshot, probably because it gets rid
   // of some things that are cached between garbage collections.
-  i::StartupSerializer ser(&sink);
+  i::StartupSerializer ser(internal_isolate, &sink);
   ser.SerializeStrongReferences();
 
-  i::PartialSerializer partial_ser(&ser, sink.partial_sink());
+  i::PartialSerializer partial_ser(
+      internal_isolate, &ser, sink.partial_sink());
   partial_ser.Serialize(&raw_context);
 
   ser.SerializeWeakReferences();

@@ -158,10 +158,7 @@ void FullCodeGenerator::Generate() {
   FrameScope frame_scope(masm_, StackFrame::MANUAL);
 
   info->set_prologue_offset(masm_->pc_offset());
-  __ push(ebp);  // Caller's frame pointer.
-  __ mov(ebp, esp);
-  __ push(esi);  // Callee's context.
-  __ push(edi);  // Callee's JS Function.
+  __ Prologue(BUILD_FUNCTION_FRAME);
   info->AddNoFrameRange(0, masm_->pc_offset());
 
   { Comment cmnt(masm_, "[ Allocate locals");
@@ -288,8 +285,7 @@ void FullCodeGenerator::Generate() {
           ExternalReference::address_of_stack_limit(isolate());
       __ cmp(esp, Operand::StaticVariable(stack_limit));
       __ j(above_equal, &ok, Label::kNear);
-      StackCheckStub stub;
-      __ CallStub(&stub);
+      __ call(isolate()->builtins()->StackCheck(), RelocInfo::CODE_TARGET);
       __ bind(&ok);
     }
 
@@ -347,8 +343,7 @@ void FullCodeGenerator::EmitBackEdgeBookkeeping(IterationStatement* stmt,
   }
   EmitProfilingCounterDecrement(weight);
   __ j(positive, &ok, Label::kNear);
-  InterruptStub stub;
-  __ CallStub(&stub);
+  __ call(isolate()->builtins()->InterruptCheck(), RelocInfo::CODE_TARGET);
 
   // Record a mapping of this PC offset to the OSR id.  This is used to find
   // the AST id from the unoptimized code in order to use it as a key into
@@ -395,8 +390,8 @@ void FullCodeGenerator::EmitReturnSequence() {
         __ push(Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
         __ CallRuntime(Runtime::kOptimizeFunctionOnNextCall, 1);
       } else {
-        InterruptStub stub;
-        __ CallStub(&stub);
+        __ call(isolate()->builtins()->InterruptCheck(),
+                RelocInfo::CODE_TARGET);
       }
       __ pop(eax);
       EmitProfilingCounterReset();
@@ -1268,7 +1263,7 @@ void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info,
       scope()->is_function_scope() &&
       info->num_literals() == 0) {
     FastNewClosureStub stub(info->language_mode(), info->is_generator());
-    __ push(Immediate(info));
+    __ mov(ebx, Immediate(info));
     __ CallStub(&stub);
   } else {
     __ push(esi);
@@ -1588,21 +1583,15 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
       : ObjectLiteral::kNoFlags;
   int properties_count = constant_properties->length() / 2;
   if ((FLAG_track_double_fields && expr->may_store_doubles()) ||
-      expr->depth() > 1) {
-    __ mov(edi, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
-    __ push(FieldOperand(edi, JSFunction::kLiteralsOffset));
-    __ push(Immediate(Smi::FromInt(expr->literal_index())));
-    __ push(Immediate(constant_properties));
-    __ push(Immediate(Smi::FromInt(flags)));
-    __ CallRuntime(Runtime::kCreateObjectLiteral, 4);
-  } else if (Serializer::enabled() || flags != ObjectLiteral::kFastElements ||
+      expr->depth() > 1 || Serializer::enabled() ||
+      flags != ObjectLiteral::kFastElements ||
       properties_count > FastCloneShallowObjectStub::kMaximumClonedProperties) {
     __ mov(edi, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
     __ push(FieldOperand(edi, JSFunction::kLiteralsOffset));
     __ push(Immediate(Smi::FromInt(expr->literal_index())));
     __ push(Immediate(constant_properties));
     __ push(Immediate(Smi::FromInt(flags)));
-    __ CallRuntime(Runtime::kCreateObjectLiteralShallow, 4);
+    __ CallRuntime(Runtime::kCreateObjectLiteral, 4);
   } else {
     __ mov(edi, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
     __ mov(eax, FieldOperand(edi, JSFunction::kLiteralsOffset));
@@ -2958,7 +2947,7 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
 
   VisitForAccumulatorValue(args->at(0));
 
-  Label materialize_true, materialize_false;
+  Label materialize_true, materialize_false, skip_lookup;
   Label* if_true = NULL;
   Label* if_false = NULL;
   Label* fall_through = NULL;
@@ -2972,7 +2961,7 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   __ mov(ebx, FieldOperand(eax, HeapObject::kMapOffset));
   __ test_b(FieldOperand(ebx, Map::kBitField2Offset),
             1 << Map::kStringWrapperSafeForDefaultValueOf);
-  __ j(not_zero, if_true);
+  __ j(not_zero, &skip_lookup);
 
   // Check for fast case object. Return false for slow case objects.
   __ mov(ecx, FieldOperand(eax, JSObject::kPropertiesOffset));
@@ -3018,6 +3007,12 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   // Reload map as register ebx was used as temporary above.
   __ mov(ebx, FieldOperand(eax, HeapObject::kMapOffset));
 
+  // Set the bit in the map to indicate that there is no local valueOf field.
+  __ or_(FieldOperand(ebx, Map::kBitField2Offset),
+         Immediate(1 << Map::kStringWrapperSafeForDefaultValueOf));
+
+  __ bind(&skip_lookup);
+
   // If a valueOf property is not found on the object check that its
   // prototype is the un-modified String prototype. If not result is false.
   __ mov(ecx, FieldOperand(ebx, Map::kPrototypeOffset));
@@ -3029,14 +3024,9 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   __ cmp(ecx,
          ContextOperand(edx,
                         Context::STRING_FUNCTION_PROTOTYPE_MAP_INDEX));
-  __ j(not_equal, if_false);
-  // Set the bit in the map to indicate that it has been checked safe for
-  // default valueOf and set true result.
-  __ or_(FieldOperand(ebx, Map::kBitField2Offset),
-         Immediate(1 << Map::kStringWrapperSafeForDefaultValueOf));
-  __ jmp(if_true);
-
   PrepareForBailoutBeforeSplit(expr, true, if_true, if_false);
+  Split(equal, if_true, if_false, fall_through);
+
   context()->Plug(if_true, if_false);
 }
 
@@ -3272,7 +3262,7 @@ void FullCodeGenerator::EmitLog(CallRuntime* expr) {
   //   2 (array): Arguments to the format string.
   ZoneList<Expression*>* args = expr->arguments();
   ASSERT_EQ(args->length(), 3);
-  if (CodeGenerator::ShouldGenerateLog(args->at(0))) {
+  if (CodeGenerator::ShouldGenerateLog(isolate(), args->at(0))) {
     VisitForStackValue(args->at(1));
     VisitForStackValue(args->at(2));
     __ CallRuntime(Runtime::kLog, 2);
@@ -3317,7 +3307,7 @@ void FullCodeGenerator::EmitRandomHeapNumber(CallRuntime* expr) {
     __ cvtss2sd(xmm1, xmm1);
     __ xorps(xmm0, xmm1);
     __ subsd(xmm0, xmm1);
-    __ movdbl(FieldOperand(edi, HeapNumber::kValueOffset), xmm0);
+    __ movsd(FieldOperand(edi, HeapNumber::kValueOffset), xmm0);
   } else {
     // 0x4130000000000000 is 1.0 x 2^20 as a double.
     __ mov(FieldOperand(edi, HeapNumber::kExponentOffset),
@@ -3556,8 +3546,8 @@ void FullCodeGenerator::EmitNumberToString(CallRuntime* expr) {
   ZoneList<Expression*>* args = expr->arguments();
   ASSERT_EQ(args->length(), 1);
 
-  // Load the argument on the stack and call the stub.
-  VisitForStackValue(args->at(0));
+  // Load the argument into eax and call the stub.
+  VisitForAccumulatorValue(args->at(0));
 
   NumberToStringStub stub;
   __ CallStub(&stub);
@@ -4897,6 +4887,79 @@ FullCodeGenerator::NestedStatement* FullCodeGenerator::TryFinally::Exit(
 }
 
 #undef __
+
+
+static const byte kJnsInstruction = 0x79;
+static const byte kJnsOffset = 0x11;
+static const byte kCallInstruction = 0xe8;
+static const byte kNopByteOne = 0x66;
+static const byte kNopByteTwo = 0x90;
+
+
+void BackEdgeTable::PatchAt(Code* unoptimized_code,
+                            Address pc,
+                            BackEdgeState target_state,
+                            Code* replacement_code) {
+  Address call_target_address = pc - kIntSize;
+  Address jns_instr_address = call_target_address - 3;
+  Address jns_offset_address = call_target_address - 2;
+
+  switch (target_state) {
+    case INTERRUPT:
+      //     sub <profiling_counter>, <delta>  ;; Not changed
+      //     jns ok
+      //     call <interrupt stub>
+      //   ok:
+      *jns_instr_address = kJnsInstruction;
+      *jns_offset_address = kJnsOffset;
+      break;
+    case ON_STACK_REPLACEMENT:
+    case OSR_AFTER_STACK_CHECK:
+      //     sub <profiling_counter>, <delta>  ;; Not changed
+      //     nop
+      //     nop
+      //     call <on-stack replacment>
+      //   ok:
+      *jns_instr_address = kNopByteOne;
+      *jns_offset_address = kNopByteTwo;
+      break;
+  }
+
+  Assembler::set_target_address_at(call_target_address,
+                                   replacement_code->entry());
+  unoptimized_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
+      unoptimized_code, call_target_address, replacement_code);
+}
+
+
+BackEdgeTable::BackEdgeState BackEdgeTable::GetBackEdgeState(
+    Isolate* isolate,
+    Code* unoptimized_code,
+    Address pc) {
+  Address call_target_address = pc - kIntSize;
+  Address jns_instr_address = call_target_address - 3;
+  ASSERT_EQ(kCallInstruction, *(call_target_address - 1));
+
+  if (*jns_instr_address == kJnsInstruction) {
+    ASSERT_EQ(kJnsOffset, *(call_target_address - 2));
+    ASSERT_EQ(isolate->builtins()->InterruptCheck()->entry(),
+              Assembler::target_address_at(call_target_address));
+    return INTERRUPT;
+  }
+
+  ASSERT_EQ(kNopByteOne, *jns_instr_address);
+  ASSERT_EQ(kNopByteTwo, *(call_target_address - 2));
+
+  if (Assembler::target_address_at(call_target_address) ==
+      isolate->builtins()->OnStackReplacement()->entry()) {
+    return ON_STACK_REPLACEMENT;
+  }
+
+  ASSERT_EQ(isolate->builtins()->OsrAfterStackCheck()->entry(),
+            Assembler::target_address_at(call_target_address));
+  return OSR_AFTER_STACK_CHECK;
+}
+
 
 } }  // namespace v8::internal
 

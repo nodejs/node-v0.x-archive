@@ -53,9 +53,9 @@ endif
 out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/toolchain.gypi deps/v8/build/features.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
 ifeq ($(USE_NINJA),1)
 	touch out/Makefile
-	$(PYTHON) tools/gyp_node -f ninja
+	$(PYTHON) tools/gyp_node.py -f ninja
 else
-	$(PYTHON) tools/gyp_node -f make
+	$(PYTHON) tools/gyp_node.py -f make
 endif
 
 config.gypi: configure
@@ -94,16 +94,16 @@ test-http1: all
 test-valgrind: all
 	$(PYTHON) tools/test.py --mode=release --valgrind simple message
 
-test/gc/node_modules/weak/build:
+test/gc/node_modules/weak/build/Release/weakref.node:
 	@if [ ! -f node ]; then make all; fi
 	./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
 		--directory="$(shell pwd)/test/gc/node_modules/weak" \
 		--nodedir="$(shell pwd)"
 
-test-gc: all test/gc/node_modules/weak/build
+test-gc: all test/gc/node_modules/weak/build/Release/weakref.node
 	$(PYTHON) tools/test.py --mode=release gc
 
-test-all: all test/gc/node_modules/weak/build
+test-all: all test/gc/node_modules/weak/build/Release/weakref.node
 	$(PYTHON) tools/test.py --mode=debug,release
 	make test-npm
 

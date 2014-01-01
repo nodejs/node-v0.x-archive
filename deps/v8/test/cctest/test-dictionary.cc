@@ -41,7 +41,7 @@ using namespace v8::internal;
 
 TEST(ObjectHashTable) {
   LocalContext context;
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   Factory* factory = isolate->factory();
   v8::HandleScope scope(context->GetIsolate());
   Handle<ObjectHashTable> table = factory->NewObjectHashTable(23);
@@ -50,13 +50,13 @@ TEST(ObjectHashTable) {
   table = PutIntoObjectHashTable(table, a, b);
   CHECK_EQ(table->NumberOfElements(), 1);
   CHECK_EQ(table->Lookup(*a), *b);
-  CHECK_EQ(table->Lookup(*b), HEAP->the_hole_value());
+  CHECK_EQ(table->Lookup(*b), CcTest::heap()->the_hole_value());
 
   // Keys still have to be valid after objects were moved.
-  HEAP->CollectGarbage(NEW_SPACE);
+  CcTest::heap()->CollectGarbage(NEW_SPACE);
   CHECK_EQ(table->NumberOfElements(), 1);
   CHECK_EQ(table->Lookup(*a), *b);
-  CHECK_EQ(table->Lookup(*b), HEAP->the_hole_value());
+  CHECK_EQ(table->Lookup(*b), CcTest::heap()->the_hole_value());
 
   // Keys that are overwritten should not change number of elements.
   table = PutIntoObjectHashTable(table, a, factory->NewJSArray(13));
@@ -67,12 +67,12 @@ TEST(ObjectHashTable) {
   table = PutIntoObjectHashTable(table, a, factory->the_hole_value());
   CHECK_EQ(table->NumberOfElements(), 0);
   CHECK_EQ(table->NumberOfDeletedElements(), 1);
-  CHECK_EQ(table->Lookup(*a), HEAP->the_hole_value());
+  CHECK_EQ(table->Lookup(*a), CcTest::heap()->the_hole_value());
 
   // Keys should map back to their respective values and also should get
   // an identity hash code generated.
   for (int i = 0; i < 100; i++) {
-    Handle<JSObject> key = factory->NewJSArray(7);
+    Handle<JSReceiver> key = factory->NewJSArray(7);
     Handle<JSObject> value = factory->NewJSArray(11);
     table = PutIntoObjectHashTable(table, key, value);
     CHECK_EQ(table->NumberOfElements(), i + 1);
@@ -84,19 +84,71 @@ TEST(ObjectHashTable) {
   // Keys never added to the map which already have an identity hash
   // code should not be found.
   for (int i = 0; i < 100; i++) {
-    Handle<JSObject> key = factory->NewJSArray(7);
+    Handle<JSReceiver> key = factory->NewJSArray(7);
     CHECK(key->GetIdentityHash(ALLOW_CREATION)->ToObjectChecked()->IsSmi());
     CHECK_EQ(table->FindEntry(*key), ObjectHashTable::kNotFound);
-    CHECK_EQ(table->Lookup(*key), HEAP->the_hole_value());
+    CHECK_EQ(table->Lookup(*key), CcTest::heap()->the_hole_value());
     CHECK(key->GetIdentityHash(OMIT_CREATION)->ToObjectChecked()->IsSmi());
   }
 
   // Keys that don't have an identity hash should not be found and also
   // should not get an identity hash code generated.
   for (int i = 0; i < 100; i++) {
-    Handle<JSObject> key = factory->NewJSArray(7);
-    CHECK_EQ(table->Lookup(*key), HEAP->the_hole_value());
-    CHECK_EQ(key->GetIdentityHash(OMIT_CREATION), HEAP->undefined_value());
+    Handle<JSReceiver> key = factory->NewJSArray(7);
+    CHECK_EQ(table->Lookup(*key), CcTest::heap()->the_hole_value());
+    CHECK_EQ(key->GetIdentityHash(OMIT_CREATION),
+             CcTest::heap()->undefined_value());
+  }
+}
+
+
+class ObjectHashTableTest: public ObjectHashTable {
+ public:
+  void insert(int entry, int key, int value) {
+    set(EntryToIndex(entry), Smi::FromInt(key));
+    set(EntryToIndex(entry) + 1, Smi::FromInt(value));
+  }
+
+  int lookup(int key) {
+    return Smi::cast(Lookup(Smi::FromInt(key)))->value();
+  }
+
+  int capacity() {
+    return Capacity();
+  }
+};
+
+
+TEST(HashTableRehash) {
+  LocalContext context;
+  Isolate* isolate = CcTest::i_isolate();
+  Factory* factory = isolate->factory();
+  v8::HandleScope scope(context->GetIsolate());
+  // Test almost filled table.
+  {
+    Handle<ObjectHashTable> table = factory->NewObjectHashTable(100);
+    ObjectHashTableTest* t = reinterpret_cast<ObjectHashTableTest*>(*table);
+    int capacity = t->capacity();
+    for (int i = 0; i < capacity - 1; i++) {
+      t->insert(i, i * i, i);
+    }
+    t->Rehash(Smi::FromInt(0));
+    for (int i = 0; i < capacity - 1; i++) {
+      CHECK_EQ(i, t->lookup(i * i));
+    }
+  }
+  // Test half-filled table.
+  {
+    Handle<ObjectHashTable> table = factory->NewObjectHashTable(100);
+    ObjectHashTableTest* t = reinterpret_cast<ObjectHashTableTest*>(*table);
+    int capacity = t->capacity();
+    for (int i = 0; i < capacity / 2; i++) {
+      t->insert(i, i * i, i);
+    }
+    t->Rehash(Smi::FromInt(0));
+    for (int i = 0; i < capacity / 2; i++) {
+      CHECK_EQ(i, t->lookup(i * i));
+    }
   }
 }
 
@@ -105,7 +157,7 @@ TEST(ObjectHashTable) {
 TEST(ObjectHashSetCausesGC) {
   i::FLAG_stress_compaction = false;
   LocalContext context;
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   Factory* factory = isolate->factory();
   v8::HandleScope scope(context->GetIsolate());
   Handle<ObjectHashSet> table = factory->NewObjectHashSet(1);
@@ -119,8 +171,8 @@ TEST(ObjectHashSetCausesGC) {
 
   // Simulate a full heap so that generating an identity hash code
   // in subsequent calls will request GC.
-  SimulateFullSpace(HEAP->new_space());
-  SimulateFullSpace(HEAP->old_pointer_space());
+  SimulateFullSpace(CcTest::heap()->new_space());
+  SimulateFullSpace(CcTest::heap()->old_pointer_space());
 
   // Calling Contains() should not cause GC ever.
   CHECK(!table->Contains(*key));
@@ -138,7 +190,7 @@ TEST(ObjectHashSetCausesGC) {
 TEST(ObjectHashTableCausesGC) {
   i::FLAG_stress_compaction = false;
   LocalContext context;
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   Factory* factory = isolate->factory();
   v8::HandleScope scope(context->GetIsolate());
   Handle<ObjectHashTable> table = factory->NewObjectHashTable(1);
@@ -152,8 +204,8 @@ TEST(ObjectHashTableCausesGC) {
 
   // Simulate a full heap so that generating an identity hash code
   // in subsequent calls will request GC.
-  SimulateFullSpace(HEAP->new_space());
-  SimulateFullSpace(HEAP->old_pointer_space());
+  SimulateFullSpace(CcTest::heap()->new_space());
+  SimulateFullSpace(CcTest::heap()->old_pointer_space());
 
   // Calling Lookup() should not cause GC ever.
   CHECK(table->Lookup(*key)->IsTheHole());

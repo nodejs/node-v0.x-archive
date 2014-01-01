@@ -29,10 +29,8 @@
 // refer to The Open Group Base Specification for specification of the correct
 // semantics for these functions.
 // (http://www.opengroup.org/onlinepubs/000095399/)
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && (_MSC_VER < 1800)
 
-#undef V8_WIN32_LEAN_AND_MEAN
-#define V8_WIN32_HEADERS_FULL
 #include "win32-headers.h"
 #include <limits.h>        // Required for INT_MAX etc.
 #include <float.h>         // Required for DBL_MAX and on Win32 for finite()

@@ -72,6 +72,7 @@ var npm = require("./npm.js")
   , mkdir = require("mkdirp")
   , lifecycle = require("./utils/lifecycle.js")
   , archy = require("archy")
+  , isGitUrl = require("./utils/is-git-url.js")
 
 function install (args, cb_) {
   var hasArguments = !!args.length
@@ -135,6 +136,7 @@ function install (args, cb_) {
                       , ancestors: {}
                       , explicit: false
                       , parent: data
+                      , root: true
                       , wrap: null }
 
         if (data.name === path.basename(where) &&
@@ -171,6 +173,7 @@ function install (args, cb_) {
                     , ancestors: {}
                     , explicit: true
                     , parent: data
+                    , root: true
                     , wrap: null }
       if (data) {
         context.family[data.name] = context.ancestors[data.name] = data.version
@@ -240,6 +243,7 @@ function readDependencies (context, where, opts, cb) {
   readJson( path.resolve(where, "package.json")
           , log.warn
           , function (er, data) {
+    if (er && er.code === "ENOENT") er.code = "ENOPACKAGEJSON"
     if (er)  return cb(er)
 
     if (opts && opts.dev) {
@@ -576,7 +580,9 @@ function installMany (what, where, context, cb) {
       var newPrev = Object.create(context.family)
         , newAnc = Object.create(context.ancestors)
 
-      newAnc[data.name] = data.version
+      if (!context.root) {
+        newAnc[data.name] = data.version
+      }
       targets.forEach(function (t) {
         newPrev[t.name] = t.version
       })
@@ -625,7 +631,8 @@ function targetResolver (where, context, deps) {
         // otherwise, make sure that it's a semver match with what we want.
         var bd = parent.bundleDependencies
         if (bd && bd.indexOf(d.name) !== -1 ||
-            semver.satisfies(d.version, deps[d.name] || "*", true)) {
+            semver.satisfies(d.version, deps[d.name] || "*", true) ||
+            deps[d.name] === d._resolved) {
           return cb(null, d.name)
         }
 
@@ -689,17 +696,25 @@ function targetResolver (where, context, deps) {
         return cb(null, [])
       }
 
+      // if the target is a git repository, we always want to fetch it
+      var isGit = false
+        , maybeGit = what.split("@").pop()
+
+      if (maybeGit)
+        isGit = isGitUrl(url.parse(maybeGit))
+
       if (!er &&
           data &&
           !context.explicit &&
           context.family[data.name] === data.version &&
-          !npm.config.get("force")) {
+          !npm.config.get("force") &&
+          !isGit) {
         log.info("already installed", data.name + "@" + data.version)
         return cb(null, [])
       }
 
       if (data && !data._from) data._from = what
-
+      if (er && parent && parent.name) er.parent = parent.name
       return cb(er, data || [])
     })
   }
@@ -1022,10 +1037,10 @@ function write (target, targetFolder, context, cb_) {
             family)
         var depsTargetFolder = targetFolder
         var depsContext = { family: family
-                         , ancestors: context.ancestors
-                         , parent: target
-                         , explicit: false
-                         , wrap: wrap }
+                          , ancestors: context.ancestors
+                          , parent: target
+                          , explicit: false
+                          , wrap: wrap }
 
         var peerDeps = prepareForInstallMany(data, "peerDependencies", bundled,
             wrap, family)

@@ -101,7 +101,7 @@ void HandleScope::DeleteExtensions(Isolate* isolate) {
 }
 
 
-#ifdef ENABLE_EXTRA_CHECKS
+#ifdef ENABLE_HANDLE_ZAPPING
 void HandleScope::ZapRange(Object** start, Object** end) {
   ASSERT(end - start <= kHandleBlockSize);
   for (Object** p = start; p != end; p++) {
@@ -150,54 +150,6 @@ Handle<JSGlobalProxy> ReinitializeJSGlobalProxy(
 }
 
 
-void SetExpectedNofProperties(Handle<JSFunction> func, int nof) {
-  // If objects constructed from this function exist then changing
-  // 'estimated_nof_properties' is dangerous since the previous value might
-  // have been compiled into the fast construct stub. More over, the inobject
-  // slack tracking logic might have adjusted the previous value, so even
-  // passing the same value is risky.
-  if (func->shared()->live_objects_may_exist()) return;
-
-  func->shared()->set_expected_nof_properties(nof);
-  if (func->has_initial_map()) {
-    Handle<Map> new_initial_map =
-        func->GetIsolate()->factory()->CopyMap(
-            Handle<Map>(func->initial_map()));
-    new_initial_map->set_unused_property_fields(nof);
-    func->set_initial_map(*new_initial_map);
-  }
-}
-
-
-static int ExpectedNofPropertiesFromEstimate(int estimate) {
-  // If no properties are added in the constructor, they are more likely
-  // to be added later.
-  if (estimate == 0) estimate = 2;
-
-  // We do not shrink objects that go into a snapshot (yet), so we adjust
-  // the estimate conservatively.
-  if (Serializer::enabled()) return estimate + 2;
-
-  // Inobject slack tracking will reclaim redundant inobject space later,
-  // so we can afford to adjust the estimate generously.
-  if (FLAG_clever_optimizations) {
-    return estimate + 8;
-  } else {
-    return estimate + 3;
-  }
-}
-
-
-void SetExpectedNofPropertiesFromEstimate(Handle<SharedFunctionInfo> shared,
-                                          int estimate) {
-  // See the comment in SetExpectedNofProperties.
-  if (shared->live_objects_may_exist()) return;
-
-  shared->set_expected_nof_properties(
-      ExpectedNofPropertiesFromEstimate(estimate));
-}
-
-
 void FlattenString(Handle<String> string) {
   CALL_HEAP_FUNCTION_VOID(string->GetIsolate(), string->TryFlatten());
 }
@@ -205,17 +157,6 @@ void FlattenString(Handle<String> string) {
 
 Handle<String> FlattenGetString(Handle<String> string) {
   CALL_HEAP_FUNCTION(string->GetIsolate(), string->TryFlatten(), String);
-}
-
-
-Handle<Object> SetPrototype(Handle<JSFunction> function,
-                            Handle<Object> prototype) {
-  ASSERT(function->should_have_prototype());
-  CALL_HEAP_FUNCTION(function->GetIsolate(),
-                     Accessors::FunctionSetPrototype(*function,
-                                                     *prototype,
-                                                     NULL),
-                     Object);
 }
 
 
@@ -293,35 +234,6 @@ Handle<Object> LookupSingleCharacterStringFromCode(Isolate* isolate,
   CALL_HEAP_FUNCTION(
       isolate,
       isolate->heap()->LookupSingleCharacterStringFromCode(index), Object);
-}
-
-
-Handle<String> SubString(Handle<String> str,
-                         int start,
-                         int end,
-                         PretenureFlag pretenure) {
-  CALL_HEAP_FUNCTION(str->GetIsolate(),
-                     str->SubString(start, end, pretenure), String);
-}
-
-
-Handle<JSObject> Copy(Handle<JSObject> obj) {
-  Isolate* isolate = obj->GetIsolate();
-  CALL_HEAP_FUNCTION(isolate,
-                     isolate->heap()->CopyJSObject(*obj), JSObject);
-}
-
-
-Handle<JSObject> DeepCopy(Handle<JSObject> obj) {
-  Isolate* isolate = obj->GetIsolate();
-  CALL_HEAP_FUNCTION(isolate,
-                     obj->DeepCopy(isolate),
-                     JSObject);
-}
-
-
-Handle<Object> SetAccessor(Handle<JSObject> obj, Handle<AccessorInfo> info) {
-  CALL_HEAP_FUNCTION(obj->GetIsolate(), obj->DefineAccessor(*info), Object);
 }
 
 
@@ -543,8 +455,9 @@ v8::Handle<v8::Array> GetKeysForNamedInterceptor(Handle<JSReceiver> receiver,
       args(isolate, interceptor->data(), *receiver, *object);
   v8::Handle<v8::Array> result;
   if (!interceptor->enumerator()->IsUndefined()) {
-    v8::NamedPropertyEnumerator enum_fun =
-        v8::ToCData<v8::NamedPropertyEnumerator>(interceptor->enumerator());
+    v8::NamedPropertyEnumeratorCallback enum_fun =
+        v8::ToCData<v8::NamedPropertyEnumeratorCallback>(
+            interceptor->enumerator());
     LOG(isolate, ApiObjectAccess("interceptor-named-enum", *object));
     result = args.Call(enum_fun);
   }
@@ -565,8 +478,9 @@ v8::Handle<v8::Array> GetKeysForIndexedInterceptor(Handle<JSReceiver> receiver,
       args(isolate, interceptor->data(), *receiver, *object);
   v8::Handle<v8::Array> result;
   if (!interceptor->enumerator()->IsUndefined()) {
-    v8::IndexedPropertyEnumerator enum_fun =
-        v8::ToCData<v8::IndexedPropertyEnumerator>(interceptor->enumerator());
+    v8::IndexedPropertyEnumeratorCallback enum_fun =
+        v8::ToCData<v8::IndexedPropertyEnumeratorCallback>(
+            interceptor->enumerator());
     LOG(isolate, ApiObjectAccess("interceptor-indexed-enum", *object));
     result = args.Call(enum_fun);
 #if ENABLE_EXTRA_CHECKS
@@ -629,8 +543,12 @@ Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
     if (p->IsJSProxy()) {
       Handle<JSProxy> proxy(JSProxy::cast(*p), isolate);
       Handle<Object> args[] = { proxy };
-      Handle<Object> names = Execution::Call(
-          isolate->proxy_enumerate(), object, ARRAY_SIZE(args), args, threw);
+      Handle<Object> names = Execution::Call(isolate,
+                                             isolate->proxy_enumerate(),
+                                             object,
+                                             ARRAY_SIZE(args),
+                                             args,
+                                             threw);
       if (*threw) return content;
       content = AddKeysFromJSArray(content, Handle<JSArray>::cast(names));
       break;
@@ -912,6 +830,17 @@ DeferredHandles* DeferredHandleScope::Detach() {
   handles_detached_ = true;
 #endif
   return deferred;
+}
+
+
+void AddWeakObjectToCodeDependency(Heap* heap,
+                                   Handle<Object> object,
+                                   Handle<Code> code) {
+  heap->EnsureWeakObjectToCodeTable();
+  Handle<DependentCode> dep(heap->LookupWeakObjectToCodeDependency(*object));
+  dep = DependentCode::Insert(dep, DependentCode::kWeaklyEmbeddedGroup, code);
+  CALL_HEAP_FUNCTION_VOID(heap->isolate(),
+                          heap->AddWeakObjectToCodeDependency(*object, *dep));
 }
 
 

@@ -14,8 +14,10 @@
     # Enable V8's post-mortem debugging only on unix flavors.
     'conditions': [
       ['OS == "win"', {
+        'os_posix': 0,
         'v8_postmortem_support': 'false'
       }, {
+        'os_posix': 1,
         'v8_postmortem_support': 'true'
       }]
     ],
@@ -55,7 +57,6 @@
             'msvs_configuration_platform': 'x64',
           }],
           ['OS=="solaris"', {
-            'cflags': [ '-fno-omit-frame-pointer' ],
             # pull in V8's postmortem metadata
             'ldflags': [ '-Wl,-z,allextract' ]
           }, {
@@ -67,6 +68,9 @@
           }],
           ['clang == 0 and gcc_version <= 44', {
             'cflags': [ '-fno-tree-sink' ],  # Work around compiler bug.
+          }],
+          ['OS!="mac" and OS!="win"', {
+            'cflags': [ '-fno-omit-frame-pointer' ],
           }],
         ],
         'msvs_settings': {

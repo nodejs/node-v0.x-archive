@@ -62,12 +62,12 @@ class LCodeGen;
   V(CallNewArray)                               \
   V(CallRuntime)                                \
   V(CallStub)                                   \
-  V(CheckFunction)                              \
   V(CheckInstanceType)                          \
   V(CheckNonSmi)                                \
   V(CheckMaps)                                  \
   V(CheckMapValue)                              \
   V(CheckSmi)                                   \
+  V(CheckValue)                                 \
   V(ClampDToUint8)                              \
   V(ClampIToUint8)                              \
   V(ClampTToUint8)                              \
@@ -91,6 +91,7 @@ class LCodeGen;
   V(DoubleToI)                                  \
   V(DoubleToSmi)                                \
   V(Drop)                                       \
+  V(Dummy)                                      \
   V(DummyUse)                                   \
   V(ElementsKind)                               \
   V(ForInCacheArray)                            \
@@ -105,7 +106,6 @@ class LCodeGen;
   V(InnerAllocatedObject)                       \
   V(InstanceOf)                                 \
   V(InstanceOfKnownGlobal)                      \
-  V(InstanceSize)                               \
   V(InstructionGap)                             \
   V(Integer32ToDouble)                          \
   V(Integer32ToSmi)                             \
@@ -113,13 +113,13 @@ class LCodeGen;
   V(IsConstructCallAndBranch)                   \
   V(IsObjectAndBranch)                          \
   V(IsStringAndBranch)                          \
-  V(IsNumberAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
   V(Label)                                      \
   V(LazyBailout)                                \
   V(LoadContextSlot)                            \
   V(LoadExternalArrayPointer)                   \
+  V(LoadRoot)                                   \
   V(LoadFieldByIndex)                           \
   V(LoadFunctionPrototype)                      \
   V(LoadGlobalCell)                             \
@@ -162,6 +162,7 @@ class LCodeGen;
   V(SmiTag)                                     \
   V(SmiUntag)                                   \
   V(StackCheck)                                 \
+  V(StoreCodeEntry)                             \
   V(StoreContextSlot)                           \
   V(StoreGlobalCell)                            \
   V(StoreGlobalGeneric)                         \
@@ -184,18 +185,23 @@ class LCodeGen;
   V(Typeof)                                     \
   V(TypeofIsAndBranch)                          \
   V(Uint32ToDouble)                             \
+  V(Uint32ToSmi)                                \
   V(UnknownOSRValue)                            \
   V(ValueOf)                                    \
   V(WrapReceiver)
 
 
-#define DECLARE_CONCRETE_INSTRUCTION(type, mnemonic)              \
-  virtual Opcode opcode() const { return LInstruction::k##type; } \
-  virtual void CompileToNative(LCodeGen* generator);              \
-  virtual const char* Mnemonic() const { return mnemonic; }       \
-  static L##type* cast(LInstruction* instr) {                     \
-    ASSERT(instr->Is##type());                                    \
-    return reinterpret_cast<L##type*>(instr);                     \
+#define DECLARE_CONCRETE_INSTRUCTION(type, mnemonic)                        \
+  virtual Opcode opcode() const V8_FINAL V8_OVERRIDE {                      \
+    return LInstruction::k##type;                                           \
+  }                                                                         \
+  virtual void CompileToNative(LCodeGen* generator) V8_FINAL V8_OVERRIDE;   \
+  virtual const char* Mnemonic() const V8_FINAL V8_OVERRIDE {               \
+    return mnemonic;                                                        \
+  }                                                                         \
+  static L##type* cast(LInstruction* instr) {                               \
+    ASSERT(instr->Is##type());                                              \
+    return reinterpret_cast<L##type*>(instr);                               \
   }
 
 
@@ -205,16 +211,15 @@ class LCodeGen;
   }
 
 
-class LInstruction: public ZoneObject {
+class LInstruction : public ZoneObject {
  public:
   LInstruction()
       : environment_(NULL),
         hydrogen_value_(NULL),
         bit_field_(IsCallBits::encode(false)) {
-    set_position(RelocInfo::kNoPosition);
   }
 
-  virtual ~LInstruction() { }
+  virtual ~LInstruction() {}
 
   virtual void CompileToNative(LCodeGen* generator) = 0;
   virtual const char* Mnemonic() const = 0;
@@ -252,15 +257,6 @@ class LInstruction: public ZoneObject {
   LPointerMap* pointer_map() const { return pointer_map_.get(); }
   bool HasPointerMap() const { return pointer_map_.is_set(); }
 
-  // The 31 bits PositionBits is used to store the int position value. And the
-  // position value may be RelocInfo::kNoPosition (-1). The accessor always
-  // +1/-1 so that the encoded value of position in bit_field_ is always >= 0
-  // and can fit into the 31 bits PositionBits.
-  void set_position(int pos) {
-    bit_field_ = PositionBits::update(bit_field_, pos + 1);
-  }
-  int position() { return PositionBits::decode(bit_field_) - 1; }
-
   void set_hydrogen_value(HValue* value) { hydrogen_value_ = value; }
   HValue* hydrogen_value() const { return hydrogen_value_; }
 
@@ -272,7 +268,7 @@ class LInstruction: public ZoneObject {
   // Interface to the register allocator and iterators.
   bool ClobbersTemps() const { return IsCall(); }
   bool ClobbersRegisters() const { return IsCall(); }
-  bool ClobbersDoubleRegisters() const { return IsCall(); }
+  virtual bool ClobbersDoubleRegisters() const { return IsCall(); }
 
   // Interface to the register allocator and iterators.
   bool IsMarkedAsCall() const { return IsCall(); }
@@ -300,7 +296,6 @@ class LInstruction: public ZoneObject {
   virtual LOperand* TempAt(int i) = 0;
 
   class IsCallBits: public BitField<bool, 0, 1> {};
-  class PositionBits: public BitField<int, 1, 31> {};
 
   LEnvironment* environment_;
   SetOncePointer<LPointerMap> pointer_map_;
@@ -313,11 +308,13 @@ class LInstruction: public ZoneObject {
 // I = number of input operands.
 // T = number of temporary operands.
 template<int R, int I, int T>
-class LTemplateInstruction: public LInstruction {
+class LTemplateInstruction : public LInstruction {
  public:
   // Allow 0 or 1 output operands.
   STATIC_ASSERT(R == 0 || R == 1);
-  virtual bool HasResult() const { return R != 0 && result() != NULL; }
+  virtual bool HasResult() const V8_FINAL V8_OVERRIDE {
+    return R != 0 && result() != NULL;
+  }
   void set_result(LOperand* operand) { results_[0] = operand; }
   LOperand* result() const { return results_[0]; }
 
@@ -327,15 +324,15 @@ class LTemplateInstruction: public LInstruction {
   EmbeddedContainer<LOperand*, T> temps_;
 
  private:
-  virtual int InputCount() { return I; }
-  virtual LOperand* InputAt(int i) { return inputs_[i]; }
+  virtual int InputCount() V8_FINAL V8_OVERRIDE { return I; }
+  virtual LOperand* InputAt(int i) V8_FINAL V8_OVERRIDE { return inputs_[i]; }
 
-  virtual int TempCount() { return T; }
-  virtual LOperand* TempAt(int i) { return temps_[i]; }
+  virtual int TempCount() V8_FINAL V8_OVERRIDE { return T; }
+  virtual LOperand* TempAt(int i) V8_FINAL V8_OVERRIDE { return temps_[i]; }
 };
 
 
-class LGap: public LTemplateInstruction<0, 0, 0> {
+class LGap : public LTemplateInstruction<0, 0, 0> {
  public:
   explicit LGap(HBasicBlock* block)
       : block_(block) {
@@ -346,8 +343,8 @@ class LGap: public LTemplateInstruction<0, 0, 0> {
   }
 
   // Can't use the DECLARE-macro here because of sub-classes.
-  virtual bool IsGap() const { return true; }
-  virtual void PrintDataTo(StringStream* stream);
+  virtual bool IsGap() const V8_OVERRIDE { return true; }
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
   static LGap* cast(LInstruction* instr) {
     ASSERT(instr->IsGap());
     return reinterpret_cast<LGap*>(instr);
@@ -383,11 +380,11 @@ class LGap: public LTemplateInstruction<0, 0, 0> {
 };
 
 
-class LInstructionGap: public LGap {
+class LInstructionGap V8_FINAL : public LGap {
  public:
   explicit LInstructionGap(HBasicBlock* block) : LGap(block) { }
 
-  virtual bool HasInterestingComment(LCodeGen* gen) const {
+  virtual bool HasInterestingComment(LCodeGen* gen) const V8_OVERRIDE {
     return !IsRedundant();
   }
 
@@ -395,23 +392,23 @@ class LInstructionGap: public LGap {
 };
 
 
-class LGoto: public LTemplateInstruction<0, 0, 0> {
+class LGoto V8_FINAL : public LTemplateInstruction<0, 0, 0> {
  public:
-  explicit LGoto(int block_id) : block_id_(block_id) { }
+  explicit LGoto(HBasicBlock* block) : block_(block) { }
 
-  virtual bool HasInterestingComment(LCodeGen* gen) const;
+  virtual bool HasInterestingComment(LCodeGen* gen) const V8_OVERRIDE;
   DECLARE_CONCRETE_INSTRUCTION(Goto, "goto")
-  virtual void PrintDataTo(StringStream* stream);
-  virtual bool IsControl() const { return true; }
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
+  virtual bool IsControl() const V8_OVERRIDE { return true; }
 
-  int block_id() const { return block_id_; }
+  int block_id() const { return block_->block_id(); }
 
  private:
-  int block_id_;
+  HBasicBlock* block_;
 };
 
 
-class LLazyBailout: public LTemplateInstruction<0, 0, 0> {
+class LLazyBailout V8_FINAL : public LTemplateInstruction<0, 0, 0> {
  public:
   LLazyBailout() : gap_instructions_size_(0) { }
 
@@ -427,7 +424,14 @@ class LLazyBailout: public LTemplateInstruction<0, 0, 0> {
 };
 
 
-class LDummyUse: public LTemplateInstruction<1, 1, 0> {
+class LDummy V8_FINAL : public LTemplateInstruction<1, 0, 0> {
+ public:
+  explicit LDummy() { }
+  DECLARE_CONCRETE_INSTRUCTION(Dummy, "dummy")
+};
+
+
+class LDummyUse V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LDummyUse(LOperand* value) {
     inputs_[0] = value;
@@ -436,22 +440,24 @@ class LDummyUse: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LDeoptimize: public LTemplateInstruction<0, 0, 0> {
+class LDeoptimize V8_FINAL : public LTemplateInstruction<0, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(Deoptimize, "deoptimize")
   DECLARE_HYDROGEN_ACCESSOR(Deoptimize)
 };
 
 
-class LLabel: public LGap {
+class LLabel V8_FINAL : public LGap {
  public:
   explicit LLabel(HBasicBlock* block)
       : LGap(block), replacement_(NULL) { }
 
-  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
+  virtual bool HasInterestingComment(LCodeGen* gen) const V8_OVERRIDE {
+    return false;
+  }
   DECLARE_CONCRETE_INSTRUCTION(Label, "label")
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   int block_id() const { return block()->block_id(); }
   bool is_loop_header() const { return block()->IsLoopHeader(); }
@@ -467,15 +473,21 @@ class LLabel: public LGap {
 };
 
 
-class LParameter: public LTemplateInstruction<1, 0, 0> {
+class LParameter V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
   DECLARE_CONCRETE_INSTRUCTION(Parameter, "parameter")
 };
 
 
-class LCallStub: public LTemplateInstruction<1, 0, 0> {
+class LCallStub V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
+  explicit LCallStub(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(CallStub, "call-stub")
   DECLARE_HYDROGEN_ACCESSOR(CallStub)
 
@@ -485,19 +497,21 @@ class LCallStub: public LTemplateInstruction<1, 0, 0> {
 };
 
 
-class LUnknownOSRValue: public LTemplateInstruction<1, 0, 0> {
+class LUnknownOSRValue V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
-  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
+  virtual bool HasInterestingComment(LCodeGen* gen) const V8_OVERRIDE {
+    return false;
+  }
   DECLARE_CONCRETE_INSTRUCTION(UnknownOSRValue, "unknown-osr-value")
 };
 
 
 template<int I, int T>
-class LControlInstruction: public LTemplateInstruction<0, I, T> {
+class LControlInstruction : public LTemplateInstruction<0, I, T> {
  public:
   LControlInstruction() : false_label_(NULL), true_label_(NULL) { }
 
-  virtual bool IsControl() const { return true; }
+  virtual bool IsControl() const V8_FINAL V8_OVERRIDE { return true; }
 
   int SuccessorCount() { return hydrogen()->SuccessorCount(); }
   HBasicBlock* SuccessorAt(int i) { return hydrogen()->SuccessorAt(i); }
@@ -536,7 +550,7 @@ class LControlInstruction: public LTemplateInstruction<0, I, T> {
 };
 
 
-class LWrapReceiver: public LTemplateInstruction<1, 2, 0> {
+class LWrapReceiver V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LWrapReceiver(LOperand* receiver, LOperand* function) {
     inputs_[0] = receiver;
@@ -550,7 +564,7 @@ class LWrapReceiver: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LApplyArguments: public LTemplateInstruction<1, 4, 0> {
+class LApplyArguments V8_FINAL : public LTemplateInstruction<1, 4, 0> {
  public:
   LApplyArguments(LOperand* function,
                   LOperand* receiver,
@@ -571,7 +585,7 @@ class LApplyArguments: public LTemplateInstruction<1, 4, 0> {
 };
 
 
-class LAccessArgumentsAt: public LTemplateInstruction<1, 3, 0> {
+class LAccessArgumentsAt V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
   LAccessArgumentsAt(LOperand* arguments, LOperand* length, LOperand* index) {
     inputs_[0] = arguments;
@@ -585,11 +599,11 @@ class LAccessArgumentsAt: public LTemplateInstruction<1, 3, 0> {
   LOperand* length() { return inputs_[1]; }
   LOperand* index() { return inputs_[2]; }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LArgumentsLength: public LTemplateInstruction<1, 1, 0> {
+class LArgumentsLength V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LArgumentsLength(LOperand* elements) {
     inputs_[0] = elements;
@@ -601,14 +615,14 @@ class LArgumentsLength: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LArgumentsElements: public LTemplateInstruction<1, 0, 0> {
+class LArgumentsElements V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ArgumentsElements, "arguments-elements")
   DECLARE_HYDROGEN_ACCESSOR(ArgumentsElements)
 };
 
 
-class LModI: public LTemplateInstruction<1, 2, 2> {
+class LModI V8_FINAL : public LTemplateInstruction<1, 2, 2> {
  public:
   LModI(LOperand* left,
         LOperand* right,
@@ -630,7 +644,7 @@ class LModI: public LTemplateInstruction<1, 2, 2> {
 };
 
 
-class LDivI: public LTemplateInstruction<1, 2, 1> {
+class LDivI V8_FINAL : public LTemplateInstruction<1, 2, 1> {
  public:
   LDivI(LOperand* left, LOperand* right, LOperand* temp) {
     inputs_[0] = left;
@@ -647,7 +661,7 @@ class LDivI: public LTemplateInstruction<1, 2, 1> {
 };
 
 
-class LMathFloorOfDiv: public LTemplateInstruction<1, 2, 1> {
+class LMathFloorOfDiv V8_FINAL : public LTemplateInstruction<1, 2, 1> {
  public:
   LMathFloorOfDiv(LOperand* left,
                   LOperand* right,
@@ -666,17 +680,15 @@ class LMathFloorOfDiv: public LTemplateInstruction<1, 2, 1> {
 };
 
 
-class LMulI: public LTemplateInstruction<1, 2, 1> {
+class LMulI V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  LMulI(LOperand* left, LOperand* right, LOperand* temp) {
+  LMulI(LOperand* left, LOperand* right) {
     inputs_[0] = left;
     inputs_[1] = right;
-    temps_[0] = temp;
   }
 
   LOperand* left() { return inputs_[0]; }
   LOperand* right() { return inputs_[1]; }
-  LOperand* temp() { return temps_[0]; }
 
   DECLARE_CONCRETE_INSTRUCTION(MulI, "mul-i")
   DECLARE_HYDROGEN_ACCESSOR(Mul)
@@ -684,7 +696,7 @@ class LMulI: public LTemplateInstruction<1, 2, 1> {
 
 
 // Instruction for computing multiplier * multiplicand + addend.
-class LMultiplyAddD: public LTemplateInstruction<1, 3, 0> {
+class LMultiplyAddD V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
   LMultiplyAddD(LOperand* addend, LOperand* multiplier,
                 LOperand* multiplicand) {
@@ -702,7 +714,7 @@ class LMultiplyAddD: public LTemplateInstruction<1, 3, 0> {
 
 
 // Instruction for computing minuend - multiplier * multiplicand.
-class LMultiplySubD: public LTemplateInstruction<1, 3, 0> {
+class LMultiplySubD V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
   LMultiplySubD(LOperand* minuend, LOperand* multiplier,
                 LOperand* multiplicand) {
@@ -719,13 +731,13 @@ class LMultiplySubD: public LTemplateInstruction<1, 3, 0> {
 };
 
 
-class LDebugBreak: public LTemplateInstruction<0, 0, 0> {
+class LDebugBreak V8_FINAL : public LTemplateInstruction<0, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(DebugBreak, "break")
 };
 
 
-class LCompareNumericAndBranch: public LControlInstruction<2, 0> {
+class LCompareNumericAndBranch V8_FINAL : public LControlInstruction<2, 0> {
  public:
   LCompareNumericAndBranch(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -744,11 +756,11 @@ class LCompareNumericAndBranch: public LControlInstruction<2, 0> {
     return hydrogen()->representation().IsDouble();
   }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LMathFloor: public LTemplateInstruction<1, 1, 0> {
+class LMathFloor V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMathFloor(LOperand* value) {
     inputs_[0] = value;
@@ -761,7 +773,7 @@ class LMathFloor: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathRound: public LTemplateInstruction<1, 1, 1> {
+class LMathRound V8_FINAL : public LTemplateInstruction<1, 1, 1> {
  public:
   LMathRound(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -776,12 +788,14 @@ class LMathRound: public LTemplateInstruction<1, 1, 1> {
 };
 
 
-class LMathAbs: public LTemplateInstruction<1, 1, 0> {
+class LMathAbs V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LMathAbs(LOperand* value) {
+  LMathAbs(LOperand* context, LOperand* value) {
+    inputs_[1] = context;
     inputs_[0] = value;
   }
 
+  LOperand* context() { return inputs_[1]; }
   LOperand* value() { return inputs_[0]; }
 
   DECLARE_CONCRETE_INSTRUCTION(MathAbs, "math-abs")
@@ -789,7 +803,7 @@ class LMathAbs: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathLog: public LTemplateInstruction<1, 1, 0> {
+class LMathLog V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMathLog(LOperand* value) {
     inputs_[0] = value;
@@ -801,7 +815,7 @@ class LMathLog: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathSin: public LTemplateInstruction<1, 1, 0> {
+class LMathSin V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMathSin(LOperand* value) {
     inputs_[0] = value;
@@ -813,7 +827,7 @@ class LMathSin: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathCos: public LTemplateInstruction<1, 1, 0> {
+class LMathCos V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMathCos(LOperand* value) {
     inputs_[0] = value;
@@ -825,7 +839,7 @@ class LMathCos: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathTan: public LTemplateInstruction<1, 1, 0> {
+class LMathTan V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMathTan(LOperand* value) {
     inputs_[0] = value;
@@ -837,7 +851,7 @@ class LMathTan: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathExp: public LTemplateInstruction<1, 1, 3> {
+class LMathExp V8_FINAL : public LTemplateInstruction<1, 1, 3> {
  public:
   LMathExp(LOperand* value,
            LOperand* double_temp,
@@ -859,7 +873,7 @@ class LMathExp: public LTemplateInstruction<1, 1, 3> {
 };
 
 
-class LMathSqrt: public LTemplateInstruction<1, 1, 0> {
+class LMathSqrt V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMathSqrt(LOperand* value) {
     inputs_[0] = value;
@@ -871,7 +885,7 @@ class LMathSqrt: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LMathPowHalf: public LTemplateInstruction<1, 1, 1> {
+class LMathPowHalf V8_FINAL : public LTemplateInstruction<1, 1, 1> {
  public:
   LMathPowHalf(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -885,7 +899,7 @@ class LMathPowHalf: public LTemplateInstruction<1, 1, 1> {
 };
 
 
-class LCmpObjectEqAndBranch: public LControlInstruction<2, 0> {
+class LCmpObjectEqAndBranch V8_FINAL : public LControlInstruction<2, 0> {
  public:
   LCmpObjectEqAndBranch(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -900,7 +914,7 @@ class LCmpObjectEqAndBranch: public LControlInstruction<2, 0> {
 };
 
 
-class LCmpHoleAndBranch: public LControlInstruction<1, 0> {
+class LCmpHoleAndBranch V8_FINAL : public LControlInstruction<1, 0> {
  public:
   explicit LCmpHoleAndBranch(LOperand* object) {
     inputs_[0] = object;
@@ -913,7 +927,7 @@ class LCmpHoleAndBranch: public LControlInstruction<1, 0> {
 };
 
 
-class LIsObjectAndBranch: public LControlInstruction<1, 1> {
+class LIsObjectAndBranch V8_FINAL : public LControlInstruction<1, 1> {
  public:
   LIsObjectAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -926,24 +940,11 @@ class LIsObjectAndBranch: public LControlInstruction<1, 1> {
   DECLARE_CONCRETE_INSTRUCTION(IsObjectAndBranch, "is-object-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(IsObjectAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LIsNumberAndBranch: public LControlInstruction<1, 0> {
- public:
-  explicit LIsNumberAndBranch(LOperand* value) {
-    inputs_[0] = value;
-  }
-
-  LOperand* value() { return inputs_[0]; }
-
-  DECLARE_CONCRETE_INSTRUCTION(IsNumberAndBranch, "is-number-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(IsNumberAndBranch)
-};
-
-
-class LIsStringAndBranch: public LControlInstruction<1, 1> {
+class LIsStringAndBranch V8_FINAL : public LControlInstruction<1, 1> {
  public:
   LIsStringAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -956,11 +957,11 @@ class LIsStringAndBranch: public LControlInstruction<1, 1> {
   DECLARE_CONCRETE_INSTRUCTION(IsStringAndBranch, "is-string-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(IsStringAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LIsSmiAndBranch: public LControlInstruction<1, 0> {
+class LIsSmiAndBranch V8_FINAL : public LControlInstruction<1, 0> {
  public:
   explicit LIsSmiAndBranch(LOperand* value) {
     inputs_[0] = value;
@@ -971,11 +972,11 @@ class LIsSmiAndBranch: public LControlInstruction<1, 0> {
   DECLARE_CONCRETE_INSTRUCTION(IsSmiAndBranch, "is-smi-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(IsSmiAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LIsUndetectableAndBranch: public LControlInstruction<1, 1> {
+class LIsUndetectableAndBranch V8_FINAL : public LControlInstruction<1, 1> {
  public:
   explicit LIsUndetectableAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -989,19 +990,21 @@ class LIsUndetectableAndBranch: public LControlInstruction<1, 1> {
                                "is-undetectable-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(IsUndetectableAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LStringCompareAndBranch: public LControlInstruction<2, 0> {
+class LStringCompareAndBranch V8_FINAL : public LControlInstruction<3, 0> {
  public:
-  LStringCompareAndBranch(LOperand* left, LOperand* right) {
-    inputs_[0] = left;
-    inputs_[1] = right;
+  LStringCompareAndBranch(LOperand* context, LOperand* left, LOperand* right) {
+    inputs_[0] = context;
+    inputs_[1] = left;
+    inputs_[2] = right;
   }
 
-  LOperand* left() { return inputs_[0]; }
-  LOperand* right() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* left() { return inputs_[1]; }
+  LOperand* right() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StringCompareAndBranch,
                                "string-compare-and-branch")
@@ -1009,11 +1012,11 @@ class LStringCompareAndBranch: public LControlInstruction<2, 0> {
 
   Token::Value op() const { return hydrogen()->token(); }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LHasInstanceTypeAndBranch: public LControlInstruction<1, 0> {
+class LHasInstanceTypeAndBranch V8_FINAL : public LControlInstruction<1, 0> {
  public:
   explicit LHasInstanceTypeAndBranch(LOperand* value) {
     inputs_[0] = value;
@@ -1025,11 +1028,11 @@ class LHasInstanceTypeAndBranch: public LControlInstruction<1, 0> {
                                "has-instance-type-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(HasInstanceTypeAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LGetCachedArrayIndex: public LTemplateInstruction<1, 1, 0> {
+class LGetCachedArrayIndex V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LGetCachedArrayIndex(LOperand* value) {
     inputs_[0] = value;
@@ -1042,7 +1045,8 @@ class LGetCachedArrayIndex: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LHasCachedArrayIndexAndBranch: public LControlInstruction<1, 0> {
+class LHasCachedArrayIndexAndBranch V8_FINAL
+    : public LControlInstruction<1, 0> {
  public:
   explicit LHasCachedArrayIndexAndBranch(LOperand* value) {
     inputs_[0] = value;
@@ -1054,11 +1058,11 @@ class LHasCachedArrayIndexAndBranch: public LControlInstruction<1, 0> {
                                "has-cached-array-index-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(HasCachedArrayIndexAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LClassOfTestAndBranch: public LControlInstruction<1, 1> {
+class LClassOfTestAndBranch V8_FINAL : public LControlInstruction<1, 1> {
  public:
   LClassOfTestAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -1072,19 +1076,21 @@ class LClassOfTestAndBranch: public LControlInstruction<1, 1> {
                                "class-of-test-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(ClassOfTestAndBranch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LCmpT: public LTemplateInstruction<1, 2, 0> {
+class LCmpT V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
-  LCmpT(LOperand* left, LOperand* right) {
-    inputs_[0] = left;
-    inputs_[1] = right;
+  LCmpT(LOperand* context, LOperand* left, LOperand* right) {
+    inputs_[0] = context;
+    inputs_[1] = left;
+    inputs_[2] = right;
   }
 
-  LOperand* left() { return inputs_[0]; }
-  LOperand* right() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* left() { return inputs_[1]; }
+  LOperand* right() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(CmpT, "cmp-t")
   DECLARE_HYDROGEN_ACCESSOR(CompareGeneric)
@@ -1093,28 +1099,32 @@ class LCmpT: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LInstanceOf: public LTemplateInstruction<1, 2, 0> {
+class LInstanceOf V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
-  LInstanceOf(LOperand* left, LOperand* right) {
-    inputs_[0] = left;
-    inputs_[1] = right;
+  LInstanceOf(LOperand* context, LOperand* left, LOperand* right) {
+    inputs_[0] = context;
+    inputs_[1] = left;
+    inputs_[2] = right;
   }
 
-  LOperand* left() { return inputs_[0]; }
-  LOperand* right() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* left() { return inputs_[1]; }
+  LOperand* right() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(InstanceOf, "instance-of")
 };
 
 
-class LInstanceOfKnownGlobal: public LTemplateInstruction<1, 1, 1> {
+class LInstanceOfKnownGlobal V8_FINAL : public LTemplateInstruction<1, 2, 1> {
  public:
-  LInstanceOfKnownGlobal(LOperand* value, LOperand* temp) {
-    inputs_[0] = value;
+  LInstanceOfKnownGlobal(LOperand* context, LOperand* value, LOperand* temp) {
+    inputs_[0] = context;
+    inputs_[1] = value;
     temps_[0] = temp;
   }
 
-  LOperand* value() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* value() { return inputs_[1]; }
   LOperand* temp() { return temps_[0]; }
 
   DECLARE_CONCRETE_INSTRUCTION(InstanceOfKnownGlobal,
@@ -1125,7 +1135,8 @@ class LInstanceOfKnownGlobal: public LTemplateInstruction<1, 1, 1> {
   LEnvironment* GetDeferredLazyDeoptimizationEnvironment() {
     return lazy_deopt_env_;
   }
-  virtual void SetDeferredLazyDeoptimizationEnvironment(LEnvironment* env) {
+  virtual void SetDeferredLazyDeoptimizationEnvironment(
+      LEnvironment* env) V8_OVERRIDE {
     lazy_deopt_env_ = env;
   }
 
@@ -1134,20 +1145,7 @@ class LInstanceOfKnownGlobal: public LTemplateInstruction<1, 1, 1> {
 };
 
 
-class LInstanceSize: public LTemplateInstruction<1, 1, 0> {
- public:
-  explicit LInstanceSize(LOperand* object) {
-    inputs_[0] = object;
-  }
-
-  LOperand* object() { return inputs_[0]; }
-
-  DECLARE_CONCRETE_INSTRUCTION(InstanceSize, "instance-size")
-  DECLARE_HYDROGEN_ACCESSOR(InstanceSize)
-};
-
-
-class LBoundsCheck: public LTemplateInstruction<0, 2, 0> {
+class LBoundsCheck V8_FINAL : public LTemplateInstruction<0, 2, 0> {
  public:
   LBoundsCheck(LOperand* index, LOperand* length) {
     inputs_[0] = index;
@@ -1162,7 +1160,7 @@ class LBoundsCheck: public LTemplateInstruction<0, 2, 0> {
 };
 
 
-class LBitI: public LTemplateInstruction<1, 2, 0> {
+class LBitI V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LBitI(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -1179,7 +1177,7 @@ class LBitI: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LShiftI: public LTemplateInstruction<1, 2, 0> {
+class LShiftI V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LShiftI(Token::Value op, LOperand* left, LOperand* right, bool can_deopt)
       : op_(op), can_deopt_(can_deopt) {
@@ -1200,7 +1198,7 @@ class LShiftI: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LSubI: public LTemplateInstruction<1, 2, 0> {
+class LSubI V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LSubI(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -1215,7 +1213,7 @@ class LSubI: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LRSubI: public LTemplateInstruction<1, 2, 0> {
+class LRSubI V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LRSubI(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -1230,7 +1228,7 @@ class LRSubI: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LConstantI: public LTemplateInstruction<1, 0, 0> {
+class LConstantI V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ConstantI, "constant-i")
   DECLARE_HYDROGEN_ACCESSOR(Constant)
@@ -1239,7 +1237,7 @@ class LConstantI: public LTemplateInstruction<1, 0, 0> {
 };
 
 
-class LConstantS: public LTemplateInstruction<1, 0, 0> {
+class LConstantS V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ConstantS, "constant-s")
   DECLARE_HYDROGEN_ACCESSOR(Constant)
@@ -1248,7 +1246,7 @@ class LConstantS: public LTemplateInstruction<1, 0, 0> {
 };
 
 
-class LConstantD: public LTemplateInstruction<1, 0, 0> {
+class LConstantD V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ConstantD, "constant-d")
   DECLARE_HYDROGEN_ACCESSOR(Constant)
@@ -1257,7 +1255,7 @@ class LConstantD: public LTemplateInstruction<1, 0, 0> {
 };
 
 
-class LConstantE: public LTemplateInstruction<1, 0, 0> {
+class LConstantE V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ConstantE, "constant-e")
   DECLARE_HYDROGEN_ACCESSOR(Constant)
@@ -1268,16 +1266,18 @@ class LConstantE: public LTemplateInstruction<1, 0, 0> {
 };
 
 
-class LConstantT: public LTemplateInstruction<1, 0, 0> {
+class LConstantT V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ConstantT, "constant-t")
   DECLARE_HYDROGEN_ACCESSOR(Constant)
 
-  Handle<Object> value() const { return hydrogen()->handle(); }
+  Handle<Object> value(Isolate* isolate) const {
+    return hydrogen()->handle(isolate);
+  }
 };
 
 
-class LBranch: public LControlInstruction<1, 0> {
+class LBranch V8_FINAL : public LControlInstruction<1, 0> {
  public:
   explicit LBranch(LOperand* value) {
     inputs_[0] = value;
@@ -1288,11 +1288,11 @@ class LBranch: public LControlInstruction<1, 0> {
   DECLARE_CONCRETE_INSTRUCTION(Branch, "branch")
   DECLARE_HYDROGEN_ACCESSOR(Branch)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LCmpMapAndBranch: public LControlInstruction<1, 1> {
+class LCmpMapAndBranch V8_FINAL : public LControlInstruction<1, 1> {
  public:
   LCmpMapAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -1305,11 +1305,11 @@ class LCmpMapAndBranch: public LControlInstruction<1, 1> {
   DECLARE_CONCRETE_INSTRUCTION(CmpMapAndBranch, "cmp-map-and-branch")
   DECLARE_HYDROGEN_ACCESSOR(CompareMap)
 
-  Handle<Map> map() const { return hydrogen()->map(); }
+  Handle<Map> map() const { return hydrogen()->map().handle(); }
 };
 
 
-class LMapEnumLength: public LTemplateInstruction<1, 1, 0> {
+class LMapEnumLength V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LMapEnumLength(LOperand* value) {
     inputs_[0] = value;
@@ -1321,7 +1321,7 @@ class LMapEnumLength: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LElementsKind: public LTemplateInstruction<1, 1, 0> {
+class LElementsKind V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LElementsKind(LOperand* value) {
     inputs_[0] = value;
@@ -1334,7 +1334,7 @@ class LElementsKind: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LValueOf: public LTemplateInstruction<1, 1, 1> {
+class LValueOf V8_FINAL : public LTemplateInstruction<1, 1, 1> {
  public:
   LValueOf(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -1349,7 +1349,7 @@ class LValueOf: public LTemplateInstruction<1, 1, 1> {
 };
 
 
-class LDateField: public LTemplateInstruction<1, 1, 1> {
+class LDateField V8_FINAL : public LTemplateInstruction<1, 1, 1> {
  public:
   LDateField(LOperand* date, LOperand* temp, Smi* index) : index_(index) {
     inputs_[0] = date;
@@ -1360,15 +1360,15 @@ class LDateField: public LTemplateInstruction<1, 1, 1> {
   LOperand* temp() { return temps_[0]; }
   Smi* index() const { return index_; }
 
-  DECLARE_CONCRETE_INSTRUCTION(ValueOf, "date-field")
-  DECLARE_HYDROGEN_ACCESSOR(ValueOf)
+  DECLARE_CONCRETE_INSTRUCTION(DateField, "date-field")
+  DECLARE_HYDROGEN_ACCESSOR(DateField)
 
  private:
   Smi* index_;
 };
 
 
-class LSeqStringSetChar: public LTemplateInstruction<1, 3, 0> {
+class LSeqStringSetChar V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
   LSeqStringSetChar(String::Encoding encoding,
                     LOperand* string,
@@ -1392,19 +1392,21 @@ class LSeqStringSetChar: public LTemplateInstruction<1, 3, 0> {
 };
 
 
-class LThrow: public LTemplateInstruction<0, 1, 0> {
+class LThrow V8_FINAL : public LTemplateInstruction<0, 2, 0> {
  public:
-  explicit LThrow(LOperand* value) {
-    inputs_[0] = value;
+  LThrow(LOperand* context, LOperand* value) {
+    inputs_[0] = context;
+    inputs_[1] = value;
   }
 
-  LOperand* value() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* value() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(Throw, "throw")
 };
 
 
-class LAddI: public LTemplateInstruction<1, 2, 0> {
+class LAddI V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LAddI(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -1419,7 +1421,7 @@ class LAddI: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LMathMinMax: public LTemplateInstruction<1, 2, 0> {
+class LMathMinMax V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LMathMinMax(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -1434,7 +1436,7 @@ class LMathMinMax: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LPower: public LTemplateInstruction<1, 2, 0> {
+class LPower V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LPower(LOperand* left, LOperand* right) {
     inputs_[0] = left;
@@ -1449,20 +1451,29 @@ class LPower: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LRandom: public LTemplateInstruction<1, 1, 0> {
+class LRandom V8_FINAL : public LTemplateInstruction<1, 1, 3> {
  public:
-  explicit LRandom(LOperand* global_object) {
+  LRandom(LOperand* global_object,
+          LOperand* scratch,
+          LOperand* scratch2,
+          LOperand* scratch3) {
     inputs_[0] = global_object;
+    temps_[0] = scratch;
+    temps_[1] = scratch2;
+    temps_[2] = scratch3;
   }
 
-  LOperand* global_object() { return inputs_[0]; }
+  LOperand* global_object() const { return inputs_[0]; }
+  LOperand* scratch() const { return temps_[0]; }
+  LOperand* scratch2() const { return temps_[1]; }
+  LOperand* scratch3() const { return temps_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(Random, "random")
   DECLARE_HYDROGEN_ACCESSOR(Random)
 };
 
 
-class LArithmeticD: public LTemplateInstruction<1, 2, 0> {
+class LArithmeticD V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LArithmeticD(Token::Value op, LOperand* left, LOperand* right)
       : op_(op) {
@@ -1474,41 +1485,51 @@ class LArithmeticD: public LTemplateInstruction<1, 2, 0> {
   LOperand* left() { return inputs_[0]; }
   LOperand* right() { return inputs_[1]; }
 
-  virtual Opcode opcode() const { return LInstruction::kArithmeticD; }
-  virtual void CompileToNative(LCodeGen* generator);
-  virtual const char* Mnemonic() const;
+  virtual Opcode opcode() const V8_OVERRIDE {
+    return LInstruction::kArithmeticD;
+  }
+  virtual void CompileToNative(LCodeGen* generator) V8_OVERRIDE;
+  virtual const char* Mnemonic() const V8_OVERRIDE;
 
  private:
   Token::Value op_;
 };
 
 
-class LArithmeticT: public LTemplateInstruction<1, 2, 0> {
+class LArithmeticT V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
-  LArithmeticT(Token::Value op, LOperand* left, LOperand* right)
+  LArithmeticT(Token::Value op,
+               LOperand* context,
+               LOperand* left,
+               LOperand* right)
       : op_(op) {
-    inputs_[0] = left;
-    inputs_[1] = right;
+    inputs_[0] = context;
+    inputs_[1] = left;
+    inputs_[2] = right;
   }
 
-  LOperand* left() { return inputs_[0]; }
-  LOperand* right() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* left() { return inputs_[1]; }
+  LOperand* right() { return inputs_[2]; }
   Token::Value op() const { return op_; }
 
-  virtual Opcode opcode() const { return LInstruction::kArithmeticT; }
-  virtual void CompileToNative(LCodeGen* generator);
-  virtual const char* Mnemonic() const;
+  virtual Opcode opcode() const V8_OVERRIDE {
+    return LInstruction::kArithmeticT;
+  }
+  virtual void CompileToNative(LCodeGen* generator) V8_OVERRIDE;
+  virtual const char* Mnemonic() const V8_OVERRIDE;
 
  private:
   Token::Value op_;
 };
 
 
-class LReturn: public LTemplateInstruction<0, 2, 0> {
+class LReturn V8_FINAL : public LTemplateInstruction<0, 3, 0> {
  public:
-  explicit LReturn(LOperand* value, LOperand* parameter_count) {
+  LReturn(LOperand* value, LOperand* context, LOperand* parameter_count) {
     inputs_[0] = value;
-    inputs_[1] = parameter_count;
+    inputs_[1] = context;
+    inputs_[2] = parameter_count;
   }
 
   LOperand* value() { return inputs_[0]; }
@@ -1520,13 +1541,13 @@ class LReturn: public LTemplateInstruction<0, 2, 0> {
     ASSERT(has_constant_parameter_count());
     return LConstantOperand::cast(parameter_count());
   }
-  LOperand* parameter_count() { return inputs_[1]; }
+  LOperand* parameter_count() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(Return, "return")
 };
 
 
-class LLoadNamedField: public LTemplateInstruction<1, 1, 0> {
+class LLoadNamedField V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LLoadNamedField(LOperand* object) {
     inputs_[0] = object;
@@ -1539,13 +1560,15 @@ class LLoadNamedField: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LLoadNamedGeneric: public LTemplateInstruction<1, 1, 0> {
+class LLoadNamedGeneric V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LLoadNamedGeneric(LOperand* object) {
-    inputs_[0] = object;
+  LLoadNamedGeneric(LOperand* context, LOperand* object) {
+    inputs_[0] = context;
+    inputs_[1] = object;
   }
 
-  LOperand* object() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* object() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(LoadNamedGeneric, "load-named-generic")
   DECLARE_HYDROGEN_ACCESSOR(LoadNamedGeneric)
@@ -1554,7 +1577,7 @@ class LLoadNamedGeneric: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LLoadFunctionPrototype: public LTemplateInstruction<1, 1, 0> {
+class LLoadFunctionPrototype V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LLoadFunctionPrototype(LOperand* function) {
     inputs_[0] = function;
@@ -1567,7 +1590,17 @@ class LLoadFunctionPrototype: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LLoadExternalArrayPointer: public LTemplateInstruction<1, 1, 0> {
+class LLoadRoot V8_FINAL : public LTemplateInstruction<1, 0, 0> {
+ public:
+  DECLARE_CONCRETE_INSTRUCTION(LoadRoot, "load-root")
+  DECLARE_HYDROGEN_ACCESSOR(LoadRoot)
+
+  Heap::RootListIndex index() const { return hydrogen()->index(); }
+};
+
+
+class LLoadExternalArrayPointer V8_FINAL
+    : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LLoadExternalArrayPointer(LOperand* object) {
     inputs_[0] = object;
@@ -1580,7 +1613,7 @@ class LLoadExternalArrayPointer: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LLoadKeyed: public LTemplateInstruction<1, 2, 0> {
+class LLoadKeyed V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LLoadKeyed(LOperand* elements, LOperand* key) {
     inputs_[0] = elements;
@@ -1599,39 +1632,43 @@ class LLoadKeyed: public LTemplateInstruction<1, 2, 0> {
   DECLARE_CONCRETE_INSTRUCTION(LoadKeyed, "load-keyed")
   DECLARE_HYDROGEN_ACCESSOR(LoadKeyed)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
   uint32_t additional_index() const { return hydrogen()->index_offset(); }
 };
 
 
-class LLoadKeyedGeneric: public LTemplateInstruction<1, 2, 0> {
+class LLoadKeyedGeneric V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
-  LLoadKeyedGeneric(LOperand* object, LOperand* key) {
-    inputs_[0] = object;
-    inputs_[1] = key;
+  LLoadKeyedGeneric(LOperand* context, LOperand* object, LOperand* key) {
+    inputs_[0] = context;
+    inputs_[1] = object;
+    inputs_[2] = key;
   }
 
-  LOperand* object() { return inputs_[0]; }
-  LOperand* key() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* object() { return inputs_[1]; }
+  LOperand* key() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(LoadKeyedGeneric, "load-keyed-generic")
 };
 
 
-class LLoadGlobalCell: public LTemplateInstruction<1, 0, 0> {
+class LLoadGlobalCell V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(LoadGlobalCell, "load-global-cell")
   DECLARE_HYDROGEN_ACCESSOR(LoadGlobalCell)
 };
 
 
-class LLoadGlobalGeneric: public LTemplateInstruction<1, 1, 0> {
+class LLoadGlobalGeneric V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LLoadGlobalGeneric(LOperand* global_object) {
-    inputs_[0] = global_object;
+  LLoadGlobalGeneric(LOperand* context, LOperand* global_object) {
+    inputs_[0] = context;
+    inputs_[1] = global_object;
   }
 
-  LOperand* global_object() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* global_object() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(LoadGlobalGeneric, "load-global-generic")
   DECLARE_HYDROGEN_ACCESSOR(LoadGlobalGeneric)
@@ -1641,7 +1678,7 @@ class LLoadGlobalGeneric: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LStoreGlobalCell: public LTemplateInstruction<0, 1, 1> {
+class LStoreGlobalCell V8_FINAL : public LTemplateInstruction<0, 1, 1> {
  public:
   LStoreGlobalCell(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
@@ -1656,16 +1693,19 @@ class LStoreGlobalCell: public LTemplateInstruction<0, 1, 1> {
 };
 
 
-class LStoreGlobalGeneric: public LTemplateInstruction<0, 2, 0> {
+class LStoreGlobalGeneric V8_FINAL : public LTemplateInstruction<0, 3, 0> {
  public:
-  explicit LStoreGlobalGeneric(LOperand* global_object,
-                               LOperand* value) {
-    inputs_[0] = global_object;
-    inputs_[1] = value;
+  LStoreGlobalGeneric(LOperand* context,
+                      LOperand* global_object,
+                      LOperand* value) {
+    inputs_[0] = context;
+    inputs_[1] = global_object;
+    inputs_[2] = value;
   }
 
-  LOperand* global_object() { return inputs_[0]; }
-  LOperand* value() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* global_object() { return inputs_[1]; }
+  LOperand* value() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreGlobalGeneric, "store-global-generic")
   DECLARE_HYDROGEN_ACCESSOR(StoreGlobalGeneric)
@@ -1675,7 +1715,7 @@ class LStoreGlobalGeneric: public LTemplateInstruction<0, 2, 0> {
 };
 
 
-class LLoadContextSlot: public LTemplateInstruction<1, 1, 0> {
+class LLoadContextSlot V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LLoadContextSlot(LOperand* context) {
     inputs_[0] = context;
@@ -1688,11 +1728,11 @@ class LLoadContextSlot: public LTemplateInstruction<1, 1, 0> {
 
   int slot_index() { return hydrogen()->slot_index(); }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LStoreContextSlot: public LTemplateInstruction<0, 2, 0> {
+class LStoreContextSlot V8_FINAL : public LTemplateInstruction<0, 2, 0> {
  public:
   LStoreContextSlot(LOperand* context, LOperand* value) {
     inputs_[0] = context;
@@ -1707,11 +1747,11 @@ class LStoreContextSlot: public LTemplateInstruction<0, 2, 0> {
 
   int slot_index() { return hydrogen()->slot_index(); }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LPushArgument: public LTemplateInstruction<0, 1, 0> {
+class LPushArgument V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
   explicit LPushArgument(LOperand* value) {
     inputs_[0] = value;
@@ -1723,7 +1763,7 @@ class LPushArgument: public LTemplateInstruction<0, 1, 0> {
 };
 
 
-class LDrop: public LTemplateInstruction<0, 0, 0> {
+class LDrop V8_FINAL : public LTemplateInstruction<0, 0, 0> {
  public:
   explicit LDrop(int count) : count_(count) { }
 
@@ -1736,7 +1776,24 @@ class LDrop: public LTemplateInstruction<0, 0, 0> {
 };
 
 
-class LInnerAllocatedObject: public LTemplateInstruction<1, 1, 0> {
+class LStoreCodeEntry V8_FINAL: public LTemplateInstruction<0, 1, 1> {
+ public:
+  LStoreCodeEntry(LOperand* function, LOperand* code_object) {
+    inputs_[0] = function;
+    temps_[0] = code_object;
+  }
+
+  LOperand* function() { return inputs_[0]; }
+  LOperand* code_object() { return temps_[0]; }
+
+  virtual void PrintDataTo(StringStream* stream);
+
+  DECLARE_CONCRETE_INSTRUCTION(StoreCodeEntry, "store-code-entry")
+  DECLARE_HYDROGEN_ACCESSOR(StoreCodeEntry)
+};
+
+
+class LInnerAllocatedObject V8_FINAL: public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LInnerAllocatedObject(LOperand* base_object) {
     inputs_[0] = base_object;
@@ -1745,28 +1802,28 @@ class LInnerAllocatedObject: public LTemplateInstruction<1, 1, 0> {
   LOperand* base_object() { return inputs_[0]; }
   int offset() { return hydrogen()->offset(); }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   DECLARE_CONCRETE_INSTRUCTION(InnerAllocatedObject, "sub-allocated-object")
   DECLARE_HYDROGEN_ACCESSOR(InnerAllocatedObject)
 };
 
 
-class LThisFunction: public LTemplateInstruction<1, 0, 0> {
+class LThisFunction V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ThisFunction, "this-function")
   DECLARE_HYDROGEN_ACCESSOR(ThisFunction)
 };
 
 
-class LContext: public LTemplateInstruction<1, 0, 0> {
+class LContext V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(Context, "context")
   DECLARE_HYDROGEN_ACCESSOR(Context)
 };
 
 
-class LOuterContext: public LTemplateInstruction<1, 1, 0> {
+class LOuterContext V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LOuterContext(LOperand* context) {
     inputs_[0] = context;
@@ -1778,14 +1835,20 @@ class LOuterContext: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LDeclareGlobals: public LTemplateInstruction<0, 0, 0> {
+class LDeclareGlobals V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
+  explicit LDeclareGlobals(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(DeclareGlobals, "declare-globals")
   DECLARE_HYDROGEN_ACCESSOR(DeclareGlobals)
 };
 
 
-class LGlobalObject: public LTemplateInstruction<1, 1, 0> {
+class LGlobalObject V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LGlobalObject(LOperand* context) {
     inputs_[0] = context;
@@ -1797,7 +1860,7 @@ class LGlobalObject: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LGlobalReceiver: public LTemplateInstruction<1, 1, 0> {
+class LGlobalReceiver V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LGlobalReceiver(LOperand* global_object) {
     inputs_[0] = global_object;
@@ -1809,72 +1872,84 @@ class LGlobalReceiver: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LCallConstantFunction: public LTemplateInstruction<1, 0, 0> {
+class LCallConstantFunction V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(CallConstantFunction, "call-constant-function")
   DECLARE_HYDROGEN_ACCESSOR(CallConstantFunction)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   Handle<JSFunction> function() { return hydrogen()->function(); }
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
-class LInvokeFunction: public LTemplateInstruction<1, 1, 0> {
+class LInvokeFunction V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LInvokeFunction(LOperand* function) {
-    inputs_[0] = function;
+  LInvokeFunction(LOperand* context, LOperand* function) {
+    inputs_[0] = context;
+    inputs_[1] = function;
   }
 
-  LOperand* function() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* function() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(InvokeFunction, "invoke-function")
   DECLARE_HYDROGEN_ACCESSOR(InvokeFunction)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
-class LCallKeyed: public LTemplateInstruction<1, 1, 0> {
+class LCallKeyed V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LCallKeyed(LOperand* key) {
-    inputs_[0] = key;
+  LCallKeyed(LOperand* context, LOperand* key) {
+    inputs_[0] = context;
+    inputs_[1] = key;
   }
 
-  LOperand* key() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* key() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(CallKeyed, "call-keyed")
   DECLARE_HYDROGEN_ACCESSOR(CallKeyed)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
 
-class LCallNamed: public LTemplateInstruction<1, 0, 0> {
+class LCallNamed V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
+  explicit LCallNamed(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(CallNamed, "call-named")
   DECLARE_HYDROGEN_ACCESSOR(CallNamed)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   Handle<String> name() const { return hydrogen()->name(); }
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
-class LCallFunction: public LTemplateInstruction<1, 1, 0> {
+class LCallFunction V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LCallFunction(LOperand* function) {
-    inputs_[0] = function;
+  LCallFunction(LOperand* context, LOperand* function) {
+    inputs_[0] = context;
+    inputs_[1] = function;
   }
 
-  LOperand* function() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* function() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(CallFunction, "call-function")
   DECLARE_HYDROGEN_ACCESSOR(CallFunction)
@@ -1883,74 +1958,95 @@ class LCallFunction: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LCallGlobal: public LTemplateInstruction<1, 0, 0> {
+class LCallGlobal V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
+  explicit LCallGlobal(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(CallGlobal, "call-global")
   DECLARE_HYDROGEN_ACCESSOR(CallGlobal)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   Handle<String> name() const {return hydrogen()->name(); }
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
-class LCallKnownGlobal: public LTemplateInstruction<1, 0, 0> {
+class LCallKnownGlobal V8_FINAL : public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(CallKnownGlobal, "call-known-global")
   DECLARE_HYDROGEN_ACCESSOR(CallKnownGlobal)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   int arity() const { return hydrogen()->argument_count() - 1;  }
 };
 
 
-class LCallNew: public LTemplateInstruction<1, 1, 0> {
+class LCallNew V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LCallNew(LOperand* constructor) {
-    inputs_[0] = constructor;
+  LCallNew(LOperand* context, LOperand* constructor) {
+    inputs_[0] = context;
+    inputs_[1] = constructor;
   }
 
-  LOperand* constructor() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* constructor() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(CallNew, "call-new")
   DECLARE_HYDROGEN_ACCESSOR(CallNew)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
-class LCallNewArray: public LTemplateInstruction<1, 1, 0> {
+class LCallNewArray V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LCallNewArray(LOperand* constructor) {
-    inputs_[0] = constructor;
+  LCallNewArray(LOperand* context, LOperand* constructor) {
+    inputs_[0] = context;
+    inputs_[1] = constructor;
   }
 
-  LOperand* constructor() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* constructor() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(CallNewArray, "call-new-array")
   DECLARE_HYDROGEN_ACCESSOR(CallNewArray)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   int arity() const { return hydrogen()->argument_count() - 1; }
 };
 
 
-class LCallRuntime: public LTemplateInstruction<1, 0, 0> {
+class LCallRuntime V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
+  explicit LCallRuntime(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(CallRuntime, "call-runtime")
   DECLARE_HYDROGEN_ACCESSOR(CallRuntime)
 
+  virtual bool ClobbersDoubleRegisters() const V8_OVERRIDE {
+    return save_doubles() == kDontSaveFPRegs;
+  }
+
   const Runtime::Function* function() const { return hydrogen()->function(); }
   int arity() const { return hydrogen()->argument_count(); }
+  SaveFPRegsMode save_doubles() const { return hydrogen()->save_doubles(); }
 };
 
 
-class LInteger32ToDouble: public LTemplateInstruction<1, 1, 0> {
+class LInteger32ToDouble V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LInteger32ToDouble(LOperand* value) {
     inputs_[0] = value;
@@ -1962,7 +2058,7 @@ class LInteger32ToDouble: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LInteger32ToSmi: public LTemplateInstruction<1, 1, 0> {
+class LInteger32ToSmi V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LInteger32ToSmi(LOperand* value) {
     inputs_[0] = value;
@@ -1975,7 +2071,7 @@ class LInteger32ToSmi: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LUint32ToDouble: public LTemplateInstruction<1, 1, 0> {
+class LUint32ToDouble V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LUint32ToDouble(LOperand* value) {
     inputs_[0] = value;
@@ -1987,7 +2083,20 @@ class LUint32ToDouble: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LNumberTagI: public LTemplateInstruction<1, 1, 0> {
+class LUint32ToSmi V8_FINAL : public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LUint32ToSmi(LOperand* value) {
+    inputs_[0] = value;
+  }
+
+  LOperand* value() { return inputs_[0]; }
+
+  DECLARE_CONCRETE_INSTRUCTION(Uint32ToSmi, "uint32-to-smi")
+  DECLARE_HYDROGEN_ACCESSOR(Change)
+};
+
+
+class LNumberTagI V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LNumberTagI(LOperand* value) {
     inputs_[0] = value;
@@ -1999,7 +2108,7 @@ class LNumberTagI: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LNumberTagU: public LTemplateInstruction<1, 1, 0> {
+class LNumberTagU V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LNumberTagU(LOperand* value) {
     inputs_[0] = value;
@@ -2011,7 +2120,7 @@ class LNumberTagU: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LNumberTagD: public LTemplateInstruction<1, 1, 2> {
+class LNumberTagD V8_FINAL : public LTemplateInstruction<1, 1, 2> {
  public:
   LNumberTagD(LOperand* value, LOperand* temp, LOperand* temp2) {
     inputs_[0] = value;
@@ -2028,17 +2137,13 @@ class LNumberTagD: public LTemplateInstruction<1, 1, 2> {
 };
 
 
-class LDoubleToSmi: public LTemplateInstruction<1, 1, 2> {
+class LDoubleToSmi V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
-  LDoubleToSmi(LOperand* value, LOperand* temp, LOperand* temp2) {
+  explicit LDoubleToSmi(LOperand* value) {
     inputs_[0] = value;
-    temps_[0] = temp;
-    temps_[1] = temp2;
   }
 
   LOperand* value() { return inputs_[0]; }
-  LOperand* temp() { return temps_[0]; }
-  LOperand* temp2() { return temps_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(DoubleToSmi, "double-to-smi")
   DECLARE_HYDROGEN_ACCESSOR(UnaryOperation)
@@ -2048,17 +2153,13 @@ class LDoubleToSmi: public LTemplateInstruction<1, 1, 2> {
 
 
 // Sometimes truncating conversion from a tagged value to an int32.
-class LDoubleToI: public LTemplateInstruction<1, 1, 2> {
+class LDoubleToI V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
-  LDoubleToI(LOperand* value, LOperand* temp, LOperand* temp2) {
+  explicit LDoubleToI(LOperand* value) {
     inputs_[0] = value;
-    temps_[0] = temp;
-    temps_[1] = temp2;
   }
 
   LOperand* value() { return inputs_[0]; }
-  LOperand* temp() { return temps_[0]; }
-  LOperand* temp2() { return temps_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(DoubleToI, "double-to-i")
   DECLARE_HYDROGEN_ACCESSOR(UnaryOperation)
@@ -2068,31 +2169,28 @@ class LDoubleToI: public LTemplateInstruction<1, 1, 2> {
 
 
 // Truncating conversion from a tagged value to an int32.
-class LTaggedToI: public LTemplateInstruction<1, 1, 3> {
+class LTaggedToI V8_FINAL : public LTemplateInstruction<1, 1, 2> {
  public:
   LTaggedToI(LOperand* value,
              LOperand* temp,
-             LOperand* temp2,
-             LOperand* temp3) {
+             LOperand* temp2) {
     inputs_[0] = value;
     temps_[0] = temp;
     temps_[1] = temp2;
-    temps_[2] = temp3;
   }
 
   LOperand* value() { return inputs_[0]; }
   LOperand* temp() { return temps_[0]; }
   LOperand* temp2() { return temps_[1]; }
-  LOperand* temp3() { return temps_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(TaggedToI, "tagged-to-i")
-  DECLARE_HYDROGEN_ACCESSOR(UnaryOperation)
+  DECLARE_HYDROGEN_ACCESSOR(Change)
 
   bool truncating() { return hydrogen()->CanTruncateToInt32(); }
 };
 
 
-class LSmiTag: public LTemplateInstruction<1, 1, 0> {
+class LSmiTag V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LSmiTag(LOperand* value) {
     inputs_[0] = value;
@@ -2104,7 +2202,7 @@ class LSmiTag: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LNumberUntagD: public LTemplateInstruction<1, 1, 0> {
+class LNumberUntagD V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LNumberUntagD(LOperand* value) {
     inputs_[0] = value;
@@ -2117,7 +2215,7 @@ class LNumberUntagD: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LSmiUntag: public LTemplateInstruction<1, 1, 0> {
+class LSmiUntag V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   LSmiUntag(LOperand* value, bool needs_check)
       : needs_check_(needs_check) {
@@ -2134,7 +2232,7 @@ class LSmiUntag: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LStoreNamedField: public LTemplateInstruction<0, 2, 1> {
+class LStoreNamedField V8_FINAL : public LTemplateInstruction<0, 2, 1> {
  public:
   LStoreNamedField(LOperand* object, LOperand* value, LOperand* temp) {
     inputs_[0] = object;
@@ -2149,7 +2247,7 @@ class LStoreNamedField: public LTemplateInstruction<0, 2, 1> {
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedField, "store-named-field")
   DECLARE_HYDROGEN_ACCESSOR(StoreNamedField)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   Handle<Map> transition() const { return hydrogen()->transition_map(); }
   Representation representation() const {
@@ -2158,27 +2256,29 @@ class LStoreNamedField: public LTemplateInstruction<0, 2, 1> {
 };
 
 
-class LStoreNamedGeneric: public LTemplateInstruction<0, 2, 0> {
+class LStoreNamedGeneric V8_FINAL : public LTemplateInstruction<0, 3, 0> {
  public:
-  LStoreNamedGeneric(LOperand* object, LOperand* value) {
-    inputs_[0] = object;
-    inputs_[1] = value;
+  LStoreNamedGeneric(LOperand* context, LOperand* object, LOperand* value) {
+    inputs_[0] = context;
+    inputs_[1] = object;
+    inputs_[2] = value;
   }
 
-  LOperand* object() { return inputs_[0]; }
-  LOperand* value() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* object() { return inputs_[1]; }
+  LOperand* value() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedGeneric, "store-named-generic")
   DECLARE_HYDROGEN_ACCESSOR(StoreNamedGeneric)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   Handle<Object> name() const { return hydrogen()->name(); }
   StrictModeFlag strict_mode_flag() { return hydrogen()->strict_mode_flag(); }
 };
 
 
-class LStoreKeyed: public LTemplateInstruction<0, 3, 0> {
+class LStoreKeyed V8_FINAL : public LTemplateInstruction<0, 3, 0> {
  public:
   LStoreKeyed(LOperand* object, LOperand* key, LOperand* value) {
     inputs_[0] = object;
@@ -2197,7 +2297,7 @@ class LStoreKeyed: public LTemplateInstruction<0, 3, 0> {
   DECLARE_CONCRETE_INSTRUCTION(StoreKeyed, "store-keyed")
   DECLARE_HYDROGEN_ACCESSOR(StoreKeyed)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
   bool NeedsCanonicalization() {
     if (hydrogen()->value()->IsAdd() || hydrogen()->value()->IsSub() ||
         hydrogen()->value()->IsMul() || hydrogen()->value()->IsDiv()) {
@@ -2209,35 +2309,43 @@ class LStoreKeyed: public LTemplateInstruction<0, 3, 0> {
 };
 
 
-class LStoreKeyedGeneric: public LTemplateInstruction<0, 3, 0> {
+class LStoreKeyedGeneric V8_FINAL : public LTemplateInstruction<0, 4, 0> {
  public:
-  LStoreKeyedGeneric(LOperand* obj, LOperand* key, LOperand* value) {
-    inputs_[0] = obj;
-    inputs_[1] = key;
-    inputs_[2] = value;
+  LStoreKeyedGeneric(LOperand* context,
+                     LOperand* obj,
+                     LOperand* key,
+                     LOperand* value) {
+    inputs_[0] = context;
+    inputs_[1] = obj;
+    inputs_[2] = key;
+    inputs_[3] = value;
   }
 
-  LOperand* object() { return inputs_[0]; }
-  LOperand* key() { return inputs_[1]; }
-  LOperand* value() { return inputs_[2]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* object() { return inputs_[1]; }
+  LOperand* key() { return inputs_[2]; }
+  LOperand* value() { return inputs_[3]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreKeyedGeneric, "store-keyed-generic")
   DECLARE_HYDROGEN_ACCESSOR(StoreKeyedGeneric)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   StrictModeFlag strict_mode_flag() { return hydrogen()->strict_mode_flag(); }
 };
 
 
-class LTransitionElementsKind: public LTemplateInstruction<0, 1, 1> {
+class LTransitionElementsKind V8_FINAL : public LTemplateInstruction<0, 2, 1> {
  public:
   LTransitionElementsKind(LOperand* object,
+                          LOperand* context,
                           LOperand* new_map_temp) {
     inputs_[0] = object;
+    inputs_[1] = context;
     temps_[0] = new_map_temp;
   }
 
+  LOperand* context() { return inputs_[1]; }
   LOperand* object() { return inputs_[0]; }
   LOperand* new_map_temp() { return temps_[0]; }
 
@@ -2245,16 +2353,18 @@ class LTransitionElementsKind: public LTemplateInstruction<0, 1, 1> {
                                "transition-elements-kind")
   DECLARE_HYDROGEN_ACCESSOR(TransitionElementsKind)
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
-  Handle<Map> original_map() { return hydrogen()->original_map(); }
-  Handle<Map> transitioned_map() { return hydrogen()->transitioned_map(); }
+  Handle<Map> original_map() { return hydrogen()->original_map().handle(); }
+  Handle<Map> transitioned_map() {
+    return hydrogen()->transitioned_map().handle();
+  }
   ElementsKind from_kind() { return hydrogen()->from_kind(); }
   ElementsKind to_kind() { return hydrogen()->to_kind(); }
 };
 
 
-class LTrapAllocationMemento : public LTemplateInstruction<0, 1, 1> {
+class LTrapAllocationMemento V8_FINAL : public LTemplateInstruction<0, 1, 1> {
  public:
   LTrapAllocationMemento(LOperand* object,
                          LOperand* temp) {
@@ -2270,15 +2380,17 @@ class LTrapAllocationMemento : public LTemplateInstruction<0, 1, 1> {
 };
 
 
-class LStringAdd: public LTemplateInstruction<1, 2, 0> {
+class LStringAdd V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
-  LStringAdd(LOperand* left, LOperand* right) {
-    inputs_[0] = left;
-    inputs_[1] = right;
+  LStringAdd(LOperand* context, LOperand* left, LOperand* right) {
+    inputs_[0] = context;
+    inputs_[1] = left;
+    inputs_[2] = right;
   }
 
-  LOperand* left() { return inputs_[0]; }
-  LOperand* right() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* left() { return inputs_[1]; }
+  LOperand* right() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StringAdd, "string-add")
   DECLARE_HYDROGEN_ACCESSOR(StringAdd)
@@ -2286,48 +2398,52 @@ class LStringAdd: public LTemplateInstruction<1, 2, 0> {
 
 
 
-class LStringCharCodeAt: public LTemplateInstruction<1, 2, 0> {
+class LStringCharCodeAt V8_FINAL : public LTemplateInstruction<1, 3, 0> {
  public:
-  LStringCharCodeAt(LOperand* string, LOperand* index) {
-    inputs_[0] = string;
-    inputs_[1] = index;
+  LStringCharCodeAt(LOperand* context, LOperand* string, LOperand* index) {
+    inputs_[0] = context;
+    inputs_[1] = string;
+    inputs_[2] = index;
   }
 
-  LOperand* string() { return inputs_[0]; }
-  LOperand* index() { return inputs_[1]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* string() { return inputs_[1]; }
+  LOperand* index() { return inputs_[2]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StringCharCodeAt, "string-char-code-at")
   DECLARE_HYDROGEN_ACCESSOR(StringCharCodeAt)
 };
 
 
-class LStringCharFromCode: public LTemplateInstruction<1, 1, 0> {
+class LStringCharFromCode V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LStringCharFromCode(LOperand* char_code) {
-    inputs_[0] = char_code;
+  explicit LStringCharFromCode(LOperand* context, LOperand* char_code) {
+    inputs_[0] = context;
+    inputs_[1] = char_code;
   }
 
-  LOperand* char_code() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* char_code() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(StringCharFromCode, "string-char-from-code")
   DECLARE_HYDROGEN_ACCESSOR(StringCharFromCode)
 };
 
 
-class LCheckFunction: public LTemplateInstruction<0, 1, 0> {
+class LCheckValue V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
-  explicit LCheckFunction(LOperand* value) {
+  explicit LCheckValue(LOperand* value) {
     inputs_[0] = value;
   }
 
   LOperand* value() { return inputs_[0]; }
 
-  DECLARE_CONCRETE_INSTRUCTION(CheckFunction, "check-function")
-  DECLARE_HYDROGEN_ACCESSOR(CheckFunction)
+  DECLARE_CONCRETE_INSTRUCTION(CheckValue, "check-value")
+  DECLARE_HYDROGEN_ACCESSOR(CheckValue)
 };
 
 
-class LCheckInstanceType: public LTemplateInstruction<0, 1, 0> {
+class LCheckInstanceType V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
   explicit LCheckInstanceType(LOperand* value) {
     inputs_[0] = value;
@@ -2340,7 +2456,7 @@ class LCheckInstanceType: public LTemplateInstruction<0, 1, 0> {
 };
 
 
-class LCheckMaps: public LTemplateInstruction<0, 1, 0> {
+class LCheckMaps V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
   explicit LCheckMaps(LOperand* value) {
     inputs_[0] = value;
@@ -2353,7 +2469,7 @@ class LCheckMaps: public LTemplateInstruction<0, 1, 0> {
 };
 
 
-class LCheckSmi: public LTemplateInstruction<1, 1, 0> {
+class LCheckSmi V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LCheckSmi(LOperand* value) {
     inputs_[0] = value;
@@ -2365,7 +2481,7 @@ class LCheckSmi: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LCheckNonSmi: public LTemplateInstruction<0, 1, 0> {
+class LCheckNonSmi V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
   explicit LCheckNonSmi(LOperand* value) {
     inputs_[0] = value;
@@ -2378,7 +2494,7 @@ class LCheckNonSmi: public LTemplateInstruction<0, 1, 0> {
 };
 
 
-class LClampDToUint8: public LTemplateInstruction<1, 1, 0> {
+class LClampDToUint8 V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LClampDToUint8(LOperand* unclamped) {
     inputs_[0] = unclamped;
@@ -2390,7 +2506,7 @@ class LClampDToUint8: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LClampIToUint8: public LTemplateInstruction<1, 1, 0> {
+class LClampIToUint8 V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LClampIToUint8(LOperand* unclamped) {
     inputs_[0] = unclamped;
@@ -2402,7 +2518,7 @@ class LClampIToUint8: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LClampTToUint8: public LTemplateInstruction<1, 1, 1> {
+class LClampTToUint8 V8_FINAL : public LTemplateInstruction<1, 1, 1> {
  public:
   LClampTToUint8(LOperand* unclamped, LOperand* temp) {
     inputs_[0] = unclamped;
@@ -2416,14 +2532,19 @@ class LClampTToUint8: public LTemplateInstruction<1, 1, 1> {
 };
 
 
-class LAllocate: public LTemplateInstruction<1, 2, 2> {
+class LAllocate V8_FINAL : public LTemplateInstruction<1, 2, 2> {
  public:
-  LAllocate(LOperand* size, LOperand* temp1, LOperand* temp2) {
+  LAllocate(LOperand* context,
+            LOperand* size,
+            LOperand* temp1,
+            LOperand* temp2) {
+    inputs_[0] = context;
     inputs_[1] = size;
     temps_[0] = temp1;
     temps_[1] = temp2;
   }
 
+  LOperand* context() { return inputs_[0]; }
   LOperand* size() { return inputs_[1]; }
   LOperand* temp1() { return temps_[0]; }
   LOperand* temp2() { return temps_[1]; }
@@ -2433,21 +2554,33 @@ class LAllocate: public LTemplateInstruction<1, 2, 2> {
 };
 
 
-class LRegExpLiteral: public LTemplateInstruction<1, 0, 0> {
+class LRegExpLiteral V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
+  explicit LRegExpLiteral(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(RegExpLiteral, "regexp-literal")
   DECLARE_HYDROGEN_ACCESSOR(RegExpLiteral)
 };
 
 
-class LFunctionLiteral: public LTemplateInstruction<1, 0, 0> {
+class LFunctionLiteral V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
+  explicit LFunctionLiteral(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(FunctionLiteral, "function-literal")
   DECLARE_HYDROGEN_ACCESSOR(FunctionLiteral)
 };
 
 
-class LToFastProperties: public LTemplateInstruction<1, 1, 0> {
+class LToFastProperties V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LToFastProperties(LOperand* value) {
     inputs_[0] = value;
@@ -2460,19 +2593,21 @@ class LToFastProperties: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LTypeof: public LTemplateInstruction<1, 1, 0> {
+class LTypeof V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LTypeof(LOperand* value) {
-    inputs_[0] = value;
+  LTypeof(LOperand* context, LOperand* value) {
+    inputs_[0] = context;
+    inputs_[1] = value;
   }
 
-  LOperand* value() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* value() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(Typeof, "typeof")
 };
 
 
-class LTypeofIsAndBranch: public LControlInstruction<1, 0> {
+class LTypeofIsAndBranch V8_FINAL : public LControlInstruction<1, 0> {
  public:
   explicit LTypeofIsAndBranch(LOperand* value) {
     inputs_[0] = value;
@@ -2485,11 +2620,11 @@ class LTypeofIsAndBranch: public LControlInstruction<1, 0> {
 
   Handle<String> type_literal() { return hydrogen()->type_literal(); }
 
-  virtual void PrintDataTo(StringStream* stream);
+  virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 };
 
 
-class LIsConstructCallAndBranch: public LControlInstruction<0, 1> {
+class LIsConstructCallAndBranch V8_FINAL : public LControlInstruction<0, 1> {
  public:
   explicit LIsConstructCallAndBranch(LOperand* temp) {
     temps_[0] = temp;
@@ -2502,17 +2637,25 @@ class LIsConstructCallAndBranch: public LControlInstruction<0, 1> {
 };
 
 
-class LOsrEntry: public LTemplateInstruction<0, 0, 0> {
+class LOsrEntry V8_FINAL : public LTemplateInstruction<0, 0, 0> {
  public:
   LOsrEntry() {}
 
-  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
+  virtual bool HasInterestingComment(LCodeGen* gen) const V8_OVERRIDE {
+    return false;
+  }
   DECLARE_CONCRETE_INSTRUCTION(OsrEntry, "osr-entry")
 };
 
 
-class LStackCheck: public LTemplateInstruction<0, 0, 0> {
+class LStackCheck V8_FINAL : public LTemplateInstruction<0, 1, 0> {
  public:
+  explicit LStackCheck(LOperand* context) {
+    inputs_[0] = context;
+  }
+
+  LOperand* context() { return inputs_[0]; }
+
   DECLARE_CONCRETE_INSTRUCTION(StackCheck, "stack-check")
   DECLARE_HYDROGEN_ACCESSOR(StackCheck)
 
@@ -2523,19 +2666,21 @@ class LStackCheck: public LTemplateInstruction<0, 0, 0> {
 };
 
 
-class LForInPrepareMap: public LTemplateInstruction<1, 1, 0> {
+class LForInPrepareMap V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
-  explicit LForInPrepareMap(LOperand* object) {
-    inputs_[0] = object;
+  LForInPrepareMap(LOperand* context, LOperand* object) {
+    inputs_[0] = context;
+    inputs_[1] = object;
   }
 
-  LOperand* object() { return inputs_[0]; }
+  LOperand* context() { return inputs_[0]; }
+  LOperand* object() { return inputs_[1]; }
 
   DECLARE_CONCRETE_INSTRUCTION(ForInPrepareMap, "for-in-prepare-map")
 };
 
 
-class LForInCacheArray: public LTemplateInstruction<1, 1, 0> {
+class LForInCacheArray V8_FINAL : public LTemplateInstruction<1, 1, 0> {
  public:
   explicit LForInCacheArray(LOperand* map) {
     inputs_[0] = map;
@@ -2551,7 +2696,7 @@ class LForInCacheArray: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LCheckMapValue: public LTemplateInstruction<0, 2, 0> {
+class LCheckMapValue V8_FINAL : public LTemplateInstruction<0, 2, 0> {
  public:
   LCheckMapValue(LOperand* value, LOperand* map) {
     inputs_[0] = value;
@@ -2565,7 +2710,7 @@ class LCheckMapValue: public LTemplateInstruction<0, 2, 0> {
 };
 
 
-class LLoadFieldByIndex: public LTemplateInstruction<1, 2, 0> {
+class LLoadFieldByIndex V8_FINAL : public LTemplateInstruction<1, 2, 0> {
  public:
   LLoadFieldByIndex(LOperand* object, LOperand* index) {
     inputs_[0] = object;
@@ -2580,17 +2725,17 @@ class LLoadFieldByIndex: public LTemplateInstruction<1, 2, 0> {
 
 
 class LChunkBuilder;
-class LPlatformChunk: public LChunk {
+class LPlatformChunk V8_FINAL : public LChunk {
  public:
   LPlatformChunk(CompilationInfo* info, HGraph* graph)
       : LChunk(info, graph) { }
 
-  int GetNextSpillIndex(bool is_double);
-  LOperand* GetNextSpillSlot(bool is_double);
+  int GetNextSpillIndex(RegisterKind kind);
+  LOperand* GetNextSpillSlot(RegisterKind kind);
 };
 
 
-class LChunkBuilder BASE_EMBEDDED {
+class LChunkBuilder V8_FINAL BASE_EMBEDDED {
  public:
   LChunkBuilder(CompilationInfo* info, HGraph* graph, LAllocator* allocator)
       : chunk_(NULL),
@@ -2609,6 +2754,8 @@ class LChunkBuilder BASE_EMBEDDED {
 
   // Build the sequence for the graph.
   LPlatformChunk* Build();
+
+  LInstruction* CheckElideControlInstruction(HControlInstruction* instr);
 
   // Declare methods that deal with the individual node types.
 #define DECLARE_DO(type) LInstruction* Do##type(H##type* node);
@@ -2743,7 +2890,7 @@ class LChunkBuilder BASE_EMBEDDED {
   LInstruction* DoArithmeticD(Token::Value op,
                               HArithmeticBinaryOperation* instr);
   LInstruction* DoArithmeticT(Token::Value op,
-                              HArithmeticBinaryOperation* instr);
+                              HBinaryOperation* instr);
 
   LPlatformChunk* chunk_;
   CompilationInfo* info_;

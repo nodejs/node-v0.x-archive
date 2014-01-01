@@ -58,7 +58,7 @@ class HarmonyIsolate {
 TEST(PerIsolateState) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context1;
+  LocalContext context1(isolate.GetIsolate());
   CompileRun(
       "var count = 0;"
       "var calls = 0;"
@@ -71,20 +71,20 @@ TEST(PerIsolateState) {
       "(function() { obj.foo = 'bar'; })");
   Handle<Value> notify_fun2;
   {
-    LocalContext context2;
+    LocalContext context2(isolate.GetIsolate());
     context2->Global()->Set(String::New("obj"), obj);
     notify_fun2 = CompileRun(
         "(function() { obj.foo = 'baz'; })");
   }
   Handle<Value> notify_fun3;
   {
-    LocalContext context3;
+    LocalContext context3(isolate.GetIsolate());
     context3->Global()->Set(String::New("obj"), obj);
     notify_fun3 = CompileRun(
         "(function() { obj.foo = 'bat'; })");
   }
   {
-    LocalContext context4;
+    LocalContext context4(isolate.GetIsolate());
     context4->Global()->Set(String::New("observer"), observer);
     context4->Global()->Set(String::New("fun1"), notify_fun1);
     context4->Global()->Set(String::New("fun2"), notify_fun2);
@@ -99,7 +99,7 @@ TEST(PerIsolateState) {
 TEST(EndOfMicrotaskDelivery) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   CompileRun(
       "var obj = {};"
       "var count = 0;"
@@ -113,7 +113,7 @@ TEST(EndOfMicrotaskDelivery) {
 TEST(DeliveryOrdering) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   CompileRun(
       "var obj1 = {};"
       "var obj2 = {};"
@@ -145,7 +145,7 @@ TEST(DeliveryOrdering) {
 TEST(DeliveryOrderingReentrant) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   CompileRun(
       "var obj = {};"
       "var reentered = false;"
@@ -177,7 +177,7 @@ TEST(DeliveryOrderingReentrant) {
 TEST(DeliveryOrderingDeliverChangeRecords) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   CompileRun(
       "var obj = {};"
       "var ordering = [];"
@@ -203,14 +203,14 @@ TEST(ObjectHashTableGrowth) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
   // Initializing this context sets up initial hash tables.
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   Handle<Value> obj = CompileRun("obj = {};");
   Handle<Value> observer = CompileRun(
       "var ran = false;"
       "(function() { ran = true })");
   {
     // As does initializing this context.
-    LocalContext context2;
+    LocalContext context2(isolate.GetIsolate());
     context2->Global()->Set(String::New("obj"), obj);
     context2->Global()->Set(String::New("observer"), observer);
     CompileRun(
@@ -231,7 +231,7 @@ TEST(ObjectHashTableGrowth) {
 
 TEST(GlobalObjectObservation) {
   HarmonyIsolate isolate;
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   HandleScope scope(isolate.GetIsolate());
   Handle<Object> global_proxy = context->Global();
   Handle<Object> inner_global = global_proxy->GetPrototype().As<Object>();
@@ -263,7 +263,7 @@ TEST(GlobalObjectObservation) {
   // to the old context.
   context->DetachGlobal();
   {
-    LocalContext context2;
+    LocalContext context2(isolate.GetIsolate());
     context2->DetachGlobal();
     context2->ReattachGlobal(global_proxy);
     CompileRun(
@@ -278,7 +278,8 @@ TEST(GlobalObjectObservation) {
   // Attaching by passing to Context::New
   {
     // Delegates to Context::New
-    LocalContext context3(NULL, Handle<ObjectTemplate>(), global_proxy);
+    LocalContext context3(
+        isolate.GetIsolate(), NULL, Handle<ObjectTemplate>(), global_proxy);
     CompileRun(
         "var records3 = [];"
         "Object.observe(this, function(r) { [].push.apply(records3, r) });"
@@ -313,11 +314,13 @@ static void ExpectRecords(Handle<Value> records,
         recordObj->Get(String::New("object"))));
     CHECK(String::New(expectations[i].type)->Equals(
         recordObj->Get(String::New("type"))));
-    CHECK(String::New(expectations[i].name)->Equals(
-        recordObj->Get(String::New("name"))));
-    if (!expectations[i].old_value.IsEmpty()) {
-      CHECK(expectations[i].old_value->Equals(
-          recordObj->Get(String::New("oldValue"))));
+    if (strcmp("splice", expectations[i].type) != 0) {
+      CHECK(String::New(expectations[i].name)->Equals(
+          recordObj->Get(String::New("name"))));
+      if (!expectations[i].old_value.IsEmpty()) {
+        CHECK(expectations[i].old_value->Equals(
+            recordObj->Get(String::New("oldValue"))));
+      }
     }
   }
 }
@@ -328,7 +331,7 @@ static void ExpectRecords(Handle<Value> records,
 TEST(APITestBasicMutation) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   Handle<Object> obj = Handle<Object>::Cast(CompileRun(
       "var records = [];"
       "var obj = {};"
@@ -372,7 +375,7 @@ TEST(APITestBasicMutation) {
 TEST(HiddenPrototypeObservation) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   Handle<FunctionTemplate> tmpl = FunctionTemplate::New();
   tmpl->SetHiddenPrototype(true);
   tmpl->InstanceTemplate()->Set(String::New("foo"), Number::New(75));
@@ -391,7 +394,7 @@ TEST(HiddenPrototypeObservation) {
     { obj, "updated", "foo", Number::New(75) }
   };
   EXPECT_RECORDS(CompileRun("records"), expected_records);
-  obj->SetPrototype(Null());
+  obj->SetPrototype(Null(isolate.GetIsolate()));
   CompileRun("obj.foo = 43");
   const RecordExpectation expected_records2[] = {
     { obj, "new", "foo", Handle<Value>() }
@@ -421,28 +424,314 @@ static int NumberOfElements(i::Handle<i::JSWeakMap> map) {
 TEST(ObservationWeakMap) {
   HarmonyIsolate isolate;
   HandleScope scope(isolate.GetIsolate());
-  LocalContext context;
+  LocalContext context(isolate.GetIsolate());
   CompileRun(
       "var obj = {};"
       "Object.observe(obj, function(){});"
       "Object.getNotifier(obj);"
       "obj = null;");
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate.GetIsolate());
   i::Handle<i::JSObject> observation_state =
-      i::Isolate::Current()->factory()->observation_state();
+      i_isolate->factory()->observation_state();
   i::Handle<i::JSWeakMap> callbackInfoMap =
       i::Handle<i::JSWeakMap>::cast(
           i::GetProperty(observation_state, "callbackInfoMap"));
   i::Handle<i::JSWeakMap> objectInfoMap =
       i::Handle<i::JSWeakMap>::cast(
           i::GetProperty(observation_state, "objectInfoMap"));
-  i::Handle<i::JSWeakMap> notifierTargetMap =
+  i::Handle<i::JSWeakMap> notifierObjectInfoMap =
       i::Handle<i::JSWeakMap>::cast(
-          i::GetProperty(observation_state, "notifierTargetMap"));
+          i::GetProperty(observation_state, "notifierObjectInfoMap"));
   CHECK_EQ(1, NumberOfElements(callbackInfoMap));
   CHECK_EQ(1, NumberOfElements(objectInfoMap));
-  CHECK_EQ(1, NumberOfElements(notifierTargetMap));
-  HEAP->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
+  CHECK_EQ(1, NumberOfElements(notifierObjectInfoMap));
+  i_isolate->heap()->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
   CHECK_EQ(0, NumberOfElements(callbackInfoMap));
   CHECK_EQ(0, NumberOfElements(objectInfoMap));
-  CHECK_EQ(0, NumberOfElements(notifierTargetMap));
+  CHECK_EQ(0, NumberOfElements(notifierObjectInfoMap));
+}
+
+
+static bool NamedAccessAlwaysAllowed(Local<Object>, Local<Value>, AccessType,
+                                     Local<Value>) {
+  return true;
+}
+
+
+static bool IndexedAccessAlwaysAllowed(Local<Object>, uint32_t, AccessType,
+                                       Local<Value>) {
+  return true;
+}
+
+
+static AccessType g_access_block_type = ACCESS_GET;
+static const uint32_t kBlockedContextIndex = 1337;
+
+
+static bool NamedAccessAllowUnlessBlocked(Local<Object> host,
+                                          Local<Value> key,
+                                          AccessType type,
+                                          Local<Value> data) {
+  if (type != g_access_block_type) return true;
+  v8::Isolate* isolate = reinterpret_cast<v8::Isolate*>(
+      Utils::OpenHandle(*host)->GetIsolate());
+  Handle<Object> global = isolate->GetCurrentContext()->Global();
+  if (!global->Has(kBlockedContextIndex)) return true;
+  return !key->IsString() || !key->Equals(data);
+}
+
+
+static bool IndexedAccessAllowUnlessBlocked(Local<Object> host,
+                                            uint32_t index,
+                                            AccessType type,
+                                            Local<Value> data) {
+  if (type != g_access_block_type) return true;
+  v8::Isolate* isolate = reinterpret_cast<v8::Isolate*>(
+      Utils::OpenHandle(*host)->GetIsolate());
+  Handle<Object> global = isolate->GetCurrentContext()->Global();
+  if (!global->Has(kBlockedContextIndex)) return true;
+  return index != data->Uint32Value();
+}
+
+
+static bool BlockAccessKeys(Local<Object> host, Local<Value> key,
+                            AccessType type, Local<Value>) {
+  v8::Isolate* isolate = reinterpret_cast<v8::Isolate*>(
+      Utils::OpenHandle(*host)->GetIsolate());
+  Handle<Object> global = isolate->GetCurrentContext()->Global();
+  return type != ACCESS_KEYS || !global->Has(kBlockedContextIndex);
+}
+
+
+static Handle<Object> CreateAccessCheckedObject(
+    NamedSecurityCallback namedCallback,
+    IndexedSecurityCallback indexedCallback,
+    Handle<Value> data = Handle<Value>()) {
+  Handle<ObjectTemplate> tmpl = ObjectTemplate::New();
+  tmpl->SetAccessCheckCallbacks(namedCallback, indexedCallback, data);
+  Handle<Object> instance = tmpl->NewInstance();
+  Handle<Object> global = instance->CreationContext()->Global();
+  global->Set(String::New("obj"), instance);
+  global->Set(kBlockedContextIndex, v8::True());
+  return instance;
+}
+
+
+TEST(NamedAccessCheck) {
+  HarmonyIsolate isolate;
+  const AccessType types[] = { ACCESS_GET, ACCESS_HAS };
+  for (size_t i = 0; i < ARRAY_SIZE(types); ++i) {
+    HandleScope scope(isolate.GetIsolate());
+    LocalContext context(isolate.GetIsolate());
+    g_access_block_type = types[i];
+    Handle<Object> instance = CreateAccessCheckedObject(
+        NamedAccessAllowUnlessBlocked,
+        IndexedAccessAlwaysAllowed,
+        String::New("foo"));
+    CompileRun("var records = null;"
+               "var objNoCheck = {};"
+               "var observer = function(r) { records = r };"
+               "Object.observe(obj, observer);"
+               "Object.observe(objNoCheck, observer);");
+    Handle<Value> obj_no_check = CompileRun("objNoCheck");
+    {
+      LocalContext context2(isolate.GetIsolate());
+      context2->Global()->Set(String::New("obj"), instance);
+      context2->Global()->Set(String::New("objNoCheck"), obj_no_check);
+      CompileRun("var records2 = null;"
+                 "var observer2 = function(r) { records2 = r };"
+                 "Object.observe(obj, observer2);"
+                 "Object.observe(objNoCheck, observer2);"
+                 "obj.foo = 'bar';"
+                 "Object.defineProperty(obj, 'foo', {value: 5});"
+                 "Object.defineProperty(obj, 'foo', {get: function(){}});"
+                 "obj.bar = 'baz';"
+                 "objNoCheck.baz = 'quux'");
+      const RecordExpectation expected_records2[] = {
+        { instance, "new", "foo", Handle<Value>() },
+        { instance, "updated", "foo", String::New("bar") },
+        { instance, "reconfigured", "foo", Number::New(5) },
+        { instance, "new", "bar", Handle<Value>() },
+        { obj_no_check, "new", "baz", Handle<Value>() },
+      };
+      EXPECT_RECORDS(CompileRun("records2"), expected_records2);
+    }
+    const RecordExpectation expected_records[] = {
+      { instance, "new", "bar", Handle<Value>() },
+      { obj_no_check, "new", "baz", Handle<Value>() }
+    };
+    EXPECT_RECORDS(CompileRun("records"), expected_records);
+  }
+}
+
+
+TEST(IndexedAccessCheck) {
+  HarmonyIsolate isolate;
+  const AccessType types[] = { ACCESS_GET, ACCESS_HAS };
+  for (size_t i = 0; i < ARRAY_SIZE(types); ++i) {
+    HandleScope scope(isolate.GetIsolate());
+    LocalContext context(isolate.GetIsolate());
+    g_access_block_type = types[i];
+    Handle<Object> instance = CreateAccessCheckedObject(
+        NamedAccessAlwaysAllowed, IndexedAccessAllowUnlessBlocked,
+        Number::New(7));
+    CompileRun("var records = null;"
+               "var objNoCheck = {};"
+               "var observer = function(r) { records = r };"
+               "Object.observe(obj, observer);"
+               "Object.observe(objNoCheck, observer);");
+    Handle<Value> obj_no_check = CompileRun("objNoCheck");
+    {
+      LocalContext context2(isolate.GetIsolate());
+      context2->Global()->Set(String::New("obj"), instance);
+      context2->Global()->Set(String::New("objNoCheck"), obj_no_check);
+      CompileRun("var records2 = null;"
+                 "var observer2 = function(r) { records2 = r };"
+                 "Object.observe(obj, observer2);"
+                 "Object.observe(objNoCheck, observer2);"
+                 "obj[7] = 'foo';"
+                 "Object.defineProperty(obj, '7', {value: 5});"
+                 "Object.defineProperty(obj, '7', {get: function(){}});"
+                 "obj[8] = 'bar';"
+                 "objNoCheck[42] = 'quux'");
+      const RecordExpectation expected_records2[] = {
+        { instance, "new", "7", Handle<Value>() },
+        { instance, "updated", "7", String::New("foo") },
+        { instance, "reconfigured", "7", Number::New(5) },
+        { instance, "new", "8", Handle<Value>() },
+        { obj_no_check, "new", "42", Handle<Value>() }
+      };
+      EXPECT_RECORDS(CompileRun("records2"), expected_records2);
+    }
+    const RecordExpectation expected_records[] = {
+      { instance, "new", "8", Handle<Value>() },
+      { obj_no_check, "new", "42", Handle<Value>() }
+    };
+    EXPECT_RECORDS(CompileRun("records"), expected_records);
+  }
+}
+
+
+TEST(SpliceAccessCheck) {
+  HarmonyIsolate isolate;
+  HandleScope scope(isolate.GetIsolate());
+  LocalContext context(isolate.GetIsolate());
+  g_access_block_type = ACCESS_GET;
+  Handle<Object> instance = CreateAccessCheckedObject(
+      NamedAccessAlwaysAllowed, IndexedAccessAllowUnlessBlocked,
+      Number::New(1));
+  CompileRun("var records = null;"
+             "obj[1] = 'foo';"
+             "obj.length = 2;"
+             "var objNoCheck = {1: 'bar', length: 2};"
+             "observer = function(r) { records = r };"
+             "Array.observe(obj, observer);"
+             "Array.observe(objNoCheck, observer);");
+  Handle<Value> obj_no_check = CompileRun("objNoCheck");
+  {
+    LocalContext context2(isolate.GetIsolate());
+    context2->Global()->Set(String::New("obj"), instance);
+    context2->Global()->Set(String::New("objNoCheck"), obj_no_check);
+    CompileRun("var records2 = null;"
+               "var observer2 = function(r) { records2 = r };"
+               "Array.observe(obj, observer2);"
+               "Array.observe(objNoCheck, observer2);"
+               // No one should hear about this: no splice records are emitted
+               // for access-checked objects
+               "[].push.call(obj, 5);"
+               "[].splice.call(obj, 1, 1);"
+               "[].pop.call(obj);"
+               "[].pop.call(objNoCheck);");
+    // TODO(adamk): Extend EXPECT_RECORDS to be able to assert more things
+    // about splice records. For this test it's not so important since
+    // we just want to guarantee the machinery is in operation at all.
+    const RecordExpectation expected_records2[] = {
+      { obj_no_check, "splice", "", Handle<Value>() }
+    };
+    EXPECT_RECORDS(CompileRun("records2"), expected_records2);
+  }
+  const RecordExpectation expected_records[] = {
+    { obj_no_check, "splice", "", Handle<Value>() }
+  };
+  EXPECT_RECORDS(CompileRun("records"), expected_records);
+}
+
+
+TEST(DisallowAllForAccessKeys) {
+  HarmonyIsolate isolate;
+  HandleScope scope(isolate.GetIsolate());
+  LocalContext context(isolate.GetIsolate());
+  Handle<Object> instance = CreateAccessCheckedObject(
+      BlockAccessKeys, IndexedAccessAlwaysAllowed);
+  CompileRun("var records = null;"
+             "var objNoCheck = {};"
+             "var observer = function(r) { records = r };"
+             "Object.observe(obj, observer);"
+             "Object.observe(objNoCheck, observer);");
+  Handle<Value> obj_no_check = CompileRun("objNoCheck");
+  {
+    LocalContext context2(isolate.GetIsolate());
+    context2->Global()->Set(String::New("obj"), instance);
+    context2->Global()->Set(String::New("objNoCheck"), obj_no_check);
+    CompileRun("var records2 = null;"
+               "var observer2 = function(r) { records2 = r };"
+               "Object.observe(obj, observer2);"
+               "Object.observe(objNoCheck, observer2);"
+               "obj.foo = 'bar';"
+               "obj[5] = 'baz';"
+               "objNoCheck.baz = 'quux'");
+    const RecordExpectation expected_records2[] = {
+      { instance, "new", "foo", Handle<Value>() },
+      { instance, "new", "5", Handle<Value>() },
+      { obj_no_check, "new", "baz", Handle<Value>() },
+    };
+    EXPECT_RECORDS(CompileRun("records2"), expected_records2);
+  }
+  const RecordExpectation expected_records[] = {
+    { obj_no_check, "new", "baz", Handle<Value>() }
+  };
+  EXPECT_RECORDS(CompileRun("records"), expected_records);
+}
+
+
+TEST(AccessCheckDisallowApiModifications) {
+  HarmonyIsolate isolate;
+  HandleScope scope(isolate.GetIsolate());
+  LocalContext context(isolate.GetIsolate());
+  Handle<Object> instance = CreateAccessCheckedObject(
+      BlockAccessKeys, IndexedAccessAlwaysAllowed);
+  CompileRun("var records = null;"
+             "var observer = function(r) { records = r };"
+             "Object.observe(obj, observer);");
+  {
+    LocalContext context2(isolate.GetIsolate());
+    context2->Global()->Set(String::New("obj"), instance);
+    CompileRun("var records2 = null;"
+               "var observer2 = function(r) { records2 = r };"
+               "Object.observe(obj, observer2);");
+    instance->Set(5, String::New("bar"));
+    instance->Set(String::New("foo"), String::New("bar"));
+    CompileRun("");  // trigger delivery
+    const RecordExpectation expected_records2[] = {
+      { instance, "new", "5", Handle<Value>() },
+      { instance, "new", "foo", Handle<Value>() }
+    };
+    EXPECT_RECORDS(CompileRun("records2"), expected_records2);
+  }
+  CHECK(CompileRun("records")->IsNull());
+}
+
+
+TEST(HiddenPropertiesLeakage) {
+  HarmonyIsolate isolate;
+  HandleScope scope(isolate.GetIsolate());
+  LocalContext context(isolate.GetIsolate());
+  CompileRun("var obj = {};"
+             "var records = null;"
+             "var observer = function(r) { records = r };"
+             "Object.observe(obj, observer);");
+  Handle<Value> obj = context->Global()->Get(String::New("obj"));
+  Handle<Object>::Cast(obj)->SetHiddenValue(String::New("foo"), Null());
+  CompileRun("");  // trigger delivery
+  CHECK(CompileRun("records")->IsNull());
 }

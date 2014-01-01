@@ -32,11 +32,6 @@
 
 using namespace ::v8::internal;
 
-TEST(NumberOfCores) {
-  CHECK_GT(OS::NumberOfCores(), 0);
-}
-
-
 #ifdef __GNUC__
 #define ASM __asm__ __volatile__
 
@@ -75,7 +70,7 @@ void GetStackPointer(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 
 TEST(StackAlignment) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = CcTest::isolate();
   v8::HandleScope handle_scope(isolate);
   v8::Handle<v8::ObjectTemplate> global_template = v8::ObjectTemplate::New();
   global_template->Set(v8_str("get_stack_pointer"),

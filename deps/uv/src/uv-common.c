@@ -66,40 +66,6 @@ size_t uv_req_size(uv_req_type type) {
 
 #undef XX
 
-size_t uv_strlcpy(char* dst, const char* src, size_t size) {
-  size_t n;
-
-  if (size == 0)
-    return 0;
-
-  for (n = 0; n < (size - 1) && *src != '\0'; n++)
-    *dst++ = *src++;
-
-  *dst = '\0';
-
-  return n;
-}
-
-
-size_t uv_strlcat(char* dst, const char* src, size_t size) {
-  size_t n;
-
-  if (size == 0)
-    return 0;
-
-  for (n = 0; n < size && *dst != '\0'; n++, dst++);
-
-  if (n == size)
-    return n;
-
-  while (n < (size - 1) && *src != '\0')
-    n++, *dst++ = *src++;
-
-  *dst = '\0';
-
-  return n;
-}
-
 
 uv_buf_t uv_buf_init(char* base, unsigned int len) {
   uv_buf_t buf;
@@ -136,9 +102,7 @@ int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr) {
   memset(addr, 0, sizeof(*addr));
   addr->sin_family = AF_INET;
   addr->sin_port = htons(port);
-  /* TODO(bnoordhuis) Don't use inet_addr(), no good way to detect errors. */
-  addr->sin_addr.s_addr = inet_addr(ip);
-  return 0;
+  return uv_inet_pton(AF_INET, ip, &(addr->sin_addr.s_addr));
 }
 
 
@@ -174,10 +138,7 @@ int uv_ip6_addr(const char* ip, int port, struct sockaddr_in6* addr) {
   }
 #endif
 
-  /* TODO(bnoordhuis) Return an error when the address is bad. */
-  uv_inet_pton(AF_INET6, ip, &addr->sin6_addr);
-
-  return 0;
+  return uv_inet_pton(AF_INET6, ip, &addr->sin6_addr);
 }
 
 
@@ -438,6 +399,9 @@ int uv__getaddrinfo_translate_error(int sys_err) {
 #if defined(EAI_BADFLAGS)
   case EAI_BADFLAGS: return UV_EAI_BADFLAGS;
 #endif
+#if defined(EAI_BADHINTS)
+  case EAI_BADHINTS: return UV_EAI_BADHINTS;
+#endif
 #if defined(EAI_CANCELED)
   case EAI_CANCELED: return UV_EAI_CANCELED;
 #endif
@@ -457,6 +421,12 @@ int uv__getaddrinfo_translate_error(int sys_err) {
 # if !defined(EAI_NODATA) || EAI_NODATA != EAI_NONAME
   case EAI_NONAME: return UV_EAI_NONAME;
 # endif
+#endif
+#if defined(EAI_OVERFLOW)
+  case EAI_OVERFLOW: return UV_EAI_OVERFLOW;
+#endif
+#if defined(EAI_PROTOCOL)
+  case EAI_PROTOCOL: return UV_EAI_PROTOCOL;
 #endif
 #if defined(EAI_SERVICE)
   case EAI_SERVICE: return UV_EAI_SERVICE;

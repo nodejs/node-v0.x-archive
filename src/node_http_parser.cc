@@ -23,10 +23,12 @@
 #include "node_buffer.h"
 #include "node_http_parser.h"
 
+#include "base-object.h"
+#include "base-object-inl.h"
 #include "env.h"
 #include "env-inl.h"
-#include "weak-object.h"
-#include "weak-object-inl.h"
+#include "util.h"
+#include "util-inl.h"
 #include "v8.h"
 
 #include <stdlib.h>  // free()
@@ -64,6 +66,7 @@ using v8::Integer;
 using v8::Local;
 using v8::Object;
 using v8::String;
+using v8::Uint32;
 using v8::Value;
 
 const uint32_t kOnHeaders = 0;
@@ -74,7 +77,7 @@ const uint32_t kOnMessageComplete = 3;
 
 #define HTTP_CB(name)                                                         \
   static int name(http_parser* p_) {                                          \
-    Parser* self = container_of(p_, Parser, parser_);                         \
+    Parser* self = CONTAINER_OF(p_, Parser, parser_);                         \
     return self->name##_();                                                   \
   }                                                                           \
   int name##_()
@@ -82,37 +85,10 @@ const uint32_t kOnMessageComplete = 3;
 
 #define HTTP_DATA_CB(name)                                                    \
   static int name(http_parser* p_, const char* at, size_t length) {           \
-    Parser* self = container_of(p_, Parser, parser_);                         \
+    Parser* self = CONTAINER_OF(p_, Parser, parser_);                         \
     return self->name##_(at, length);                                         \
   }                                                                           \
   int name##_(const char* at, size_t length)
-
-
-// Call this function only when there is a valid HandleScope on the stack
-// somewhere.
-inline Local<String> MethodToString(Environment* env, uint32_t method) {
-  // XXX(bnoordhuis) Predicated on the observation that 99.9% of all HTTP
-  // requests are either GET, HEAD or POST. I threw in DELETE and PUT for
-  // good measure.
-  switch (method) {
-    case HTTP_DELETE: return env->DELETE_string();
-    case HTTP_GET: return env->GET_string();
-    case HTTP_HEAD: return env->HEAD_string();
-    case HTTP_POST: return env->POST_string();
-    case HTTP_PUT: return env->PUT_string();
-  }
-
-  switch (method) {
-#define V(num, name, string)                                                  \
-    case HTTP_ ## name:                                                       \
-      return FIXED_ONE_BYTE_STRING(node_isolate, #string);
-    HTTP_METHOD_MAP(V)
-#undef V
-  }
-
-  // Unreachable, http_parser parses only a restricted set of request methods.
-  return FIXED_ONE_BYTE_STRING(node_isolate, "UNKNOWN_METHOD");
-}
 
 
 // helper class for the Parser
@@ -187,13 +163,13 @@ struct StringPtr {
 };
 
 
-class Parser : public WeakObject {
+class Parser : public BaseObject {
  public:
   Parser(Environment* env, Local<Object> wrap, enum http_parser_type type)
-      : WeakObject(env->isolate(), wrap)
-      , env_(env)
-      , current_buffer_len_(0)
-      , current_buffer_data_(NULL) {
+      : BaseObject(env, wrap),
+        current_buffer_len_(0),
+        current_buffer_data_(NULL) {
+    MakeWeak<Parser>(this);
     Init(type);
   }
 
@@ -205,12 +181,19 @@ class Parser : public WeakObject {
   HTTP_CB(on_message_begin) {
     num_fields_ = num_values_ = 0;
     url_.Reset();
+    status_message_.Reset();
     return 0;
   }
 
 
   HTTP_DATA_CB(on_url) {
     url_.Update(at, length);
+    return 0;
+  }
+
+
+  HTTP_DATA_CB(on_status) {
+    status_message_.Update(at, length);
     return 0;
   }
 
@@ -254,7 +237,7 @@ class Parser : public WeakObject {
 
 
   HTTP_CB(on_headers_complete) {
-    Local<Object> obj = weak_object(node_isolate);
+    Local<Object> obj = object();
     Local<Value> cb = obj->Get(kOnHeadersComplete);
 
     if (!cb->IsFunction())
@@ -276,13 +259,15 @@ class Parser : public WeakObject {
     // METHOD
     if (parser_.type == HTTP_REQUEST) {
       message_info->Set(env()->method_string(),
-                        MethodToString(env(), parser_.method));
+                        Uint32::NewFromUnsigned(parser_.method));
     }
 
     // STATUS
     if (parser_.type == HTTP_RESPONSE) {
       message_info->Set(env()->status_code_string(),
                         Integer::New(parser_.status_code, node_isolate));
+      message_info->Set(env()->status_message_string(),
+                        status_message_.ToString());
     }
 
     // VERSION
@@ -315,7 +300,7 @@ class Parser : public WeakObject {
   HTTP_DATA_CB(on_body) {
     HandleScope scope(node_isolate);
 
-    Local<Object> obj = weak_object(node_isolate);
+    Local<Object> obj = object();
     Local<Value> cb = obj->Get(kOnBody);
 
     if (!cb->IsFunction())
@@ -344,7 +329,7 @@ class Parser : public WeakObject {
     if (num_fields_)
       Flush();  // Flush trailing HTTP headers.
 
-    Local<Object> obj = weak_object(node_isolate);
+    Local<Object> obj = object();
     Local<Value> cb = obj->Get(kOnMessageComplete);
 
     if (!cb->IsFunction())
@@ -362,8 +347,8 @@ class Parser : public WeakObject {
 
 
   static void New(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
     http_parser_type type =
         static_cast<http_parser_type>(args[0]->Int32Value());
     assert(type == HTTP_REQUEST || type == HTTP_RESPONSE);
@@ -373,6 +358,7 @@ class Parser : public WeakObject {
 
   void Save() {
     url_.Save();
+    status_message_.Save();
 
     for (int i = 0; i < num_fields_; i++) {
       fields_[i].Save();
@@ -388,7 +374,7 @@ class Parser : public WeakObject {
   static void Execute(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
 
-    Parser* parser = WeakObject::Unwrap<Parser>(args.This());
+    Parser* parser = Unwrap<Parser>(args.This());
     assert(parser->current_buffer_.IsEmpty());
     assert(parser->current_buffer_len_ == 0);
     assert(parser->current_buffer_data_ == NULL);
@@ -417,7 +403,8 @@ class Parser : public WeakObject {
     parser->current_buffer_data_ = NULL;
 
     // If there was an exception in one of the callbacks
-    if (parser->got_exception_) return;
+    if (parser->got_exception_)
+      return;
 
     Local<Integer> nparsed_obj = Integer::New(nparsed, node_isolate);
     // If there was a parse error in one of the callbacks
@@ -442,14 +429,15 @@ class Parser : public WeakObject {
   static void Finish(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
 
-    Parser* parser = WeakObject::Unwrap<Parser>(args.This());
+    Parser* parser = Unwrap<Parser>(args.This());
 
     assert(parser->current_buffer_.IsEmpty());
     parser->got_exception_ = false;
 
     int rv = http_parser_execute(&(parser->parser_), &settings, NULL, 0);
 
-    if (parser->got_exception_) return;
+    if (parser->got_exception_)
+      return;
 
     if (rv != 0) {
       enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
@@ -468,17 +456,28 @@ class Parser : public WeakObject {
 
 
   static void Reinitialize(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
 
     http_parser_type type =
         static_cast<http_parser_type>(args[0]->Int32Value());
 
     assert(type == HTTP_REQUEST || type == HTTP_RESPONSE);
-    Parser* parser = WeakObject::Unwrap<Parser>(args.This());
+    Parser* parser = Unwrap<Parser>(args.This());
     // Should always be called from the same context.
     assert(env == parser->env());
     parser->Init(type);
+  }
+
+
+  template <bool should_pause>
+  static void Pause(const FunctionCallbackInfo<Value>& args) {
+    HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    Parser* parser = Unwrap<Parser>(args.This());
+    // Should always be called from the same context.
+    assert(env == parser->env());
+    http_parser_pause(&parser->parser_, should_pause);
   }
 
 
@@ -502,7 +501,7 @@ class Parser : public WeakObject {
   void Flush() {
     HandleScope scope(node_isolate);
 
-    Local<Object> obj = weak_object(node_isolate);
+    Local<Object> obj = object();
     Local<Value> cb = obj->Get(kOnHeaders);
 
     if (!cb->IsFunction())
@@ -526,6 +525,7 @@ class Parser : public WeakObject {
   void Init(enum http_parser_type type) {
     http_parser_init(&parser_, type);
     url_.Reset();
+    status_message_.Reset();
     num_fields_ = 0;
     num_values_ = 0;
     have_flushed_ = false;
@@ -533,16 +533,11 @@ class Parser : public WeakObject {
   }
 
 
-  inline Environment* env() const {
-    return env_;
-  }
-
-
-  Environment* const env_;
   http_parser parser_;
   StringPtr fields_[32];  // header fields
   StringPtr values_[32];  // header values
   StringPtr url_;
+  StringPtr status_message_;
   int num_fields_;
   int num_values_;
   bool have_flushed_;
@@ -557,6 +552,7 @@ class Parser : public WeakObject {
 const struct http_parser_settings Parser::settings = {
   Parser::on_message_begin,
   Parser::on_url,
+  Parser::on_status,
   Parser::on_header_field,
   Parser::on_header_value,
   Parser::on_headers_complete,
@@ -585,9 +581,18 @@ void InitHttpParser(Handle<Object> target,
   t->Set(FIXED_ONE_BYTE_STRING(node_isolate, "kOnMessageComplete"),
          Integer::NewFromUnsigned(kOnMessageComplete, node_isolate));
 
+  Local<Array> methods = Array::New();
+#define V(num, name, string)                                                  \
+    methods->Set(num, FIXED_ONE_BYTE_STRING(node_isolate, #string));
+  HTTP_METHOD_MAP(V)
+#undef V
+  t->Set(FIXED_ONE_BYTE_STRING(node_isolate, "methods"), methods);
+
   NODE_SET_PROTOTYPE_METHOD(t, "execute", Parser::Execute);
   NODE_SET_PROTOTYPE_METHOD(t, "finish", Parser::Finish);
   NODE_SET_PROTOTYPE_METHOD(t, "reinitialize", Parser::Reinitialize);
+  NODE_SET_PROTOTYPE_METHOD(t, "pause", Parser::Pause<true>);
+  NODE_SET_PROTOTYPE_METHOD(t, "resume", Parser::Pause<false>);
 
   target->Set(FIXED_ONE_BYTE_STRING(node_isolate, "HTTPParser"),
               t->GetFunction());

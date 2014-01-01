@@ -60,7 +60,6 @@
 
 #include "v8.h"  // NOLINT(build/include_order)
 #include "node_version.h"  // NODE_MODULE_VERSION
-#include "node_object_wrap.h"
 
 // Forward-declare these functions now to stop MSVS from becoming
 // terminally confused when it's done in node_internals.h
@@ -74,6 +73,18 @@ NODE_EXTERN v8::Local<v8::Value> UVException(int errorno,
                                              const char* syscall = NULL,
                                              const char* message = NULL,
                                              const char* path = NULL);
+
+/*
+ * MakeCallback doesn't have a HandleScope. That means the callers scope
+ * will retain ownership of created handles from MakeCallback and related.
+ * There is by default a wrapping HandleScope before uv_run, if the caller
+ * doesn't have a HandleScope on the stack the global will take ownership
+ * which won't be reaped until the uv loop exits.
+ *
+ * If a uv callback is fired, and there is no enclosing HandleScope in the
+ * cb, you will appear to leak 4-bytes for every invocation. Take heed.
+ */
+
 NODE_EXTERN v8::Handle<v8::Value> MakeCallback(
     const v8::Handle<v8::Object> recv,
     const char* method,

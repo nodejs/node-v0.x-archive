@@ -59,7 +59,8 @@ int NodeBIO::New(BIO* bio) {
 
 
 int NodeBIO::Free(BIO* bio) {
-  if (bio == NULL) return 0;
+  if (bio == NULL)
+    return 0;
 
   if (bio->shutdown) {
     if (bio->init && bio->ptr != NULL) {
@@ -95,6 +96,33 @@ char* NodeBIO::Peek(size_t* size) {
 }
 
 
+size_t NodeBIO::PeekMultiple(char** out, size_t* size, size_t* count) {
+  Buffer* pos = read_head_;
+  size_t max = *count;
+  size_t total = 0;
+
+  size_t i;
+  for (i = 0; i < max; i++) {
+    size[i] = pos->write_pos_ - pos->read_pos_;
+    total += size[i];
+    out[i] = pos->data_ + pos->read_pos_;
+
+    /* Don't get past write head */
+    if (pos == write_head_)
+      break;
+    else
+      pos = pos->next_;
+  }
+
+  if (i == max)
+    *count = i;
+  else
+    *count = i + 1;
+
+  return total;
+}
+
+
 int NodeBIO::Write(BIO* bio, const char* data, int len) {
   BIO_clear_retry_flags(bio);
 
@@ -118,10 +146,12 @@ int NodeBIO::Gets(BIO* bio, char* out, int size) {
   int i = nbio->IndexOf('\n', size);
 
   // Include '\n'
-  if (i < size) i++;
+  if (i < size)
+    i++;
 
   // Shift `i` a bit to NULL-terminate string later
-  if (size == i) i--;
+  if (size == i)
+    i--;
 
   // Flush read data
   nbio->Read(out, i);
@@ -188,6 +218,25 @@ long NodeBIO::Ctrl(BIO* bio, int cmd, long num, void* ptr) {
 }
 
 
+void NodeBIO::TryMoveReadHead() {
+  // `read_pos_` and `write_pos_` means the position of the reader and writer
+  // inside the buffer, respectively. When they're equal - its safe to reset
+  // them, because both reader and writer will continue doing their stuff
+  // from new (zero) positions.
+  while (read_head_->read_pos_ != 0 &&
+         read_head_->read_pos_ == read_head_->write_pos_) {
+    // Reset positions
+    read_head_->read_pos_ = 0;
+    read_head_->write_pos_ = 0;
+
+    // Move read_head_ forward, just in case if there're still some data to
+    // read in the next buffer.
+    if (read_head_ != write_head_)
+      read_head_ = read_head_->next_;
+  }
+}
+
+
 size_t NodeBIO::Read(char* out, size_t size) {
   size_t bytes_read = 0;
   size_t expected = Length() > size ? size : Length();
@@ -210,16 +259,7 @@ size_t NodeBIO::Read(char* out, size_t size) {
     offset += avail;
     left -= avail;
 
-    // Move to next buffer
-    if (read_head_->read_pos_ == read_head_->write_pos_) {
-      read_head_->read_pos_ = 0;
-      read_head_->write_pos_ = 0;
-
-      // But not get beyond write_head_
-      if (length_ != bytes_read && read_head_ != write_head_) {
-        read_head_ = read_head_->next_;
-      }
-    }
+    TryMoveReadHead();
   }
   assert(expected == bytes_read);
   length_ -= bytes_read;
@@ -328,6 +368,10 @@ void NodeBIO::Write(const char* data, size_t size) {
       assert(write_head_->write_pos_ == kBufferLength);
       TryAllocateForWrite();
       write_head_ = write_head_->next_;
+
+      // Additionally, since we're moved to the next buffer, read head
+      // may be moved as well.
+      TryMoveReadHead();
     }
   }
   assert(left == 0);
@@ -353,8 +397,13 @@ void NodeBIO::Commit(size_t size) {
   // Allocate new buffer if write head is full,
   // and there're no other place to go
   TryAllocateForWrite();
-  if (write_head_->write_pos_ == kBufferLength)
+  if (write_head_->write_pos_ == kBufferLength) {
     write_head_ = write_head_->next_;
+
+    // Additionally, since we're moved to the next buffer, read head
+    // may be moved as well.
+    TryMoveReadHead();
+  }
 }
 
 

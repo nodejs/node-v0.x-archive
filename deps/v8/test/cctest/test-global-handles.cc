@@ -86,19 +86,19 @@ class TestObjectVisitor : public ObjectVisitor {
 
 TEST(IterateObjectGroupsOldApi) {
   CcTest::InitializeVM();
-  GlobalHandles* global_handles = Isolate::Current()->global_handles();
-
+  GlobalHandles* global_handles = CcTest::i_isolate()->global_handles();
+  Heap* heap = CcTest::heap();
   v8::HandleScope handle_scope(CcTest::isolate());
 
   Handle<Object> g1s1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g1s2 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
 
   Handle<Object> g2s1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g2s2 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
 
   TestRetainedObjectInfo info1;
   TestRetainedObjectInfo info2;
@@ -181,19 +181,20 @@ TEST(IterateObjectGroupsOldApi) {
 
 TEST(IterateObjectGroups) {
   CcTest::InitializeVM();
-  GlobalHandles* global_handles = Isolate::Current()->global_handles();
+  GlobalHandles* global_handles = CcTest::i_isolate()->global_handles();
+  Heap* heap = CcTest::heap();
 
   v8::HandleScope handle_scope(CcTest::isolate());
 
   Handle<Object> g1s1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g1s2 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
 
   Handle<Object> g2s1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g2s2 =
-    global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+    global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
 
   TestRetainedObjectInfo info1;
   TestRetainedObjectInfo info2;
@@ -275,24 +276,25 @@ TEST(IterateObjectGroups) {
 
 TEST(ImplicitReferences) {
   CcTest::InitializeVM();
-  GlobalHandles* global_handles = Isolate::Current()->global_handles();
+  GlobalHandles* global_handles = CcTest::i_isolate()->global_handles();
+  Heap* heap = CcTest::heap();
 
   v8::HandleScope handle_scope(CcTest::isolate());
 
   Handle<Object> g1s1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g1c1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g1c2 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
 
 
   Handle<Object> g2s1 =
-      global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+      global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g2s2 =
-    global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+    global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
   Handle<Object> g2c1 =
-    global_handles->Create(HEAP->AllocateFixedArray(1)->ToObjectChecked());
+    global_handles->Create(heap->AllocateFixedArray(1)->ToObjectChecked());
 
   global_handles->SetObjectGroupId(g1s1.location(), UniqueId(1));
   global_handles->SetObjectGroupId(g2s1.location(), UniqueId(2));
@@ -319,26 +321,28 @@ TEST(ImplicitReferences) {
 
 TEST(EternalHandles) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   v8::Isolate* v8_isolate = reinterpret_cast<v8::Isolate*>(isolate);
-  EternalHandles* eternals = isolate->eternal_handles();
+  EternalHandles* eternal_handles = isolate->eternal_handles();
 
   // Create a number of handles that will not be on a block boundary
   const int kArrayLength = 2048-1;
   int indices[kArrayLength];
+  v8::Eternal<v8::Value> eternals[kArrayLength];
 
-  CHECK_EQ(0, eternals->NumberOfHandles());
+  CHECK_EQ(0, eternal_handles->NumberOfHandles());
   for (int i = 0; i < kArrayLength; i++) {
+    indices[i] = -1;
     HandleScope scope(isolate);
     v8::Local<v8::Object> object = v8::Object::New();
     object->Set(i, v8::Integer::New(i, v8_isolate));
-    if (i % 2 == 0) {
-      // Create with internal api
-      indices[i] = eternals->Create(isolate, *v8::Utils::OpenHandle(*object));
-    } else {
-      // Create with external api
-      indices[i] = object.Eternalize(v8_isolate);
-    }
+    // Create with internal api
+    eternal_handles->Create(
+        isolate, *v8::Utils::OpenHandle(*object), &indices[i]);
+    // Create with external api
+    CHECK(eternals[i].IsEmpty());
+    eternals[i].Set(v8_isolate, object);
+    CHECK(!eternals[i].IsEmpty());
   }
 
   isolate->heap()->CollectAllAvailableGarbage();
@@ -346,21 +350,31 @@ TEST(EternalHandles) {
   for (int i = 0; i < kArrayLength; i++) {
     for (int j = 0; j < 2; j++) {
       HandleScope scope(isolate);
-      v8::Local<v8::Object> object;
+      v8::Local<v8::Value> local;
       if (j == 0) {
         // Test internal api
-        v8::Local<v8::Value> local =
-            v8::Utils::ToLocal(eternals->Get(indices[i]));
-        object = v8::Handle<v8::Object>::Cast(local);
+        local = v8::Utils::ToLocal(eternal_handles->Get(indices[i]));
       } else {
         // Test external api
-        object = v8::Local<v8::Object>::GetEternal(v8_isolate, indices[i]);
+        local = eternals[i].Get(v8_isolate);
       }
+      v8::Local<v8::Object> object = v8::Handle<v8::Object>::Cast(local);
       v8::Local<v8::Value> value = object->Get(i);
       CHECK(value->IsInt32());
       CHECK_EQ(i, value->Int32Value());
     }
   }
 
-  CHECK_EQ(kArrayLength, eternals->NumberOfHandles());
+  CHECK_EQ(2*kArrayLength, eternal_handles->NumberOfHandles());
+
+  // Create an eternal via the constructor
+  {
+    HandleScope scope(isolate);
+    v8::Local<v8::Object> object = v8::Object::New();
+    v8::Eternal<v8::Object> eternal(v8_isolate, object);
+    CHECK(!eternal.IsEmpty());
+    CHECK(object == eternal.Get(v8_isolate));
+  }
+
+  CHECK_EQ(2*kArrayLength + 1, eternal_handles->NumberOfHandles());
 }

@@ -33,6 +33,7 @@
 #include "codegen.h"
 #include "cpu-profiler.h"
 #include "debug.h"
+#include "isolate-inl.h"
 #include "runtime.h"
 #include "serialize.h"
 
@@ -48,6 +49,7 @@ MacroAssembler::MacroAssembler(Isolate* arg_isolate, void* buffer, int size)
       allow_stub_calls_(true),
       has_frame_(false) {
   if (isolate() != NULL) {
+    // TODO(titzer): should we just use a null handle here instead?
     code_object_ = Handle<Object>(isolate()->heap()->undefined_value(),
                                   isolate());
   }
@@ -215,8 +217,233 @@ void MacroAssembler::ClampUint8(Register reg) {
 }
 
 
-static double kUint32Bias =
-    static_cast<double>(static_cast<uint32_t>(0xFFFFFFFF)) + 1;
+void MacroAssembler::SlowTruncateToI(Register result_reg,
+                                     Register input_reg,
+                                     int offset) {
+  DoubleToIStub stub(input_reg, result_reg, offset, true);
+  call(stub.GetCode(isolate()), RelocInfo::CODE_TARGET);
+}
+
+
+void MacroAssembler::TruncateDoubleToI(Register result_reg,
+                                       XMMRegister input_reg) {
+  Label done;
+  cvttsd2si(result_reg, Operand(input_reg));
+  cmp(result_reg, 0x80000000u);
+  j(not_equal, &done, Label::kNear);
+
+  sub(esp, Immediate(kDoubleSize));
+  movsd(MemOperand(esp, 0), input_reg);
+  SlowTruncateToI(result_reg, esp, 0);
+  add(esp, Immediate(kDoubleSize));
+  bind(&done);
+}
+
+
+void MacroAssembler::TruncateX87TOSToI(Register result_reg) {
+  sub(esp, Immediate(kDoubleSize));
+  fst_d(MemOperand(esp, 0));
+  SlowTruncateToI(result_reg, esp, 0);
+  add(esp, Immediate(kDoubleSize));
+}
+
+
+void MacroAssembler::X87TOSToI(Register result_reg,
+                               MinusZeroMode minus_zero_mode,
+                               Label* conversion_failed,
+                               Label::Distance dst) {
+  Label done;
+  sub(esp, Immediate(kPointerSize));
+  fld(0);
+  fist_s(MemOperand(esp, 0));
+  fild_s(MemOperand(esp, 0));
+  pop(result_reg);
+  FCmp();
+  j(not_equal, conversion_failed, dst);
+  j(parity_even, conversion_failed, dst);
+  if (minus_zero_mode == FAIL_ON_MINUS_ZERO) {
+    test(result_reg, Operand(result_reg));
+    j(not_zero, &done, Label::kNear);
+    // To check for minus zero, we load the value again as float, and check
+    // if that is still 0.
+    sub(esp, Immediate(kPointerSize));
+    fst_s(MemOperand(esp, 0));
+    pop(result_reg);
+    test(result_reg, Operand(result_reg));
+    j(not_zero, conversion_failed, dst);
+  }
+  bind(&done);
+}
+
+
+void MacroAssembler::DoubleToI(Register result_reg,
+                               XMMRegister input_reg,
+                               XMMRegister scratch,
+                               MinusZeroMode minus_zero_mode,
+                               Label* conversion_failed,
+                               Label::Distance dst) {
+  ASSERT(!input_reg.is(scratch));
+  cvttsd2si(result_reg, Operand(input_reg));
+  Cvtsi2sd(scratch, Operand(result_reg));
+  ucomisd(scratch, input_reg);
+  j(not_equal, conversion_failed, dst);
+  j(parity_even, conversion_failed, dst);  // NaN.
+  if (minus_zero_mode == FAIL_ON_MINUS_ZERO) {
+    Label done;
+    // The integer converted back is equal to the original. We
+    // only have to test if we got -0 as an input.
+    test(result_reg, Operand(result_reg));
+    j(not_zero, &done, Label::kNear);
+    movmskpd(result_reg, input_reg);
+    // Bit 0 contains the sign of the double in input_reg.
+    // If input was positive, we are ok and return 0, otherwise
+    // jump to conversion_failed.
+    and_(result_reg, 1);
+    j(not_zero, conversion_failed, dst);
+    bind(&done);
+  }
+}
+
+
+void MacroAssembler::TruncateHeapNumberToI(Register result_reg,
+                                           Register input_reg) {
+  Label done, slow_case;
+
+  if (CpuFeatures::IsSupported(SSE3)) {
+    CpuFeatureScope scope(this, SSE3);
+    Label convert;
+    // Use more powerful conversion when sse3 is available.
+    // Load x87 register with heap number.
+    fld_d(FieldOperand(input_reg, HeapNumber::kValueOffset));
+    // Get exponent alone and check for too-big exponent.
+    mov(result_reg, FieldOperand(input_reg, HeapNumber::kExponentOffset));
+    and_(result_reg, HeapNumber::kExponentMask);
+    const uint32_t kTooBigExponent =
+        (HeapNumber::kExponentBias + 63) << HeapNumber::kExponentShift;
+    cmp(Operand(result_reg), Immediate(kTooBigExponent));
+    j(greater_equal, &slow_case, Label::kNear);
+
+    // Reserve space for 64 bit answer.
+    sub(Operand(esp), Immediate(kDoubleSize));
+    // Do conversion, which cannot fail because we checked the exponent.
+    fisttp_d(Operand(esp, 0));
+    mov(result_reg, Operand(esp, 0));  // Low word of answer is the result.
+    add(Operand(esp), Immediate(kDoubleSize));
+    jmp(&done, Label::kNear);
+
+    // Slow case.
+    bind(&slow_case);
+    if (input_reg.is(result_reg)) {
+      // Input is clobbered. Restore number from fpu stack
+      sub(Operand(esp), Immediate(kDoubleSize));
+      fstp_d(Operand(esp, 0));
+      SlowTruncateToI(result_reg, esp, 0);
+      add(esp, Immediate(kDoubleSize));
+    } else {
+      fstp(0);
+      SlowTruncateToI(result_reg, input_reg);
+    }
+  } else if (CpuFeatures::IsSupported(SSE2)) {
+    CpuFeatureScope scope(this, SSE2);
+    movsd(xmm0, FieldOperand(input_reg, HeapNumber::kValueOffset));
+    cvttsd2si(result_reg, Operand(xmm0));
+    cmp(result_reg, 0x80000000u);
+    j(not_equal, &done, Label::kNear);
+    // Check if the input was 0x8000000 (kMinInt).
+    // If no, then we got an overflow and we deoptimize.
+    ExternalReference min_int = ExternalReference::address_of_min_int();
+    ucomisd(xmm0, Operand::StaticVariable(min_int));
+    j(not_equal, &slow_case, Label::kNear);
+    j(parity_even, &slow_case, Label::kNear);  // NaN.
+    jmp(&done, Label::kNear);
+
+    // Slow case.
+    bind(&slow_case);
+    if (input_reg.is(result_reg)) {
+      // Input is clobbered. Restore number from double scratch.
+      sub(esp, Immediate(kDoubleSize));
+      movsd(MemOperand(esp, 0), xmm0);
+      SlowTruncateToI(result_reg, esp, 0);
+      add(esp, Immediate(kDoubleSize));
+    } else {
+      SlowTruncateToI(result_reg, input_reg);
+    }
+  } else {
+    SlowTruncateToI(result_reg, input_reg);
+  }
+  bind(&done);
+}
+
+
+void MacroAssembler::TaggedToI(Register result_reg,
+                               Register input_reg,
+                               XMMRegister temp,
+                               MinusZeroMode minus_zero_mode,
+                               Label* lost_precision) {
+  Label done;
+  ASSERT(!temp.is(xmm0));
+
+  cmp(FieldOperand(input_reg, HeapObject::kMapOffset),
+      isolate()->factory()->heap_number_map());
+  j(not_equal, lost_precision, Label::kNear);
+
+  if (CpuFeatures::IsSafeForSnapshot(SSE2)) {
+    ASSERT(!temp.is(no_xmm_reg));
+    CpuFeatureScope scope(this, SSE2);
+
+    movsd(xmm0, FieldOperand(input_reg, HeapNumber::kValueOffset));
+    cvttsd2si(result_reg, Operand(xmm0));
+    Cvtsi2sd(temp, Operand(result_reg));
+    ucomisd(xmm0, temp);
+    RecordComment("Deferred TaggedToI: lost precision");
+    j(not_equal, lost_precision, Label::kNear);
+    RecordComment("Deferred TaggedToI: NaN");
+    j(parity_even, lost_precision, Label::kNear);
+    if (minus_zero_mode == FAIL_ON_MINUS_ZERO) {
+      test(result_reg, Operand(result_reg));
+      j(not_zero, &done, Label::kNear);
+      movmskpd(result_reg, xmm0);
+      and_(result_reg, 1);
+      RecordComment("Deferred TaggedToI: minus zero");
+      j(not_zero, lost_precision, Label::kNear);
+    }
+  } else {
+    // TODO(olivf) Converting a number on the fpu is actually quite slow. We
+    // should first try a fast conversion and then bailout to this slow case.
+    Label lost_precision_pop, zero_check;
+    Label* lost_precision_int = (minus_zero_mode == FAIL_ON_MINUS_ZERO)
+        ? &lost_precision_pop : lost_precision;
+    sub(esp, Immediate(kPointerSize));
+    fld_d(FieldOperand(input_reg, HeapNumber::kValueOffset));
+    if (minus_zero_mode == FAIL_ON_MINUS_ZERO) fld(0);
+    fist_s(MemOperand(esp, 0));
+    fild_s(MemOperand(esp, 0));
+    FCmp();
+    pop(result_reg);
+    j(not_equal, lost_precision_int, Label::kNear);
+    j(parity_even, lost_precision_int, Label::kNear);  // NaN.
+    if (minus_zero_mode == FAIL_ON_MINUS_ZERO) {
+      test(result_reg, Operand(result_reg));
+      j(zero, &zero_check, Label::kNear);
+      fstp(0);
+      jmp(&done, Label::kNear);
+      bind(&zero_check);
+      // To check for minus zero, we load the value again as float, and check
+      // if that is still 0.
+      sub(esp, Immediate(kPointerSize));
+      fstp_s(Operand(esp, 0));
+      pop(result_reg);
+      test(result_reg, Operand(result_reg));
+      j(zero, &done, Label::kNear);
+      jmp(lost_precision, Label::kNear);
+
+      bind(&lost_precision_pop);
+      fstp(0);
+      jmp(lost_precision, Label::kNear);
+    }
+  }
+  bind(&done);
+}
 
 
 void MacroAssembler::LoadUint32(XMMRegister dst,
@@ -224,12 +451,28 @@ void MacroAssembler::LoadUint32(XMMRegister dst,
                                 XMMRegister scratch) {
   Label done;
   cmp(src, Immediate(0));
-  movdbl(scratch,
-         Operand(reinterpret_cast<int32_t>(&kUint32Bias), RelocInfo::NONE32));
-  cvtsi2sd(dst, src);
+  ExternalReference uint32_bias =
+        ExternalReference::address_of_uint32_bias();
+  movsd(scratch, Operand::StaticVariable(uint32_bias));
+  Cvtsi2sd(dst, src);
   j(not_sign, &done, Label::kNear);
   addsd(dst, scratch);
   bind(&done);
+}
+
+
+void MacroAssembler::LoadUint32NoSSE2(Register src) {
+  Label done;
+  push(src);
+  fild_s(Operand(esp, 0));
+  cmp(src, Immediate(0));
+  j(not_sign, &done, Label::kNear);
+  ExternalReference uint32_bias =
+        ExternalReference::address_of_uint32_bias();
+  fld_d(Operand::StaticVariable(uint32_bias));
+  faddp(1);
+  bind(&done);
+  add(esp, Immediate(kPointerSize));
 }
 
 
@@ -445,6 +688,12 @@ void MacroAssembler::DebugBreak() {
 #endif
 
 
+void MacroAssembler::Cvtsi2sd(XMMRegister dst, const Operand& src) {
+  xorps(dst, dst);
+  cvtsi2sd(dst, src);
+}
+
+
 void MacroAssembler::Set(Register dst, const Immediate& x) {
   if (x.is_zero()) {
     xor_(dst, dst);  // Shorter than mov.
@@ -568,9 +817,9 @@ void MacroAssembler::StoreNumberToDoubleElements(
       ExternalReference::address_of_canonical_non_hole_nan();
   if (CpuFeatures::IsSupported(SSE2) && specialize_for_processor) {
     CpuFeatureScope use_sse2(this, SSE2);
-    movdbl(scratch2, FieldOperand(maybe_number, HeapNumber::kValueOffset));
+    movsd(scratch2, FieldOperand(maybe_number, HeapNumber::kValueOffset));
     bind(&have_double_value);
-    movdbl(FieldOperand(elements, key, times_4,
+    movsd(FieldOperand(elements, key, times_4,
                         FixedDoubleArray::kHeaderSize - elements_offset),
            scratch2);
   } else {
@@ -590,7 +839,7 @@ void MacroAssembler::StoreNumberToDoubleElements(
   bind(&is_nan);
   if (CpuFeatures::IsSupported(SSE2) && specialize_for_processor) {
     CpuFeatureScope use_sse2(this, SSE2);
-    movdbl(scratch2, Operand::StaticVariable(canonical_nan_reference));
+    movsd(scratch2, Operand::StaticVariable(canonical_nan_reference));
   } else {
     fld_d(Operand::StaticVariable(canonical_nan_reference));
   }
@@ -603,8 +852,8 @@ void MacroAssembler::StoreNumberToDoubleElements(
   SmiUntag(scratch1);
   if (CpuFeatures::IsSupported(SSE2) && specialize_for_processor) {
     CpuFeatureScope fscope(this, SSE2);
-    cvtsi2sd(scratch2, scratch1);
-    movdbl(FieldOperand(elements, key, times_4,
+    Cvtsi2sd(scratch2, scratch1);
+    movsd(FieldOperand(elements, key, times_4,
                         FixedDoubleArray::kHeaderSize - elements_offset),
            scratch2);
   } else {
@@ -765,6 +1014,30 @@ void MacroAssembler::AssertNotSmi(Register object) {
 }
 
 
+void MacroAssembler::Prologue(PrologueFrameMode frame_mode) {
+  if (frame_mode == BUILD_STUB_FRAME) {
+    push(ebp);  // Caller's frame pointer.
+    mov(ebp, esp);
+    push(esi);  // Callee's context.
+    push(Immediate(Smi::FromInt(StackFrame::STUB)));
+  } else {
+    PredictableCodeSizeScope predictible_code_size_scope(this,
+        kNoCodeAgeSequenceLength);
+    if (isolate()->IsCodePreAgingActive()) {
+        // Pre-age the code.
+      call(isolate()->builtins()->MarkCodeAsExecutedOnce(),
+          RelocInfo::CODE_AGE_SEQUENCE);
+      Nop(kNoCodeAgeSequenceLength - Assembler::kCallInstructionLength);
+    } else {
+      push(ebp);  // Caller's frame pointer.
+      mov(ebp, esp);
+      push(esi);  // Callee's context.
+      push(edi);  // Callee's JS function.
+    }
+  }
+}
+
+
 void MacroAssembler::EnterFrame(StackFrame::Type type) {
   push(ebp);
   mov(ebp, esp);
@@ -820,7 +1093,7 @@ void MacroAssembler::EnterExitFrameEpilogue(int argc, bool save_doubles) {
     const int offset = -2 * kPointerSize;
     for (int i = 0; i < XMMRegister::kNumRegisters; i++) {
       XMMRegister reg = XMMRegister::from_code(i);
-      movdbl(Operand(ebp, offset - ((i + 1) * kDoubleSize)), reg);
+      movsd(Operand(ebp, offset - ((i + 1) * kDoubleSize)), reg);
     }
   } else {
     sub(esp, Immediate(argc * kPointerSize));
@@ -864,7 +1137,7 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
     const int offset = -2 * kPointerSize;
     for (int i = 0; i < XMMRegister::kNumRegisters; i++) {
       XMMRegister reg = XMMRegister::from_code(i);
-      movdbl(reg, Operand(ebp, offset - ((i + 1) * kDoubleSize)));
+      movsd(reg, Operand(ebp, offset - ((i + 1) * kDoubleSize)));
     }
   }
 
@@ -878,14 +1151,16 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
   // Push the return address to get ready to return.
   push(ecx);
 
-  LeaveExitFrameEpilogue();
+  LeaveExitFrameEpilogue(true);
 }
 
 
-void MacroAssembler::LeaveExitFrameEpilogue() {
+void MacroAssembler::LeaveExitFrameEpilogue(bool restore_context) {
   // Restore current context from top and clear it in debug mode.
   ExternalReference context_address(Isolate::kContextAddress, isolate());
-  mov(esi, Operand::StaticVariable(context_address));
+  if (restore_context) {
+    mov(esi, Operand::StaticVariable(context_address));
+  }
 #ifdef DEBUG
   mov(Operand::StaticVariable(context_address), Immediate(0));
 #endif
@@ -897,11 +1172,11 @@ void MacroAssembler::LeaveExitFrameEpilogue() {
 }
 
 
-void MacroAssembler::LeaveApiExitFrame() {
+void MacroAssembler::LeaveApiExitFrame(bool restore_context) {
   mov(esp, ebp);
   pop(ebp);
 
-  LeaveExitFrameEpilogue();
+  LeaveExitFrameEpilogue(restore_context);
 }
 
 
@@ -1910,23 +2185,9 @@ void MacroAssembler::IndexFromHash(Register hash, Register index) {
 }
 
 
-void MacroAssembler::CallRuntime(Runtime::FunctionId id, int num_arguments) {
-  CallRuntime(Runtime::FunctionForId(id), num_arguments);
-}
-
-
-void MacroAssembler::CallRuntimeSaveDoubles(Runtime::FunctionId id) {
-  const Runtime::Function* function = Runtime::FunctionForId(id);
-  Set(eax, Immediate(function->nargs));
-  mov(ebx, Immediate(ExternalReference(function, isolate())));
-  CEntryStub ces(1, CpuFeatures::IsSupported(SSE2) ? kSaveFPRegs
-                                                   : kDontSaveFPRegs);
-  CallStub(&ces);
-}
-
-
 void MacroAssembler::CallRuntime(const Runtime::Function* f,
-                                 int num_arguments) {
+                                 int num_arguments,
+                                 SaveFPRegsMode save_doubles) {
   // If the expected number of arguments of the runtime function is
   // constant, we check that the actual number of arguments match the
   // expectation.
@@ -1941,7 +2202,8 @@ void MacroAssembler::CallRuntime(const Runtime::Function* f,
   // smarter.
   Set(eax, Immediate(num_arguments));
   mov(ebx, Immediate(ExternalReference(f, isolate())));
-  CEntryStub ces(1);
+  CEntryStub ces(1, CpuFeatures::IsSupported(SSE2) ? save_doubles
+                                                   : kDontSaveFPRegs);
   CallStub(&ces);
 }
 
@@ -1977,60 +2239,26 @@ void MacroAssembler::TailCallRuntime(Runtime::FunctionId fid,
 }
 
 
-// If true, a Handle<T> returned by value from a function with cdecl calling
-// convention will be returned directly as a value of location_ field in a
-// register eax.
-// If false, it is returned as a pointer to a preallocated by caller memory
-// region. Pointer to this region should be passed to a function as an
-// implicit first argument.
-#if defined(USING_BSD_ABI) || defined(__MINGW32__) || defined(__CYGWIN__)
-static const bool kReturnHandlesDirectly = true;
-#else
-static const bool kReturnHandlesDirectly = false;
-#endif
-
-
-Operand ApiParameterOperand(int index, bool returns_handle) {
-  int offset = (index +(kReturnHandlesDirectly || !returns_handle ? 0 : 1));
-  return Operand(esp, offset * kPointerSize);
+Operand ApiParameterOperand(int index) {
+  return Operand(esp, index * kPointerSize);
 }
 
 
-void MacroAssembler::PrepareCallApiFunction(int argc, bool returns_handle) {
-  if (kReturnHandlesDirectly || !returns_handle) {
-    EnterApiExitFrame(argc);
-    // When handles are returned directly we don't have to allocate extra
-    // space for and pass an out parameter.
-    if (emit_debug_code()) {
-      mov(esi, Immediate(BitCast<int32_t>(kZapValue)));
-    }
-  } else {
-    // We allocate two additional slots: return value and pointer to it.
-    EnterApiExitFrame(argc + 2);
-
-    // The argument slots are filled as follows:
-    //
-    //   n + 1: output slot
-    //   n: arg n
-    //   ...
-    //   1: arg1
-    //   0: pointer to the output slot
-
-    lea(esi, Operand(esp, (argc + 1) * kPointerSize));
-    mov(Operand(esp, 0 * kPointerSize), esi);
-    if (emit_debug_code()) {
-      mov(Operand(esi, 0), Immediate(0));
-    }
+void MacroAssembler::PrepareCallApiFunction(int argc) {
+  EnterApiExitFrame(argc);
+  if (emit_debug_code()) {
+    mov(esi, Immediate(BitCast<int32_t>(kZapValue)));
   }
 }
 
 
-void MacroAssembler::CallApiFunctionAndReturn(Address function_address,
-                                              Address thunk_address,
-                                              Operand thunk_last_arg,
-                                              int stack_space,
-                                              bool returns_handle,
-                                              int return_value_offset) {
+void MacroAssembler::CallApiFunctionAndReturn(
+    Address function_address,
+    Address thunk_address,
+    Operand thunk_last_arg,
+    int stack_space,
+    Operand return_value_operand,
+    Operand* context_restore_operand) {
   ExternalReference next_address =
       ExternalReference::handle_scope_next_address(isolate());
   ExternalReference limit_address =
@@ -2085,25 +2313,11 @@ void MacroAssembler::CallApiFunctionAndReturn(Address function_address,
   }
 
   Label prologue;
-  if (returns_handle) {
-    if (!kReturnHandlesDirectly) {
-      // PrepareCallApiFunction saved pointer to the output slot into
-      // callee-save register esi.
-      mov(eax, Operand(esi, 0));
-    }
-    Label empty_handle;
-    // Check if the result handle holds 0.
-    test(eax, eax);
-    j(zero, &empty_handle);
-    // It was non-zero.  Dereference to get the result value.
-    mov(eax, Operand(eax, 0));
-    jmp(&prologue);
-    bind(&empty_handle);
-  }
   // Load the value from ReturnValue
-  mov(eax, Operand(ebp, return_value_offset * kPointerSize));
+  mov(eax, return_value_operand);
 
   Label promote_scheduled_exception;
+  Label exception_handled;
   Label delete_allocated_handles;
   Label leave_exit_frame;
 
@@ -2123,6 +2337,7 @@ void MacroAssembler::CallApiFunctionAndReturn(Address function_address,
   cmp(Operand::StaticVariable(scheduled_exception_address),
       Immediate(isolate()->factory()->the_hole_value()));
   j(not_equal, &promote_scheduled_exception);
+  bind(&exception_handled);
 
 #if ENABLE_EXTRA_CHECKS
   // Check if the function returned a valid JavaScript value.
@@ -2159,11 +2374,19 @@ void MacroAssembler::CallApiFunctionAndReturn(Address function_address,
   bind(&ok);
 #endif
 
-  LeaveApiExitFrame();
+  bool restore_context = context_restore_operand != NULL;
+  if (restore_context) {
+    mov(esi, *context_restore_operand);
+  }
+  LeaveApiExitFrame(!restore_context);
   ret(stack_space * kPointerSize);
 
   bind(&promote_scheduled_exception);
-  TailCallRuntime(Runtime::kPromoteScheduledException, 0, 1);
+  {
+    FrameScope frame(this, StackFrame::INTERNAL);
+    CallRuntime(Runtime::kPromoteScheduledException, 0);
+  }
+  jmp(&exception_handled);
 
   // HandleScope limit has changed. Delete allocated extensions.
   ExternalReference delete_extensions =
@@ -2618,6 +2841,8 @@ void MacroAssembler::Ret(int bytes_dropped, Register scratch) {
 void MacroAssembler::VerifyX87StackDepth(uint32_t depth) {
   // Make sure the floating point stack is either empty or has depth items.
   ASSERT(depth <= 7);
+  // This is very expensive.
+  ASSERT(FLAG_debug_code && FLAG_enable_slow_asserts);
 
   // The top-of-stack (tos) is 7 if there is one item pushed.
   int tos = (8 - depth) % 8;
@@ -2774,6 +2999,11 @@ void MacroAssembler::Abort(BailoutReason reason) {
     RecordComment("Abort message: ");
     RecordComment(msg);
   }
+
+  if (FLAG_trap_on_abort) {
+    int3();
+    return;
+  }
 #endif
 
   push(eax);
@@ -2813,6 +3043,88 @@ void MacroAssembler::LoadPowerOf2(XMMRegister dst,
   mov(scratch, Immediate(power + HeapNumber::kExponentBias));
   movd(dst, scratch);
   psllq(dst, HeapNumber::kMantissaBits);
+}
+
+
+void MacroAssembler::LookupNumberStringCache(Register object,
+                                             Register result,
+                                             Register scratch1,
+                                             Register scratch2,
+                                             Label* not_found) {
+  // Use of registers. Register result is used as a temporary.
+  Register number_string_cache = result;
+  Register mask = scratch1;
+  Register scratch = scratch2;
+
+  // Load the number string cache.
+  LoadRoot(number_string_cache, Heap::kNumberStringCacheRootIndex);
+  // Make the hash mask from the length of the number string cache. It
+  // contains two elements (number and string) for each cache entry.
+  mov(mask, FieldOperand(number_string_cache, FixedArray::kLengthOffset));
+  shr(mask, kSmiTagSize + 1);  // Untag length and divide it by two.
+  sub(mask, Immediate(1));  // Make mask.
+
+  // Calculate the entry in the number string cache. The hash value in the
+  // number string cache for smis is just the smi value, and the hash for
+  // doubles is the xor of the upper and lower words. See
+  // Heap::GetNumberStringCache.
+  Label smi_hash_calculated;
+  Label load_result_from_cache;
+  Label not_smi;
+  STATIC_ASSERT(kSmiTag == 0);
+  JumpIfNotSmi(object, &not_smi, Label::kNear);
+  mov(scratch, object);
+  SmiUntag(scratch);
+  jmp(&smi_hash_calculated, Label::kNear);
+  bind(&not_smi);
+  cmp(FieldOperand(object, HeapObject::kMapOffset),
+      isolate()->factory()->heap_number_map());
+  j(not_equal, not_found);
+  STATIC_ASSERT(8 == kDoubleSize);
+  mov(scratch, FieldOperand(object, HeapNumber::kValueOffset));
+  xor_(scratch, FieldOperand(object, HeapNumber::kValueOffset + 4));
+  // Object is heap number and hash is now in scratch. Calculate cache index.
+  and_(scratch, mask);
+  Register index = scratch;
+  Register probe = mask;
+  mov(probe,
+      FieldOperand(number_string_cache,
+                   index,
+                   times_twice_pointer_size,
+                   FixedArray::kHeaderSize));
+  JumpIfSmi(probe, not_found);
+  if (CpuFeatures::IsSupported(SSE2)) {
+    CpuFeatureScope fscope(this, SSE2);
+    movsd(xmm0, FieldOperand(object, HeapNumber::kValueOffset));
+    ucomisd(xmm0, FieldOperand(probe, HeapNumber::kValueOffset));
+  } else {
+    fld_d(FieldOperand(object, HeapNumber::kValueOffset));
+    fld_d(FieldOperand(probe, HeapNumber::kValueOffset));
+    FCmp();
+  }
+  j(parity_even, not_found);  // Bail out if NaN is involved.
+  j(not_equal, not_found);  // The cache did not contain this value.
+  jmp(&load_result_from_cache, Label::kNear);
+
+  bind(&smi_hash_calculated);
+  // Object is smi and hash is now in scratch. Calculate cache index.
+  and_(scratch, mask);
+  // Check if the entry is the smi we are looking for.
+  cmp(object,
+      FieldOperand(number_string_cache,
+                   index,
+                   times_twice_pointer_size,
+                   FixedArray::kHeaderSize));
+  j(not_equal, not_found);
+
+  // Get the result from the cache.
+  bind(&load_result_from_cache);
+  mov(result,
+      FieldOperand(number_string_cache,
+                   index,
+                   times_twice_pointer_size,
+                   FixedArray::kHeaderSize + kPointerSize));
+  IncrementCounter(isolate()->counters()->number_to_string_native(), 1);
 }
 
 
@@ -3221,9 +3533,8 @@ void MacroAssembler::CheckEnumCache(Label* call_runtime) {
 
 void MacroAssembler::TestJSArrayForAllocationMemento(
     Register receiver_reg,
-    Register scratch_reg) {
-  Label no_memento_available;
-
+    Register scratch_reg,
+    Label* no_memento_found) {
   ExternalReference new_space_start =
       ExternalReference::new_space_start(isolate());
   ExternalReference new_space_allocation_top =
@@ -3232,12 +3543,11 @@ void MacroAssembler::TestJSArrayForAllocationMemento(
   lea(scratch_reg, Operand(receiver_reg,
       JSArray::kSize + AllocationMemento::kSize - kHeapObjectTag));
   cmp(scratch_reg, Immediate(new_space_start));
-  j(less, &no_memento_available);
+  j(less, no_memento_found);
   cmp(scratch_reg, Operand::StaticVariable(new_space_allocation_top));
-  j(greater, &no_memento_available);
+  j(greater, no_memento_found);
   cmp(MemOperand(scratch_reg, -AllocationMemento::kSize),
-      Immediate(Handle<Map>(isolate()->heap()->allocation_memento_map())));
-  bind(&no_memento_available);
+      Immediate(isolate()->factory()->allocation_memento_map()));
 }
 
 

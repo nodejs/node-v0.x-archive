@@ -22,10 +22,12 @@
 #include "node.h"
 #include "node_internals.h"
 #include "node_watchdog.h"
+#include "base-object.h"
+#include "base-object-inl.h"
 #include "env.h"
 #include "env-inl.h"
-#include "weak-object.h"
-#include "weak-object-inl.h"
+#include "util.h"
+#include "util-inl.h"
 
 namespace node {
 
@@ -64,12 +66,12 @@ class ContextifyContext {
 
  public:
   explicit ContextifyContext(Environment* env, Local<Object> sandbox)
-      : env_(env)
-      , sandbox_(env->isolate(), sandbox)
-      , context_(env->isolate(), CreateV8Context(env))
-      , proxy_global_(env->isolate(), context()->Global())
+      : env_(env),
+        sandbox_(env->isolate(), sandbox),
+        context_(env->isolate(), CreateV8Context(env)),
+        proxy_global_(env->isolate(), context()->Global()),
         // Wait for sandbox_, proxy_global_, and context_ to die
-      , references_(3) {
+        references_(3) {
     sandbox_.MakeWeak(this, WeakCallback);
     sandbox_.MarkIndependent();
     context_.MakeWeak(this, WeakCallback);
@@ -96,6 +98,79 @@ class ContextifyContext {
   }
 
 
+  // XXX(isaacs): This function only exists because of a shortcoming of
+  // the V8 SetNamedPropertyHandler function.
+  //
+  // It does not provide a way to intercept Object.defineProperty(..)
+  // calls.  As a result, these properties are not copied onto the
+  // contextified sandbox when a new global property is added via either
+  // a function declaration or a Object.defineProperty(global, ...) call.
+  //
+  // Note that any function declarations or Object.defineProperty()
+  // globals that are created asynchronously (in a setTimeout, callback,
+  // etc.) will happen AFTER the call to copy properties, and thus not be
+  // caught.
+  //
+  // The way to properly fix this is to add some sort of a
+  // Object::SetNamedDefinePropertyHandler() function that takes a callback,
+  // which receives the property name and property descriptor as arguments.
+  //
+  // Luckily, such situations are rare, and asynchronously-added globals
+  // weren't supported by Node's VM module until 0.12 anyway.  But, this
+  // should be fixed properly in V8, and this copy function should be
+  // removed once there is a better way.
+  void CopyProperties() {
+    HandleScope scope(node_isolate);
+
+    Local<Context> context = PersistentToLocal(env()->isolate(), context_);
+    Local<Object> global = context->Global()->GetPrototype()->ToObject();
+    Local<Object> sandbox = PersistentToLocal(env()->isolate(), sandbox_);
+
+    Local<Function> clone_property_method;
+
+    Local<Array> names = global->GetOwnPropertyNames();
+    int length = names->Length();
+    for (int i = 0; i < length; i++) {
+      Local<String> key = names->Get(i)->ToString();
+      bool has = sandbox->HasOwnProperty(key);
+      if (!has) {
+        // Could also do this like so:
+        //
+        // PropertyAttribute att = global->GetPropertyAttributes(key_v);
+        // Local<Value> val = global->Get(key_v);
+        // sandbox->ForceSet(key_v, val, att);
+        //
+        // However, this doesn't handle ES6-style properties configured with
+        // Object.defineProperty, and that's exactly what we're up against at
+        // this point.  ForceSet(key,val,att) only supports value properties
+        // with the ES3-style attribute flags (DontDelete/DontEnum/ReadOnly),
+        // which doesn't faithfully capture the full range of configurations
+        // that can be done using Object.defineProperty.
+        if (clone_property_method.IsEmpty()) {
+          Local<String> code = FIXED_ONE_BYTE_STRING(node_isolate,
+              "(function cloneProperty(source, key, target) {\n"
+              "  try {\n"
+              "    var desc = Object.getOwnPropertyDescriptor(source, key);\n"
+              "    if (desc.value === source) desc.value = target;\n"
+              "    Object.defineProperty(target, key, desc);\n"
+              "  } catch (e) {\n"
+              "   // Catch sealed properties errors\n"
+              "  }\n"
+              "})");
+
+          Local<String> fname = FIXED_ONE_BYTE_STRING(node_isolate,
+              "binding:script");
+          Local<Script> script = Script::Compile(code, fname);
+          clone_property_method = Local<Function>::Cast(script->Run());
+          assert(clone_property_method->IsFunction());
+        }
+        Local<Value> args[] = { global, key, sandbox };
+        clone_property_method->Call(global, ARRAY_SIZE(args), args);
+      }
+    }
+  }
+
+
   // This is an object that just keeps an internal pointer to this
   // ContextifyContext.  It's passed to the NamedPropertyHandler.  If we
   // pass the main JavaScript context object we're embedded in, then the
@@ -105,7 +180,7 @@ class ContextifyContext {
     HandleScope scope(node_isolate);
     Local<Object> wrapper =
         env->script_data_constructor_function()->NewInstance();
-    NODE_WRAP(wrapper, this);
+    Wrap<ContextifyContext>(wrapper, this);
     return scope.Close(wrapper);
   }
 
@@ -143,8 +218,8 @@ class ContextifyContext {
 
 
   static void MakeContext(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
 
     if (!args[0]->IsObject()) {
       return ThrowTypeError("sandbox argument must be an object.");
@@ -224,8 +299,8 @@ class ContextifyContext {
       const PropertyCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
 
-    ContextifyContext* ctx = NULL;
-    NODE_UNWRAP(args.Data().As<Object>(), ContextifyContext, ctx);
+    ContextifyContext* ctx =
+        Unwrap<ContextifyContext>(args.Data().As<Object>());
 
     Local<Object> sandbox = PersistentToLocal(node_isolate, ctx->sandbox_);
     Local<Value> rv = sandbox->GetRealNamedProperty(property);
@@ -248,8 +323,8 @@ class ContextifyContext {
       const PropertyCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
 
-    ContextifyContext* ctx = NULL;
-    NODE_UNWRAP(args.Data().As<Object>(), ContextifyContext, ctx);
+    ContextifyContext* ctx =
+        Unwrap<ContextifyContext>(args.Data().As<Object>());
 
     PersistentToLocal(node_isolate, ctx->sandbox_)->Set(property, value);
   }
@@ -260,8 +335,8 @@ class ContextifyContext {
       const PropertyCallbackInfo<Integer>& args) {
     HandleScope scope(node_isolate);
 
-    ContextifyContext* ctx = NULL;
-    NODE_UNWRAP(args.Data().As<Object>(), ContextifyContext, ctx);
+    ContextifyContext* ctx =
+        Unwrap<ContextifyContext>(args.Data().As<Object>());
 
     Local<Object> sandbox = PersistentToLocal(node_isolate, ctx->sandbox_);
     Local<Object> proxy_global = PersistentToLocal(node_isolate,
@@ -281,8 +356,8 @@ class ContextifyContext {
       const PropertyCallbackInfo<Boolean>& args) {
     HandleScope scope(node_isolate);
 
-    ContextifyContext* ctx = NULL;
-    NODE_UNWRAP(args.Data().As<Object>(), ContextifyContext, ctx);
+    ContextifyContext* ctx =
+        Unwrap<ContextifyContext>(args.Data().As<Object>());
 
     bool success = PersistentToLocal(node_isolate,
                                      ctx->sandbox_)->Delete(property);
@@ -298,15 +373,15 @@ class ContextifyContext {
       const PropertyCallbackInfo<Array>& args) {
     HandleScope scope(node_isolate);
 
-    ContextifyContext* ctx = NULL;
-    NODE_UNWRAP(args.Data().As<Object>(), ContextifyContext, ctx);
+    ContextifyContext* ctx =
+        Unwrap<ContextifyContext>(args.Data().As<Object>());
 
     Local<Object> sandbox = PersistentToLocal(node_isolate, ctx->sandbox_);
     args.GetReturnValue().Set(sandbox->GetPropertyNames());
   }
 };
 
-class ContextifyScript : public WeakObject {
+class ContextifyScript : public BaseObject {
  private:
   Persistent<Script> script_;
 
@@ -337,8 +412,9 @@ class ContextifyScript : public WeakObject {
       return ThrowError("Must call vm.Script as a constructor.");
     }
 
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
     ContextifyScript* contextify_script =
-        new ContextifyScript(args.GetIsolate(), args.This());
+        new ContextifyScript(env, args.This());
 
     TryCatch try_catch;
     Local<String> code = args[0]->ToString();
@@ -373,8 +449,8 @@ class ContextifyScript : public WeakObject {
 
   // args: [options]
   static void RunInThisContext(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
 
     // Assemble arguments
     TryCatch try_catch;
@@ -421,6 +497,7 @@ class ContextifyScript : public WeakObject {
                 display_errors,
                 args,
                 try_catch);
+    contextify_context->CopyProperties();
   }
 
   static int64_t GetTimeoutArg(const FunctionCallbackInfo<Value>& args,
@@ -499,7 +576,7 @@ class ContextifyScript : public WeakObject {
     }
 
     ContextifyScript* wrapped_script =
-        WeakObject::Unwrap<ContextifyScript>(args.This());
+        Unwrap<ContextifyScript>(args.This());
     Local<Script> script = PersistentToLocal(node_isolate,
                                              wrapped_script->script_);
 
@@ -529,8 +606,9 @@ class ContextifyScript : public WeakObject {
   }
 
 
-  ContextifyScript(Isolate* isolate, Local<Object> object)
-      : WeakObject(isolate, object) {
+  ContextifyScript(Environment* env, Local<Object> object)
+      : BaseObject(env, object) {
+    MakeWeak<ContextifyScript>(this);
   }
 
 

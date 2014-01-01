@@ -25,14 +25,48 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <stdarg.h>
+#include "checks.h"
 
-#include "v8.h"
+#if V8_LIBC_GLIBC || V8_OS_BSD
+# include <cxxabi.h>
+# include <execinfo.h>
+#endif  // V8_LIBC_GLIBC || V8_OS_BSD
+#include <stdio.h>
 
 #include "platform.h"
+#include "v8.h"
 
-// TODO(isolates): is it necessary to lift this?
-static int fatal_error_handler_nesting_depth = 0;
+
+// Attempts to dump a backtrace (if supported).
+static V8_INLINE void DumpBacktrace() {
+#if V8_LIBC_GLIBC || V8_OS_BSD
+  void* trace[100];
+  int size = backtrace(trace, ARRAY_SIZE(trace));
+  char** symbols = backtrace_symbols(trace, size);
+  i::OS::PrintError("\n==== C stack trace ===============================\n\n");
+  if (size == 0) {
+    i::OS::PrintError("(empty)\n");
+  } else if (symbols == NULL) {
+    i::OS::PrintError("(no symbols)\n");
+  } else {
+    for (int i = 1; i < size; ++i) {
+      i::OS::PrintError("%2d: ", i);
+      char mangled[201];
+      if (sscanf(symbols[i], "%*[^(]%*[(]%200[^)+]", mangled) == 1) {  // NOLINT
+        int status;
+        size_t length;
+        char* demangled = abi::__cxa_demangle(mangled, NULL, &length, &status);
+        i::OS::PrintError("%s\n", demangled != NULL ? demangled : mangled);
+        free(demangled);
+      } else {
+        i::OS::PrintError("??\n");
+      }
+    }
+  }
+  free(symbols);
+#endif  // V8_LIBC_GLIBC || V8_OS_BSD
+}
+
 
 // Contains protection against recursive calls (faults while handling faults).
 extern "C" void V8_Fatal(const char* file, int line, const char* format, ...) {
@@ -40,24 +74,14 @@ extern "C" void V8_Fatal(const char* file, int line, const char* format, ...) {
   i::AllowDeferredHandleDereference allow_deferred_deref;
   fflush(stdout);
   fflush(stderr);
-  fatal_error_handler_nesting_depth++;
-  // First time we try to print an error message
-  if (fatal_error_handler_nesting_depth < 2) {
-    i::OS::PrintError("\n\n#\n# Fatal error in %s, line %d\n# ", file, line);
-    va_list arguments;
-    va_start(arguments, format);
-    i::OS::VPrintError(format, arguments);
-    va_end(arguments);
-    i::OS::PrintError("\n#\n");
-    i::OS::DumpBacktrace();
-  }
-  // First two times we may try to print a stack dump.
-  if (fatal_error_handler_nesting_depth < 3) {
-    if (i::FLAG_stack_trace_on_abort) {
-      // Call this one twice on double fault
-      i::Isolate::Current()->PrintStack(stderr);
-    }
-  }
+  i::OS::PrintError("\n\n#\n# Fatal error in %s, line %d\n# ", file, line);
+  va_list arguments;
+  va_start(arguments, format);
+  i::OS::VPrintError(format, arguments);
+  va_end(arguments);
+  i::OS::PrintError("\n#\n");
+  DumpBacktrace();
+  fflush(stderr);
   i::OS::Abort();
 }
 
@@ -104,8 +128,6 @@ void API_Fatal(const char* location, const char* format, ...) {
 
 
 namespace v8 { namespace internal {
-
-  bool EnableSlowAsserts() { return FLAG_enable_slow_asserts; }
 
   intptr_t HeapObjectTagMask() { return kHeapObjectTagMask; }
 

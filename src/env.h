@@ -51,13 +51,9 @@ namespace node {
 // Strings are per-isolate primitives but Environment proxies them
 // for the sake of convenience.
 #define PER_ISOLATE_STRING_PROPERTIES(V)                                      \
-  V(DELETE_string, "DELETE")                                                  \
-  V(GET_string, "GET")                                                        \
-  V(HEAD_string, "HEAD")                                                      \
-  V(POST_string, "POST")                                                      \
-  V(PUT_string, "PUT")                                                        \
   V(address_string, "address")                                                \
   V(atime_string, "atime")                                                    \
+  V(async_queue_string, "_asyncQueue")                                        \
   V(birthtime_string, "birthtime")                                            \
   V(blksize_string, "blksize")                                                \
   V(blocks_string, "blocks")                                                  \
@@ -70,7 +66,6 @@ namespace node {
   V(ctime_string, "ctime")                                                    \
   V(dev_string, "dev")                                                        \
   V(disposed_string, "_disposed")                                             \
-  V(domain_string, "domain")                                                  \
   V(enter_string, "enter")                                                    \
   V(errno_string, "errno")                                                    \
   V(exit_string, "exit")                                                      \
@@ -100,6 +95,7 @@ namespace node {
   V(onclienthello_string, "onclienthello")                                    \
   V(oncomplete_string, "oncomplete")                                          \
   V(onconnection_string, "onconnection")                                      \
+  V(ondone_string, "ondone")                                                  \
   V(onerror_string, "onerror")                                                \
   V(onexit_string, "onexit")                                                  \
   V(onhandshakedone_string, "onhandshakedone")                                \
@@ -107,6 +103,7 @@ namespace node {
   V(onmessage_string, "onmessage")                                            \
   V(onnewsession_string, "onnewsession")                                      \
   V(onread_string, "onread")                                                  \
+  V(onselect_string, "onselect")                                              \
   V(onsignal_string, "onsignal")                                              \
   V(onstop_string, "onstop")                                                  \
   V(path_string, "path")                                                      \
@@ -114,6 +111,7 @@ namespace node {
   V(rdev_string, "rdev")                                                      \
   V(rename_string, "rename")                                                  \
   V(rss_string, "rss")                                                        \
+  V(serial_number_string, "serialNumber")                                     \
   V(servername_string, "servername")                                          \
   V(session_id_string, "sessionId")                                           \
   V(should_keep_alive_string, "shouldKeepAlive")                              \
@@ -121,6 +119,7 @@ namespace node {
   V(smalloc_p_string, "_smalloc_p")                                           \
   V(sni_context_string, "sni_context")                                        \
   V(status_code_string, "statusCode")                                         \
+  V(status_message_string, "statusMessage")                                   \
   V(subject_string, "subject")                                                \
   V(subjectaltname_string, "subjectaltname")                                  \
   V(syscall_string, "syscall")                                                \
@@ -136,10 +135,14 @@ namespace node {
   V(write_queue_size_string, "writeQueueSize")                                \
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
+  V(async_listener_load_function, v8::Function)                               \
+  V(async_listener_push_function, v8::Function)                               \
+  V(async_listener_run_function, v8::Function)                                \
+  V(async_listener_strip_function, v8::Function)                              \
+  V(async_listener_unload_function, v8::Function)                             \
   V(binding_cache_object, v8::Object)                                         \
   V(buffer_constructor_function, v8::Function)                                \
   V(context, v8::Context)                                                     \
-  V(domain_array, v8::Array)                                                  \
   V(module_load_list_array, v8::Array)                                        \
   V(pipe_constructor_template, v8::FunctionTemplate)                          \
   V(process_object, v8::Object)                                               \
@@ -168,7 +171,7 @@ RB_HEAD(ares_task_list, ares_task_t);
 
 class Environment {
  public:
-  class DomainFlag {
+  class AsyncListener {
    public:
     inline uint32_t* fields();
     inline int fields_count() const;
@@ -176,7 +179,7 @@ class Environment {
 
    private:
     friend class Environment;  // So we can call the constructor.
-    inline DomainFlag();
+    inline AsyncListener();
 
     enum Fields {
       kCount,
@@ -185,33 +188,34 @@ class Environment {
 
     uint32_t fields_[kFieldsCount];
 
-    DISALLOW_COPY_AND_ASSIGN(DomainFlag);
+    DISALLOW_COPY_AND_ASSIGN(AsyncListener);
   };
 
   class TickInfo {
    public:
     inline uint32_t* fields();
     inline int fields_count() const;
-    inline uint32_t in_tick() const;
+    inline bool in_tick() const;
+    inline bool last_threw() const;
     inline uint32_t index() const;
-    inline uint32_t last_threw() const;
     inline uint32_t length() const;
+    inline void set_in_tick(bool value);
     inline void set_index(uint32_t value);
-    inline void set_last_threw(uint32_t value);
+    inline void set_last_threw(bool value);
 
    private:
     friend class Environment;  // So we can call the constructor.
     inline TickInfo();
 
     enum Fields {
-      kInTick,
       kIndex,
-      kLastThrew,
       kLength,
       kFieldsCount
     };
 
     uint32_t fields_[kFieldsCount];
+    bool in_tick_;
+    bool last_threw_;
 
     DISALLOW_COPY_AND_ASSIGN(TickInfo);
   };
@@ -227,12 +231,19 @@ class Environment {
 
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
-  inline bool in_domain() const;
+  inline bool has_async_listeners() const;
 
   static inline Environment* from_immediate_check_handle(uv_check_t* handle);
   inline uv_check_t* immediate_check_handle();
   inline uv_idle_t* immediate_idle_handle();
-  inline DomainFlag* domain_flag();
+
+  static inline Environment* from_idle_prepare_handle(uv_prepare_t* handle);
+  inline uv_prepare_t* idle_prepare_handle();
+
+  static inline Environment* from_idle_check_handle(uv_check_t* handle);
+  inline uv_check_t* idle_check_handle();
+
+  inline AsyncListener* async_listener();
   inline TickInfo* tick_info();
 
   static inline Environment* from_cares_timer_handle(uv_timer_t* handle);
@@ -243,9 +254,6 @@ class Environment {
 
   inline bool using_smalloc_alloc_cb() const;
   inline void set_using_smalloc_alloc_cb(bool value);
-
-  inline bool using_domains() const;
-  inline void set_using_domains(bool value);
 
   // Strings are shared across shared contexts. The getters simply proxy to
   // the per-isolate primitive.
@@ -274,13 +282,14 @@ class Environment {
   IsolateData* const isolate_data_;
   uv_check_t immediate_check_handle_;
   uv_idle_t immediate_idle_handle_;
-  DomainFlag domain_flag_;
+  uv_prepare_t idle_prepare_handle_;
+  uv_check_t idle_check_handle_;
+  AsyncListener async_listener_count_;
   TickInfo tick_info_;
   uv_timer_t cares_timer_handle_;
   ares_channel cares_channel_;
   ares_task_list cares_task_list_;
   bool using_smalloc_alloc_cb_;
-  bool using_domains_;
 
 #define V(PropertyName, TypeName)                                             \
   v8::Persistent<TypeName> PropertyName ## _;
@@ -307,7 +316,7 @@ class Environment {
     v8::Isolate* const isolate_;
 
 #define V(PropertyName, StringValue)                                          \
-    const int PropertyName ## _index_;
+    v8::Eternal<v8::String> PropertyName ## _;
     PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V
 

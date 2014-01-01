@@ -22,6 +22,8 @@
 #ifndef SRC_REQ_WRAP_H_
 #define SRC_REQ_WRAP_H_
 
+#include "async-wrap.h"
+#include "async-wrap-inl.h"
 #include "env.h"
 #include "env-inl.h"
 #include "queue.h"
@@ -33,22 +35,10 @@ namespace node {
 extern QUEUE req_wrap_queue;
 
 template <typename T>
-class ReqWrap {
+class ReqWrap : public AsyncWrap {
  public:
-  ReqWrap(Environment* env,
-          v8::Handle<v8::Object> object = v8::Handle<v8::Object>())
-      : env_(env) {
-    v8::HandleScope handle_scope(env->isolate());
-
-    if (object.IsEmpty()) {
-      object = v8::Object::New();
-    }
-    persistent().Reset(env->isolate(), object);
-
-    if (env->in_domain()) {
-      object->Set(env->domain_string(), env->domain_array()->Get(0));
-    }
-
+  ReqWrap(Environment* env, v8::Handle<v8::Object> object)
+      : AsyncWrap(env, object) {
     QUEUE_INSERT_TAIL(&req_wrap_queue, &req_wrap_queue_);
   }
 
@@ -66,25 +56,9 @@ class ReqWrap {
     req_.data = this;
   }
 
-  inline Environment* env() const {
-    return env_;
-  }
-
-  inline v8::Local<v8::Object> object() {
-    return PersistentToLocal(env()->isolate(), persistent());
-  }
-
-  inline v8::Persistent<v8::Object>& persistent() {
-    return object_;
-  }
-
   // TODO(bnoordhuis) Make these private.
   QUEUE req_wrap_queue_;
   T req_;  // *must* be last, GetActiveRequests() in node.cc depends on it
-
- private:
-  v8::Persistent<v8::Object> object_;
-  Environment* const env_;
 };
 
 

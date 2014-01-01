@@ -66,23 +66,33 @@ using v8::Value;
 
 class FSReqWrap: public ReqWrap<uv_fs_t> {
  public:
+  void* operator new(size_t size) { return new char[size]; }
+  void* operator new(size_t size, char* storage) { return storage; }
+
   FSReqWrap(Environment* env, const char* syscall, char* data = NULL)
-    : ReqWrap<uv_fs_t>(env)
-    , syscall_(syscall)
-    , data_(data) {
+    : ReqWrap<uv_fs_t>(env, Object::New()),
+      syscall_(syscall),
+      data_(data),
+      dest_len_(0) {
   }
 
   void ReleaseEarly() {
-    if (data_ == NULL) return;
+    if (data_ == NULL)
+      return;
     delete[] data_;
     data_ = NULL;
   }
 
-  const char* syscall() { return syscall_; }
+  inline const char* syscall() const { return syscall_; }
+  inline const char* dest() const { return dest_; }
+  inline unsigned int dest_len() const { return dest_len_; }
+  inline void dest_len(unsigned int dest_len) { dest_len_ = dest_len; }
 
  private:
   const char* syscall_;
   char* data_;
+  unsigned int dest_len_;
+  char dest_[1];
 };
 
 
@@ -97,7 +107,7 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
 #define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1)
 #define GET_TRUNCATE_LENGTH(a) ((a)->IntegerValue())
 
-static inline int IsInt64(double x) {
+static inline bool IsInt64(double x) {
   return x == static_cast<double>(static_cast<int64_t>(x));
 }
 
@@ -108,8 +118,8 @@ static void After(uv_fs_t *req) {
   req_wrap->ReleaseEarly();  // Free memory that's no longer used now.
 
   Environment* env = req_wrap->env();
-  Context::Scope context_scope(env->context());
   HandleScope handle_scope(env->isolate());
+  Context::Scope context_scope(env->context());
 
   // there is always at least one argument. "error"
   int argc = 1;
@@ -122,6 +132,14 @@ static void After(uv_fs_t *req) {
     // If the request doesn't have a path parameter set.
     if (req->path == NULL) {
       argv[0] = UVException(req->result, NULL, req_wrap->syscall());
+    } else if ((req->result == UV_EEXIST ||
+                req->result == UV_ENOTEMPTY ||
+                req->result == UV_EPERM) &&
+               req_wrap->dest_len() > 0) {
+      argv[0] = UVException(req->result,
+                            NULL,
+                            req_wrap->syscall(),
+                            req_wrap->dest());
     } else {
       argv[0] = UVException(req->result,
                             NULL,
@@ -213,7 +231,7 @@ static void After(uv_fs_t *req) {
     }
   }
 
-  MakeCallback(env, req_wrap->object(), env->oncomplete_string(), argc, argv);
+  req_wrap->MakeCallback(env->oncomplete_string(), argc, argv);
 
   uv_fs_req_cleanup(&req_wrap->req_);
   delete req_wrap;
@@ -231,10 +249,20 @@ struct fs_req_wrap {
 };
 
 
-#define ASYNC_CALL(func, callback, ...)                                       \
+#define ASYNC_DEST_CALL(func, callback, dest_path, ...)                       \
   Environment* env = Environment::GetCurrent(args.GetIsolate());              \
-  FSReqWrap* req_wrap = new FSReqWrap(env, #func);                            \
-  int err = uv_fs_ ## func(env->event_loop(),                                 \
+  FSReqWrap* req_wrap;                                                        \
+  char* dest_str = (dest_path);                                               \
+  int dest_len = dest_str == NULL ? 0 : strlen(dest_str);                     \
+  char* storage = new char[sizeof(*req_wrap) + dest_len];                     \
+  req_wrap = new(storage) FSReqWrap(env, #func);                              \
+  req_wrap->dest_len(dest_len);                                               \
+  if (dest_str != NULL) {                                                     \
+    memcpy(const_cast<char*>(req_wrap->dest()),                               \
+           dest_str,                                                          \
+           dest_len + 1);                                                     \
+  }                                                                           \
+  int err = uv_fs_ ## func(env->event_loop() ,                                \
                            &req_wrap->req_,                                   \
                            __VA_ARGS__,                                       \
                            After);                                            \
@@ -248,14 +276,29 @@ struct fs_req_wrap {
   }                                                                           \
   args.GetReturnValue().Set(req_wrap->persistent());
 
-#define SYNC_CALL(func, path, ...)                                            \
+#define ASYNC_CALL(func, callback, ...)                                       \
+  ASYNC_DEST_CALL(func, callback, NULL, __VA_ARGS__)                          \
+
+#define SYNC_DEST_CALL(func, path, dest, ...)                                 \
   fs_req_wrap req_wrap;                                                       \
   Environment* env = Environment::GetCurrent(args.GetIsolate());              \
   int err = uv_fs_ ## func(env->event_loop(),                                 \
-                           &req_wrap.req,                                     \
-                           __VA_ARGS__,                                       \
-                           NULL);                                             \
-  if (err < 0) return ThrowUVException(err, #func, NULL, path);               \
+                         &req_wrap.req,                                       \
+                         __VA_ARGS__,                                         \
+                         NULL);                                               \
+  if (err < 0) {                                                              \
+    if (dest != NULL &&                                                       \
+        (err == UV_EEXIST ||                                                  \
+         err == UV_ENOTEMPTY ||                                               \
+         err == UV_EPERM)) {                                                  \
+      return ThrowUVException(err, #func, "", dest);                          \
+    } else {                                                                  \
+      return ThrowUVException(err, #func, "", path);                          \
+    }                                                                         \
+  }                                                                           \
+
+#define SYNC_CALL(func, path, ...)                                            \
+  SYNC_DEST_CALL(func, path, NULL, __VA_ARGS__)                               \
 
 #define SYNC_REQ req_wrap.req
 
@@ -304,7 +347,8 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 #define X(name)                                                               \
   {                                                                           \
     Local<Value> val = Integer::New(s->st_##name, node_isolate);              \
-    if (val.IsEmpty()) return Local<Object>();                                \
+    if (val.IsEmpty())                                                        \
+      return Local<Object>();                                                 \
     stats->Set(env->name ## _string(), val);                                  \
   }
   X(dev)
@@ -321,7 +365,8 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 #define X(name)                                                               \
   {                                                                           \
     Local<Value> val = Number::New(static_cast<double>(s->st_##name));        \
-    if (val.IsEmpty()) return Local<Object>();                                \
+    if (val.IsEmpty())                                                        \
+      return Local<Object>();                                                 \
     stats->Set(env->name ## _string(), val);                                  \
   }
   X(ino)
@@ -336,7 +381,8 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     double msecs = static_cast<double>(s->st_##rec.tv_sec) * 1000;            \
     msecs += static_cast<double>(s->st_##rec.tv_nsec / 1000000);              \
     Local<Value> val = v8::Date::New(msecs);                                  \
-    if (val.IsEmpty()) return Local<Object>();                                \
+    if (val.IsEmpty())                                                        \
+      return Local<Object>();                                                 \
     stats->Set(env->name ## _string(), val);                                  \
   }
   X(atime, atim)
@@ -351,8 +397,10 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 static void Stat(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  if (args.Length() < 1) return TYPE_ERROR("path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  if (args.Length() < 1)
+    return TYPE_ERROR("path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
 
   String::Utf8Value path(args[0]);
 
@@ -368,8 +416,10 @@ static void Stat(const FunctionCallbackInfo<Value>& args) {
 static void LStat(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  if (args.Length() < 1) return TYPE_ERROR("path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  if (args.Length() < 1)
+    return TYPE_ERROR("path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
 
   String::Utf8Value path(args[0]);
 
@@ -404,10 +454,14 @@ static void Symlink(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("dest path required");
-  if (len < 2) return TYPE_ERROR("src path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("dest path must be a string");
-  if (!args[1]->IsString()) return TYPE_ERROR("src path must be a string");
+  if (len < 1)
+    return TYPE_ERROR("dest path required");
+  if (len < 2)
+    return TYPE_ERROR("src path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("dest path must be a string");
+  if (!args[1]->IsString())
+    return TYPE_ERROR("src path must be a string");
 
   String::Utf8Value dest(args[0]);
   String::Utf8Value path(args[1]);
@@ -425,9 +479,9 @@ static void Symlink(const FunctionCallbackInfo<Value>& args) {
   }
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(symlink, args[3], *dest, *path, flags)
+    ASYNC_DEST_CALL(symlink, args[3], *dest, *dest, *path, flags)
   } else {
-    SYNC_CALL(symlink, *path, *dest, *path, flags)
+    SYNC_DEST_CALL(symlink, *path, *dest, *dest, *path, flags)
   }
 }
 
@@ -435,26 +489,32 @@ static void Link(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("dest path required");
-  if (len < 2) return TYPE_ERROR("src path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("dest path must be a string");
-  if (!args[1]->IsString()) return TYPE_ERROR("src path must be a string");
+  if (len < 1)
+    return TYPE_ERROR("dest path required");
+  if (len < 2)
+    return TYPE_ERROR("src path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("dest path must be a string");
+  if (!args[1]->IsString())
+    return TYPE_ERROR("src path must be a string");
 
   String::Utf8Value orig_path(args[0]);
   String::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(link, args[2], *orig_path, *new_path)
+    ASYNC_DEST_CALL(link, args[2], *new_path, *orig_path, *new_path)
   } else {
-    SYNC_CALL(link, *orig_path, *orig_path, *new_path)
+    SYNC_DEST_CALL(link, *orig_path, *new_path, *orig_path, *new_path)
   }
 }
 
 static void ReadLink(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  if (args.Length() < 1) return TYPE_ERROR("path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  if (args.Length() < 1)
+    return TYPE_ERROR("path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
 
   String::Utf8Value path(args[0]);
 
@@ -472,18 +532,22 @@ static void Rename(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("old path required");
-  if (len < 2) return TYPE_ERROR("new path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("old path must be a string");
-  if (!args[1]->IsString()) return TYPE_ERROR("new path must be a string");
+  if (len < 1)
+    return TYPE_ERROR("old path required");
+  if (len < 2)
+    return TYPE_ERROR("new path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("old path must be a string");
+  if (!args[1]->IsString())
+    return TYPE_ERROR("new path must be a string");
 
   String::Utf8Value old_path(args[0]);
   String::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(rename, args[2], *old_path, *new_path)
+    ASYNC_DEST_CALL(rename, args[2], *new_path, *old_path, *new_path)
   } else {
-    SYNC_CALL(rename, *old_path, *old_path, *new_path)
+    SYNC_DEST_CALL(rename, *old_path, *new_path, *old_path, *new_path)
   }
 }
 
@@ -541,8 +605,10 @@ static void Fsync(const FunctionCallbackInfo<Value>& args) {
 static void Unlink(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  if (args.Length() < 1) return TYPE_ERROR("path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  if (args.Length() < 1)
+    return TYPE_ERROR("path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
 
   String::Utf8Value path(args[0]);
 
@@ -556,8 +622,10 @@ static void Unlink(const FunctionCallbackInfo<Value>& args) {
 static void RMDir(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  if (args.Length() < 1) return TYPE_ERROR("path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  if (args.Length() < 1)
+    return TYPE_ERROR("path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
 
   String::Utf8Value path(args[0]);
 
@@ -588,8 +656,10 @@ static void MKDir(const FunctionCallbackInfo<Value>& args) {
 static void ReadDir(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  if (args.Length() < 1) return TYPE_ERROR("path required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
+  if (args.Length() < 1)
+    return TYPE_ERROR("path required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
 
   String::Utf8Value path(args[0]);
 
@@ -622,12 +692,18 @@ static void Open(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("path required");
-  if (len < 2) return TYPE_ERROR("flags required");
-  if (len < 3) return TYPE_ERROR("mode required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
-  if (!args[1]->IsInt32()) return TYPE_ERROR("flags must be an int");
-  if (!args[2]->IsInt32()) return TYPE_ERROR("mode must be an int");
+  if (len < 1)
+    return TYPE_ERROR("path required");
+  if (len < 2)
+    return TYPE_ERROR("flags required");
+  if (len < 3)
+    return TYPE_ERROR("mode required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
+  if (!args[1]->IsInt32())
+    return TYPE_ERROR("flags must be an int");
+  if (!args[2]->IsInt32())
+    return TYPE_ERROR("mode must be an int");
 
   String::Utf8Value path(args[0]);
   int flags = args[1]->Int32Value();
@@ -696,8 +772,8 @@ static void WriteBuffer(const FunctionCallbackInfo<Value>& args) {
 //             if null, write from the current position
 // 3 enc       encoding of string
 static void WriteString(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   if (!args[0]->IsInt32())
     return ThrowTypeError("First argument must be file descriptor");
@@ -727,7 +803,8 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
 
   if (!cb->IsFunction()) {
     SYNC_CALL(write, NULL, fd, buf, len, pos)
-    if (must_free) delete[] buf;
+    if (must_free)
+      delete[] buf;
     return args.GetReturnValue().Set(SYNC_RESULT);
   }
 
@@ -860,12 +937,18 @@ static void Chown(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("path required");
-  if (len < 2) return TYPE_ERROR("uid required");
-  if (len < 3) return TYPE_ERROR("gid required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
-  if (!args[1]->IsUint32()) return TYPE_ERROR("uid must be an unsigned int");
-  if (!args[2]->IsUint32()) return TYPE_ERROR("gid must be an unsigned int");
+  if (len < 1)
+    return TYPE_ERROR("path required");
+  if (len < 2)
+    return TYPE_ERROR("uid required");
+  if (len < 3)
+    return TYPE_ERROR("gid required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
+  if (!args[1]->IsUint32())
+    return TYPE_ERROR("uid must be an unsigned int");
+  if (!args[2]->IsUint32())
+    return TYPE_ERROR("gid must be an unsigned int");
 
   String::Utf8Value path(args[0]);
   uv_uid_t uid = static_cast<uv_uid_t>(args[1]->Uint32Value());
@@ -886,12 +969,18 @@ static void FChown(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("fd required");
-  if (len < 2) return TYPE_ERROR("uid required");
-  if (len < 3) return TYPE_ERROR("gid required");
-  if (!args[0]->IsInt32()) return TYPE_ERROR("fd must be an int");
-  if (!args[1]->IsUint32()) return TYPE_ERROR("uid must be an unsigned int");
-  if (!args[2]->IsUint32()) return TYPE_ERROR("gid must be an unsigned int");
+  if (len < 1)
+    return TYPE_ERROR("fd required");
+  if (len < 2)
+    return TYPE_ERROR("uid required");
+  if (len < 3)
+    return TYPE_ERROR("gid required");
+  if (!args[0]->IsInt32())
+    return TYPE_ERROR("fd must be an int");
+  if (!args[1]->IsUint32())
+    return TYPE_ERROR("uid must be an unsigned int");
+  if (!args[2]->IsUint32())
+    return TYPE_ERROR("gid must be an unsigned int");
 
   int fd = args[0]->Int32Value();
   uv_uid_t uid = static_cast<uv_uid_t>(args[1]->Uint32Value());
@@ -909,12 +998,18 @@ static void UTimes(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("path required");
-  if (len < 2) return TYPE_ERROR("atime required");
-  if (len < 3) return TYPE_ERROR("mtime required");
-  if (!args[0]->IsString()) return TYPE_ERROR("path must be a string");
-  if (!args[1]->IsNumber()) return TYPE_ERROR("atime must be a number");
-  if (!args[2]->IsNumber()) return TYPE_ERROR("mtime must be a number");
+  if (len < 1)
+    return TYPE_ERROR("path required");
+  if (len < 2)
+    return TYPE_ERROR("atime required");
+  if (len < 3)
+    return TYPE_ERROR("mtime required");
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
+  if (!args[1]->IsNumber())
+    return TYPE_ERROR("atime must be a number");
+  if (!args[2]->IsNumber())
+    return TYPE_ERROR("mtime must be a number");
 
   const String::Utf8Value path(args[0]);
   const double atime = static_cast<double>(args[1]->NumberValue());
@@ -931,12 +1026,18 @@ static void FUTimes(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
   int len = args.Length();
-  if (len < 1) return TYPE_ERROR("fd required");
-  if (len < 2) return TYPE_ERROR("atime required");
-  if (len < 3) return TYPE_ERROR("mtime required");
-  if (!args[0]->IsInt32()) return TYPE_ERROR("fd must be an int");
-  if (!args[1]->IsNumber()) return TYPE_ERROR("atime must be a number");
-  if (!args[2]->IsNumber()) return TYPE_ERROR("mtime must be a number");
+  if (len < 1)
+    return TYPE_ERROR("fd required");
+  if (len < 2)
+    return TYPE_ERROR("atime required");
+  if (len < 3)
+    return TYPE_ERROR("mtime required");
+  if (!args[0]->IsInt32())
+    return TYPE_ERROR("fd must be an int");
+  if (!args[1]->IsNumber())
+    return TYPE_ERROR("atime must be a number");
+  if (!args[2]->IsNumber())
+    return TYPE_ERROR("mtime must be a number");
 
   const int fd = args[0]->Int32Value();
   const double atime = static_cast<double>(args[1]->NumberValue());

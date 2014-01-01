@@ -125,8 +125,8 @@ template <typename T> inline T ToCData(v8::internal::Object* obj) {
 
 
 template <typename T>
-inline v8::internal::Handle<v8::internal::Object> FromCData(T obj) {
-  v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
+inline v8::internal::Handle<v8::internal::Object> FromCData(
+    v8::internal::Isolate* isolate, T obj) {
   STATIC_ASSERT(sizeof(T) == sizeof(v8::internal::Address));
   return isolate->factory()->NewForeign(
       reinterpret_cast<v8::internal::Address>(reinterpret_cast<intptr_t>(obj)));
@@ -542,12 +542,12 @@ class HandleScopeImplementer {
   inline void DecrementCallDepth() {call_depth_--;}
   inline bool CallDepthIsZero() { return call_depth_ == 0; }
 
-  inline void EnterContext(Handle<Object> context);
-  inline bool LeaveLastContext();
+  inline void EnterContext(Handle<Context> context);
+  inline bool LeaveContext(Handle<Context> context);
 
   // Returns the last entered context or an empty handle if no
   // contexts have been entered.
-  inline Handle<Object> LastEnteredContext();
+  inline Handle<Context> LastEnteredContext();
 
   inline void SaveContext(Context* context);
   inline Context* RestoreContext();
@@ -592,7 +592,7 @@ class HandleScopeImplementer {
   Isolate* isolate_;
   List<internal::Object**> blocks_;
   // Used as a stack to keep track of entered contexts.
-  List<Handle<Object> > entered_contexts_;
+  List<Context*> entered_contexts_;
   // Used as a stack to keep track of saved contexts.
   List<Context*> saved_contexts_;
   Object** spare_;
@@ -630,21 +630,23 @@ bool HandleScopeImplementer::HasSavedContexts() {
 }
 
 
-void HandleScopeImplementer::EnterContext(Handle<Object> context) {
-  entered_contexts_.Add(context);
+void HandleScopeImplementer::EnterContext(Handle<Context> context) {
+  entered_contexts_.Add(*context);
 }
 
 
-bool HandleScopeImplementer::LeaveLastContext() {
+bool HandleScopeImplementer::LeaveContext(Handle<Context> context) {
   if (entered_contexts_.is_empty()) return false;
+  // TODO(dcarney): figure out what's wrong here
+  // if (entered_contexts_.last() != *context) return false;
   entered_contexts_.RemoveLast();
   return true;
 }
 
 
-Handle<Object> HandleScopeImplementer::LastEnteredContext() {
-  if (entered_contexts_.is_empty()) return Handle<Object>::null();
-  return entered_contexts_.last();
+Handle<Context> HandleScopeImplementer::LastEnteredContext() {
+  if (entered_contexts_.is_empty()) return Handle<Context>::null();
+  return Handle<Context>(entered_contexts_.last());
 }
 
 
@@ -665,7 +667,7 @@ void HandleScopeImplementer::DeleteExtensions(internal::Object** prev_limit) {
 #ifdef DEBUG
     // SealHandleScope may make the prev_limit to point inside the block.
     if (block_start <= prev_limit && prev_limit <= block_limit) {
-#ifdef ENABLE_EXTRA_CHECKS
+#ifdef ENABLE_HANDLE_ZAPPING
       internal::HandleScope::ZapRange(prev_limit, block_limit);
 #endif
       break;
@@ -675,7 +677,7 @@ void HandleScopeImplementer::DeleteExtensions(internal::Object** prev_limit) {
 #endif
 
     blocks_.RemoveLast();
-#ifdef ENABLE_EXTRA_CHECKS
+#ifdef ENABLE_HANDLE_ZAPPING
     internal::HandleScope::ZapRange(block_start, block_limit);
 #endif
     if (spare_ != NULL) {
@@ -690,19 +692,11 @@ void HandleScopeImplementer::DeleteExtensions(internal::Object** prev_limit) {
 
 // Interceptor functions called from generated inline caches to notify
 // CPU profiler that external callbacks are invoked.
-v8::Handle<v8::Value> InvokeAccessorGetter(
-    v8::Local<v8::String> property,
-    const v8::AccessorInfo& info,
-    v8::AccessorGetter getter);
-
-
 void InvokeAccessorGetterCallback(
     v8::Local<v8::String> property,
     const v8::PropertyCallbackInfo<v8::Value>& info,
     v8::AccessorGetterCallback getter);
 
-v8::Handle<v8::Value> InvokeInvocationCallback(const v8::Arguments& args,
-                                              v8::InvocationCallback callback);
 void InvokeFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info,
                             v8::FunctionCallback callback);
 

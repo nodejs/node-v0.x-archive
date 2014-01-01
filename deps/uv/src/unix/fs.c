@@ -170,6 +170,8 @@ skip:
 #elif defined(__APPLE__)                                                      \
     || defined(__DragonFly__)                                                 \
     || defined(__FreeBSD__)                                                   \
+    || defined(__NetBSD__)                                                    \
+    || defined(__OpenBSD__)                                                   \
     || defined(__sun)
   struct timeval tv[2];
   tv[0].tv_sec  = req->atime;
@@ -211,9 +213,12 @@ static ssize_t uv__fs_readdir(uv_fs_t* req) {
   int i;
   int n;
 
+  dents = NULL;
   n = scandir(req->path, &dents, uv__fs_readdir_filter, alphasort);
 
-  if (n == -1 || n == 0)
+  if (n == 0)
+    goto out; /* osx still needs to deallocate some memory */
+  else if (n == -1)
     return n;
 
   len = 0;
@@ -241,7 +246,7 @@ static ssize_t uv__fs_readdir(uv_fs_t* req) {
 
 out:
   saved_errno = errno;
-  {
+  if (dents != NULL) {
     for (i = 0; i < n; i++)
       free(dents[i]);
     free(dents);
@@ -311,7 +316,7 @@ static ssize_t uv__fs_sendfile_emul(uv_fs_t* req) {
    *
    * 1. Read errors are reported only if nsent==0, otherwise we return nsent.
    *    The user needs to know that some data has already been sent, to stop
-   *    him from sending it twice.
+   *    them from sending it twice.
    *
    * 2. Write errors are always reported. Write errors are bad because they
    *    mean data loss: we've read data but now we can't write it out.

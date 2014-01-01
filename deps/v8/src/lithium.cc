@@ -229,37 +229,7 @@ void LPointerMap::PrintTo(StringStream* stream) {
     if (i != 0) stream->Add(";");
     pointer_operands_[i]->PrintTo(stream);
   }
-  stream->Add("} @%d", position());
-}
-
-
-int ElementsKindToShiftSize(ElementsKind elements_kind) {
-  switch (elements_kind) {
-    case EXTERNAL_BYTE_ELEMENTS:
-    case EXTERNAL_PIXEL_ELEMENTS:
-    case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-      return 0;
-    case EXTERNAL_SHORT_ELEMENTS:
-    case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      return 1;
-    case EXTERNAL_INT_ELEMENTS:
-    case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-    case EXTERNAL_FLOAT_ELEMENTS:
-      return 2;
-    case EXTERNAL_DOUBLE_ELEMENTS:
-    case FAST_DOUBLE_ELEMENTS:
-    case FAST_HOLEY_DOUBLE_ELEMENTS:
-      return 3;
-    case FAST_SMI_ELEMENTS:
-    case FAST_ELEMENTS:
-    case FAST_HOLEY_SMI_ELEMENTS:
-    case FAST_HOLEY_ELEMENTS:
-    case DICTIONARY_ELEMENTS:
-    case NON_STRICT_ARGUMENTS_ELEMENTS:
-      return kPointerSizeLog2;
-  }
-  UNREACHABLE();
-  return 0;
+  stream->Add("}");
 }
 
 
@@ -422,6 +392,7 @@ Representation LChunk::LookupLiteralRepresentation(
 LChunk* LChunk::NewChunk(HGraph* graph) {
   DisallowHandleAllocation no_handles;
   DisallowHeapAllocation no_gc;
+  graph->DisallowAddingNewValues();
   int values = graph->GetMaximumValueID();
   CompilationInfo* info = graph->info();
   if (values > LUnallocated::kMaxVirtualRegisters) {
@@ -461,12 +432,10 @@ Handle<Code> LChunk::Codegen() {
         CodeGenerator::MakeCodeEpilogue(&assembler, flags, info());
     generator.FinishCode(code);
     code->set_is_crankshafted(true);
-    if (!code.is_null()) {
-      void* jit_handler_data =
-          assembler.positions_recorder()->DetachJITHandlerData();
-      LOG_CODE_EVENT(info()->isolate(),
-                     CodeEndLinePosInfoRecordEvent(*code, jit_handler_data));
-    }
+    void* jit_handler_data =
+        assembler.positions_recorder()->DetachJITHandlerData();
+    LOG_CODE_EVENT(info()->isolate(),
+                   CodeEndLinePosInfoRecordEvent(*code, jit_handler_data));
 
     CodeGenerator::PrintCode(code, info());
     return code;
@@ -489,6 +458,14 @@ void LChunk::set_allocated_double_registers(BitVector* allocated_registers) {
     }
     iterator.Advance();
   }
+}
+
+
+LInstruction* LChunkBuilder::CheckElideControlInstruction(
+    HControlInstruction* instr) {
+  HBasicBlock* successor;
+  if (!instr->KnownSuccessorBlock(&successor)) return NULL;
+  return new(zone()) LGoto(successor);
 }
 
 

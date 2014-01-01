@@ -47,7 +47,7 @@ typedef Object* (*F4)(void* p0, void* p1, int p2, int p3, int p4);
 
 TEST(0) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -74,7 +74,7 @@ TEST(0) {
 
 TEST(1) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -112,7 +112,7 @@ TEST(1) {
 
 TEST(2) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -159,7 +159,7 @@ TEST(2) {
 
 TEST(3) {
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -215,7 +215,7 @@ TEST(3) {
 TEST(4) {
   // Test the VFP floating point instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -363,7 +363,7 @@ TEST(4) {
 TEST(5) {
   // Test the ARMv7 bitfield instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -400,7 +400,7 @@ TEST(5) {
 TEST(6) {
   // Test saturating instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -443,8 +443,7 @@ static void TestRoundingMode(VCVTTypes types,
                              double value,
                              int expected,
                              bool expected_exception = false) {
-  CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -511,6 +510,7 @@ static void TestRoundingMode(VCVTTypes types,
 
 
 TEST(7) {
+  CcTest::InitializeVM();
   // Test vfp rounding modes.
 
   // s32_f64 (double to integer).
@@ -623,7 +623,7 @@ TEST(7) {
 TEST(8) {
   // Test VFP multi load/store with ia_w.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -731,7 +731,7 @@ TEST(8) {
 TEST(9) {
   // Test VFP multi load/store with ia.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -843,7 +843,7 @@ TEST(9) {
 TEST(10) {
   // Test VFP multi load/store with db_w.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -951,7 +951,7 @@ TEST(10) {
 TEST(11) {
   // Test instructions using the carry flag.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1017,7 +1017,7 @@ TEST(11) {
 TEST(12) {
   // Test chaining of label usages within instructions (issue 1644).
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   Assembler assm(isolate, NULL, 0);
@@ -1032,7 +1032,7 @@ TEST(12) {
 TEST(13) {
   // Test VFP instructions using registers d16-d31.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   if (!CpuFeatures::IsSupported(VFP32DREGS)) {
@@ -1160,7 +1160,7 @@ TEST(13) {
 TEST(14) {
   // Test the VFP Canonicalized Nan mode.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1240,7 +1240,7 @@ TEST(14) {
 TEST(15) {
   // Test the Neon instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1347,7 +1347,7 @@ TEST(15) {
 TEST(16) {
   // Test the pkh, uxtb, uxtab and uxtb16 instructions.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   typedef struct {
@@ -1423,7 +1423,7 @@ TEST(17) {
   // Test generating labels at high addresses.
   // Should not assert.
   CcTest::InitializeVM();
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   HandleScope scope(isolate);
 
   // Generate a code segment that will be longer than 2^24 bytes.
@@ -1438,5 +1438,76 @@ TEST(17) {
   __ nop();
 }
 
+
+TEST(code_relative_offset) {
+  // Test extracting the offset of a label from the beginning of the code
+  // in a register.
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
+  // Initialize a code object that will contain the code.
+  Handle<Object> code_object(isolate->heap()->undefined_value(), isolate);
+
+  Assembler assm(isolate, NULL, 0);
+
+  Label start, target_away, target_faraway;
+
+  __ stm(db_w, sp, r4.bit() | r5.bit() | lr.bit());
+
+  // r3 is used as the address zero, the test will crash when we load it.
+  __ mov(r3, Operand::Zero());
+
+  // r5 will be a pointer to the start of the code.
+  __ mov(r5, Operand(code_object));
+  __ mov_label_offset(r4, &start);
+
+  __ mov_label_offset(r1, &target_faraway);
+  __ str(r1, MemOperand(sp, kPointerSize, NegPreIndex));
+
+  __ mov_label_offset(r1, &target_away);
+
+  // Jump straight to 'target_away' the first time and use the relative
+  // position the second time. This covers the case when extracting the
+  // position of a label which is linked.
+  __ mov(r2, Operand::Zero());
+  __ bind(&start);
+  __ cmp(r2, Operand::Zero());
+  __ b(eq, &target_away);
+  __ add(pc, r5, r1);
+  // Emit invalid instructions to push the label between 2^8 and 2^16
+  // instructions away. The test will crash if they are reached.
+  for (int i = 0; i < (1 << 10); i++) {
+    __ ldr(r3, MemOperand(r3));
+  }
+  __ bind(&target_away);
+  // This will be hit twice: r0 = r0 + 5 + 5.
+  __ add(r0, r0, Operand(5));
+
+  __ ldr(r1, MemOperand(sp, kPointerSize, PostIndex), ne);
+  __ add(pc, r5, r4, LeaveCC, ne);
+
+  __ mov(r2, Operand(1));
+  __ b(&start);
+  // Emit invalid instructions to push the label between 2^16 and 2^24
+  // instructions away. The test will crash if they are reached.
+  for (int i = 0; i < (1 << 21); i++) {
+    __ ldr(r3, MemOperand(r3));
+  }
+  __ bind(&target_faraway);
+  // r0 = r0 + 5 + 5 + 11
+  __ add(r0, r0, Operand(11));
+
+  __ ldm(ia_w, sp, r4.bit() | r5.bit() | pc.bit());
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Handle<Code> code = isolate->factory()->NewCode(desc,
+      Code::ComputeFlags(Code::STUB), code_object);
+  CHECK(code->IsCode());
+  F1 f = FUNCTION_CAST<F1>(code->entry());
+  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 21, 0, 0, 0, 0));
+  ::printf("f() = %d\n", res);
+  CHECK_EQ(42, res);
+}
 
 #undef __

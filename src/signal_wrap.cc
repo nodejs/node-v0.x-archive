@@ -19,9 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "async-wrap.h"
+#include "async-wrap-inl.h"
 #include "env.h"
 #include "env-inl.h"
 #include "handle_wrap.h"
+#include "util.h"
+#include "util-inl.h"
 #include "v8.h"
 
 namespace node {
@@ -62,8 +66,8 @@ class SignalWrap : public HandleWrap {
     // Therefore we assert that we are not trying to call this as a
     // normal function.
     assert(args.IsConstructCall());
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
     HandleScope handle_scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
     new SignalWrap(env, args.This());
   }
 
@@ -78,8 +82,7 @@ class SignalWrap : public HandleWrap {
 
   static void Start(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
-    SignalWrap* wrap;
-    NODE_UNWRAP(args.This(), SignalWrap, wrap);
+    SignalWrap* wrap = Unwrap<SignalWrap>(args.This());
 
     int signum = args[0]->Int32Value();
     int err = uv_signal_start(&wrap->handle_, OnSignal, signum);
@@ -88,20 +91,20 @@ class SignalWrap : public HandleWrap {
 
   static void Stop(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(node_isolate);
-    SignalWrap* wrap;
-    NODE_UNWRAP(args.This(), SignalWrap, wrap);
+    SignalWrap* wrap = Unwrap<SignalWrap>(args.This());
 
     int err = uv_signal_stop(&wrap->handle_);
     args.GetReturnValue().Set(err);
   }
 
   static void OnSignal(uv_signal_t* handle, int signum) {
-    SignalWrap* wrap = container_of(handle, SignalWrap, handle_);
+    SignalWrap* wrap = CONTAINER_OF(handle, SignalWrap, handle_);
     Environment* env = wrap->env();
-    Context::Scope context_scope(env->context());
     HandleScope handle_scope(env->isolate());
+    Context::Scope context_scope(env->context());
+
     Local<Value> arg = Integer::New(signum, env->isolate());
-    MakeCallback(env, wrap->object(), env->onsignal_string(), 1, &arg);
+    wrap->MakeCallback(env->onsignal_string(), 1, &arg);
   }
 
   uv_signal_t handle_;

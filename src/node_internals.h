@@ -49,7 +49,7 @@ inline v8::Local<TypeName> PersistentToLocal(
 
 // Call with valid HandleScope and while inside Context scope.
 v8::Handle<v8::Value> MakeCallback(Environment* env,
-                                   const v8::Handle<v8::Object> object,
+                                   v8::Handle<v8::Object> object,
                                    const char* method,
                                    int argc = 0,
                                    v8::Handle<v8::Value>* argv = NULL);
@@ -91,7 +91,8 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   int n = _vsprintf_p(buf, len, fmt, ap);
-  if (len) buf[len - 1] = '\0';
+  if (len)
+    buf[len - 1] = '\0';
   va_end(ap);
   return n;
 }
@@ -101,20 +102,6 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 # define BITS_PER_LONG 64
 #else
 # define BITS_PER_LONG 32
-#endif
-
-#ifndef offset_of
-// g++ in strict mode complains loudly about the system offsetof() macro
-// because it uses NULL as the base address.
-# define offset_of(type, member) \
-  (reinterpret_cast<intptr_t>( \
-      reinterpret_cast<char*>(&(reinterpret_cast<type*>(8)->member)) - 8))
-#endif
-
-#ifndef container_of
-# define container_of(ptr, type, member) \
-  (reinterpret_cast<type*>(reinterpret_cast<char*>(ptr) - \
-                           offset_of(type, member)))
 #endif
 
 #ifndef ARRAY_SIZE
@@ -171,37 +158,6 @@ inline static void ThrowUVException(int errorno,
 NO_RETURN void FatalError(const char* location, const char* message);
 
 v8::Local<v8::Object> BuildStatsObject(Environment* env, const uv_stat_t* s);
-
-#define NODE_WRAP(Object, Pointer)                                             \
-  do {                                                                         \
-    assert(!Object.IsEmpty());                                                 \
-    assert(Object->InternalFieldCount() > 0);                                  \
-    Object->SetAlignedPointerInInternalField(0, Pointer);                      \
-  }                                                                            \
-  while (0)
-
-#define NODE_UNWRAP(Object, TypeName, Var)                                     \
-  do {                                                                         \
-    assert(!Object.IsEmpty());                                                 \
-    assert(Object->InternalFieldCount() > 0);                                  \
-    Var = static_cast<TypeName*>(                                              \
-        Object->GetAlignedPointerFromInternalField(0));                        \
-    if (!Var) {                                                                \
-      fprintf(stderr, #TypeName ": Aborting due to unwrap failure at %s:%d\n", \
-              __FILE__, __LINE__);                                             \
-      abort();                                                                 \
-    }                                                                          \
-  }                                                                            \
-  while (0)
-
-#define NODE_UNWRAP_NO_ABORT(Object, TypeName, Var)                            \
-  do {                                                                         \
-    assert(!Object.IsEmpty());                                                 \
-    assert(Object->InternalFieldCount() > 0);                                  \
-    Var = static_cast<TypeName*>(                                              \
-        Object->GetAlignedPointerFromInternalField(0));                        \
-  }                                                                            \
-  while (0)
 
 enum Endianness {
   kLittleEndian,  // _Not_ LITTLE_ENDIAN, clashes with endian.h.

@@ -44,7 +44,7 @@ process.on("exit", function (code) {
 })
 
 function exit (code, noLog) {
-  exitCode = exitCode || code
+  exitCode = exitCode || process.exitCode || code
 
   var doExit = npm.config.get("_exit")
   log.verbose("exit", [code, doExit])
@@ -149,6 +149,9 @@ function errorHandler (er) {
     if (er.pkgid && er.pkgid !== "-") {
       var msg = ["'"+er.pkgid+"' is not in the npm registry."
                 ,"You should bug the author to publish it"]
+      if (er.parent) {
+        msg.push("It was specified as a dependency of '"+er.parent+"'")
+      }
       if (er.pkgid.match(/^node[\.\-]|[\.\-]js$/)) {
         var s = er.pkgid.replace(/^node[\.\-]|[\.\-]js$/g, "")
         if (s !== er.pkgid) {
@@ -236,6 +239,21 @@ function errorHandler (er) {
               ].join("\n"))
     break
 
+  case "ENOPACKAGEJSON":
+    log.error("package.json", [er.message
+              ,"This is most likely not a problem with npm itself."
+              ,"npm can't find a package.json file in your current directory."
+              ].join("\n"))
+    break
+
+  case "ETARGET":
+    log.error("notarget", [er.message
+              ,"This is most likely not a problem with npm itself."
+              ,"In most cases you or one of your dependencies are requesting"
+              ,"a package version that doesn't exist."
+              ].join("\n"))
+    break
+
   case "ENOTSUP":
     if (er.required) {
       log.error("notsup", [er.message
@@ -250,10 +268,9 @@ function errorHandler (er) {
 
   default:
     log.error("", er.stack || er.message || er)
-    log.error("", ["If you need help, you may report this log at:"
+    log.error("", ["If you need help, you may report this *entire* log,"
+                  ,"including the npm and node versions, at:"
                   ,"    <http://github.com/isaacs/npm/issues>"
-                  ,"or email it to:"
-                  ,"    <npm-@googlegroups.com>"
                   ].join("\n"))
     printStack = false
     break

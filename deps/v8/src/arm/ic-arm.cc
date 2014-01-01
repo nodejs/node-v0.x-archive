@@ -354,7 +354,7 @@ void CallICBase::GenerateMonomorphicCacheProbe(MacroAssembler* masm,
                                          extra_state,
                                          Code::NORMAL,
                                          argc);
-  Isolate::Current()->stub_cache()->GenerateProbe(
+  masm->isolate()->stub_cache()->GenerateProbe(
       masm, flags, r1, r2, r3, r4, r5, r6);
 
   // If the stub cache probing failed, the receiver might be a value.
@@ -393,7 +393,7 @@ void CallICBase::GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Probe the stub cache for the value object.
   __ bind(&probe);
-  Isolate::Current()->stub_cache()->GenerateProbe(
+  masm->isolate()->stub_cache()->GenerateProbe(
       masm, flags, r1, r2, r3, r4, r5, r6);
 
   __ bind(&miss);
@@ -656,9 +656,9 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
 
   // Probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(
-      Code::STUB, MONOMORPHIC, Code::kNoExtraICState,
+      Code::HANDLER, MONOMORPHIC, Code::kNoExtraICState,
       Code::NORMAL, Code::LOAD_IC);
-  Isolate::Current()->stub_cache()->GenerateProbe(
+  masm->isolate()->stub_cache()->GenerateProbe(
       masm, flags, r0, r2, r3, r4, r5, r6);
 
   // Cache miss: Jump to runtime.
@@ -1394,7 +1394,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   Register receiver = r2;
   Register receiver_map = r3;
   Register elements_map = r6;
-  Register elements = r7;  // Elements array of the receiver.
+  Register elements = r9;  // Elements array of the receiver.
   // r4 and r5 are used as general scratch registers.
 
   // Check that the key is a smi.
@@ -1487,10 +1487,10 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
 
   // Get the receiver from the stack and probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(
-      Code::STUB, MONOMORPHIC, strict_mode,
+      Code::HANDLER, MONOMORPHIC, strict_mode,
       Code::NORMAL, Code::STORE_IC);
 
-  Isolate::Current()->stub_cache()->GenerateProbe(
+  masm->isolate()->stub_cache()->GenerateProbe(
       masm, flags, r1, r2, r3, r4, r5, r6);
 
   // Cache miss: Jump to runtime.

@@ -37,7 +37,7 @@ using namespace v8::internal;
 static MaybeObject* AllocateAfterFailures() {
   static int attempts = 0;
   if (++attempts < 3) return Failure::RetryAfterGC();
-  Heap* heap = Isolate::Current()->heap();
+  Heap* heap = CcTest::heap();
 
   // New space.
   SimulateFullSpace(heap->new_space());
@@ -50,7 +50,7 @@ static MaybeObject* AllocateAfterFailures() {
   CHECK(!heap->AllocateHeapNumber(0.42)->IsFailure());
   CHECK(!heap->AllocateArgumentsObject(Smi::FromInt(87), 10)->IsFailure());
   Object* object = heap->AllocateJSObject(
-      *Isolate::Current()->object_function())->ToObjectChecked();
+      *CcTest::i_isolate()->object_function())->ToObjectChecked();
   CHECK(!heap->CopyJSObject(JSObject::cast(object))->IsFailure());
 
   // Old data space.
@@ -81,7 +81,7 @@ static MaybeObject* AllocateAfterFailures() {
   // Test that we can allocate in old pointer space and code space.
   SimulateFullSpace(heap->code_space());
   CHECK(!heap->AllocateFixedArray(100, TENURED)->IsFailure());
-  CHECK(!heap->CopyCode(Isolate::Current()->builtins()->builtin(
+  CHECK(!heap->CopyCode(CcTest::i_isolate()->builtins()->builtin(
       Builtins::kIllegal))->IsFailure());
 
   // Return success.
@@ -90,13 +90,13 @@ static MaybeObject* AllocateAfterFailures() {
 
 
 static Handle<Object> Test() {
-  CALL_HEAP_FUNCTION(ISOLATE, AllocateAfterFailures(), Object);
+  CALL_HEAP_FUNCTION(CcTest::i_isolate(), AllocateAfterFailures(), Object);
 }
 
 
 TEST(StressHandles) {
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
-  v8::Handle<v8::Context> env = v8::Context::New(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Handle<v8::Context> env = v8::Context::New(CcTest::isolate());
   env->Enter();
   Handle<Object> o = Test();
   CHECK(o->IsSmi() && Smi::cast(*o)->value() == 42);
@@ -104,7 +104,7 @@ TEST(StressHandles) {
 }
 
 
-static MaybeObject* TestAccessorGet(Object* object, void*) {
+static MaybeObject* TestAccessorGet(Isolate* isolate, Object* object, void*) {
   return AllocateAfterFailures();
 }
 
@@ -117,17 +117,17 @@ const AccessorDescriptor kDescriptor = {
 
 
 TEST(StressJS) {
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   Factory* factory = isolate->factory();
-  v8::HandleScope scope(v8::Isolate::GetCurrent());
-  v8::Handle<v8::Context> env = v8::Context::New(v8::Isolate::GetCurrent());
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Handle<v8::Context> env = v8::Context::New(CcTest::isolate());
   env->Enter();
   Handle<JSFunction> function =
       factory->NewFunction(factory->function_string(), factory->null_value());
   // Force the creation of an initial map and set the code to
   // something empty.
   factory->NewJSObject(function);
-  function->ReplaceCode(Isolate::Current()->builtins()->builtin(
+  function->ReplaceCode(CcTest::i_isolate()->builtins()->builtin(
       Builtins::kEmptyFunction));
   // Patch the map to have an accessor for "get".
   Handle<Map> map(function->initial_map());
@@ -186,10 +186,9 @@ class Block {
 
 TEST(CodeRange) {
   const int code_range_size = 32*MB;
-  OS::SetUp();
-  Isolate::Current()->InitializeLoggingAndCounters();
-  CodeRange* code_range = new CodeRange(Isolate::Current());
-  code_range->SetUp(code_range_size);
+  CcTest::InitializeVM();
+  CodeRange code_range(reinterpret_cast<Isolate*>(CcTest::isolate()));
+  code_range.SetUp(code_range_size);
   int current_allocated = 0;
   int total_allocated = 0;
   List<Block> blocks(1000);
@@ -205,9 +204,9 @@ TEST(CodeRange) {
           (Page::kMaxNonCodeHeapObjectSize << (Pseudorandom() % 3)) +
           Pseudorandom() % 5000 + 1;
       size_t allocated = 0;
-      Address base = code_range->AllocateRawMemory(requested,
-                                                   requested,
-                                                   &allocated);
+      Address base = code_range.AllocateRawMemory(requested,
+                                                  requested,
+                                                  &allocated);
       CHECK(base != NULL);
       blocks.Add(Block(base, static_cast<int>(allocated)));
       current_allocated += static_cast<int>(allocated);
@@ -215,7 +214,7 @@ TEST(CodeRange) {
     } else {
       // Free a block.
       int index = Pseudorandom() % blocks.length();
-      code_range->FreeRawMemory(blocks[index].base, blocks[index].size);
+      code_range.FreeRawMemory(blocks[index].base, blocks[index].size);
       current_allocated -= blocks[index].size;
       if (index < blocks.length() - 1) {
         blocks[index] = blocks.RemoveLast();
@@ -225,6 +224,5 @@ TEST(CodeRange) {
     }
   }
 
-  code_range->TearDown();
-  delete code_range;
+  code_range.TearDown();
 }

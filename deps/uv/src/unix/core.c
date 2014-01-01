@@ -73,7 +73,7 @@ STATIC_ASSERT(offsetof(uv_buf_t, len) == offsetof(struct iovec, iov_len));
 
 
 uint64_t uv_hrtime(void) {
-  return uv__hrtime();
+  return uv__hrtime(UV_CLOCK_PRECISE);
 }
 
 
@@ -248,10 +248,15 @@ int uv_backend_timeout(const uv_loop_t* loop) {
 }
 
 
-static int uv__loop_alive(uv_loop_t* loop) {
+static int uv__loop_alive(const uv_loop_t* loop) {
   return uv__has_active_handles(loop) ||
          uv__has_active_reqs(loop) ||
          loop->closing_handles != NULL;
+}
+
+
+int uv_loop_alive(const uv_loop_t* loop) {
+    return uv__loop_alive(loop);
 }
 
 
@@ -260,6 +265,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   int r;
 
   r = uv__loop_alive(loop);
+  if (!r)
+    uv__update_time(loop);
+
   while (r != 0 && loop->stop_flag == 0) {
     UV_TICK_START(loop, mode);
 
@@ -340,7 +348,7 @@ int uv__socket(int domain, int type, int protocol) {
     err = uv__cloexec(sockfd, 1);
 
   if (err) {
-    close(sockfd);
+    uv__close(sockfd);
     return err;
   }
 
@@ -397,12 +405,32 @@ skip:
       err = uv__nonblock(peerfd, 1);
 
     if (err) {
-      close(peerfd);
+      uv__close(peerfd);
       return err;
     }
 
     return peerfd;
   }
+}
+
+
+int uv__close(int fd) {
+  int saved_errno;
+  int rc;
+
+  assert(fd > -1);  /* Catch uninitialized io_watcher.fd bugs. */
+  assert(fd > STDERR_FILENO);  /* Catch stdio close bugs. */
+
+  saved_errno = errno;
+  rc = close(fd);
+  if (rc == -1) {
+    rc = -errno;
+    if (rc == -EINTR)
+      rc = -EINPROGRESS;  /* For platform/libc consistency. */
+    errno = saved_errno;
+  }
+
+  return rc;
 }
 
 
@@ -514,11 +542,49 @@ int uv__dup(int fd) {
 
   err = uv__cloexec(fd, 1);
   if (err) {
-    close(fd);
+    uv__close(fd);
     return err;
   }
 
   return fd;
+}
+
+
+ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
+  struct cmsghdr* cmsg;
+  ssize_t rc;
+  int* pfd;
+  int* end;
+#if defined(__linux__)
+  static int no_msg_cmsg_cloexec;
+  if (no_msg_cmsg_cloexec == 0) {
+    rc = recvmsg(fd, msg, flags | 0x40000000);  /* MSG_CMSG_CLOEXEC */
+    if (rc != -1)
+      return rc;
+    if (errno != EINVAL)
+      return -errno;
+    rc = recvmsg(fd, msg, flags);
+    if (rc == -1)
+      return -errno;
+    no_msg_cmsg_cloexec = 1;
+  } else {
+    rc = recvmsg(fd, msg, flags);
+  }
+#else
+  rc = recvmsg(fd, msg, flags);
+#endif
+  if (rc == -1)
+    return -errno;
+  if (msg->msg_controllen == 0)
+    return rc;
+  for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg))
+    if (cmsg->cmsg_type == SCM_RIGHTS)
+      for (pfd = (int*) CMSG_DATA(cmsg),
+           end = (int*) ((char*) cmsg + cmsg->cmsg_len);
+           pfd < end;
+           pfd += 1)
+        uv__cloexec(*pfd, 1);
+  return rc;
 }
 
 
@@ -584,20 +650,33 @@ static unsigned int next_power_of_two(unsigned int val) {
 
 static void maybe_resize(uv_loop_t* loop, unsigned int len) {
   uv__io_t** watchers;
+  void* fake_watcher_list;
+  void* fake_watcher_count;
   unsigned int nwatchers;
   unsigned int i;
 
   if (len <= loop->nwatchers)
     return;
 
-  nwatchers = next_power_of_two(len);
-  watchers = realloc(loop->watchers, nwatchers * sizeof(loop->watchers[0]));
+  /* Preserve fake watcher list and count at the end of the watchers */
+  if (loop->watchers != NULL) {
+    fake_watcher_list = loop->watchers[loop->nwatchers];
+    fake_watcher_count = loop->watchers[loop->nwatchers + 1];
+  } else {
+    fake_watcher_list = NULL;
+    fake_watcher_count = NULL;
+  }
+
+  nwatchers = next_power_of_two(len + 2) - 2;
+  watchers = realloc(loop->watchers,
+                     (nwatchers + 2) * sizeof(loop->watchers[0]));
 
   if (watchers == NULL)
     abort();
-
   for (i = loop->nwatchers; i < nwatchers; i++)
     watchers[i] = NULL;
+  watchers[nwatchers] = fake_watcher_list;
+  watchers[nwatchers + 1] = fake_watcher_count;
 
   loop->watchers = watchers;
   loop->nwatchers = nwatchers;
@@ -689,6 +768,9 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 void uv__io_close(uv_loop_t* loop, uv__io_t* w) {
   uv__io_stop(loop, w, UV__POLLIN | UV__POLLOUT);
   QUEUE_REMOVE(&w->pending_queue);
+
+  /* Remove stale events for this file descriptor */
+  uv__platform_invalidate_fd(loop, w->fd);
 }
 
 

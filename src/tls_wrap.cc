@@ -20,6 +20,8 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tls_wrap.h"
+#include "async-wrap.h"
+#include "async-wrap-inl.h"
 #include "node_buffer.h"  // Buffer
 #include "node_crypto.h"  // SecureContext
 #include "node_crypto_bio.h"  // NodeBIO
@@ -28,6 +30,8 @@
 #include "node_wrap.h"  // WithGenericStream
 #include "node_counters.h"
 #include "node_internals.h"
+#include "util.h"
+#include "util-inl.h"
 
 namespace node {
 
@@ -58,8 +62,11 @@ TLSCallbacks::TLSCallbacks(Environment* env,
                            Kind kind,
                            Handle<Object> sc,
                            StreamWrapCallbacks* old)
-    : SSLWrap<TLSCallbacks>(env, WeakObject::Unwrap<SecureContext>(sc), kind),
+    : SSLWrap<TLSCallbacks>(env, Unwrap<SecureContext>(sc), kind),
       StreamWrapCallbacks(old),
+      AsyncWrap(env, env->tls_wrap_constructor_function()->NewInstance()),
+      sc_(Unwrap<SecureContext>(sc)),
+      sc_handle_(env->isolate(), sc),
       enc_in_(NULL),
       enc_out_(NULL),
       clear_in_(NULL),
@@ -67,15 +74,9 @@ TLSCallbacks::TLSCallbacks(Environment* env,
       pending_write_item_(NULL),
       started_(false),
       established_(false),
-      shutdown_(false) {
-
-  // Persist SecureContext
-  sc_ = WeakObject::Unwrap<SecureContext>(sc);
-  sc_handle_.Reset(node_isolate, sc);
-
-  Local<Object> object = env->tls_wrap_constructor_function()->NewInstance();
-  NODE_WRAP(object, this);
-  persistent().Reset(node_isolate, object);
+      shutdown_(false),
+      eof_(false) {
+  node::Wrap<TLSCallbacks>(object(), this);
 
   // Initialize queue for clearIn writes
   QUEUE_INIT(&write_item_queue_);
@@ -115,7 +116,7 @@ void TLSCallbacks::InvokeQueued(int status) {
   // Process old queue
   while (q != &write_item_queue_) {
     QUEUE* next = static_cast<QUEUE*>(QUEUE_NEXT(q));
-    WriteItem* wi = container_of(q, WriteItem, member_);
+    WriteItem* wi = CONTAINER_OF(q, WriteItem, member_);
     wi->cb_(&wi->w_->req_, status);
     delete wi;
     q = next;
@@ -141,32 +142,19 @@ void TLSCallbacks::InitSSL() {
   SSL_set_app_data(ssl_, this);
   SSL_set_info_callback(ssl_, SSLInfoCallback);
 
-  if (is_server()) {
-    SSL_set_accept_state(ssl_);
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-    // Server should advertise NPN protocols
-    SSL_CTX_set_next_protos_advertised_cb(
-        sc_->ctx_,
-        SSLWrap<TLSCallbacks>::AdvertiseNextProtoCallback,
-        this);
-#endif  // OPENSSL_NPN_NEGOTIATED
-
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+  if (is_server()) {
     SSL_CTX_set_tlsext_servername_callback(sc_->ctx_, SelectSNIContextCallback);
     SSL_CTX_set_tlsext_servername_arg(sc_->ctx_, this);
+  }
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+
+  InitNPN(sc_, this);
+
+  if (is_server()) {
+    SSL_set_accept_state(ssl_);
   } else if (is_client()) {
     SSL_set_connect_state(ssl_);
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-    // Client should select protocol from list of advertised
-    // If server supports NPN
-    SSL_CTX_set_next_proto_select_cb(
-        sc_->ctx_,
-        SSLWrap<TLSCallbacks>::SelectNextProtoCallback,
-        this);
-#endif  // OPENSSL_NPN_NEGOTIATED
   } else {
     // Unexpected
     abort();
@@ -178,8 +166,8 @@ void TLSCallbacks::InitSSL() {
 
 
 void TLSCallbacks::Wrap(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   if (args.Length() < 1 || !args[0]->IsObject())
     return ThrowTypeError("First argument should be a StreamWrap instance");
@@ -210,8 +198,7 @@ void TLSCallbacks::Wrap(const FunctionCallbackInfo<Value>& args) {
 void TLSCallbacks::Start(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
+  TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   if (wrap->started_)
     return ThrowError("Already started.");
@@ -233,15 +220,14 @@ void TLSCallbacks::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
   SSL* ssl = const_cast<SSL*>(ssl_);
   TLSCallbacks* c = static_cast<TLSCallbacks*>(SSL_get_app_data(ssl));
   Environment* env = c->env();
-  // There should be a Context::Scope a few stack frames down.
-  assert(env->context() == env->isolate()->GetCurrentContext());
   HandleScope handle_scope(env->isolate());
-  Local<Object> object = c->weak_object(env->isolate());
+  Context::Scope context_scope(env->context());
+  Local<Object> object = c->object();
 
   if (where & SSL_CB_HANDSHAKE_START) {
     Local<Value> callback = object->Get(env->onhandshakestart_string());
     if (callback->IsFunction()) {
-      MakeCallback(env, object, callback.As<Function>());
+      c->MakeCallback(callback.As<Function>(), 0, NULL);
     }
   }
 
@@ -249,7 +235,7 @@ void TLSCallbacks::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
     c->established_ = true;
     Local<Value> callback = object->Get(env->onhandshakedone_string());
     if (callback->IsFunction()) {
-      MakeCallback(env, object, callback.As<Function>());
+      c->MakeCallback(callback.As<Function>(), 0, NULL);
     }
   }
 }
@@ -266,7 +252,7 @@ void TLSCallbacks::EncOut() {
 
   // Split-off queue
   if (established_ && !QUEUE_EMPTY(&write_item_queue_)) {
-    pending_write_item_ = container_of(QUEUE_NEXT(&write_item_queue_),
+    pending_write_item_ = CONTAINER_OF(QUEUE_NEXT(&write_item_queue_),
                                        WriteItem,
                                        member_);
     QUEUE_INIT(&write_item_queue_);
@@ -278,12 +264,17 @@ void TLSCallbacks::EncOut() {
     return;
   }
 
-  char* data = NodeBIO::FromBIO(enc_out_)->Peek(&write_size_);
-  assert(write_size_ != 0);
+  char* data[kSimultaneousBufferCount];
+  size_t size[ARRAY_SIZE(data)];
+  size_t count = ARRAY_SIZE(data);
+  write_size_ = NodeBIO::FromBIO(enc_out_)->PeekMultiple(data, size, &count);
+  assert(write_size_ != 0 && count != 0);
 
   write_req_.data = this;
-  uv_buf_t buf = uv_buf_init(data, write_size_);
-  int r = uv_write(&write_req_, wrap()->stream(), &buf, 1, EncOutCb);
+  uv_buf_t buf[ARRAY_SIZE(data)];
+  for (size_t i = 0; i < count; i++)
+    buf[i] = uv_buf_init(data[i], size[i]);
+  int r = uv_write(&write_req_, wrap()->stream(), buf, count, EncOutCb);
 
   // Ignore errors, this should be already handled in js
   if (!r) {
@@ -307,16 +298,12 @@ void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
       return;
 
     // Notify about error
-    Context::Scope context_scope(env->context());
     HandleScope handle_scope(env->isolate());
+    Context::Scope context_scope(env->context());
     Local<Value> arg = String::Concat(
         FIXED_ONE_BYTE_STRING(node_isolate, "write cb error, status: "),
         Integer::New(status, node_isolate)->ToString());
-    MakeCallback(env,
-                 callbacks->weak_object(node_isolate),
-                 env->onerror_string(),
-                 1,
-                 &arg);
+    callbacks->MakeCallback(env->onerror_string(), 1, &arg);
     callbacks->InvokeQueued(status);
     return;
   }
@@ -370,8 +357,8 @@ void TLSCallbacks::ClearOut() {
   if (!hello_parser_.IsEnded())
     return;
 
-  Context::Scope context_scope(env()->context());
   HandleScope handle_scope(env()->isolate());
+  Context::Scope context_scope(env()->context());
 
   assert(ssl_ != NULL);
 
@@ -384,24 +371,23 @@ void TLSCallbacks::ClearOut() {
         Integer::New(read, node_isolate),
         Buffer::New(env(), out, read)
       };
-      MakeCallback(env(),
-                   Self(),
-                   env()->onread_string(),
-                   ARRAY_SIZE(argv),
-                   argv);
+      wrap()->MakeCallback(env()->onread_string(), ARRAY_SIZE(argv), argv);
     }
   } while (read > 0);
 
+  int flags = SSL_get_shutdown(ssl_);
+  if (!eof_ && flags & SSL_RECEIVED_SHUTDOWN) {
+    eof_ = true;
+    Local<Value> arg = Integer::New(UV_EOF, node_isolate);
+    wrap()->MakeCallback(env()->onread_string(), 1, &arg);
+  }
+
   if (read == -1) {
     int err;
-    Handle<Value> argv = GetSSLError(read, &err);
+    Handle<Value> arg = GetSSLError(read, &err);
 
-    if (!argv.IsEmpty()) {
-      MakeCallback(env(),
-                   weak_object(node_isolate),
-                   env()->onerror_string(),
-                   1,
-                   &argv);
+    if (!arg.IsEmpty()) {
+      MakeCallback(env()->onerror_string(), 1, &arg);
     }
   }
 }
@@ -429,18 +415,14 @@ bool TLSCallbacks::ClearIn() {
     return true;
   }
 
-  Context::Scope context_scope(env()->context());
   HandleScope handle_scope(env()->isolate());
+  Context::Scope context_scope(env()->context());
 
   // Error or partial write
   int err;
-  Handle<Value> argv = GetSSLError(written, &err);
-  if (!argv.IsEmpty()) {
-    MakeCallback(env(),
-                 weak_object(node_isolate),
-                 env()->onerror_string(),
-                 1,
-                 &argv);
+  Handle<Value> arg = GetSSLError(written, &err);
+  if (!arg.IsEmpty()) {
+    MakeCallback(env()->onerror_string(), 1, &arg);
   }
 
   return false;
@@ -499,15 +481,11 @@ int TLSCallbacks::DoWrite(WriteWrap* w,
 
   if (i != count) {
     int err;
-    Context::Scope context_scope(env()->context());
     HandleScope handle_scope(env()->isolate());
-    Handle<Value> argv = GetSSLError(written, &err);
-    if (!argv.IsEmpty()) {
-      MakeCallback(env(),
-                   weak_object(node_isolate),
-                   env()->onerror_string(),
-                   1,
-                   &argv);
+    Context::Scope context_scope(env()->context());
+    Handle<Value> arg = GetSSLError(written, &err);
+    if (!arg.IsEmpty()) {
+      MakeCallback(env()->onerror_string(), 1, &arg);
       return -1;
     }
 
@@ -543,10 +521,18 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
   if (nread < 0)  {
     // Error should be emitted only after all data was read
     ClearOut();
-    Context::Scope context_scope(env()->context());
+
+    // Ignore EOF if received close_notify
+    if (nread == UV_EOF) {
+      if (eof_)
+        return;
+      eof_ = true;
+    }
+
     HandleScope handle_scope(env()->isolate());
+    Context::Scope context_scope(env()->context());
     Local<Value> arg = Integer::New(nread, node_isolate);
-    MakeCallback(env(), Self(), env()->onread_string(), 1, &arg);
+    wrap()->MakeCallback(env()->onread_string(), 1, &arg);
     return;
   }
 
@@ -582,8 +568,7 @@ int TLSCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
 void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
+  TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   if (args.Length() < 2 || !args[0]->IsBoolean() || !args[1]->IsBoolean())
     return ThrowTypeError("Bad arguments, expected two booleans");
@@ -597,7 +582,8 @@ void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
     } else {
       bool reject_unauthorized = args[1]->IsTrue();
       verify_mode = SSL_VERIFY_PEER;
-      if (reject_unauthorized) verify_mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+      if (reject_unauthorized)
+        verify_mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     }
   } else {
     // Note request_cert and reject_unauthorized are ignored for clients.
@@ -613,8 +599,7 @@ void TLSCallbacks::EnableSessionCallbacks(
     const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
+  TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   wrap->enable_session_callbacks();
   EnableHelloParser(args);
@@ -624,8 +609,7 @@ void TLSCallbacks::EnableSessionCallbacks(
 void TLSCallbacks::EnableHelloParser(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
+  TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   wrap->hello_parser_.Start(SSLWrap<TLSCallbacks>::OnClientHello,
                             OnClientHelloParseEnd,
@@ -643,8 +627,7 @@ void TLSCallbacks::OnClientHelloParseEnd(void* arg) {
 void TLSCallbacks::GetServername(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
+  TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   const char* servername = SSL_get_servername(wrap->ssl_,
                                               TLSEXT_NAMETYPE_host_name);
@@ -659,8 +642,7 @@ void TLSCallbacks::GetServername(const FunctionCallbackInfo<Value>& args) {
 void TLSCallbacks::SetServername(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(node_isolate);
 
-  TLSCallbacks* wrap;
-  NODE_UNWRAP(args.This(), TLSCallbacks, wrap);
+  TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   if (args.Length() < 1 || !args[0]->IsString())
     return ThrowTypeError("First argument should be a string");
@@ -688,7 +670,7 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
 
   if (servername != NULL) {
     // Call the SNI callback and use its return value as context
-    Local<Object> object = p->weak_object(node_isolate);
+    Local<Object> object = p->object();
     Local<Value> ctx = object->Get(env->sni_context_string());
 
     if (!ctx->IsObject())
@@ -697,7 +679,8 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
     p->sni_context_.Dispose();
     p->sni_context_.Reset(node_isolate, ctx);
 
-    SecureContext* sc = WeakObject::Unwrap<SecureContext>(ctx.As<Object>());
+    SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());
+    InitNPN(sc, p);
     SSL_set_SSL_CTX(s, sc->ctx_);
   }
 

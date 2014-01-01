@@ -70,7 +70,7 @@ static void eof_timer_close_cb(uv_handle_t* handle);
 
 
 static void uv_unique_pipe_name(char* ptr, char* name, size_t size) {
-  _snprintf(name, size, "\\\\.\\pipe\\uv\\%p-%d", ptr, GetCurrentProcessId());
+  _snprintf(name, size, "\\\\.\\pipe\\uv\\%p-%u", ptr, GetCurrentProcessId());
 }
 
 
@@ -1556,6 +1556,13 @@ void uv_process_pipe_accept_req(uv_loop_t* loop, uv_pipe_t* handle,
   uv_pipe_accept_t* req = (uv_pipe_accept_t*) raw_req;
 
   assert(handle->type == UV_NAMED_PIPE);
+
+  if (handle->flags & UV__HANDLE_CLOSING) {
+    /* The req->pipeHandle should be freed already in uv_pipe_cleanup(). */
+    assert(req->pipeHandle == INVALID_HANDLE_VALUE);
+    DECREASE_PENDING_REQ_COUNT(handle);
+    return;
+  }
 
   if (REQ_SUCCESS(req)) {
     assert(req->pipeHandle != INVALID_HANDLE_VALUE);

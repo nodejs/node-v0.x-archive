@@ -32,6 +32,11 @@
 # include <stdint.h>
 #endif
 
+#if !defined(_WIN32)
+# include <sys/time.h>
+# include <sys/resource.h>  /* setrlimit() */
+#endif
+
 #define TEST_PORT 9123
 #define TEST_PORT_2 9124
 
@@ -153,7 +158,25 @@ enum test_status {
     return TEST_SKIP;                                                         \
   } while (0)
 
-#ifdef _WIN32
+#if !defined(_WIN32)
+
+# define TEST_FILE_LIMIT(num)                                                 \
+    do {                                                                      \
+      struct rlimit lim;                                                      \
+      lim.rlim_cur = (num);                                                   \
+      lim.rlim_max = lim.rlim_cur;                                            \
+      if (setrlimit(RLIMIT_NOFILE, &lim))                                     \
+        RETURN_SKIP("File descriptor limit too low.");                        \
+    } while (0)
+
+#else  /* defined(_WIN32) */
+
+# define TEST_FILE_LIMIT(num) do {} while (0)
+
+#endif
+
+
+#if defined _WIN32 && ! defined __GNUC__
 
 #include <stdarg.h>
 

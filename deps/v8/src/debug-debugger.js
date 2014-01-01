@@ -448,7 +448,7 @@ ScriptBreakPoint.prototype.set = function (script) {
 
   // If the position is not found in the script (the script might be shorter
   // than it used to be) just ignore it.
-  if (position === null) return;
+  if (IS_NULL(position)) return;
 
   // Create a break point object and set the break point.
   break_point = MakeBreakPoint(position, this);
@@ -957,12 +957,17 @@ function ExecutionState(break_id) {
   this.selected_frame = 0;
 }
 
-ExecutionState.prototype.prepareStep = function(opt_action, opt_count) {
+ExecutionState.prototype.prepareStep = function(opt_action, opt_count,
+    opt_callframe) {
   var action = Debug.StepAction.StepIn;
   if (!IS_UNDEFINED(opt_action)) action = %ToNumber(opt_action);
   var count = opt_count ? %ToNumber(opt_count) : 1;
+  var callFrameId = 0;
+  if (!IS_UNDEFINED(opt_callframe)) {
+    callFrameId = opt_callframe.details_.frameId();
+  }
 
-  return %PrepareStep(this.break_id, action, count);
+  return %PrepareStep(this.break_id, action, count, callFrameId);
 };
 
 ExecutionState.prototype.evaluateGlobal = function(source, disable_break,
@@ -2059,7 +2064,7 @@ DebugCommandProcessor.resolveValue_ = function(value_description) {
   } else if ("value" in value_description) {
     return value_description.value;
   } else if (value_description.type == UNDEFINED_TYPE) {
-    return void 0;
+    return UNDEFINED;
   } else if (value_description.type == NULL_TYPE) {
     return null;
   } else {

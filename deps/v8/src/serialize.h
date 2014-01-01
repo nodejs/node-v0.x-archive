@@ -110,7 +110,7 @@ class ExternalReferenceTable {
 
 class ExternalReferenceEncoder {
  public:
-  ExternalReferenceEncoder();
+  explicit ExternalReferenceEncoder(Isolate* isolate);
 
   uint32_t Encode(Address key) const;
 
@@ -134,7 +134,7 @@ class ExternalReferenceEncoder {
 
 class ExternalReferenceDecoder {
  public:
-  ExternalReferenceDecoder();
+  explicit ExternalReferenceDecoder(Isolate* isolate);
   ~ExternalReferenceDecoder();
 
   Address Decode(uint32_t key) const {
@@ -208,7 +208,7 @@ class SnapshotByteSource {
 // both.
 class SerializerDeserializer: public ObjectVisitor {
  public:
-  static void Iterate(ObjectVisitor* visitor);
+  static void Iterate(Isolate* isolate, ObjectVisitor* visitor);
 
   static int nop() { return kNop; }
 
@@ -325,10 +325,10 @@ class Deserializer: public SerializerDeserializer {
   virtual ~Deserializer();
 
   // Deserialize the snapshot into an empty heap.
-  void Deserialize();
+  void Deserialize(Isolate* isolate);
 
   // Deserialize a single object and the objects reachable from it.
-  void DeserializePartial(Object** root);
+  void DeserializePartial(Isolate* isolate, Object** root);
 
   void set_reservation(int space_number, int reservation) {
     ASSERT(space_number >= 0);
@@ -338,10 +338,6 @@ class Deserializer: public SerializerDeserializer {
 
  private:
   virtual void VisitPointers(Object** start, Object** end);
-
-  virtual void VisitExternalReferences(Address* start, Address* end) {
-    UNREACHABLE();
-  }
 
   virtual void VisitRuntimeEntry(RelocInfo* rinfo) {
     UNREACHABLE();
@@ -366,6 +362,10 @@ class Deserializer: public SerializerDeserializer {
   Address Allocate(int space_index, int size) {
     Address address = high_water_[space_index];
     high_water_[space_index] = address + size;
+    HeapProfiler* profiler = isolate_->heap_profiler();
+    if (profiler->is_tracking_allocations()) {
+      profiler->NewObjectEvent(address, size);
+    }
     return address;
   }
 
@@ -464,7 +464,7 @@ class CodeAddressMap;
 // There can be only one serializer per V8 process.
 class Serializer : public SerializerDeserializer {
  public:
-  explicit Serializer(SnapshotByteSink* sink);
+  Serializer(Isolate* isolate, SnapshotByteSink* sink);
   ~Serializer();
   void VisitPointers(Object** start, Object** end);
   // You can call this after serialization to find out how much space was used
@@ -474,7 +474,8 @@ class Serializer : public SerializerDeserializer {
     return fullness_[space];
   }
 
-  static void Enable();
+  Isolate* isolate() const { return isolate_; }
+  static void Enable(Isolate* isolate);
   static void Disable();
 
   // Call this when you have made use of the fact that there is no serialization
@@ -516,7 +517,7 @@ class Serializer : public SerializerDeserializer {
     void Serialize();
     void VisitPointers(Object** start, Object** end);
     void VisitEmbeddedPointer(RelocInfo* target);
-    void VisitExternalReferences(Address* start, Address* end);
+    void VisitExternalReference(Address* p);
     void VisitExternalReference(RelocInfo* rinfo);
     void VisitCodeTarget(RelocInfo* target);
     void VisitCodeEntry(Address entry_address);
@@ -568,6 +569,10 @@ class Serializer : public SerializerDeserializer {
 
   int SpaceAreaSize(int space);
 
+  // Some roots should not be serialized, because their actual value depends on
+  // absolute addresses and they are reset after deserialization, anyway.
+  bool ShouldBeSkipped(Object** current);
+
   Isolate* isolate_;
   // Keep track of the fullness of each space in order to generate
   // relative addresses for back references.
@@ -593,9 +598,10 @@ class Serializer : public SerializerDeserializer {
 
 class PartialSerializer : public Serializer {
  public:
-  PartialSerializer(Serializer* startup_snapshot_serializer,
+  PartialSerializer(Isolate* isolate,
+                    Serializer* startup_snapshot_serializer,
                     SnapshotByteSink* sink)
-    : Serializer(sink),
+    : Serializer(isolate, sink),
       startup_serializer_(startup_snapshot_serializer) {
     set_root_index_wave_front(Heap::kStrongRootListLength);
   }
@@ -618,7 +624,8 @@ class PartialSerializer : public Serializer {
     return o->IsName() || o->IsSharedFunctionInfo() ||
            o->IsHeapNumber() || o->IsCode() ||
            o->IsScopeInfo() ||
-           o->map() == HEAP->fixed_cow_array_map();
+           o->map() ==
+               startup_serializer_->isolate()->heap()->fixed_cow_array_map();
   }
 
  private:
@@ -629,12 +636,13 @@ class PartialSerializer : public Serializer {
 
 class StartupSerializer : public Serializer {
  public:
-  explicit StartupSerializer(SnapshotByteSink* sink) : Serializer(sink) {
+  StartupSerializer(Isolate* isolate, SnapshotByteSink* sink)
+    : Serializer(isolate, sink) {
     // Clear the cache of objects used by the partial snapshot.  After the
     // strong roots have been serialized we can create a partial snapshot
     // which will repopulate the cache with objects needed by that partial
     // snapshot.
-    Isolate::Current()->set_serialize_partial_snapshot_cache_length(0);
+    isolate->set_serialize_partial_snapshot_cache_length(0);
   }
   // Serialize the current state of the heap.  The order is:
   // 1) Strong references.

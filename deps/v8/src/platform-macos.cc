@@ -53,58 +53,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <cxxabi.h>
 
 #undef MAP_TYPE
 
 #include "v8.h"
 
-#include "platform-posix.h"
 #include "platform.h"
 #include "simulator.h"
 #include "vm-state-inl.h"
 
-// Manually define these here as weak imports, rather than including execinfo.h.
-// This lets us launch on 10.4 which does not have these calls.
-extern "C" {
-  extern int backtrace(void**, int) __attribute__((weak_import));
-  extern char** backtrace_symbols(void* const*, int)
-      __attribute__((weak_import));
-  extern void backtrace_symbols_fd(void* const*, int, int)
-      __attribute__((weak_import));
-}
-
 
 namespace v8 {
 namespace internal {
-
-
-static Mutex* limit_mutex = NULL;
-
-
-// We keep the lowest and highest addresses mapped as a quick way of
-// determining that pointers are outside the heap (used mostly in assertions
-// and verification).  The estimate is conservative, i.e., not all addresses in
-// 'allocated' space are actually allocated to our heap.  The range is
-// [lowest, highest), inclusive on the low and and exclusive on the high end.
-static void* lowest_ever_allocated = reinterpret_cast<void*>(-1);
-static void* highest_ever_allocated = reinterpret_cast<void*>(0);
-
-
-static void UpdateAllocatedSpaceLimits(void* address, int size) {
-  ASSERT(limit_mutex != NULL);
-  ScopedLock lock(limit_mutex);
-
-  lowest_ever_allocated = Min(lowest_ever_allocated, address);
-  highest_ever_allocated =
-      Max(highest_ever_allocated,
-          reinterpret_cast<void*>(reinterpret_cast<char*>(address) + size));
-}
-
-
-bool OS::IsOutsideAllocatedSpace(void* address) {
-  return address < lowest_ever_allocated || address >= highest_ever_allocated;
-}
 
 
 // Constants used for mmap.
@@ -131,16 +91,7 @@ void* OS::Allocate(const size_t requested,
     return NULL;
   }
   *allocated = msize;
-  UpdateAllocatedSpaceLimits(mbase, msize);
   return mbase;
-}
-
-
-void OS::DumpBacktrace() {
-  // If weak link to execinfo lib has failed, ie because we are on 10.4, abort.
-  if (backtrace == NULL) return;
-
-  POSIXBacktraceHelper<backtrace, backtrace_symbols>::DumpBacktrace();
 }
 
 
@@ -202,7 +153,7 @@ PosixMemoryMappedFile::~PosixMemoryMappedFile() {
 }
 
 
-void OS::LogSharedLibraryAddresses() {
+void OS::LogSharedLibraryAddresses(Isolate* isolate) {
   unsigned int images_count = _dyld_image_count();
   for (unsigned int i = 0; i < images_count; ++i) {
     const mach_header* header = _dyld_get_image_header(i);
@@ -221,7 +172,7 @@ void OS::LogSharedLibraryAddresses() {
     if (code_ptr == NULL) continue;
     const uintptr_t slide = _dyld_get_image_vmaddr_slide(i);
     const uintptr_t start = reinterpret_cast<uintptr_t>(code_ptr) + slide;
-    LOG(Isolate::Current(),
+    LOG(isolate,
         SharedLibraryEvent(_dyld_get_image_name(i), start, start + size));
   }
 }
@@ -246,14 +197,6 @@ double OS::LocalTimeOffset() {
   // tm_gmtoff includes any daylight savings offset, so subtract it.
   return static_cast<double>(t->tm_gmtoff * msPerSecond -
                              (t->tm_isdst > 0 ? 3600 * msPerSecond : 0));
-}
-
-
-int OS::StackWalk(Vector<StackFrame> frames) {
-  // If weak link to execinfo lib has failed, ie because we are on 10.4, abort.
-  if (backtrace == NULL) return 0;
-
-  return POSIXBacktraceHelper<backtrace, backtrace_symbols>::StackWalk(frames);
 }
 
 
@@ -366,8 +309,6 @@ bool VirtualMemory::CommitRegion(void* address,
                          kMmapFdOffset)) {
     return false;
   }
-
-  UpdateAllocatedSpaceLimits(address, size);
   return true;
 }
 
@@ -390,66 +331,5 @@ bool VirtualMemory::ReleaseRegion(void* address, size_t size) {
 bool VirtualMemory::HasLazyCommits() {
   return false;
 }
-
-
-class MacOSSemaphore : public Semaphore {
- public:
-  explicit MacOSSemaphore(int count) {
-    int r;
-    r = semaphore_create(mach_task_self(),
-                         &semaphore_,
-                         SYNC_POLICY_FIFO,
-                         count);
-    ASSERT(r == KERN_SUCCESS);
-  }
-
-  ~MacOSSemaphore() {
-    int r;
-    r = semaphore_destroy(mach_task_self(), semaphore_);
-    ASSERT(r == KERN_SUCCESS);
-  }
-
-  void Wait() {
-    int r;
-    do {
-      r = semaphore_wait(semaphore_);
-      ASSERT(r == KERN_SUCCESS || r == KERN_ABORTED);
-    } while (r == KERN_ABORTED);
-  }
-
-  bool Wait(int timeout);
-
-  void Signal() { semaphore_signal(semaphore_); }
-
- private:
-  semaphore_t semaphore_;
-};
-
-
-bool MacOSSemaphore::Wait(int timeout) {
-  mach_timespec_t ts;
-  ts.tv_sec = timeout / 1000000;
-  ts.tv_nsec = (timeout % 1000000) * 1000;
-  return semaphore_timedwait(semaphore_, ts) != KERN_OPERATION_TIMED_OUT;
-}
-
-
-Semaphore* OS::CreateSemaphore(int count) {
-  return new MacOSSemaphore(count);
-}
-
-
-void OS::SetUp() {
-  // Seed the random number generator. We preserve microsecond resolution.
-  uint64_t seed = Ticks() ^ (getpid() << 16);
-  srandom(static_cast<unsigned int>(seed));
-  limit_mutex = CreateMutex();
-}
-
-
-void OS::TearDown() {
-  delete limit_mutex;
-}
-
 
 } }  // namespace v8::internal

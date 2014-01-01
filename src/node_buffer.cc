@@ -43,7 +43,9 @@
   Local<Object> obj = argT;                                                 \
   size_t obj_length = obj->GetIndexedPropertiesExternalArrayDataLength();   \
   char* obj_data = static_cast<char*>(                                      \
-    obj->GetIndexedPropertiesExternalArrayData());
+    obj->GetIndexedPropertiesExternalArrayData());                          \
+  if (obj_length > 0)                                                       \
+    assert(obj_data != NULL);
 
 #define SLICE_START_END(start_arg, end_arg, end_max)                        \
   size_t start;                                                             \
@@ -57,6 +59,7 @@
 namespace node {
 namespace Buffer {
 
+using v8::ArrayBuffer;
 using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -124,8 +127,10 @@ Local<Object> New(Handle<String> string, enum encoding enc) {
 
 
 Local<Object> New(size_t length) {
+  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
-  return Buffer::New(env, length);
+  Local<Object> obj = Buffer::New(env, length);
+  return handle_scope.Close(obj);
 }
 
 
@@ -157,8 +162,10 @@ Local<Object> New(Environment* env, size_t length) {
 
 
 Local<Object> New(const char* data, size_t length) {
+  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
-  return Buffer::New(env, data, length);
+  Local<Object> obj = Buffer::New(env, data, length);
+  return handle_scope.Close(obj);
 }
 
 
@@ -196,8 +203,10 @@ Local<Object> New(char* data,
                   size_t length,
                   smalloc::FreeCallback callback,
                   void* hint) {
+  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
-  return Buffer::New(env, data, length, callback, hint);
+  Local<Object> obj = Buffer::New(env, data, length, callback, hint);
+  return handle_scope.Close(obj);
 }
 
 
@@ -220,8 +229,10 @@ Local<Object> New(Environment* env,
 
 
 Local<Object> Use(char* data, uint32_t length) {
+  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
-  return Buffer::Use(env, data, length);
+  Local<Object> obj = Buffer::Use(env, data, length);
+  return handle_scope.Close(obj);
 }
 
 
@@ -468,7 +479,8 @@ void ReadFloatGeneric(const FunctionCallbackInfo<Value>& args) {
   const void* data = args.This()->GetIndexedPropertiesExternalArrayData();
   const char* ptr = static_cast<const char*>(data) + offset;
   memcpy(na.bytes, ptr, sizeof(na.bytes));
-  if (endianness != GetEndianness()) Swizzle(na.bytes, sizeof(na.bytes));
+  if (endianness != GetEndianness())
+    Swizzle(na.bytes, sizeof(na.bytes));
 
   args.GetReturnValue().Set(na.val);
 }
@@ -522,7 +534,8 @@ uint32_t WriteFloatGeneric(const FunctionCallbackInfo<Value>& args) {
   union NoAlias na = { val };
   void* data = args.This()->GetIndexedPropertiesExternalArrayData();
   char* ptr = static_cast<char*>(data) + offset;
-  if (endianness != GetEndianness()) Swizzle(na.bytes, sizeof(na.bytes));
+  if (endianness != GetEndianness())
+    Swizzle(na.bytes, sizeof(na.bytes));
   memcpy(ptr, na.bytes, sizeof(na.bytes));
   return offset + sizeof(na.bytes);
 }
@@ -548,6 +561,25 @@ void WriteDoubleBE(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+void ToArrayBuffer(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(node_isolate);
+
+  ARGS_THIS(args.This());
+  void* adata = malloc(obj_length);
+
+  if (adata == NULL) {
+    FatalError("node::Buffer::ToArrayBuffer("
+        "const FunctionCallbackInfo<v8::Value>&)",
+        "Out Of Memory");
+  }
+
+  memcpy(adata, obj_data, obj_length);
+
+  Local<ArrayBuffer> abuf = ArrayBuffer::New(adata, obj_length);
+  args.GetReturnValue().Set(abuf);
+}
+
+
 void ByteLength(const FunctionCallbackInfo<Value> &args) {
   HandleScope scope(node_isolate);
 
@@ -564,8 +596,8 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
 
 // pass Buffer object to load prototype methods
 void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   assert(args[0]->IsFunction());
 
@@ -602,6 +634,8 @@ void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
   NODE_SET_METHOD(proto, "writeFloatBE", WriteFloatBE);
   NODE_SET_METHOD(proto, "writeFloatLE", WriteFloatLE);
 
+  NODE_SET_METHOD(proto, "toArrayBuffer", ToArrayBuffer);
+
   NODE_SET_METHOD(proto, "copy", Copy);
   NODE_SET_METHOD(proto, "fill", Fill);
 
@@ -623,7 +657,6 @@ void Initialize(Handle<Object> target,
                 Handle<Value> unused,
                 Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
-  HandleScope handle_scope(env->isolate());
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "setupBufferJS"),
               FunctionTemplate::New(SetupBufferJS)->GetFunction());
 }

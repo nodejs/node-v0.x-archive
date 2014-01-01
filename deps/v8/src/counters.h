@@ -116,8 +116,8 @@ class StatsTable {
 class StatsCounter {
  public:
   StatsCounter() { }
-  explicit StatsCounter(const char* name)
-      : name_(name), ptr_(NULL), lookup_done_(false) { }
+  explicit StatsCounter(Isolate* isolate, const char* name)
+      : isolate_(isolate), name_(name), ptr_(NULL), lookup_done_(false) { }
 
   // Sets the counter to a specific value.
   void Set(int value) {
@@ -175,6 +175,7 @@ class StatsCounter {
  private:
   int* FindLocationInStatsTable() const;
 
+  Isolate* isolate_;
   const char* name_;
   int* ptr_;
   bool lookup_done_;
@@ -245,9 +246,7 @@ class HistogramTimer : public Histogram {
                  int max,
                  int num_buckets,
                  Isolate* isolate)
-      : Histogram(name, min, max, num_buckets, isolate),
-        start_time_(0),
-        stop_time_(0) { }
+      : Histogram(name, min, max, num_buckets, isolate) {}
 
   // Start the timer.
   void Start();
@@ -257,26 +256,54 @@ class HistogramTimer : public Histogram {
 
   // Returns true if the timer is running.
   bool Running() {
-    return Enabled() && (start_time_ != 0) && (stop_time_ == 0);
+    return Enabled() && timer_.IsStarted();
   }
 
+  // TODO(bmeurer): Remove this when HistogramTimerScope is fixed.
+#ifdef DEBUG
+  ElapsedTimer* timer() { return &timer_; }
+#endif
+
  private:
-  int64_t start_time_;
-  int64_t stop_time_;
+  ElapsedTimer timer_;
 };
 
 // Helper class for scoping a HistogramTimer.
+// TODO(bmeurer): The ifdeffery is an ugly hack around the fact that the
+// Parser is currently reentrant (when it throws an error, we call back
+// into JavaScript and all bets are off), but ElapsedTimer is not
+// reentry-safe. Fix this properly and remove |allow_nesting|.
 class HistogramTimerScope BASE_EMBEDDED {
  public:
-  explicit HistogramTimerScope(HistogramTimer* timer) :
-  timer_(timer) {
+  explicit HistogramTimerScope(HistogramTimer* timer,
+                               bool allow_nesting = false)
+#ifdef DEBUG
+      : timer_(timer),
+        skipped_timer_start_(false) {
+    if (timer_->timer()->IsStarted() && allow_nesting) {
+      skipped_timer_start_ = true;
+    } else {
+      timer_->Start();
+    }
+#else
+      : timer_(timer) {
     timer_->Start();
+#endif
   }
   ~HistogramTimerScope() {
+#ifdef DEBUG
+    if (!skipped_timer_start_) {
+      timer_->Stop();
+    }
+#else
     timer_->Stop();
+#endif
   }
  private:
   HistogramTimer* timer_;
+#ifdef DEBUG
+  bool skipped_timer_start_;
+#endif
 };
 
 

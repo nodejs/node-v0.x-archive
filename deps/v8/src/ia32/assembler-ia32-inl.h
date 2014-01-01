@@ -47,6 +47,7 @@ namespace internal {
 
 
 static const byte kCallOpcode = 0xE8;
+static const int kNoCodeAgeSequenceLength = 5;
 
 
 // The modes possibly affected by apply must be in kApplyMask.
@@ -190,6 +191,13 @@ void RelocInfo::set_target_cell(Cell* cell, WriteBarrierMode mode) {
 }
 
 
+Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
+  ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  ASSERT(*pc_ == kCallOpcode);
+  return Memory::Object_Handle_at(pc_ + 1);
+}
+
+
 Code* RelocInfo::code_age_stub() {
   ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
   ASSERT(*pc_ == kCallOpcode);
@@ -251,7 +259,7 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 }
 
 
-void RelocInfo::Visit(ObjectVisitor* visitor) {
+void RelocInfo::Visit(Isolate* isolate, ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     visitor->VisitEmbeddedPointer(this);
@@ -266,12 +274,11 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   } else if (RelocInfo::IsCodeAgeSequence(mode)) {
     visitor->VisitCodeAgeSequence(this);
   #ifdef ENABLE_DEBUGGER_SUPPORT
-  // TODO(isolates): Get a cached isolate below.
   } else if (((RelocInfo::IsJSReturn(mode) &&
               IsPatchedReturnSequence()) ||
              (RelocInfo::IsDebugBreakSlot(mode) &&
               IsPatchedDebugBreakSlotSequence())) &&
-             Isolate::Current()->debug()->has_break_points()) {
+             isolate->debug()->has_break_points()) {
     visitor->VisitDebugTarget(this);
 #endif
   } else if (IsRuntimeEntry(mode)) {
@@ -329,14 +336,11 @@ Immediate::Immediate(Label* internal_offset) {
 
 
 Immediate::Immediate(Handle<Object> handle) {
-#ifdef DEBUG
-  Isolate* isolate = Isolate::Current();
-#endif
   AllowDeferredHandleDereference using_raw_address;
   // Verify all Objects referred by code are NOT in new space.
   Object* obj = *handle;
-  ASSERT(!isolate->heap()->InNewSpace(obj));
   if (obj->IsHeapObject()) {
+    ASSERT(!HeapObject::cast(obj)->GetHeap()->InNewSpace(obj));
     x_ = reinterpret_cast<intptr_t>(handle.location());
     rmode_ = RelocInfo::EMBEDDED_OBJECT;
   } else {
@@ -383,7 +387,8 @@ void Assembler::emit(Handle<Object> handle) {
 void Assembler::emit(uint32_t x, RelocInfo::Mode rmode, TypeFeedbackId id) {
   if (rmode == RelocInfo::CODE_TARGET && !id.IsNone()) {
     RecordRelocInfo(RelocInfo::CODE_TARGET_WITH_ID, id.ToInt());
-  } else if (!RelocInfo::IsNone(rmode)) {
+  } else if (!RelocInfo::IsNone(rmode)
+      && rmode != RelocInfo::CODE_AGE_SEQUENCE) {
     RecordRelocInfo(rmode);
   }
   emit(x);

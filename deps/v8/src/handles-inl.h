@@ -32,6 +32,7 @@
 #include "api.h"
 #include "apiutils.h"
 #include "handles.h"
+#include "heap.h"
 #include "isolate.h"
 
 namespace v8 {
@@ -85,11 +86,13 @@ bool Handle<T>::IsDereferenceAllowed(DereferenceCheckMode mode) const {
   Object* object = *BitCast<T**>(location_);
   if (object->IsSmi()) return true;
   HeapObject* heap_object = HeapObject::cast(object);
-  Isolate* isolate = heap_object->GetIsolate();
+  Heap* heap = heap_object->GetHeap();
   Object** handle = reinterpret_cast<Object**>(location_);
-  Object** roots_array_start = isolate->heap()->roots_array_start();
+  Object** roots_array_start = heap->roots_array_start();
   if (roots_array_start <= handle &&
-      handle < roots_array_start + Heap::kStrongRootListLength) {
+      handle < roots_array_start + Heap::kStrongRootListLength &&
+      heap->RootCanBeTreatedAsConstant(
+        static_cast<Heap::RootListIndex>(handle - roots_array_start))) {
     return true;
   }
   if (!AllowHandleDereference::IsAllowed()) return false;
@@ -98,7 +101,7 @@ bool Handle<T>::IsDereferenceAllowed(DereferenceCheckMode mode) const {
     // Accessing maps and internalized strings is safe.
     if (heap_object->IsMap()) return true;
     if (heap_object->IsInternalizedString()) return true;
-    return !isolate->IsDeferredHandle(handle);
+    return !heap->isolate()->IsDeferredHandle(handle);
   }
   return true;
 }
@@ -127,16 +130,17 @@ void HandleScope::CloseScope(Isolate* isolate,
   v8::ImplementationUtilities::HandleScopeData* current =
       isolate->handle_scope_data();
 
-  current->next = prev_next;
+  std::swap(current->next, prev_next);
   current->level--;
   if (current->limit != prev_limit) {
     current->limit = prev_limit;
     DeleteExtensions(isolate);
-  }
-
-#ifdef ENABLE_EXTRA_CHECKS
-  ZapRange(prev_next, prev_limit);
+#ifdef ENABLE_HANDLE_ZAPPING
+    ZapRange(current->next, prev_limit);
+  } else {
+    ZapRange(current->next, prev_next);
 #endif
+  }
 }
 
 

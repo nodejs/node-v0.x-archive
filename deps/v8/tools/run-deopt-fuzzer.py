@@ -58,9 +58,9 @@ MODE_FLAGS = {
     "debug"   : ["--nobreak-on-abort", "--nodead-code-elimination",
                  "--nofold-constants", "--enable-slow-asserts",
                  "--debug-code", "--verify-heap",
-                 "--noparallel-recompilation"],
+                 "--noconcurrent-recompilation"],
     "release" : ["--nobreak-on-abort", "--nodead-code-elimination",
-                 "--nofold-constants", "--noparallel-recompilation"]}
+                 "--nofold-constants", "--noconcurrent-recompilation"]}
 
 SUPPORTED_ARCHS = ["android_arm",
                    "android_ia32",
@@ -358,7 +358,8 @@ def Execute(arch, mode, args, options, suites, workspace):
                         mode_flags, options.verbose,
                         timeout, options.isolates,
                         options.command_prefix,
-                        options.extra_flags)
+                        options.extra_flags,
+                        False)
 
   # Find available test suites and read test cases from them.
   variables = {
@@ -367,6 +368,7 @@ def Execute(arch, mode, args, options, suites, workspace):
     "system": utils.GuessOS(),
     "isolates": options.isolates,
     "deopt_fuzzer": True,
+    "no_i18n": False,
   }
   all_tests = []
   num_tests = 0

@@ -73,26 +73,26 @@ typedef struct uv__fsevents_event_s uv__fsevents_event_t;
 typedef struct uv__cf_loop_signal_s uv__cf_loop_signal_t;
 typedef struct uv__cf_loop_state_s uv__cf_loop_state_t;
 
-struct uv__cf_loop_state_s {
-  CFRunLoopRef loop;
-  CFRunLoopSourceRef signal_source;
-  volatile int fsevent_need_reschedule;
-  FSEventStreamRef fsevent_stream;
-  uv_sem_t fsevent_sem;
-  uv_mutex_t fsevent_mutex;
-  void* fsevent_handles[2];
-  int fsevent_handle_count;
-};
-
 struct uv__cf_loop_signal_s {
   QUEUE member;
   uv_fs_event_t* handle;
 };
 
 struct uv__fsevents_event_s {
+  QUEUE member;
   int events;
-  void* next;
   char path[1];
+};
+
+struct uv__cf_loop_state_s {
+  CFRunLoopRef loop;
+  CFRunLoopSourceRef signal_source;
+  int fsevent_need_reschedule;
+  FSEventStreamRef fsevent_stream;
+  uv_sem_t fsevent_sem;
+  uv_mutex_t fsevent_mutex;
+  void* fsevent_handles[2];
+  unsigned int fsevent_handle_count;
 };
 
 /* Forward declarations */
@@ -120,9 +120,9 @@ static CFRunLoopSourceRef (*pCFRunLoopSourceCreate)(CFAllocatorRef,
 static void (*pCFRunLoopSourceSignal)(CFRunLoopSourceRef);
 static void (*pCFRunLoopStop)(CFRunLoopRef);
 static void (*pCFRunLoopWakeUp)(CFRunLoopRef);
-static CFStringRef (*pCFStringCreateWithCString)(CFAllocatorRef,
-                                                 const char*,
-                                                 CFStringEncoding);
+static CFStringRef (*pCFStringCreateWithFileSystemRepresentation)(
+    CFAllocatorRef,
+    const char*);
 static CFStringEncoding (*pCFStringGetSystemEncoding)(void);
 static CFStringRef (*pkCFRunLoopDefaultMode);
 static FSEventStreamRef (*pFSEventStreamCreate)(CFAllocatorRef,
@@ -143,22 +143,36 @@ static void (*pFSEventStreamStop)(FSEventStreamRef);
 
 #define UV__FSEVENTS_PROCESS(handle, block)                                   \
     do {                                                                      \
+      QUEUE events;                                                           \
+      QUEUE* q;                                                               \
       uv__fsevents_event_t* event;                                            \
-      uv__fsevents_event_t* next;                                             \
+      int err;                                                                \
       uv_mutex_lock(&(handle)->cf_mutex);                                     \
-      event = (handle)->cf_event;                                             \
-      (handle)->cf_event = NULL;                                              \
+      /* Split-off all events and empty original queue */                     \
+      QUEUE_INIT(&events);                                                    \
+      if (!QUEUE_EMPTY(&(handle)->cf_events)) {                               \
+        q = QUEUE_HEAD(&(handle)->cf_events);                                 \
+        QUEUE_SPLIT(&(handle)->cf_events, q, &events);                        \
+      }                                                                       \
+      /* Get error (if any) and zero original one */                          \
+      err = (handle)->cf_error;                                               \
+      (handle)->cf_error = 0;                                                 \
       uv_mutex_unlock(&(handle)->cf_mutex);                                   \
-      while (event != NULL) {                                                 \
-        /* Invoke callback */                                                 \
-        /* Invoke block code, but only if handle wasn't closed */             \
-        if (!uv__is_closing((handle)))                                        \
+      /* Loop through events, deallocating each after processing */           \
+      while (!QUEUE_EMPTY(&events)) {                                         \
+        q = QUEUE_HEAD(&events);                                              \
+        event = QUEUE_DATA(q, uv__fsevents_event_t, member);                  \
+        QUEUE_REMOVE(q);                                                      \
+        /* NOTE: Checking uv__is_active() is required here, because handle    \
+         * callback may close handle and invoking it after it will lead to    \
+         * incorrect behaviour */                                             \
+        if (!uv__is_closing((handle)) && uv__is_active((handle)))             \
           block                                                               \
         /* Free allocated data */                                             \
-        next = event->next;                                                   \
         free(event);                                                          \
-        event = next;                                                         \
       }                                                                       \
+      if (err != 0 && !uv__is_closing((handle)) && uv__is_active((handle)))   \
+        (handle)->cb((handle), NULL, 0, err);                                 \
     } while (0)
 
 
@@ -169,12 +183,28 @@ static void uv__fsevents_cb(uv_async_t* cb, int status) {
   handle = cb->data;
 
   UV__FSEVENTS_PROCESS(handle, {
-    if (handle->event_watcher.fd != -1)
-      handle->cb(handle, event->path[0] ? event->path : NULL, event->events, 0);
+    handle->cb(handle, event->path[0] ? event->path : NULL, event->events, 0);
   });
+}
 
-  if (!uv__is_closing(handle) && handle->event_watcher.fd == -1)
-    uv__fsevents_close(handle);
+
+/* Runs in CF thread, pushed event into handle's event list */
+static void uv__fsevents_push_event(uv_fs_event_t* handle,
+                                    QUEUE* events,
+                                    int err) {
+  assert(events != NULL || err != 0);
+  uv_mutex_lock(&handle->cf_mutex);
+
+  /* Concatenate two queues */
+  if (events != NULL)
+    QUEUE_ADD(&handle->cf_events, events);
+
+  /* Propagate error */
+  if (err != 0)
+    handle->cf_error = err;
+  uv_mutex_unlock(&handle->cf_mutex);
+
+  uv_async_send(handle->cf_cb);
 }
 
 
@@ -195,7 +225,7 @@ static void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
   uv_loop_t* loop;
   uv__cf_loop_state_t* state;
   uv__fsevents_event_t* event;
-  uv__fsevents_event_t* tail;
+  QUEUE head;
 
   loop = info;
   state = loop->cf_state;
@@ -203,9 +233,10 @@ static void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
   paths = eventPaths;
 
   /* For each handle */
+  uv_mutex_lock(&state->fsevent_mutex);
   QUEUE_FOREACH(q, &state->fsevent_handles) {
     handle = QUEUE_DATA(q, uv_fs_event_t, cf_member);
-    tail = NULL;
+    QUEUE_INIT(&head);
 
     /* Process and filter out events */
     for (i = 0; i < numEvents; i++) {
@@ -220,13 +251,15 @@ static void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
       if (strncmp(path, handle->realpath, handle->realpath_len) != 0)
         continue;
 
-      path += handle->realpath_len;
-      len -= handle->realpath_len;
+      if (handle->realpath_len > 1 || *handle->realpath != '/') {
+        path += handle->realpath_len;
+        len -= handle->realpath_len;
 
-      /* Skip back slash */
-      if (*path != 0) {
-        path++;
-        len--;
+        /* Skip forward slash */
+        if (*path != '\0') {
+          path++;
+          len--;
+        }
       }
 
 #ifdef MAC_OS_X_VERSION_10_7
@@ -236,9 +269,9 @@ static void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
 #endif /* MAC_OS_X_VERSION_10_7 */
 
       /* Do not emit events from subdirectories (without option set) */
-      if ((handle->cf_flags & UV_FS_EVENT_RECURSIVE) == 0) {
-        pos = strchr(path, '/');
-        if (pos != NULL && pos != path + 1)
+      if ((handle->cf_flags & UV_FS_EVENT_RECURSIVE) == 0 && *path != 0) {
+        pos = strchr(path + 1, '/');
+        if (pos != NULL)
           continue;
       }
 
@@ -260,25 +293,18 @@ static void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
       else
         event->events = UV_RENAME;
 
-      if (tail != NULL)
-        tail->next = event;
-      tail = event;
+      QUEUE_INSERT_TAIL(&head, &event->member);
     }
 
-    if (tail != NULL) {
-      uv_mutex_lock(&handle->cf_mutex);
-      tail->next = handle->cf_event;
-      handle->cf_event = tail;
-      uv_mutex_unlock(&handle->cf_mutex);
-
-      uv_async_send(handle->cf_cb);
-    }
+    if (!QUEUE_EMPTY(&head))
+      uv__fsevents_push_event(handle, &head, 0);
   }
+  uv_mutex_unlock(&state->fsevent_mutex);
 }
 
 
 /* Runs in CF thread */
-static void uv__fsevents_create_stream(uv_loop_t* loop, CFArrayRef paths) {
+static int uv__fsevents_create_stream(uv_loop_t* loop, CFArrayRef paths) {
   uv__cf_loop_state_t* state;
   FSEventStreamContext ctx;
   FSEventStreamRef ref;
@@ -292,10 +318,21 @@ static void uv__fsevents_create_stream(uv_loop_t* loop, CFArrayRef paths) {
   ctx.release = NULL;
   ctx.copyDescription = NULL;
 
-  latency = 0.15;
+  latency = 0.05;
 
-  /* Set appropriate flags */
-  flags = kFSEventStreamCreateFlagFileEvents;
+  /* Explanation of selected flags:
+   * 1. NoDefer - without this flag, events that are happening continuously
+   *    (i.e. each event is happening after time interval less than `latency`,
+   *    counted from previous event), will be deferred and passed to callback
+   *    once they'll either fill whole OS buffer, or when this continuous stream
+   *    will stop (i.e. there'll be delay between events, bigger than
+   *    `latency`).
+   *    Specifying this flag will invoke callback after `latency` time passed
+   *    since event.
+   * 2. FileEvents - fire callback for file changes too (by default it is firing
+   *    it only for directory changes).
+   */
+  flags = kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents;
 
   /*
    * NOTE: It might sound like a good idea to remember last seen StreamEventId,
@@ -316,10 +353,14 @@ static void uv__fsevents_create_stream(uv_loop_t* loop, CFArrayRef paths) {
   pFSEventStreamScheduleWithRunLoop(ref,
                                     state->loop,
                                     *pkCFRunLoopDefaultMode);
-  if (!pFSEventStreamStart(ref))
-    abort();
+  if (!pFSEventStreamStart(ref)) {
+    pFSEventStreamInvalidate(ref);
+    pFSEventStreamRelease(ref);
+    return -EMFILE;
+  }
 
   state->fsevent_stream = ref;
+  return 0;
 }
 
 
@@ -352,51 +393,91 @@ static void uv__fsevents_reschedule(uv_fs_event_t* handle) {
   uv_fs_event_t* curr;
   CFArrayRef cf_paths;
   CFStringRef* paths;
-  int i;
-  int path_count;
+  unsigned int i;
+  int err;
+  unsigned int path_count;
 
   state = handle->loop->cf_state;
+  paths = NULL;
+  cf_paths = NULL;
+  err = 0;
+  /* NOTE: `i` is used in deallocation loop below */
+  i = 0;
 
   /* Optimization to prevent O(n^2) time spent when starting to watch
    * many files simultaneously
    */
-  if (!state->fsevent_need_reschedule)
-    return;
+  uv_mutex_lock(&state->fsevent_mutex);
+  if (state->fsevent_need_reschedule == 0) {
+    uv_mutex_unlock(&state->fsevent_mutex);
+    goto final;
+  }
   state->fsevent_need_reschedule = 0;
+  uv_mutex_unlock(&state->fsevent_mutex);
 
   /* Destroy previous FSEventStream */
   uv__fsevents_destroy_stream(handle->loop);
+
+  /* Any failure below will be a memory failure */
+  err = -ENOMEM;
 
   /* Create list of all watched paths */
   uv_mutex_lock(&state->fsevent_mutex);
   path_count = state->fsevent_handle_count;
   if (path_count != 0) {
     paths = malloc(sizeof(*paths) * path_count);
-    if (paths == NULL)
-      abort();
+    if (paths == NULL) {
+      uv_mutex_unlock(&state->fsevent_mutex);
+      goto final;
+    }
 
     q = &state->fsevent_handles;
-    for (i = 0; i < path_count; i++) {
+    for (; i < path_count; i++) {
       q = QUEUE_NEXT(q);
       assert(q != &state->fsevent_handles);
       curr = QUEUE_DATA(q, uv_fs_event_t, cf_member);
 
       assert(curr->realpath != NULL);
-      paths[i] = pCFStringCreateWithCString(NULL,
-                                            curr->realpath,
-                                            pCFStringGetSystemEncoding());
-      if (paths[i] == NULL)
-        abort();
+      paths[i] =
+          pCFStringCreateWithFileSystemRepresentation(NULL, curr->realpath);
+      if (paths[i] == NULL) {
+        uv_mutex_unlock(&state->fsevent_mutex);
+        goto final;
+      }
     }
   }
   uv_mutex_unlock(&state->fsevent_mutex);
+  err = 0;
 
   if (path_count != 0) {
     /* Create new FSEventStream */
     cf_paths = pCFArrayCreate(NULL, (const void**) paths, path_count, NULL);
-    if (cf_paths == NULL)
-      abort();
-    uv__fsevents_create_stream(handle->loop, cf_paths);
+    if (cf_paths == NULL) {
+      err = -ENOMEM;
+      goto final;
+    }
+    err = uv__fsevents_create_stream(handle->loop, cf_paths);
+  }
+
+final:
+  /* Deallocate all paths in case of failure */
+  if (err != 0) {
+    if (cf_paths == NULL) {
+      while (i != 0)
+        pCFRelease(paths[--i]);
+      free(paths);
+    } else {
+      /* CFArray takes ownership of both strings and original C-array */
+      pCFRelease(cf_paths);
+    }
+
+    /* Broadcast error to all handles */
+    uv_mutex_lock(&state->fsevent_mutex);
+    QUEUE_FOREACH(q, &state->fsevent_handles) {
+      curr = QUEUE_DATA(q, uv_fs_event_t, cf_member);
+      uv__fsevents_push_event(curr, NULL, err);
+    }
+    uv_mutex_unlock(&state->fsevent_mutex);
   }
 
   /*
@@ -405,7 +486,7 @@ static void uv__fsevents_reschedule(uv_fs_event_t* handle) {
    *
    * NOTE: This is coupled with `uv_sem_wait()` in `uv__fsevents_close`
    */
-  if (uv__is_closing(handle))
+  if (!uv__is_active(handle))
     uv_sem_post(&state->fsevent_sem);
 }
 
@@ -459,7 +540,7 @@ static int uv__fsevents_global_init(void) {
   V(core_foundation_handle, CFRunLoopSourceSignal);
   V(core_foundation_handle, CFRunLoopStop);
   V(core_foundation_handle, CFRunLoopWakeUp);
-  V(core_foundation_handle, CFStringCreateWithCString);
+  V(core_foundation_handle, CFStringCreateWithFileSystemRepresentation);
   V(core_foundation_handle, CFStringGetSystemEncoding);
   V(core_foundation_handle, kCFRunLoopDefaultMode);
   V(core_services_handle, FSEventStreamCreate);
@@ -509,7 +590,7 @@ static int uv__fsevents_loop_init(uv_loop_t* loop) {
 
   err = uv_mutex_init(&loop->cf_mutex);
   if (err)
-    return err;
+    goto fail_mutex_init;
 
   err = uv_sem_init(&loop->cf_sem, 0);
   if (err)
@@ -547,7 +628,7 @@ static int uv__fsevents_loop_init(uv_loop_t* loop) {
     attr = NULL;
 
   if (attr != NULL)
-    if (pthread_attr_setstacksize(attr, 3 * PTHREAD_STACK_MIN))
+    if (pthread_attr_setstacksize(attr, 4 * PTHREAD_STACK_MIN))
       abort();
 
   loop->cf_state = state;
@@ -579,6 +660,8 @@ fail_fsevent_sem_init:
 
 fail_sem_init:
   uv_mutex_destroy(&loop->cf_mutex);
+
+fail_mutex_init:
   free(state);
   return err;
 }
@@ -717,8 +800,9 @@ int uv__fsevents_init(uv_fs_event_t* handle) {
     return -errno;
   handle->realpath_len = strlen(handle->realpath);
 
-  /* Initialize singly-linked list */
-  handle->cf_event = NULL;
+  /* Initialize event queue */
+  QUEUE_INIT(&handle->cf_events);
+  handle->cf_error = 0;
 
   /*
    * Events will occur in other thread.
