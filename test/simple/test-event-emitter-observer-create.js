@@ -39,16 +39,16 @@ events.addObserver(obs);
 
 var ee = new events();
 
-assert.ok(ee._observers);
-assert.equal(ee._observers.length, 1);
-assert.equal(ee._observers[0], obs);
-assert.equal(ee._storage[obs.uid], obs.storage);
+assert.ok(ee.__observers);
+assert.equal(ee.__observers.length, 1);
+assert.equal(ee.__observers[0], obs);
+assert.equal(ee.__storage[obs.uid], obs.storage);
 
-var item = ee._observers[0];
+var item = ee.__observers[0];
 assert.equal(typeof item.create, 'function');
 assert.equal(item.flags, 1);
 assert.equal(item.storage, 'test storage');
-assert.equal(ee._storage[obs.uid], item.storage);
+assert.equal(ee.__storage[obs.uid], item.storage);
 
 
 // Check the observer is removed properly.
@@ -56,8 +56,8 @@ events.removeObserver(obs);
 
 var ee = new events();
 
-assert.ok(!ee._observers);
-assert.ok(!ee._storage);
+assert.ok(!ee.__observers);
+assert.ok(!ee.__storage);
 
 
 // Check the storage value can be overridden, and the observer
@@ -71,13 +71,13 @@ var obs = events.addObserver({
 
 var ee = new events();
 
-assert.ok(ee._observers);
-assert.equal(ee._observers.length, 1);
-assert.equal(ee._observers[0], obs);
-assert.equal(ee._storage[obs.uid], 'this works');
+assert.ok(ee.__observers);
+assert.equal(ee.__observers.length, 1);
+assert.equal(ee.__observers[0], obs);
+assert.equal(ee.__storage[obs.uid], 'this works');
 assert.ok(ee.testValue);
 
-var item = ee._observers[0];
+var item = ee.__observers[0];
 assert.equal(typeof item.create, 'function');
 assert.equal(item.flags, 1);
 assert.equal(item.storage, 'remove me');
@@ -88,8 +88,8 @@ events.addObserver(obs);
 
 var ee = new events();
 
-assert.ok(ee._observers);
-assert.equal(ee._observers.length, 1);
+assert.ok(ee.__observers);
+assert.equal(ee.__observers.length, 1);
 
 // Check the storage value isn't overridden if observer was
 // previously created.

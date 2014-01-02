@@ -35,5 +35,5 @@ var ee = new events();
 events.attachObserver(ee, obs);
 events.detachObserver(ee, obs);
 
-assert.ok(!ee._observers);
-assert.equal(ee._flags, 0);
+assert.ok(!ee.__observers);
+assert.equal(ee.__flags, 0);

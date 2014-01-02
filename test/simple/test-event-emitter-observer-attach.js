@@ -34,16 +34,16 @@ var ee = new events();
 
 events.attachObserver(ee, obs);
 
-assert.ok(ee._observers);
-assert.equal(ee._observers.length, 1);
-assert.equal(ee._observers[0], obs);
-assert.equal(ee._storage[obs.uid], obs.storage);
+assert.ok(ee.__observers);
+assert.equal(ee.__observers.length, 1);
+assert.equal(ee.__observers[0], obs);
+assert.equal(ee.__storage[obs.uid], obs.storage);
 
-var item = ee._observers[0];
+var item = ee.__observers[0];
 assert.equal(typeof item.create, 'function');
 assert.equal(item.flags, 1);
 assert.equal(item.storage, 'test storage');
-assert.equal(ee._storage[obs.uid], item.storage);
+assert.equal(ee.__storage[obs.uid], item.storage);
 
 
 // Check observer can be added after creation and storage changed.
@@ -55,11 +55,11 @@ var ee = new events();
 
 events.attachObserver(ee, obs, 'new storage');
 
-assert.ok(ee._observers);
-assert.equal(ee._observers.length, 1);
-assert.equal(ee._observers[0], obs);
+assert.ok(ee.__observers);
+assert.equal(ee.__observers.length, 1);
+assert.equal(ee.__observers[0], obs);
 
-var item = ee._observers[0];
+var item = ee.__observers[0];
 assert.equal(typeof item.create, 'function');
 assert.equal(item.flags, 1);
-assert.equal(ee._storage[obs.uid], 'new storage');
+assert.equal(ee.__storage[obs.uid], 'new storage');
