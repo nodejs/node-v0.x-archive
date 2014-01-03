@@ -4078,7 +4078,7 @@ void InitCryptoOnce() {
 
 
 #ifndef OPENSSL_NO_ENGINE
-void SetEngine(const v8::FunctionCallbackInfo<v8::Value>& args) {
+void SetEngine(const FunctionCallbackInfo<Value>& args) {
   CHECK(args.Length() >= 1 && args[0]->IsString());
   unsigned int flags = ENGINE_METHOD_ALL;
   if (args.Length() >= 2) {
