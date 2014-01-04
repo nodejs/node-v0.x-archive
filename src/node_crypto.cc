@@ -4072,6 +4072,7 @@ void InitCryptoOnce() {
 #endif
 
 #ifndef OPENSSL_NO_ENGINE
+  ERR_load_ENGINE_strings();
   ENGINE_load_builtin_engines();
 #endif  // !OPENSSL_NO_ENGINE
 }
@@ -4079,12 +4080,11 @@ void InitCryptoOnce() {
 
 #ifndef OPENSSL_NO_ENGINE
 void SetEngine(const FunctionCallbackInfo<Value>& args) {
-  CHECK(args.Length() >= 1 && args[0]->IsString());
-  unsigned int flags = ENGINE_METHOD_ALL;
-  if (args.Length() >= 2) {
-    CHECK(args[1]->IsUint32());
-    flags = args[1]->Uint32Value();
-  }
+  CHECK(args.Length() >= 2 && args[0]->IsString());
+  unsigned int flags = args[1]->Uint32Value();
+
+  ClearErrorOnReturn clear_error_on_return;
+  (void) &clear_error_on_return;  // Silence compiler warning.
 
   const String::Utf8Value engine_id(args[0]);
   ENGINE* engine = ENGINE_by_id(*engine_id);
@@ -4115,7 +4115,7 @@ void SetEngine(const FunctionCallbackInfo<Value>& args) {
   int r = ENGINE_set_default(engine, flags);
   ENGINE_free(engine);
   if (r == 0)
-    return ThrowCryptoError(r);
+    return ThrowCryptoError(ERR_get_error());
 }
 #endif  // !OPENSSL_NO_ENGINE
 
