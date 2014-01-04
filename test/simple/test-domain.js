@@ -263,7 +263,7 @@ d.add(fst)
 expectCaught++;
 
 
-;[42, null, undefined, false, function(){}, 'string'].forEach(function(something) {
+[42, null, undefined, false, function(){}, 'string'].forEach(function(something) {
   var d = new domain.Domain();
   d.run(function() {
     process.nextTick(function() {
