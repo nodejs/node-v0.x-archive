@@ -219,6 +219,53 @@ bool EntropySource(unsigned char* buffer, size_t length) {
 }
 
 
+// Some ciphers and digests have both uppercase and lowercase aliases while
+// others don't.  For example, "SHA", "sha" and "DSA" are all accepted but
+// "dsa" is not.  To make things a little easier for the user, we try the
+// original cipher/digest name first, then the uppercase and lowercase
+// versions.
+template <typename Type, const Type* (*Lookup)(const char*)>
+const Type* GetCipherOrHashByName(const char* name) {
+  char namebuf[1024];
+  size_t namelen;
+
+  if (const Type* obj = Lookup(name))
+    return obj;
+
+  namelen = strlen(name);
+  if (namelen >= sizeof(namebuf))
+    return NULL;
+
+  memcpy(namebuf, name, namelen);
+  namebuf[namelen] = '\0';
+
+  // Try the uppercase version.
+  for (size_t i = 0; i < namelen; i += 1)
+    if (namebuf[i] >= 'a' && namebuf[i] <= 'z')
+      namebuf[i] &= ~32;
+
+  if (const Type* obj = Lookup(namebuf))
+    return obj;
+
+  // Now try the lowercase version.
+  for (size_t i = 0; i < namelen; i += 1)
+    if (namebuf[i] >= 'A' && namebuf[i] <= 'Z')
+      namebuf[i] |= 32;
+
+  return Lookup(namebuf);
+}
+
+
+const EVP_CIPHER* GetCipherByName(const char* name) {
+  return GetCipherOrHashByName<EVP_CIPHER, EVP_get_cipherbyname>(name);
+}
+
+
+const EVP_MD* GetDigestByName(const char* name) {
+  return GetCipherOrHashByName<EVP_MD, EVP_get_digestbyname>(name);
+}
+
+
 void SecureContext::Initialize(Environment* env, Handle<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(SecureContext::New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -2130,7 +2177,7 @@ void CipherBase::Init(const char* cipher_type,
   HandleScope scope(node_isolate);
 
   assert(cipher_ == NULL);
-  cipher_ = EVP_get_cipherbyname(cipher_type);
+  cipher_ = GetCipherByName(cipher_type);
   if (cipher_ == NULL) {
     return ThrowError("Unknown cipher");
   }
@@ -2188,7 +2235,7 @@ void CipherBase::InitIv(const char* cipher_type,
                         int iv_len) {
   HandleScope scope(node_isolate);
 
-  cipher_ = EVP_get_cipherbyname(cipher_type);
+  cipher_ = GetCipherByName(cipher_type);
   if (cipher_ == NULL) {
     return ThrowError("Unknown cipher");
   }
@@ -2459,7 +2506,7 @@ void Hmac::HmacInit(const char* hash_type, const char* key, int key_len) {
   HandleScope scope(node_isolate);
 
   assert(md_ == NULL);
-  md_ = EVP_get_digestbyname(hash_type);
+  md_ = GetDigestByName(hash_type);
   if (md_ == NULL) {
     return ThrowError("Unknown message digest");
   }
@@ -2598,7 +2645,7 @@ void Hash::New(const FunctionCallbackInfo<Value>& args) {
 
 bool Hash::HashInit(const char* hash_type) {
   assert(md_ == NULL);
-  md_ = EVP_get_digestbyname(hash_type);
+  md_ = GetDigestByName(hash_type);
   if (md_ == NULL)
     return false;
   EVP_MD_CTX_init(&mdctx_);
@@ -2698,7 +2745,7 @@ void Sign::SignInit(const char* sign_type) {
   HandleScope scope(node_isolate);
 
   assert(md_ == NULL);
-  md_ = EVP_get_digestbyname(sign_type);
+  md_ = GetDigestByName(sign_type);
   if (!md_) {
     return ThrowError("Uknown message digest");
   }
@@ -2881,7 +2928,7 @@ void Verify::VerifyInit(const char* verify_type) {
   HandleScope scope(node_isolate);
 
   assert(md_ == NULL);
-  md_ = EVP_get_digestbyname(verify_type);
+  md_ = GetDigestByName(verify_type);
   if (md_ == NULL) {
     return ThrowError("Unknown message digest");
   }
@@ -3418,6 +3465,7 @@ class PBKDF2Request : public AsyncWrap {
  public:
   PBKDF2Request(Environment* env,
                 Local<Object> object,
+                const EVP_MD* digest,
                 ssize_t passlen,
                 char* pass,
                 ssize_t saltlen,
@@ -3425,6 +3473,7 @@ class PBKDF2Request : public AsyncWrap {
                 ssize_t iter,
                 ssize_t keylen)
       : AsyncWrap(env, object),
+        digest_(digest),
         error_(0),
         passlen_(passlen),
         pass_(pass),
@@ -3443,6 +3492,10 @@ class PBKDF2Request : public AsyncWrap {
 
   uv_work_t* work_req() {
     return &work_req_;
+  }
+
+  inline const EVP_MD* digest() const {
+    return digest_;
   }
 
   inline ssize_t passlen() const {
@@ -3494,6 +3547,7 @@ class PBKDF2Request : public AsyncWrap {
   uv_work_t work_req_;
 
  private:
+  const EVP_MD* digest_;
   int error_;
   ssize_t passlen_;
   char* pass_;
@@ -3506,12 +3560,13 @@ class PBKDF2Request : public AsyncWrap {
 
 
 void EIO_PBKDF2(PBKDF2Request* req) {
-  req->set_error(PKCS5_PBKDF2_HMAC_SHA1(
+  req->set_error(PKCS5_PBKDF2_HMAC(
     req->pass(),
     req->passlen(),
     reinterpret_cast<unsigned char*>(req->salt()),
     req->saltlen(),
     req->iter(),
+    req->digest(),
     req->keylen(),
     reinterpret_cast<unsigned char*>(req->key())));
   memset(req->pass(), 0, req->passlen());
@@ -3556,6 +3611,7 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
+  const EVP_MD* digest = NULL;
   const char* type_error = NULL;
   char* pass = NULL;
   char* salt = NULL;
@@ -3568,7 +3624,7 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   PBKDF2Request* req = NULL;
   Local<Object> obj;
 
-  if (args.Length() != 4 && args.Length() != 5) {
+  if (args.Length() != 5 && args.Length() != 6) {
     type_error = "Bad parameter";
     goto err;
   }
@@ -3623,11 +3679,32 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
     goto err;
   }
 
-  obj = Object::New();
-  req = new PBKDF2Request(env, obj, passlen, pass, saltlen, salt, iter, keylen);
+  if (args[4]->IsString()) {
+    String::Utf8Value digest_name(args[4]);
+    digest = GetDigestByName(*digest_name);
+    if (digest == NULL) {
+      type_error = "Bad digest name";
+      goto err;
+    }
+  }
 
-  if (args[4]->IsFunction()) {
-    obj->Set(env->ondone_string(), args[4]);
+  if (digest == NULL) {
+    digest = EVP_sha1();
+  }
+
+  obj = Object::New();
+  req = new PBKDF2Request(env,
+                          obj,
+                          digest,
+                          passlen,
+                          pass,
+                          saltlen,
+                          salt,
+                          iter,
+                          keylen);
+
+  if (args[5]->IsFunction()) {
+    obj->Set(env->ondone_string(), args[5]);
     uv_queue_work(env->event_loop(),
                   req->work_req(),
                   EIO_PBKDF2,

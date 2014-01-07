@@ -24,6 +24,7 @@
 
 var common = require('../common');
 var assert = require('assert');
+var util = require('util');
 
 try {
   var crypto = require('crypto');
@@ -912,14 +913,29 @@ testPBKDF2('pass\0word', 'sa\0lt', 4096, 16,
            '\x56\xfa\x6a\xa7\x55\x48\x09\x9d\xcc\x37\xd7\xf0\x34' +
            '\x25\xe0\xc3');
 
+(function() {
+  var expected =
+      '64c486c55d30d4c5a079b8823b7d7cb37ff0556f537da8410233bcec330ed956';
+  var key = crypto.pbkdf2Sync('password', 'salt', 32, 32, 'sha256');
+  assert.equal(key.toString('hex'), expected);
+
+  crypto.pbkdf2('password', 'salt', 32, 32, 'sha256', common.mustCall(ondone));
+  function ondone(err, key) {
+    if (err) throw err;
+    assert.equal(key.toString('hex'), expected);
+  }
+})();
+
 function assertSorted(list) {
-  assert.deepEqual(list, list.sort());
+  // Array#sort() modifies the list in place so make a copy.
+  var sorted = util._extend([], list).sort();
+  assert.deepEqual(list, sorted);
 }
 
 // Assume that we have at least AES-128-CBC.
 assert.notEqual(0, crypto.getCiphers().length);
 assert.notEqual(-1, crypto.getCiphers().indexOf('aes-128-cbc'));
-assert.equal(-1, crypto.getCiphers().indexOf('AES-128-CBC'));
+assert.notEqual(-1, crypto.getCiphers().indexOf('AES-128-CBC'));
 assertSorted(crypto.getCiphers());
 
 // Assume that we have at least AES256-SHA.
@@ -929,12 +945,11 @@ assert.notEqual(-1, tls.getCiphers().indexOf('aes256-sha'));
 assert.equal(-1, tls.getCiphers().indexOf('AES256-SHA'));
 assertSorted(tls.getCiphers());
 
-// Assert that we have sha and sha1 but not SHA and SHA1.
 assert.notEqual(0, crypto.getHashes().length);
-assert.notEqual(-1, crypto.getHashes().indexOf('sha1'));
+assert.notEqual(-1, crypto.getHashes().indexOf('SHA'));
 assert.notEqual(-1, crypto.getHashes().indexOf('sha'));
-assert.equal(-1, crypto.getHashes().indexOf('SHA1'));
-assert.equal(-1, crypto.getHashes().indexOf('SHA'));
+assert.notEqual(-1, crypto.getHashes().indexOf('DSA'));
+assert.equal(-1, crypto.getHashes().indexOf('dsa'));  // No lowercase variant.
 assertSorted(crypto.getHashes());
 
 // Base64 padding regression test, see #4837.
