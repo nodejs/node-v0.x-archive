@@ -157,7 +157,7 @@
           [ 'v8_use_arm_eabi_hardfloat=="true"', {
             'defines': [
               'USE_EABI_HARDFLOAT=1',
-              'CAN_USE_VFP2_INSTRUCTIONS',
+              'CAN_USE_VFP3_INSTRUCTIONS',
             ],
             'target_conditions': [
               ['_toolset=="target"', {
@@ -200,11 +200,10 @@
                   ['mips_arch_variant=="mips32r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
                   }],
-                  ['mips_arch_variant=="mips32r1"', {
-                    'cflags': ['-mips32', '-Wa,-mips32'],
-                  }],
                   ['mips_arch_variant=="loongson"', {
                     'cflags': ['-mips3', '-Wa,-mips3'],
+                  }, {
+                    'cflags': ['-mips32', '-Wa,-mips32'],
                   }],
                 ],
               }],
@@ -379,6 +378,15 @@
         'conditions': [
           ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" \
             or OS=="android"', {
+            'cflags!': [
+              '-O2',
+              '-Os',
+            ],
+            'cflags': [
+              '-fdata-sections',
+              '-ffunction-sections',
+              '-O3',
+            ],
             'conditions': [
               [ 'gcc_version==44 and clang==0', {
                 'cflags': [

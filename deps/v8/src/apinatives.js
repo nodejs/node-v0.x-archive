@@ -37,7 +37,7 @@ function CreateDate(time) {
 }
 
 
-var kApiFunctionCache = new InternalArray();
+var kApiFunctionCache = {};
 var functionCache = kApiFunctionCache;
 
 

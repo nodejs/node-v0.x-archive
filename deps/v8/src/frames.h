@@ -500,9 +500,6 @@ class JavaScriptFrame: public StandardFrame {
     return GetNumberOfIncomingArguments();
   }
 
-  // Debugger access.
-  void SetParameterValue(int index, Object* value) const;
-
   // Check if this frame is a constructor frame invoked through 'new'.
   bool IsConstructor() const;
 
