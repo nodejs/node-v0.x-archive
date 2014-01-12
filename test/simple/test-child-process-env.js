@@ -36,7 +36,7 @@ env.__proto__ = {
 if (isWindows) {
   var child = spawn('cmd.exe', ['/c', 'set'], {env: env});
 } else {
-  var child = spawn('/usr/bin/env', [], {env: env});
+  var child = spawn('/usr/bin/env', {env: env});
 }
 
 
