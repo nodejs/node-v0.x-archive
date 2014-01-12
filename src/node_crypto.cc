@@ -424,7 +424,7 @@ void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
 // possibly followed by a sequence of CA certificates that should be
 // sent to the peer in the Certificate message.
 //
-// Taken from OpenSSL - editted for style.
+// Taken from OpenSSL - edited for style.
 int SSL_CTX_use_certificate_chain(SSL_CTX *ctx, BIO *in) {
   int ret = 0;
   X509 *x = NULL;

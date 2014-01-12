@@ -279,7 +279,7 @@
     var inAsyncTick = false;
 
     // To prevent infinite recursion when an error handler also throws
-    // flag when an error is currenly being handled.
+    // flag when an error is currently being handled.
     var inErrorTick = false;
 
     // Needs to be the same as src/env.h
