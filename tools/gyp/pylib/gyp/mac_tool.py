@@ -503,8 +503,6 @@ class MacTool(object):
     if isinstance(data, list):
       return [self._ExpandVariables(v, substitutions) for v in data]
     if isinstance(data, dict):
-      # {k : self._ExpandVariables(data[k], substitutions) for k in data}
-      # will break on python2.6 and below, why not a version independent comprehension
       return dict((k, self._ExpandVariables(data[k], substitutions)) for k in data)
     return data
 
