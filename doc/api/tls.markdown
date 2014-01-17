@@ -627,6 +627,10 @@ has been established.
 ANOTHER NOTE: When running as the server, socket will be destroyed
 with an error after `handshakeTimeout` timeout.
 
+### tlsSocket.setMaxSendFragment(size)
+
+Set maximum TLS fragment size (default value is: `16384`).
+
 ### tlsSocket.address()
 
 Returns the bound address, the address family name and port of the
