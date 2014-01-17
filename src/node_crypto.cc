@@ -1251,8 +1251,7 @@ void SSLWrap<Base>::IsInitFinished(const FunctionCallbackInfo<Value>& args) {
 
 template <class Base>
 void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
-  Isolate* isolate = args.GetIsolate();
-  HandleScope scope(isolate);
+  HandleScope scope(node_isolate);
 
   Base* w = Unwrap<Base>(args.This());
 
@@ -1305,6 +1304,7 @@ void SSLWrap<Base>::VerifyError(const FunctionCallbackInfo<Value>& args) {
   }
 #undef CASE_X509_ERR
 
+  Isolate* isolate = args.GetIsolate();
   Local<String> reason_string = OneByteString(isolate, reason);
   Local<Value> exception_value = Exception::Error(reason_string);
   Local<Object> exception_object = exception_value->ToObject();
