@@ -448,6 +448,7 @@ care of instantiating the object (i.e. it does the job of `new` in JavaScript):
     #define MYOBJECT_H
 
     #include <node.h>
+    #include <node_object_wrap.h>
 
     class MyObject : public node::ObjectWrap {
      public:
