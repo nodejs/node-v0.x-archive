@@ -350,8 +350,6 @@ Here we expose the method `plusOne` by adding it to the constructor's
 prototype:
 
     // myobject.cc
-    #include <node.h>
-    #include <node_object_wrap.h>
     #include "myobject.h"
 
     using namespace v8;
