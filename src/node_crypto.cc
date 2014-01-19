@@ -2693,17 +2693,53 @@ void Sign::New(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Sign::SignInit(const char* sign_type) {
+void Sign::Throw(Sign::SignError error) {
   HandleScope scope(node_isolate);
 
+  switch (error) {
+    case kSignUnknownDigest:
+      return ThrowError("Unknown message digest");
+
+    case kSignNotInitialised:
+      return ThrowError("Sign not initialised");
+
+    case kSignInit:
+    case kSignUpdate:
+    case kSignPrivateKey:
+      {
+        unsigned long err = ERR_get_error();
+        if (err)
+          return ThrowCryptoError(err);
+        switch (error) {
+          case kSignInit:
+            return ThrowError("EVP_SignInit_ex failed");
+          case kSignUpdate:
+            return ThrowError("EVP_SignUpdate failed");
+          case kSignPrivateKey:
+            return ThrowError("PEM_read_bio_PrivateKey failed");
+          default:
+            abort();
+        }
+      }
+
+    case kSignOk:
+      return;
+  }
+}
+
+
+Sign::SignError Sign::SignInit(const char* sign_type) {
   assert(md_ == NULL);
   md_ = EVP_get_digestbyname(sign_type);
-  if (!md_) {
-    return ThrowError("Uknown message digest");
-  }
+  if (!md_)
+    return kSignUnknownDigest;
+
   EVP_MD_CTX_init(&mdctx_);
-  EVP_SignInit_ex(&mdctx_, md_, NULL);
+  if (!EVP_SignInit_ex(&mdctx_, md_, NULL))
+    return kSignInit;
   initialised_ = true;
+
+  return kSignOk;
 }
 
 
@@ -2717,15 +2753,16 @@ void Sign::SignInit(const FunctionCallbackInfo<Value>& args) {
   }
 
   const String::Utf8Value sign_type(args[0]);
-  sign->SignInit(*sign_type);
+  Throw(sign->SignInit(*sign_type));
 }
 
 
-bool Sign::SignUpdate(const char* data, int len) {
+Sign::SignError Sign::SignUpdate(const char* data, int len) {
   if (!initialised_)
-    return false;
-  EVP_SignUpdate(&mdctx_, data, len);
-  return true;
+    return kSignNotInitialised;
+  if (!EVP_SignUpdate(&mdctx_, data, len))
+    return kSignUpdate;
+  return kSignOk;
 }
 
 
@@ -2737,7 +2774,7 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
   ASSERT_IS_STRING_OR_BUFFER(args[0]);
 
   // Only copy the data if we have to, because it's a string
-  int r;
+  SignError err;
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
@@ -2746,29 +2783,25 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
     size_t buflen = StringBytes::StorageSize(string, encoding);
     char* buf = new char[buflen];
     size_t written = StringBytes::Write(buf, buflen, string, encoding);
-    r = sign->SignUpdate(buf, written);
+    err = sign->SignUpdate(buf, written);
     delete[] buf;
   } else {
     char* buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
-    r = sign->SignUpdate(buf, buflen);
+    err = sign->SignUpdate(buf, buflen);
   }
 
-  if (!r) {
-    return ThrowTypeError("SignUpdate fail");
-  }
+  Throw(err);
 }
 
 
-bool Sign::SignFinal(const char* key_pem,
-                     int key_pem_len,
-                     const char* passphrase,
-                     unsigned char** sig,
-                     unsigned int *sig_len) {
-  if (!initialised_) {
-    ThrowError("Sign not initalised");
-    return false;
-  }
+Sign::SignError Sign::SignFinal(const char* key_pem,
+                                int key_pem_len,
+                                const char* passphrase,
+                                unsigned char** sig,
+                                unsigned int *sig_len) {
+  if (!initialised_)
+    return kSignNotInitialised;
 
   BIO* bp = NULL;
   EVP_PKEY* pkey = NULL;
@@ -2801,17 +2834,10 @@ bool Sign::SignFinal(const char* key_pem,
 
   EVP_MD_CTX_cleanup(&mdctx_);
 
-  if (fatal) {
-    unsigned long err = ERR_get_error();
-    if (err) {
-      ThrowCryptoError(err);
-    } else {
-      ThrowError("PEM_read_bio_PrivateKey");
-    }
-    return false;
-  }
+  if (fatal)
+    return kSignPrivateKey;
 
-  return true;
+  return kSignOk;
 }
 
 
@@ -2838,15 +2864,17 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
   md_len = 8192;  // Maximum key size is 8192 bits
   md_value = new unsigned char[md_len];
 
-  bool r = sign->SignFinal(buf,
-                           buf_len,
-                           len >= 3 && !args[2]->IsNull() ? *passphrase : NULL,
-                           &md_value,
-                           &md_len);
-  if (!r) {
+  SignError err = sign->SignFinal(
+      buf,
+      buf_len,
+      len >= 3 && !args[2]->IsNull() ? *passphrase : NULL,
+      &md_value,
+      &md_len);
+  if (err != kSignOk) {
     delete[] md_value;
     md_value = NULL;
     md_len = 0;
+    return Throw(err);
   }
 
   Local<Value> rc = StringBytes::Encode(
@@ -2876,18 +2904,53 @@ void Verify::New(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Verify::VerifyInit(const char* verify_type) {
+void Verify::Throw(Verify::VerifyError error) {
   HandleScope scope(node_isolate);
 
+  switch (error) {
+    case kVerifyUnknownDigest:
+      return ThrowError("Unknown message digest");
+
+    case kVerifyNotInitialised:
+      return ThrowError("Verify not initialised");
+
+    case kVerifyInit:
+    case kVerifyUpdate:
+    case kVerifyPublicKey:
+      {
+        unsigned long err = ERR_get_error();
+        if (err)
+          return ThrowCryptoError(err);
+        switch (error) {
+          case kVerifyInit:
+            return ThrowError("EVP_VerifyInit_ex failed");
+          case kVerifyUpdate:
+            return ThrowError("EVP_VerifyUpdate failed");
+          case kVerifyPublicKey:
+            return ThrowError("PEM_read_bio_PUBKEY failed");
+          default:
+            abort();
+        }
+      }
+
+    case kVerifyOk:
+      return;
+  }
+}
+
+
+Verify::VerifyError Verify::VerifyInit(const char* verify_type) {
   assert(md_ == NULL);
   md_ = EVP_get_digestbyname(verify_type);
-  if (md_ == NULL) {
-    return ThrowError("Unknown message digest");
-  }
+  if (md_ == NULL)
+    return kVerifyUnknownDigest;
 
   EVP_MD_CTX_init(&mdctx_);
-  EVP_VerifyInit_ex(&mdctx_, md_, NULL);
+  if (!EVP_VerifyInit_ex(&mdctx_, md_, NULL))
+    return kVerifyInit;
   initialised_ = true;
+
+  return kVerifyOk;
 }
 
 
@@ -2901,15 +2964,18 @@ void Verify::VerifyInit(const FunctionCallbackInfo<Value>& args) {
   }
 
   const String::Utf8Value verify_type(args[0]);
-  verify->VerifyInit(*verify_type);
+  Throw(verify->VerifyInit(*verify_type));
 }
 
 
-bool Verify::VerifyUpdate(const char* data, int len) {
+Verify::VerifyError Verify::VerifyUpdate(const char* data, int len) {
   if (!initialised_)
-    return false;
-  EVP_VerifyUpdate(&mdctx_, data, len);
-  return true;
+    return kVerifyNotInitialised;
+
+  if (!EVP_VerifyUpdate(&mdctx_, data, len))
+    return kVerifyUpdate;
+
+  return kVerifyOk;
 }
 
 
@@ -2921,7 +2987,7 @@ void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
   ASSERT_IS_STRING_OR_BUFFER(args[0]);
 
   // Only copy the data if we have to, because it's a string
-  bool r;
+  VerifyError err;
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
@@ -2930,30 +2996,25 @@ void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
     size_t buflen = StringBytes::StorageSize(string, encoding);
     char* buf = new char[buflen];
     size_t written = StringBytes::Write(buf, buflen, string, encoding);
-    r = verify->VerifyUpdate(buf, written);
+    err = verify->VerifyUpdate(buf, written);
     delete[] buf;
   } else {
     char* buf = Buffer::Data(args[0]);
     size_t buflen = Buffer::Length(args[0]);
-    r = verify->VerifyUpdate(buf, buflen);
+    err = verify->VerifyUpdate(buf, buflen);
   }
 
-  if (!r) {
-    return ThrowTypeError("VerifyUpdate fail");
-  }
+  Throw(err);
 }
 
 
-bool Verify::VerifyFinal(const char* key_pem,
-                         int key_pem_len,
-                         const char* sig,
-                         int siglen) {
-  HandleScope scope(node_isolate);
-
-  if (!initialised_) {
-    ThrowError("Verify not initalised");
-    return false;
-  }
+Verify::VerifyError Verify::VerifyFinal(const char* key_pem,
+                                        int key_pem_len,
+                                        const char* sig,
+                                        int siglen,
+                                        bool* verify_result) {
+  if (!initialised_)
+    return kVerifyNotInitialised;
 
   ClearErrorOnReturn clear_error_on_return;
   (void) &clear_error_on_return;  // Silence compiler warning.
@@ -3016,13 +3077,11 @@ bool Verify::VerifyFinal(const char* key_pem,
   EVP_MD_CTX_cleanup(&mdctx_);
   initialised_ = false;
 
-  if (fatal) {
-    unsigned long err = ERR_get_error();
-    ThrowCryptoError(err);
-    return false;
-  }
+  if (fatal)
+    return kVerifyPublicKey;
 
-  return r == 1;
+  *verify_result = r == 1;
+  return kVerifyOk;
 }
 
 
@@ -3054,11 +3113,13 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
     hbuf = Buffer::Data(args[1]);
   }
 
-  bool rc = verify->VerifyFinal(kbuf, klen, hbuf, hlen);
-  if (args[1]->IsString()) {
+  bool verify_result;
+  VerifyError err = verify->VerifyFinal(kbuf, klen, hbuf, hlen, &verify_result);
+  if (args[1]->IsString())
     delete[] hbuf;
-  }
-  args.GetReturnValue().Set(rc);
+  if (err != kVerifyOk)
+    return Throw(err);
+  args.GetReturnValue().Set(verify_result);
 }
 
 

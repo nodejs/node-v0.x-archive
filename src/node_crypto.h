@@ -443,6 +443,15 @@ class Hash : public BaseObject {
 
 class Sign : public BaseObject {
  public:
+  typedef enum {
+    kSignOk,
+    kSignUnknownDigest,
+    kSignInit,
+    kSignNotInitialised,
+    kSignUpdate,
+    kSignPrivateKey
+  } SignError;
+
   ~Sign() {
     if (!initialised_)
       return;
@@ -451,19 +460,20 @@ class Sign : public BaseObject {
 
   static void Initialize(Environment* env, v8::Handle<v8::Object> target);
 
-  void SignInit(const char* sign_type);
-  bool SignUpdate(const char* data, int len);
-  bool SignFinal(const char* key_pem,
-                 int key_pem_len,
-                 const char* passphrase,
-                 unsigned char** sig,
-                 unsigned int *sig_len);
+  SignError SignInit(const char* sign_type);
+  SignError SignUpdate(const char* data, int len);
+  SignError SignFinal(const char* key_pem,
+                      int key_pem_len,
+                      const char* passphrase,
+                      unsigned char** sig,
+                      unsigned int *sig_len);
 
  protected:
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SignInit(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SignUpdate(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SignFinal(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Throw(SignError error);
 
   Sign(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
@@ -480,6 +490,15 @@ class Sign : public BaseObject {
 
 class Verify : public BaseObject {
  public:
+  typedef enum {
+    kVerifyOk,
+    kVerifyUnknownDigest,
+    kVerifyInit,
+    kVerifyNotInitialised,
+    kVerifyUpdate,
+    kVerifyPublicKey
+  } VerifyError;
+
   ~Verify() {
     if (!initialised_)
       return;
@@ -488,18 +507,20 @@ class Verify : public BaseObject {
 
   static void Initialize(Environment* env, v8::Handle<v8::Object> target);
 
-  void VerifyInit(const char* verify_type);
-  bool VerifyUpdate(const char* data, int len);
-  bool VerifyFinal(const char* key_pem,
-                   int key_pem_len,
-                   const char* sig,
-                   int siglen);
+  VerifyError VerifyInit(const char* verify_type);
+  VerifyError VerifyUpdate(const char* data, int len);
+  VerifyError VerifyFinal(const char* key_pem,
+                          int key_pem_len,
+                          const char* sig,
+                          int siglen,
+                          bool* verify_result);
 
  protected:
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void VerifyInit(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void VerifyUpdate(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void VerifyFinal(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Throw(VerifyError error);
 
   Verify(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
