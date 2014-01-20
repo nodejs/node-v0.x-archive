@@ -36,7 +36,7 @@ if (process.platform === 'win32') {
   exports.PIPE = exports.tmpDir + '/test.sock';
   exports.opensslCli = path.join(process.execPath, '..', 'openssl-cli');
 }
-if (!fs.existsSync(exports.openssCli))
+if (!fs.existsSync(exports.opensslCli))
   exports.opensslCli = false;
 
 var util = require('util');
