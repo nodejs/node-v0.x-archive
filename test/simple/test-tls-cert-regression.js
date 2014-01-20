@@ -26,6 +26,7 @@ if (!process.versions.openssl) {
 
 var tls = require('tls');
 
+var assert = require('assert');
 var common = require('../common');
 
 var cert = '-----BEGIN CERTIFICATE-----\n' +
@@ -49,9 +50,22 @@ var key = '-----BEGIN RSA PRIVATE KEY-----\n' +
   'AOaJnkQrmurlRdePX6LvN/LgGAQoxwovfjcOYNnZsIVY\n' +
   '-----END RSA PRIVATE KEY-----';
 
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}).listen(common.PORT, function() {
-  server.close();
+function test(cert, key, cb) {
+  var server = tls.createServer({
+    cert: cert,
+    key: key
+  }).listen(common.PORT, function() {
+    server.close(cb);
+  });
+}
+
+var completed = false;
+test(cert, key, function() {
+  test(new Buffer(cert), new Buffer(key), function() {
+    completed = true;
+  });
+});
+
+process.on('exit', function() {
+  assert(completed);
 });
