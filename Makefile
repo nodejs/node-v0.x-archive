@@ -102,6 +102,7 @@ test/gc/node_modules/weak/build/Release/weakref.node:
 
 build-addons:
 	@if [ ! -f node ]; then make all; fi
+	rm -rf test/addons/doc-*/
 	./node tools/doc/addon-verify.js
 	$(foreach dir, \
 			$(sort $(dir $(wildcard test/addons/*/*.gyp))), \

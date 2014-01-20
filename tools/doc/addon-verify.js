@@ -1,6 +1,5 @@
 var fs = require('fs');
 var path = require('path');
-var spawn = require('child_process').spawn;
 var marked = require('marked');
 
 var doc = path.resolve(__dirname, '..', '..', 'doc', 'api', 'addons.markdown');
@@ -22,31 +21,25 @@ oldDirs = oldDirs.filter(function(dir) {
   return path.resolve(verifyDir, dir);
 });
 
-var proc = spawn('rm', [ '-rf' ].concat(oldDirs), {
-  stdio: 'inherit'
-});
-
-proc.on('close', function() {
-  for (var i = 0; i < tokens.length; i++) {
-    var token = tokens[i];
-    if (token.type === 'heading') {
-      if (files && Object.keys(files).length !== 0) {
-        verifyFiles(files, function(err) {
-          if (err)
-            console.log(err);
-          else
-            console.log('done');
-        });
-      }
-      files = {};
-    } else if (token.type === 'code') {
-      var match = token.text.match(/^\/\/\s+(.*\.(?:cc|h|js))[\r\n]/);
-      if (match === null)
-        continue;
-      files[match[1]] = token.text;
+for (var i = 0; i < tokens.length; i++) {
+  var token = tokens[i];
+  if (token.type === 'heading') {
+    if (files && Object.keys(files).length !== 0) {
+      verifyFiles(files, function(err) {
+        if (err)
+          console.log(err);
+        else
+          console.log('done');
+      });
     }
+    files = {};
+  } else if (token.type === 'code') {
+    var match = token.text.match(/^\/\/\s+(.*\.(?:cc|h|js))[\r\n]/);
+    if (match === null)
+      continue;
+    files[match[1]] = token.text;
   }
-});
+}
 
 function once(fn) {
   var once = false;
