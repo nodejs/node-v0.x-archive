@@ -40,7 +40,13 @@ var server = tls.createServer({
   key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
   cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 }, function(c) {
+  // Lower and upper limits
+  assert(!c.setMaxSendFragment(511));
+  assert(!c.setMaxSendFragment(16385));
+
+  // Correct fragment size
   assert(c.setMaxSendFragment(maxChunk));
+
   c.end(buf);
 }).listen(common.PORT, function() {
   var c = tls.connect(common.PORT, {
