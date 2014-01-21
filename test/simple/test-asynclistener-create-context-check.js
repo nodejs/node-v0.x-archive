@@ -21,59 +21,69 @@
 
 var common = require('../common');
 var assert = require('assert');
+var net = require('net');
+var fs = require('fs');
+var dgram = require('dgram');
 
-var once = 0;
-
-var results = [];
-var handlers = {
-  before: function() {
-    throw 1;
-  },
-  error: function(ctx, stor, err) {
-    // Must catch error thrown in before callback.
-    assert.equal(err, 1);
-    once++;
-    return true;
+// Will cause a SEGFAULT if any context variables are not properly inialized
+// before all their properties are setup.
+process.addAsyncListener({
+  create: function onAsync(ctx) {
+    for (var i in ctx)
+      ctx[i] = ctx[i];
   }
-}
-
-var handlers1 = {
-  before: function() {
-    throw 2;
-  },
-  error: function(ctx, stor, err) {
-    // Must catch *other* handlers throw by error callback.
-    assert.equal(err, 1);
-    once++;
-    return true;
-  }
-}
-
-var listeners = [
-  process.addAsyncListener(handlers),
-  process.addAsyncListener(handlers1)
-];
-
-var uncaughtFired = false;
-process.on('uncaughtException', function(err) {
-  uncaughtFired = true;
-
-  // Both error handlers must fire.
-  assert.equal(once, 2);
 });
+
+
+var test_list = [];
+function register(fn) {
+  test_list.push(fn);
+}
+
+function next() {
+  if (test_list.length > 0)
+    test_list.shift()();
+}
+
+setImmediate(next);
+
+
+// These tests are going to cause create() to fire for different scenarios.
+
+// Timers
 
 process.nextTick(function() { });
+setTimeout(function() { });
+setTimeout(function() { }, 50);
+var si = setInterval(function() { clearInterval(si); }, 10);
+setImmediate(function() { });
 
-for (var i = 0; i < listeners.length; i++)
-  process.removeAsyncListener(listeners[i]);
 
-process.on('exit', function(code) {
-  // If the exit code isn't ok then return early to throw the stack that
-  // caused the bad return code.
-  if (code !== 0)
-    return;
-  // Make sure uncaughtException actually fired.
-  assert.ok(uncaughtFired);
-  console.log('ok');
+// FS
+
+fs.stat(__filename, function() { });
+
+
+// NET
+
+register(function() {
+  var ns = net.createServer(function() {
+    net.connect(common.PORT, function() {
+      this.destroy();
+      ns.close(next);
+    });
+  }).listen(common.PORT);
 });
 
+
+// UDP
+
+register(function() {
+  var us = dgram.createSocket('udp4');
+  us.bind(common.PORT, function() {
+    us.send(new Buffer('a'), 0, 0, 1, common.PORT, '', function() {
+      us.close();
+      next();
+    });
+  });
+});

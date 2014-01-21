@@ -722,7 +722,7 @@ Explanation of function parameters:
 
 `callbacksObj`: An `Object` which may contain three optional fields:
 
-* `create(userData)`: A `Function` called when an asynchronous
+* `create(context, userData)`: A `Function` called when an asynchronous
 event is instantiated. If a `Value` is returned then it will be attached
 to the event and overwrite any value that had been passed to
 `process.createAsyncListener()`'s `userData` argument. If an initial
@@ -739,7 +739,7 @@ either occurred).
 the asynchronous event's callback has run. Note this will not be called
 if the callback throws and the error is not handled.
 
-* `error(userData, error)`: A `Function` called if the event's
+* `error(context, userData, error)`: A `Function` called if the event's
 callback threw. If this registered callback returns `true` then Node will
 assume the error has been properly handled and resume execution normally.
 When multiple `error()` callbacks have been registered only **one** of
@@ -753,7 +753,7 @@ is returned by `create()`.
 Here is an example of overwriting the `userData`:
 
     process.createAsyncListener({
-      create: function listener(value) {
+      create: function listener(context, value) {
         // value === true
         return false;
     }, {
@@ -784,7 +784,7 @@ Example usage for capturing errors:
 
     var cntr = 0;
     var key = process.addAsyncListener({
-      create: function onCreate() {
+      create: function onCreate(context) {
         return { uid: cntr++ };
       },
       before: function onBefore(context, storage) {
@@ -794,7 +794,7 @@ Example usage for capturing errors:
       after: function onAfter(context, storage) {
         fs.writeSync(1, 'uid: ' + storage.uid + ' is about to run\n');
       },
-      error: function onError(storage, err) {
+      error: function onError(context, storage, err) {
         // Handle known errors
         if (err.message === 'everything is fine') {
           fs.writeSync(1, 'handled error just threw:\n');

@@ -355,7 +355,7 @@
             data[queueItem.uid] = queueItem.data;
             continue;
           }
-          value = queueItem.create(queueItem.data);
+          value = queueItem.create(context, queueItem.data);
           data[queueItem.uid] = (value === undefined) ? queueItem.data : value;
         }
       }
@@ -374,7 +374,7 @@
             data[queueItem.uid] = queueItem.data;
             continue;
           }
-          value = queueItem.create(queueItem.data);
+          value = queueItem.create(context, queueItem.data);
           data[queueItem.uid] = (value === undefined) ? queueItem.data : value;
         }
       }
@@ -449,10 +449,9 @@
             continue;
           try {
             threw = true;
-            // While it would be possible to pass in currentContext, if
-            // the error is thrown from the "create" callback then there's
-            // a chance the object hasn't been fully constructed.
-            handled = queueItem.error(data[queueItem.uid], er) || handled;
+            handled = queueItem.error(currentContext,
+                                      data[queueItem.uid],
+                                      er) || handled;
             threw = false;
           } finally {
             // If the error callback thew then die quickly. Only allow the
@@ -474,7 +473,9 @@
             continue;
           try {
             threw = true;
-            handled = queueItem.error(queueItem.data, er) || handled;
+            handled = queueItem.error(currentContext || global,
+                                      queueItem.data,
+                                      er) || handled;
             threw = false;
           } finally {
             // If the error callback thew then die quickly. Only allow the

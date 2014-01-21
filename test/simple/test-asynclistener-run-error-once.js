@@ -25,7 +25,7 @@ var net = require('net');
 
 var cntr = 0;
 var al = process.addAsyncListener({
-  error: function(stor, er) {
+  error: function(ctx, stor, er) {
     cntr++;
     process._rawDebug('Handling error: ' + er.message);
     return true;
