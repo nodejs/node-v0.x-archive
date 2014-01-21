@@ -24,6 +24,7 @@
 
 #include "env.h"
 #include "handle_wrap.h"
+#include "callback_wrap.h"
 #include "req_wrap.h"
 #include "string_bytes.h"
 #include "v8.h"
@@ -62,12 +63,12 @@ class WriteWrap: public ReqWrap<uv_write_t> {
 };
 
 // Overridable callbacks' types
-class StreamWrapCallbacks {
+class StreamWrapCallbacks : public WrapCallbacks {
  public:
-  explicit StreamWrapCallbacks(StreamWrap* wrap) : wrap_(wrap) {
+	 explicit StreamWrapCallbacks(StreamWrap* wrap) : WrapCallbacks(reinterpret_cast<HandleWrap*>(wrap)) {
   }
 
-  explicit StreamWrapCallbacks(StreamWrapCallbacks* old) : wrap_(old->wrap()) {
+  explicit StreamWrapCallbacks(StreamWrapCallbacks* old) : WrapCallbacks(old) {
   }
 
   virtual ~StreamWrapCallbacks() {
@@ -88,20 +89,19 @@ class StreamWrapCallbacks {
                       uv_handle_type pending);
   virtual int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
 
+  v8::Handle<v8::Object> Self();
+
  protected:
   inline StreamWrap* wrap() const {
-    return wrap_;
+    return (StreamWrap*) wrap_;
   }
-
- private:
-  StreamWrap* const wrap_;
 };
 
 class StreamWrap : public HandleWrap {
  public:
-  void OverrideCallbacks(StreamWrapCallbacks* callbacks) {
+  void OverrideCallbacks(WrapCallbacks* callbacks) {
     StreamWrapCallbacks* old = callbacks_;
-    callbacks_ = callbacks;
+    callbacks_ = reinterpret_cast<StreamWrapCallbacks *>(callbacks);
     if (old != &default_callbacks_)
       delete old;
   }

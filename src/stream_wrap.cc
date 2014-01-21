@@ -25,6 +25,7 @@
 #include "handle_wrap.h"
 #include "node_buffer.h"
 #include "node_counters.h"
+#include "callback_wrap.h"
 #include "pipe_wrap.h"
 #include "req_wrap.h"
 #include "tcp_wrap.h"
@@ -466,7 +467,7 @@ void StreamWrap::Shutdown(const FunctionCallbackInfo<Value>& args) {
   Local<Object> req_wrap_obj = args[0].As<Object>();
 
   ShutdownWrap* req_wrap = new ShutdownWrap(env, req_wrap_obj);
-  int err = wrap->callbacks()->DoShutdown(req_wrap, AfterShutdown);
+  int err = wrap->callbacks_->DoShutdown(req_wrap, AfterShutdown);
   req_wrap->Dispatched();
   if (err)
     delete req_wrap;
@@ -599,6 +600,10 @@ void StreamWrapCallbacks::DoRead(uv_stream_t* handle,
 
 int StreamWrapCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
   return uv_shutdown(&req_wrap->req_, wrap()->stream(), cb);
+}
+
+Handle<Object> StreamWrapCallbacks::Self() {
+  return wrap()->object();
 }
 
 }  // namespace node
