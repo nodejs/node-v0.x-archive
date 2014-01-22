@@ -113,6 +113,21 @@ FakeInput.prototype.end = function() {};
   assert.equal(callCount, expectedLines.length - 1);
   rli.close();
 
+  // sending multiple newlines at once that does not end with a new line
+  // and a `end` event
+  fi = new FakeInput();
+  rli = new readline.Interface({ input: fi, output: fi, terminal: terminal });
+  expectedLines = ['foo', 'bar', 'baz', 'bat'];
+  callCount = 0;
+  rli.on('line', function(line) {
+    assert.equal(line, expectedLines[callCount]);
+    callCount++;
+  });
+  fi.emit('data', expectedLines.join('\n'));
+  fi.emit('end');
+  assert.equal(callCount, expectedLines.length);
+  rli.close();
+
   // \r\n should emit one line event, not two
   fi = new FakeInput();
   rli = new readline.Interface({ input: fi, output: fi, terminal: terminal });
@@ -214,6 +229,5 @@ FakeInput.prototype.end = function() {};
   assert.equal(readline.getStringWidth('\u001b[31m\u001b[39m'), 0);
   assert.equal(readline.getStringWidth('> '), 2);
 
-  assert.deepEqual(fi.listeners('end'), []);
   assert.deepEqual(fi.listeners(terminal ? 'keypress' : 'data'), []);
 });
