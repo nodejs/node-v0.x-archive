@@ -85,7 +85,7 @@ function server() {
       if (err) {
         fail(err, 'write');
       } else if (!writeReq.async) {
-        setImmediate(function() {
+        process.nextTick(function() {
           afterWrite(null, clientHandle, writeReq);
         });
       }

@@ -206,7 +206,6 @@ void StreamWrap::WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   char* storage;
   WriteWrap* req_wrap;
   uv_buf_t buf;
-
   WriteBuffer(buf_obj, &buf);
 
   // Try writing immediately without allocation
@@ -273,7 +272,7 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
   char* storage;
   WriteWrap* req_wrap;
   char* data;
-  char stack_storage[16384];
+  char stack_storage[16384];  // 16kb
   size_t data_size;
   uv_buf_t buf;
 
@@ -560,7 +559,7 @@ int StreamWrapCallbacks::TryWrite(uv_buf_t** bufs, size_t* count) {
   if (err < 0)
     return err;
 
-  // Slice of the buffers
+  // Slice off the buffers
   written = err;
   for (; written != 0 && vcount > 0; vbufs++, vcount--) {
     // Slice
