@@ -434,7 +434,9 @@ bool TLSCallbacks::ClearIn() {
 
 
 const char* TLSCallbacks::Error() {
-  return error_;
+  const char* ret = error_;
+  error_ = NULL;
+  return ret;
 }
 
 
