@@ -75,6 +75,7 @@ TLSCallbacks::TLSCallbacks(Environment* env,
       started_(false),
       established_(false),
       shutdown_(false),
+      error_(NULL),
       eof_(false) {
   node::Wrap<TLSCallbacks>(object(), this);
 
@@ -105,10 +106,18 @@ TLSCallbacks::~TLSCallbacks() {
 }
 
 
-void TLSCallbacks::InvokeQueued(int status) {
+void TLSCallbacks::MakePending() {
+  pending_write_item_ = CONTAINER_OF(QUEUE_NEXT(&write_item_queue_),
+                                     WriteItem,
+                                     member_);
+  QUEUE_INIT(&write_item_queue_);
+}
+
+
+bool TLSCallbacks::InvokeQueued(int status) {
   // Empty queue - ignore call
   if (pending_write_item_ == NULL)
-    return;
+    return false;
 
   QUEUE* q = &pending_write_item_->member_;
   pending_write_item_ = NULL;
@@ -121,6 +130,8 @@ void TLSCallbacks::InvokeQueued(int status) {
     delete wi;
     q = next;
   }
+
+  return true;
 }
 
 
@@ -251,16 +262,13 @@ void TLSCallbacks::EncOut() {
     return;
 
   // Split-off queue
-  if (established_ && !QUEUE_EMPTY(&write_item_queue_)) {
-    pending_write_item_ = CONTAINER_OF(QUEUE_NEXT(&write_item_queue_),
-                                       WriteItem,
-                                       member_);
-    QUEUE_INIT(&write_item_queue_);
-  }
+  if (established_ && !QUEUE_EMPTY(&write_item_queue_))
+    MakePending();
 
   // No data to write
   if (BIO_pending(enc_out_) == 0) {
-    InvokeQueued(0);
+    if (clear_in_->Length() == 0)
+      InvokeQueued(0);
     return;
   }
 
@@ -289,7 +297,6 @@ void TLSCallbacks::EncOut() {
 
 void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
   TLSCallbacks* callbacks = static_cast<TLSCallbacks*>(req->data);
-  Environment* env = callbacks->env();
 
   // Handle error
   if (status) {
@@ -298,12 +305,6 @@ void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
       return;
 
     // Notify about error
-    HandleScope handle_scope(env->isolate());
-    Context::Scope context_scope(env->context());
-    Local<Value> arg = String::Concat(
-        FIXED_ONE_BYTE_STRING(node_isolate, "write cb error, status: "),
-        Integer::New(status, node_isolate)->ToString());
-    callbacks->MakeCallback(env->onerror_string(), 1, &arg);
     callbacks->InvokeQueued(status);
     return;
   }
@@ -317,7 +318,7 @@ void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
 }
 
 
-Local<Value> TLSCallbacks::GetSSLError(int status, int* err) {
+Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
   HandleScope scope(node_isolate);
 
   *err = SSL_get_error(ssl_, status);
@@ -331,19 +332,19 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err) {
       break;
     default:
       {
-        BUF_MEM* mem;
-        BIO* bio;
+        static char buf[1024];
 
         assert(*err == SSL_ERROR_SSL || *err == SSL_ERROR_SYSCALL);
 
-        bio = BIO_new(BIO_s_mem());
-        assert(bio != NULL);
-        ERR_print_errors(bio);
-        BIO_get_mem_ptr(bio, &mem);
+        ERR_error_string_n(*err, buf, sizeof(buf));
         Local<String> message =
-            OneByteString(node_isolate, mem->data, mem->length);
+            OneByteString(node_isolate, buf, strlen(buf));
         Local<Value> exception = Exception::Error(message);
-        BIO_free_all(bio);
+
+        if (msg != NULL) {
+          assert(*msg == NULL);
+          *msg = buf;
+        }
 
         return scope.Close(exception);
       }
@@ -384,7 +385,7 @@ void TLSCallbacks::ClearOut() {
 
   if (read == -1) {
     int err;
-    Handle<Value> arg = GetSSLError(read, &err);
+    Handle<Value> arg = GetSSLError(read, &err, NULL);
 
     if (!arg.IsEmpty()) {
       MakeCallback(env()->onerror_string(), 1, &arg);
@@ -420,12 +421,20 @@ bool TLSCallbacks::ClearIn() {
 
   // Error or partial write
   int err;
-  Handle<Value> arg = GetSSLError(written, &err);
+  Handle<Value> arg = GetSSLError(written, &err, &error_);
   if (!arg.IsEmpty()) {
-    MakeCallback(env()->onerror_string(), 1, &arg);
+    MakePending();
+    if (!InvokeQueued(UV_EPROTO))
+      error_ = NULL;
+    clear_in_->Reset();
   }
 
   return false;
+}
+
+
+const char* TLSCallbacks::Error() {
+  return error_;
 }
 
 
@@ -483,11 +492,9 @@ int TLSCallbacks::DoWrite(WriteWrap* w,
     int err;
     HandleScope handle_scope(env()->isolate());
     Context::Scope context_scope(env()->context());
-    Handle<Value> arg = GetSSLError(written, &err);
-    if (!arg.IsEmpty()) {
-      MakeCallback(env()->onerror_string(), 1, &arg);
-      return -1;
-    }
+    Handle<Value> arg = GetSSLError(written, &err, &error_);
+    if (!arg.IsEmpty())
+      return UV_EPROTO;
 
     // No errors, queue rest
     for (; i < count; i++)

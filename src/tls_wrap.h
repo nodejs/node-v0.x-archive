@@ -50,6 +50,7 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
                          v8::Handle<v8::Value> unused,
                          v8::Handle<v8::Context> context);
 
+  const char* Error();
   int DoWrite(WriteWrap* w,
               uv_buf_t* bufs,
               size_t count,
@@ -98,7 +99,8 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   static void EncOutCb(uv_write_t* req, int status);
   bool ClearIn();
   void ClearOut();
-  void InvokeQueued(int status);
+  void MakePending();
+  bool InvokeQueued(int status);
 
   inline void Cycle() {
     ClearIn();
@@ -106,7 +108,7 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
     EncOut();
   }
 
-  v8::Local<v8::Value> GetSSLError(int status, int* err);
+  v8::Local<v8::Value> GetSSLError(int status, int* err, const char** msg);
   static void OnClientHelloParseEnd(void* arg);
 
   static void Wrap(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -136,6 +138,7 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   bool started_;
   bool established_;
   bool shutdown_;
+  const char* error_;
 
   // If true - delivered EOF to the js-land, either after `close_notify`, or
   // after the `UV_EOF` on socket.
