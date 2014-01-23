@@ -61,6 +61,8 @@
 #include "v8.h"  // NOLINT(build/include_order)
 #include "node_version.h"  // NODE_MODULE_VERSION
 
+#include <sys/types.h>  // size_t, ssize_t
+
 // Forward-declare these functions now to stop MSVS from becoming
 // terminally confused when it's done in node_internals.h
 namespace node {
