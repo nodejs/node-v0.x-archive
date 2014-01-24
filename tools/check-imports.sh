@@ -17,17 +17,20 @@
 SED=sed
 UNAME=`uname`
 
+FILES=$*
+if [ "$FILES" = "" ]; then
+  FILES=`dirname "$0"`/../src/*.cc
+fi
+
 if [ "$UNAME" = Darwin ] || [ "$UNAME" = FreeBSD ]; then
   SED=gsed
 fi
 
-cd `dirname "$0"`/../
-
-for FILE in src/*.cc; do
+for FILE in $FILES; do
   $SED -rne 's/^using (\w+::\w+);$/\1/p' $FILE | sort -c || echo "in $FILE"
 done
 
-for FILE in src/*.cc; do
+for FILE in $FILES; do
   for IMPORT in `$SED -rne 's/^using (\w+)::(\w+);$/\2/p' $FILE`; do
     if ! $SED -re '/^using (\w+)::(\w+);$/d' $FILE | grep -q "$IMPORT"; then
       echo "$IMPORT unused in $FILE"
