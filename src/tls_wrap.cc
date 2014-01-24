@@ -71,7 +71,6 @@ TLSCallbacks::TLSCallbacks(Environment* env,
       enc_out_(NULL),
       clear_in_(NULL),
       write_size_(0),
-      pending_write_item_(NULL),
       started_(false),
       established_(false),
       shutdown_(false),
@@ -81,6 +80,7 @@ TLSCallbacks::TLSCallbacks(Environment* env,
 
   // Initialize queue for clearIn writes
   QUEUE_INIT(&write_item_queue_);
+  QUEUE_INIT(&pending_write_items_);
 
   // We've our own session callbacks
   SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<TLSCallbacks>::GetSessionCallback);
@@ -103,32 +103,49 @@ TLSCallbacks::~TLSCallbacks() {
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   sni_context_.Dispose();
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+
+  // Move all writes to pending
+  MakePending();
+
+  // And destroy
+  while (!QUEUE_EMPTY(&pending_write_items_)) {
+    QUEUE* q = QUEUE_HEAD(&pending_write_items_);
+    QUEUE_REMOVE(q);
+
+    WriteItem* wi = QUEUE_DATA(q, WriteItem, member_);
+    delete wi;
+  }
 }
 
 
 void TLSCallbacks::MakePending() {
-  pending_write_item_ = CONTAINER_OF(QUEUE_NEXT(&write_item_queue_),
-                                     WriteItem,
-                                     member_);
-  QUEUE_INIT(&write_item_queue_);
+  // Aliases
+  QUEUE* from = &write_item_queue_;
+  QUEUE* to = &pending_write_items_;
+
+  if (QUEUE_EMPTY(from))
+    return;
+
+  // Add items to pending
+  QUEUE_ADD(to, from);
+
+  // Empty original queue
+  QUEUE_INIT(from);
 }
 
 
 bool TLSCallbacks::InvokeQueued(int status) {
-  // Empty queue - ignore call
-  if (pending_write_item_ == NULL)
+  if (QUEUE_EMPTY(&pending_write_items_))
     return false;
 
-  QUEUE* q = &pending_write_item_->member_;
-  pending_write_item_ = NULL;
-
   // Process old queue
-  while (q != &write_item_queue_) {
-    QUEUE* next = static_cast<QUEUE*>(QUEUE_NEXT(q));
-    WriteItem* wi = CONTAINER_OF(q, WriteItem, member_);
+  while (!QUEUE_EMPTY(&pending_write_items_)) {
+    QUEUE* q = QUEUE_HEAD(&pending_write_items_);
+    QUEUE_REMOVE(q);
+
+    WriteItem* wi = QUEUE_DATA(q, WriteItem, member_);
     wi->cb_(&wi->w_->req_, status);
     delete wi;
-    q = next;
   }
 
   return true;
@@ -385,7 +402,7 @@ void TLSCallbacks::ClearOut() {
 
   if (read == -1) {
     int err;
-    Handle<Value> arg = GetSSLError(read, &err, NULL);
+    Local<Value> arg = GetSSLError(read, &err, NULL);
 
     if (!arg.IsEmpty()) {
       MakeCallback(env()->onerror_string(), 1, &arg);
@@ -421,7 +438,7 @@ bool TLSCallbacks::ClearIn() {
 
   // Error or partial write
   int err;
-  Handle<Value> arg = GetSSLError(written, &err, &error_);
+  Local<Value> arg = GetSSLError(written, &err, &error_);
   if (!arg.IsEmpty()) {
     MakePending();
     if (!InvokeQueued(UV_EPROTO))
@@ -494,7 +511,7 @@ int TLSCallbacks::DoWrite(WriteWrap* w,
     int err;
     HandleScope handle_scope(env()->isolate());
     Context::Scope context_scope(env()->context());
-    Handle<Value> arg = GetSSLError(written, &err, &error_);
+    Local<Value> arg = GetSSLError(written, &err, &error_);
     if (!arg.IsEmpty())
       return UV_EPROTO;
 

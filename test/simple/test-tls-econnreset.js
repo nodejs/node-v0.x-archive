@@ -78,8 +78,6 @@ var server = tls.createServer({ ca: ca, cert: cert, key: key }, function(conn) {
     ca: ca
   };
   tls.connect(options).on('error', function(err) {
-    console.log(err);
-    console.trace();
     assert(!connectError);
 
     connectError = err;

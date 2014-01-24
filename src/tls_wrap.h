@@ -134,7 +134,7 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   size_t write_size_;
   size_t write_queue_size_;
   QUEUE write_item_queue_;
-  WriteItem* pending_write_item_;
+  QUEUE pending_write_items_;
   bool started_;
   bool established_;
   bool shutdown_;
