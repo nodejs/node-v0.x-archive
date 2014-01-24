@@ -58,6 +58,10 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_FN_SN;
 
 
+size_t TLSCallbacks::error_off_;
+char TLSCallbacks::error_buf_[1024];
+
+
 TLSCallbacks::TLSCallbacks(Environment* env,
                            Kind kind,
                            Handle<Object> sc,
@@ -335,6 +339,32 @@ void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
 }
 
 
+int TLSCallbacks::PrintErrorsCb(const char* str, size_t len, void* arg) {
+  size_t to_copy = error_off_;
+  size_t avail = sizeof(error_buf_) - error_off_ - 1;
+
+  if (avail > to_copy)
+    to_copy = avail;
+
+  memcpy(error_buf_, str, avail);
+  error_off_ += avail;
+  assert(error_off_ < sizeof(error_buf_));
+
+  // Zero-terminate
+  error_buf_[error_off_] = '\0';
+
+  return 0;
+}
+
+
+const char* TLSCallbacks::PrintErrors() {
+  error_off_ = 0;
+  ERR_print_errors_cb(PrintErrorsCb, this);
+
+  return error_buf_;
+}
+
+
 Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
   HandleScope scope(node_isolate);
 
@@ -349,11 +379,10 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
       break;
     default:
       {
-        static char buf[1024];
-
         assert(*err == SSL_ERROR_SSL || *err == SSL_ERROR_SYSCALL);
 
-        ERR_error_string_n(*err, buf, sizeof(buf));
+        const char* buf = PrintErrors();
+
         Local<String> message =
             OneByteString(node_isolate, buf, strlen(buf));
         Local<Value> exception = Exception::Error(message);
