@@ -40,8 +40,9 @@ class FlockTool(object):
     # with EBADF, that's why we use this F_SETLK
     # hack instead.
     fd = os.open(lockfile, os.O_WRONLY|os.O_NOCTTY|os.O_CREAT, 0666)
-    op = struct.pack('hhllhhl', fcntl.F_WRLCK, 0, 0, 0, 0, 0, 0)
-    fcntl.fcntl(fd, fcntl.F_SETLK, op)
+    #op = struct.pack('hhllhhl', fcntl.F_WRLCK, 0, 0, 0, 0, 0, 0)
+    #fcntl.fcntl(fd, fcntl.F_SETLK, op)
+    fcntl.flock(fd, fcntl.LOCK_EX)
     return subprocess.call(cmd_list)
 
 
