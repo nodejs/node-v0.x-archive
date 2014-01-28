@@ -123,6 +123,9 @@ FakeInput.prototype.end = function() {};
     assert.equal(line, expectedLines[callCount]);
     callCount++;
   });
+  rli.on('close', function() {
+    callCount++;
+  })
   fi.emit('data', expectedLines.join('\n'));
   fi.emit('end');
   assert.equal(callCount, expectedLines.length);
