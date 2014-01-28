@@ -1243,7 +1243,7 @@ Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
 }
 
 // Returns -1 if the handle was not valid for decoding
-ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
+ptrdiff_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
   HandleScope scope(node_isolate);
 
   if (val->IsArray()) {
@@ -1253,7 +1253,7 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
-  return StringBytes::Size(val, encoding);
+  return (ptrdiff_t) StringBytes::Size(val, encoding);
 }
 
 #ifndef MIN
@@ -1261,11 +1261,11 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
 #endif
 
 // Returns number of bytes written.
-ssize_t DecodeWrite(char *buf,
+ptrdiff_t DecodeWrite(char *buf,
                     size_t buflen,
                     v8::Handle<v8::Value> val,
                     enum encoding encoding) {
-  return StringBytes::Write(buf, buflen, val, encoding, NULL);
+  return (ptrdiff_t) StringBytes::Write(buf, buflen, val, encoding, NULL);
 }
 
 void DisplayExceptionLine(Handle<Message> message) {
