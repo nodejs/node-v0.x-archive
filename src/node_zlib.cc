@@ -195,46 +195,9 @@ class ZCtx : public AsyncWrap {
     if (!async) {
       // sync version
 
-      ZCtx::Process(work_req);
-
-      Environment* env = ctx->env();
-
-      HandleScope handle_scope(env->isolate());
-      Context::Scope context_scope(env->context());
-
-      // Acceptable error states depend on the type of zlib stream.
-      switch (ctx->err_) {
-      case Z_OK:
-      case Z_STREAM_END:
-      case Z_BUF_ERROR:
-        // normal statuses, not fatal
-        break;
-      case Z_NEED_DICT:
-        if (ctx->dictionary_ == NULL) {
-          ZCtx::Error(ctx, "Missing dictionary");
-        }
-        else {
-          ZCtx::Error(ctx, "Bad dictionary");
-        }
-        return;
-      default:
-        // something else.
-        ZCtx::Error(ctx, "Zlib error");
-        return;
-      }
-
-      Local<Integer> avail_out = Integer::New(ctx->strm_.avail_out, node_isolate);
-      Local<Integer> avail_in = Integer::New(ctx->strm_.avail_in, node_isolate);
-
-      ctx->write_in_progress_ = false;
-
-      Local<Array> result = Array::New(2);
-      result->Set(0, avail_in);
-      result->Set(1, avail_out);
-      args.GetReturnValue().Set(result);
-
-      ctx->Unref();
-
+      Process(work_req);
+      if (IsGood(ctx))
+        AfterSync(ctx, args);
       return;
     }
 
@@ -246,6 +209,20 @@ class ZCtx : public AsyncWrap {
                   ZCtx::After);
 
     args.GetReturnValue().Set(ctx->object());
+  }
+
+  static void AfterSync(ZCtx* ctx, const FunctionCallbackInfo<Value>& args) {
+    Local<Integer> avail_out = Integer::New(ctx->strm_.avail_out, node_isolate);
+    Local<Integer> avail_in = Integer::New(ctx->strm_.avail_in, node_isolate);
+
+    ctx->write_in_progress_ = false;
+
+    Local<Array> result = Array::New(2);
+    result->Set(0, avail_in);
+    result->Set(1, avail_out);
+    args.GetReturnValue().Set(result);
+
+    ctx->Unref();
   }
 
 
@@ -299,6 +276,31 @@ class ZCtx : public AsyncWrap {
     // or shift the queue and call Process.
   }
 
+  static bool IsGood(ZCtx* ctx) {
+    // Acceptable error states depend on the type of zlib stream.
+    switch (ctx->err_) {
+    case Z_OK:
+    case Z_STREAM_END:
+    case Z_BUF_ERROR:
+      // normal statuses, not fatal
+      break;
+    case Z_NEED_DICT:
+      if (ctx->dictionary_ == NULL) {
+        ZCtx::Error(ctx, "Missing dictionary");
+      }
+      else {
+        ZCtx::Error(ctx, "Bad dictionary");
+      }
+      return false;
+    default:
+      // something else.
+      ZCtx::Error(ctx, "Zlib error");
+      return false;
+    }
+
+    return true;
+  }
+
   // v8 land!
   static void After(uv_work_t* work_req, int status) {
     assert(status == 0);
@@ -309,25 +311,8 @@ class ZCtx : public AsyncWrap {
     HandleScope handle_scope(env->isolate());
     Context::Scope context_scope(env->context());
 
-    // Acceptable error states depend on the type of zlib stream.
-    switch (ctx->err_) {
-      case Z_OK:
-      case Z_STREAM_END:
-      case Z_BUF_ERROR:
-        // normal statuses, not fatal
-        break;
-      case Z_NEED_DICT:
-        if (ctx->dictionary_ == NULL) {
-          ZCtx::Error(ctx, "Missing dictionary");
-        } else {
-          ZCtx::Error(ctx, "Bad dictionary");
-        }
-        return;
-      default:
-        // something else.
-        ZCtx::Error(ctx, "Zlib error");
-        return;
-    }
+    if (!IsGood(ctx))
+      return;
 
     Local<Integer> avail_out = Integer::New(ctx->strm_.avail_out, node_isolate);
     Local<Integer> avail_in = Integer::New(ctx->strm_.avail_in, node_isolate);
