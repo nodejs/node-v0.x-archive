@@ -194,15 +194,13 @@ class ZCtx : public AsyncWrap {
 
     if (!async) {
       // sync version
-
       Process(work_req);
-      if (IsGood(ctx))
+      if (CheckError(ctx))
         AfterSync(ctx, args);
       return;
     }
 
     // async version
-
     uv_queue_work(ctx->env()->event_loop(),
                   work_req,
                   ZCtx::Process,
@@ -276,7 +274,7 @@ class ZCtx : public AsyncWrap {
     // or shift the queue and call Process.
   }
 
-  static bool IsGood(ZCtx* ctx) {
+  static bool CheckError(ZCtx* ctx) {
     // Acceptable error states depend on the type of zlib stream.
     switch (ctx->err_) {
     case Z_OK:
@@ -285,12 +283,10 @@ class ZCtx : public AsyncWrap {
       // normal statuses, not fatal
       break;
     case Z_NEED_DICT:
-      if (ctx->dictionary_ == NULL) {
+      if (ctx->dictionary_ == NULL)
         ZCtx::Error(ctx, "Missing dictionary");
-      }
-      else {
+      else
         ZCtx::Error(ctx, "Bad dictionary");
-      }
       return false;
     default:
       // something else.
@@ -311,7 +307,7 @@ class ZCtx : public AsyncWrap {
     HandleScope handle_scope(env->isolate());
     Context::Scope context_scope(env->context());
 
-    if (!IsGood(ctx))
+    if (!CheckError(ctx))
       return;
 
     Local<Integer> avail_out = Integer::New(ctx->strm_.avail_out, node_isolate);
