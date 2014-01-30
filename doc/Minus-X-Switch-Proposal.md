@@ -92,10 +92,9 @@ the process will cwd into this directory before (as in ruby and perl)
  Script authors can control the arguments passed to node using a similar
 syntax to that used by ruby and perl.
 
-
-    #!/usr/bin/env bash
-    exec /usr/bin/env node -x --harmony --harmony_typeof -- $0 "$@"
-    #!node
+     #!/usr/bin/env bash
+     exec /usr/bin/env node -x --harmony --harmony_typeof -- $0 "$@"
+     #!node
 
 # Implementation
 
