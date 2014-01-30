@@ -80,14 +80,15 @@ Ruby uses the same convention as perl.
 
 # Proposal
 
- I propose to add a new command-line switch to node (-x) following the same semantics as
+ I propose to add a new command-line switch to node (-x) following similar semantics as
 used by perl and ruby, namely:
 
-1. The -x switch causes node to skip everything in the first input file/stream up to
+* The -x switch causes node to skip everything in the first input file/stream up to
 a line starting with '#!' and containing 'node' (as in ruby and perl)
 
-1. The -x switch has an optional argument which is interpreted as a directory; if supplied,
-the process will cwd into this directory before (as in ruby and perl)
+However,
+
+* The -x switch in node does *NOT* take an optional argument as in ruby and perl.
 
  Script authors can control the arguments passed to node using a similar
 syntax to that used by ruby and perl.
