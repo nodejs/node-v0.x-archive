@@ -3220,6 +3220,8 @@ void Init(int* argc,
     }
   }
 
+  V8::SetFlagsFromString("--harmony", sizeof("--harmony") - 1);
+
   // The const_cast doesn't violate conceptual const-ness.  V8 doesn't modify
   // the argv array or the elements it points to.
   V8::SetFlagsFromCommandLine(&v8_argc, const_cast<char**>(v8_argv), true);
