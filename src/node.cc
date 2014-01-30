@@ -2791,6 +2791,7 @@ static void PrintHelp() {
          "  -p, --print          evaluate script and print result\n"
          "  -i, --interactive    always enter the REPL even if stdin\n"
          "                       does not appear to be a terminal\n"
+         "  -x                   ignore text before #!node line\n"
          "  --no-deprecation     silence deprecation warnings\n"
          "  --trace-deprecation  show stack traces on deprecations\n"
          "  --v8-options         print v8 command line options\n"
