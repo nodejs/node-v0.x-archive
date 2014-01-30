@@ -90,8 +90,9 @@ However,
 
 * The -x switch in node does *NOT* take an optional argument as in ruby and perl.
 
- Script authors can control the arguments passed to node using a similar
+Script authors can control the arguments passed to node using a similar
 syntax to that used by ruby and perl.
+
 
      #!/usr/bin/env bash
      exec /usr/bin/env node -x --harmony --harmony_typeof -- $0 "$@"
