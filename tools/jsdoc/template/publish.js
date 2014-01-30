@@ -1,32 +1,61 @@
 
 var fs = require('fs');
+var path = require('path');
 var handlebars = require('handlebars');
+var marked = require('marked');
 
-var formatMember = function (member) {
-  var module = member.memberof.substr(7);
-  var path = member.longname.substr(7);
-  var anchor = [module, module, member.name];
+var formatMembers = function (docs) {
+  return function (member) {
+    var module = member.memberof.substr(7);
+    var path = member.longname.substr(7);
+    var anchor = [module, module, member.name];
 
-  if (member.kind === 'function') {
-    var params = member.params.map(function (param) {
-      var signature = param.name + (param.variable ? ' ...' : '');
-      if (param.optional)
-        signature = '[' + signature + ']';
-      return signature;
-    });
-    member.signature = path + '(' + params.join(', ') + ')';
+    if (member.kind === 'function') {
+      var params = member.params.map(function (param) {
+        var signature = param.name + (param.variable ? ' ...' : '');
+        if (param.optional)
+          signature = '[' + signature + ']';
+        return signature;
+      });
+      member.signature = path + '(' + params.join(', ') + ')';
+    } else {
+      member.signature = path;
+    }
 
-    var params = member.params.map(function (param) {
-      return param.name;
-    });
-    anchor = anchor.concat(params);
-  } else {
-    member.signature = path;
-  }
+    var doc = docs[member.signature];
+    if (doc) {
+      member.anchor = doc.anchor;
+      member.description = doc.description;
+    } else {
+      member.anchor = anchor.join('_');
+    }
 
-  member.anchor = anchor.join('_');
+    return member;
+  };
+};
 
-  return member;
+var parseDocs = function (module) {
+  // @TODO: fix
+  var file = path.resolve(__dirname, '../../../../../../doc/api',
+    module + '.markdown');
+
+  if (!fs.existsSync(file))
+    return false;
+
+  var markdown = marked(fs.readFileSync(file).toString());
+
+  var docs = {};
+  markdown.split('<h2').slice(1).forEach(function (raw) {
+    var parsed = raw.match(/\s+id="(.*)">(.*)<\/h2>\n((.|\n)*)/);
+
+    docs[parsed[2]] = {
+      signature: parsed[2],
+      anchor: parsed[1],
+      description: parsed[3]
+    }
+  });
+
+  return docs;
 };
 
 exports.publish = function(data, opts) {
@@ -60,6 +89,8 @@ exports.publish = function(data, opts) {
       }
     });
 
+    var docs = parseDocs(module.name);
+
     switch (format) {
       case 'html':
         var output = template({
@@ -70,7 +101,7 @@ exports.publish = function(data, opts) {
             'API Frozen', 'Locked'][stability]
           },
           module: module,
-          members: members.map(formatMember)
+          members: members.map(formatMembers(docs))
         });
         break;
 
