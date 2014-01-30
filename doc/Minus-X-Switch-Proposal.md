@@ -111,11 +111,14 @@ has already processed the supplied command-line arguments.
 The remaining problem is to ignore the preamble, and parse the script as a valid
 javascript file.  An example preamble is reproduced below.
 
-
+    $ cat preamble.js
     #!/usr/bin/env bash
     exec /usr/bin/env node -x --harmony --harmony_typeof -- $0 "$@"
     #!node
     // javascript beginning here
+
+To preserve line numbering, the implementation will replace each line up to and including
+the '#!node' line with a single newline.
 
 ## Command Line Option
 
