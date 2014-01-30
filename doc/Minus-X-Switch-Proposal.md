@@ -90,7 +90,7 @@ a line starting with '#!' and containing 'node' (as in ruby and perl)
 the process will cwd into this directory before (as in ruby and perl)
 
  Script authors can control the arguments passed to node using a similar
-syntax to that used by ruby and perl:
+syntax to that used by ruby and perl.
 
 
     #!/usr/bin/env bash
@@ -188,6 +188,13 @@ For example:
     // more js code
 
 This proposal would allow a node script to serve as its own wrapper script.
+
+# Remaining Issues
+
+If this is accepted, then [cmd-shim](https://github.com/ForbesLindesay/cmd-shim) will
+need to be updated to support the -x switch and #!node lines.  A mechanism using
+wrapper scripts is necessary on Windows in any case.  I volunteer to do the
+necessary work on cmd-shim.
 
 # References
 
