@@ -765,9 +765,15 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
     p->sni_context_.Dispose();
     p->sni_context_.Reset(node_isolate, ctx);
 
-    SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());
-    InitNPN(sc, p);
-    SSL_set_SSL_CTX(s, sc->ctx_);
+    Local<FunctionTemplate> secure_context_constructor_template =
+        env->secure_context_constructor_template();
+    if (secure_context_constructor_template->HasInstance(ctx)) {
+      SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());
+      InitNPN(sc, p);
+      SSL_set_SSL_CTX(s, sc->ctx_);
+    } else {
+      return SSL_TLSEXT_ERR_NOACK;
+    }
   }
 
   return SSL_TLSEXT_ERR_OK;
