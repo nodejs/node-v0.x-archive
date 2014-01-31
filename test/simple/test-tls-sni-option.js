@@ -47,10 +47,14 @@ var serverOptions = {
 
     // Just to test asynchronous callback
     setTimeout(function() {
-      if (credentials)
-        callback(null, crypto.createCredentials(credentials).context);
-      else
+      if (credentials) {
+        if (credentials.emptyRegression)
+          callback(null, {});
+        else
+          callback(null, crypto.createCredentials(credentials).context);
+      } else {
         callback(null, null);
+      }
     }, 100);
   }
 };
@@ -63,6 +67,9 @@ var SNIContexts = {
   'b.example.com': {
     key: loadPEM('agent3-key'),
     cert: loadPEM('agent3-cert')
+  },
+  'c.another.com': {
+    emptyRegression: true
   }
 };
 
@@ -89,6 +96,13 @@ var clientsOptions = [{
   ca: [loadPEM('ca1-cert')],
   servername: 'c.wrong.com',
   rejectUnauthorized: false
+}, {
+  port: serverPort,
+  key: loadPEM('agent3-key'),
+  cert: loadPEM('agent3-cert'),
+  ca: [loadPEM('ca1-cert')],
+  servername: 'c.another.com',
+  rejectUnauthorized: false
 }];
 
 var serverResults = [],
@@ -114,7 +128,9 @@ function startTest() {
   connectClient(clientsOptions[0], function() {
     connectClient(clientsOptions[1], function() {
       connectClient(clientsOptions[2], function() {
-        server.close();
+        connectClient(clientsOptions[3], function() {
+          server.close();
+        });
       });
     });
   });
@@ -122,6 +138,6 @@ function startTest() {
 
 process.on('exit', function() {
   assert.deepEqual(serverResults, ['a.example.com', 'b.example.com',
-                                   'c.wrong.com']);
-  assert.deepEqual(clientResults, [true, true, false]);
+                                   'c.wrong.com', 'c.another.com']);
+  assert.deepEqual(clientResults, [true, true, false, false]);
 });
