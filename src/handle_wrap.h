@@ -36,8 +36,8 @@ namespace node {
 // - Do not throw from handle methods. Set errno.
 //
 // - MakeCallback may only be made directly off the event loop.
-//   That is there can be no JavaScript stack frames underneith it.
-//   (Is there anyway to assert that?)
+//   That is there can be no JavaScript stack frames underneath it.
+//   (Is there any way to assert that?)
 //
 // - No use of v8::WeakReferenceCallback. The close callback signifies that
 //   we're done with a handle - external resources can be freed.
@@ -45,10 +45,10 @@ namespace node {
 // - Reusable?
 //
 // - The uv_close_cb is used to free the c++ object. The close callback
-//   is not made into javascript land.
+//   is not made into JavaScript land.
 //
 // - uv_ref, uv_unref counts are managed at this layer to avoid needless
-//   js/c++ boundary crossing. At the javascript layer that should all be
+//   js/c++ boundary crossing. At the JavaScript layer that should all be
 //   taken care of.
 
 class HandleWrap : public AsyncWrap {
