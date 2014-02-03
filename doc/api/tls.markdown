@@ -320,7 +320,7 @@ Creates a new client connection to the given `port` and `host` (old API) or
     SSL version 3. The possible values depend on your installation of
     OpenSSL and are defined in the constant [SSL_METHODS][].
 
-  - `session`: A `Buffer` instance, containig TLS session.
+  - `session`: A `Buffer` instance, containing TLS session.
 
 The `callback` parameter will be added as a listener for the
 ['secureConnect'][] event.
