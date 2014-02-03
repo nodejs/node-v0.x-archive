@@ -106,38 +106,63 @@ var clientsOptions = [{
 }];
 
 var serverResults = [],
-    clientResults = [];
+    clientResults = [],
+    serverErrors = [],
+    clientErrors = [],
+    serverError,
+    clientError;
 
 var server = tls.createServer(serverOptions, function(c) {
   serverResults.push(c.servername);
 });
 
+server.on('clientError', function(err) {
+  serverResults.push(null);
+  serverError = err.message;
+});
+
 server.listen(serverPort, startTest);
 
 function startTest() {
-  function connectClient(options, callback) {
+  function connectClient(i, callback) {
+    var options = clientsOptions[i];
+    clientError = null;
+    serverError = null;
+
     var client = tls.connect(options, function() {
       clientResults.push(
           /Hostname\/IP doesn't/.test(client.authorizationError || ''));
       client.destroy();
 
-      callback();
+      next();
     });
+
+    client.on('error', function(err) {
+      clientResults.push(false);
+      clientError = err.message;
+      next();
+    });
+
+    function next() {
+      clientErrors.push(clientError);
+      serverErrors.push(serverError);
+
+      if (i === clientsOptions.length - 1)
+        callback();
+      else
+        connectClient(i + 1, callback);
+    }
   };
 
-  connectClient(clientsOptions[0], function() {
-    connectClient(clientsOptions[1], function() {
-      connectClient(clientsOptions[2], function() {
-        connectClient(clientsOptions[3], function() {
-          server.close();
-        });
-      });
-    });
+  connectClient(0, function() {
+    server.close();
   });
 }
 
 process.on('exit', function() {
   assert.deepEqual(serverResults, ['a.example.com', 'b.example.com',
-                                   'c.wrong.com', 'c.another.com']);
+                                   'c.wrong.com', null]);
   assert.deepEqual(clientResults, [true, true, false, false]);
+  assert.deepEqual(clientErrors, [null, null, null, "socket hang up"]);
+  assert.deepEqual(serverErrors, [null, null, null, "Invalid SNI context"]);
 });
