@@ -91,6 +91,7 @@ TLSCallbacks::TLSCallbacks(Environment* env,
   SSL_CTX_sess_set_new_cb(sc_->ctx_, SSLWrap<TLSCallbacks>::NewSessionCallback);
 
   InitSSL();
+  AsyncWrap::Init();
 }
 
 

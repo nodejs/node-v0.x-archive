@@ -30,7 +30,7 @@ var caught = 0;
 var expectCaught = 0;
 
 var callbacksObj = {
-  error: function(value, er) {
+  error: function(ctx, stor, er) {
     var idx = errorMsgs.indexOf(er.message);
     caught++;
 

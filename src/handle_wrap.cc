@@ -98,6 +98,7 @@ HandleWrap::HandleWrap(Environment* env,
   HandleScope scope(node_isolate);
   Wrap<HandleWrap>(object, this);
   QUEUE_INSERT_TAIL(&handle_wrap_queue, &handle_wrap_queue_);
+  AsyncWrap::Init();
 }
 
 

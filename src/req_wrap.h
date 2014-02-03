@@ -43,6 +43,8 @@ class ReqWrap : public AsyncWrap {
       object->Set(env->domain_string(), env->domain_array()->Get(0));
 
     QUEUE_INSERT_TAIL(&req_wrap_queue, &req_wrap_queue_);
+
+    AsyncWrap::Init();
   }
 
 

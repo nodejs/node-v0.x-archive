@@ -34,7 +34,7 @@ var expectCaught = 0;
 var exitCbRan = false;
 
 var callbacksObj = {
-  error: function(value, er) {
+  error: function(ctx, value, er) {
     var idx = errorMsgs.indexOf(er.message);
 
     caught++;
