@@ -3490,6 +3490,7 @@ class PBKDF2Request : public AsyncWrap {
         iter_(iter) {
     if (key() == NULL)
       FatalError("node::PBKDF2Request()", "Out of Memory");
+    AsyncWrap::Init();
   }
 
   ~PBKDF2Request() {
@@ -3746,6 +3747,7 @@ class RandomBytesRequest : public AsyncWrap {
         data_(static_cast<char*>(malloc(size))) {
     if (data() == NULL)
       FatalError("node::RandomBytesRequest()", "Out of Memory");
+    AsyncWrap::Init();
   }
 
   ~RandomBytesRequest() {

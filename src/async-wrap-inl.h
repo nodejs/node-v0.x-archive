@@ -37,23 +37,32 @@ namespace node {
 
 inline AsyncWrap::AsyncWrap(Environment* env, v8::Handle<v8::Object> object)
     : BaseObject(env, object),
+      initialized_(false),
       async_flags_(NO_OPTIONS) {
-  if (!env->has_async_listener())
+}
+
+
+inline AsyncWrap::~AsyncWrap() {
+  assert(initialized_ != false);
+}
+
+
+inline void AsyncWrap::Init() {
+  assert(initialized_ == false);
+  initialized_ = true;
+
+  if (!env()->has_async_listener())
     return;
 
   // TODO(trevnorris): Do we really need to TryCatch this call?
   v8::TryCatch try_catch;
   try_catch.SetVerbose(true);
 
-  v8::Local<v8::Value> val = object.As<v8::Value>();
-  env->async_listener_run_function()->Call(env->process_object(), 1, &val);
+  v8::Local<v8::Value> val = object().As<v8::Value>();
+  env()->async_listener_run_function()->Call(env()->process_object(), 1, &val);
 
   if (!try_catch.HasCaught())
     async_flags_ |= HAS_ASYNC_LISTENER;
-}
-
-
-inline AsyncWrap::~AsyncWrap() {
 }
 
 

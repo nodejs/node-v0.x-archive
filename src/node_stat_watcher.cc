@@ -71,6 +71,7 @@ StatWatcher::StatWatcher(Environment* env, Local<Object> wrap)
   MakeWeak<StatWatcher>(this);
   uv_fs_poll_init(env->event_loop(), watcher_);
   watcher_->data = static_cast<void*>(this);
+  AsyncWrap::Init();
 }
 
 

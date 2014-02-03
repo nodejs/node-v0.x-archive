@@ -39,6 +39,8 @@ class AsyncWrap : public BaseObject {
 
   inline ~AsyncWrap();
 
+  inline void Init();
+
   inline uint32_t async_flags() const;
 
   inline bool has_async_listener();
@@ -64,6 +66,7 @@ class AsyncWrap : public BaseObject {
       int argc,
       v8::Handle<v8::Value>* argv);
 
+  bool initialized_;
   uint32_t async_flags_;
 };
 

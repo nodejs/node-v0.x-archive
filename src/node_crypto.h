@@ -305,6 +305,7 @@ class Connection : public SSLWrap<Connection>, public AsyncWrap {
                         OnClientHelloParseEnd,
                         this);
     enable_session_callbacks();
+    AsyncWrap::Init();
   }
 
  private:
@@ -584,6 +585,7 @@ class Certificate : public AsyncWrap {
   Certificate(Environment* env, v8::Local<v8::Object> wrap)
       : AsyncWrap(env, wrap) {
     MakeWeak<Certificate>(this);
+    AsyncWrap::Init();
   }
 };
 

@@ -89,6 +89,7 @@ class ZCtx : public AsyncWrap {
         write_in_progress_(false),
         refs_(0) {
     MakeWeak<ZCtx>(this);
+    AsyncWrap::Init();
   }
 
 
