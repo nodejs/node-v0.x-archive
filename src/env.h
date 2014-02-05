@@ -88,6 +88,7 @@ namespace node {
   V(ipv4_string, "IPv4")                                                      \
   V(ipv6_string, "IPv6")                                                      \
   V(issuer_string, "issuer")                                                  \
+  V(message_string, "message")                                                \
   V(method_string, "method")                                                  \
   V(mode_string, "mode")                                                      \
   V(modulus_string, "modulus")                                                \
@@ -111,6 +112,7 @@ namespace node {
   V(onstop_string, "onstop")                                                  \
   V(path_string, "path")                                                      \
   V(port_string, "port")                                                      \
+  V(processed_string, "processed")                                            \
   V(rdev_string, "rdev")                                                      \
   V(rename_string, "rename")                                                  \
   V(rss_string, "rss")                                                        \
@@ -122,6 +124,7 @@ namespace node {
   V(smalloc_p_string, "_smalloc_p")                                           \
   V(sni_context_err_string, "Invalid SNI context")                            \
   V(sni_context_string, "sni_context")                                        \
+  V(stack_string, "stack")                                                    \
   V(status_code_string, "statusCode")                                         \
   V(status_message_string, "statusMessage")                                   \
   V(subject_string, "subject")                                                \
