@@ -573,14 +573,19 @@ This will generate:
 
 * `callback` {Function}
 
-Once the current event loop turn runs to completion, call the callback
-function.
+Schedule a callback to run immediately after all currently running synchronous
+operations.
 
-This is *not* a simple alias to `setTimeout(fn, 0)`, it's much more
-efficient.  It runs before any additional I/O events (including
-timers) fire in subsequent ticks of the event loop.
+This is subject to change in the future.
+
+The `nextTickQueue` are callbacks that will be called immediately after the
+currently running callback, and before continuing with the event loop. Recursive
+`nextTick` calls will then have the same effect as a `while(true);` loop.
 
     console.log('start');
+    setImmediate(function() {
+      console.log('setImmediate callback');
+    });
     process.nextTick(function() {
       console.log('nextTick callback');
     });
@@ -589,17 +594,20 @@ timers) fire in subsequent ticks of the event loop.
     // start
     // scheduled
     // nextTick callback
+    // setImmediate callback
 
-This is important in developing APIs where you want to give the user the
-chance to assign event handlers after an object has been constructed,
-but before any I/O has occurred.
+`process.nextTick` is specifically important when developing an event based API
+when you need to allow the developer time to setup the event handlers after an
+object has been constructed, but perform a task before any other asynchronous
+events have fired (e.g. I/O).
 
     function MyThing(options) {
       this.setupOptions(options);
 
+      var ts = this;
       process.nextTick(function() {
-        this.startDoingStuff();
-      }.bind(this));
+        ts.startDoingStuff();
+      });
     }
 
     var thing = new MyThing();
@@ -611,39 +619,41 @@ It is very important for APIs to be either 100% synchronous or 100%
 asynchronous.  Consider this example:
 
     // WARNING!  DO NOT USE!  BAD UNSAFE HAZARD!
-    function maybeSync(arg, cb) {
+    function maybeSync(path, arg, cb) {
       if (arg) {
         cb();
         return;
       }
 
-      fs.stat('file', cb);
+      fs.stat(path, cb);
     }
 
-This API is hazardous.  If you do this:
+The above now seems ambiguous whether the callback will be called before the
+currently running script continues:
 
-    maybeSync(true, function() {
+    maybeSync('/path', /* maybe truthy */, function() {
       foo();
     });
     bar();
 
-then it's not clear whether `foo()` or `bar()` will be called first.
+If the second `maybeSync()` argument is truthy then `foo()` will run before
+`bar()`. Otherwise `bar()` will run before `foo()`. This type of design decision
+creates unnecessary confusion, and should be avoided.
 
 This approach is much better:
 
-    function definitelyAsync(arg, cb) {
+    function definitelyAsync(path, arg, cb) {
       if (arg) {
         process.nextTick(cb);
         return;
       }
 
-      fs.stat('file', cb);
+      fs.stat(path, cb);
     }
 
-Note: the nextTick queue is completely drained on each pass of the
-event loop **before** additional I/O is processed.  As a result,
-recursively setting nextTick callbacks will block any I/O from
-happening, just like a `while(true);` loop.
+Note to module developers: Make sure to use the `MakeCallback` API when calling
+a JS callback from C++ after an asynchronous operation. This is the only way to
+drain the `nextTickQueue`.
 
 ## process.umask([mask])
 
