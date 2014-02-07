@@ -45,10 +45,10 @@ namespace node {
 // - Reusable?
 //
 // - The uv_close_cb is used to free the c++ object. The close callback
-//   is not made into JavaScript land.
+//   is not made into javascript land.
 //
 // - uv_ref, uv_unref counts are managed at this layer to avoid needless
-//   js/c++ boundary crossing. At the JavaScript layer that should all be
+//   js/c++ boundary crossing. At the javascript layer that should all be
 //   taken care of.
 
 class HandleWrap : public AsyncWrap {
