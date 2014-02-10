@@ -193,7 +193,7 @@ int X509_TRUST_add(int id, int flags, int (*ck)(X509_TRUST *, X509 *, int),
 	trtmp->arg1 = arg1;
 	trtmp->arg2 = arg2;
 
-	/* If its a new entry manage the dynamic table */
+	/* If it's a new entry manage the dynamic table */
 	if(idx == -1) {
 		if(!trtable && !(trtable = sk_X509_TRUST_new(tr_cmp))) {
 			X509err(X509_F_X509_TRUST_ADD,ERR_R_MALLOC_FAILURE);

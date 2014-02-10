@@ -283,7 +283,7 @@ int ASN1_template_new(ASN1_VALUE **pval, const ASN1_TEMPLATE *tt)
 	if (tt->field_name)
 		CRYPTO_push_info(tt->field_name);
 #endif
-	/* If SET OF or SEQUENCE OF, its a STACK */
+	/* If SET OF or SEQUENCE OF, it's a STACK */
 	if (tt->flags & ASN1_TFLG_SK_MASK)
 		{
 		STACK_OF(ASN1_VALUE) *skval;
