@@ -160,7 +160,7 @@ sub link_hash_crl {
 		my $suffix = 0;
 		# Search for an unused hash filename
 		while(exists $hashlist{"$hash.r$suffix"}) {
-			# Hash matches: if fingerprint matches its a duplicate cert
+			# Hash matches: if fingerprint matches it's a duplicate cert
 			if($hashlist{"$hash.r$suffix"} eq $fprint) {
 				print STDERR "WARNING: Skipping duplicate CRL $fname\n";
 				return;

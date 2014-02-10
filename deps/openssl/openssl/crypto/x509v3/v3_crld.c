@@ -145,7 +145,7 @@ static int set_dist_point_name(DIST_POINT_NAME **pdp, X509V3_CTX *ctx,
 		X509_NAME_free(nm);
 		if (!ret || sk_X509_NAME_ENTRY_num(rnm) <= 0)
 			goto err;
-		/* Since its a name fragment can't have more than one
+		/* Since it's a name fragment can't have more than one
 		 * RDNSequence
 		 */
 		if (sk_X509_NAME_ENTRY_value(rnm,

@@ -528,7 +528,7 @@ int ssl_verify_cert_chain(SSL *s,STACK_OF(X509) *sk)
 	X509_STORE_CTX_set_ex_data(&ctx,SSL_get_ex_data_X509_STORE_CTX_idx(),s);
 
 	/* We need to inherit the verify parameters. These can be determined by
-	 * the context: if its a server it will verify SSL client certificates
+	 * the context: if it's a server it will verify SSL client certificates
 	 * or vice versa.
 	 */
 
