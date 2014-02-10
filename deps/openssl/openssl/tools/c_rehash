@@ -110,7 +110,7 @@ sub check_file {
 
 # Link a certificate to its subject name hash value, each hash is of
 # the form <hash>.<n> where n is an integer. If the hash value already exists
-# then we need to up the value of n, unless its a duplicate in which
+# then we need to up the value of n, unless it's a duplicate in which
 # case we skip the link. We check for duplicates by comparing the
 # certificate fingerprints
 
@@ -125,7 +125,7 @@ sub link_hash_cert {
 		my $suffix = 0;
 		# Search for an unused hash filename
 		while(exists $hashlist{"$hash.$suffix"}) {
-			# Hash matches: if fingerprint matches its a duplicate cert
+			# Hash matches: if fingerprint matches it's a duplicate cert
 			if($hashlist{"$hash.$suffix"} eq $fprint) {
 				print STDERR "WARNING: Skipping duplicate certificate $fname\n";
 				return;
