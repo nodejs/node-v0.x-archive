@@ -50,8 +50,8 @@ Use `nc` to connect to a UNIX domain socket server:
 
     nc -U /tmp/echo.sock
 
-## net.connect(options, [connectionListener])
-## net.createConnection(options, [connectionListener])
+## net.connect(options, [connectListener])
+## net.createConnection(options, [connectListener])
 
 Constructs a new socket object and opens the socket to the given location.
 When the socket is established, the ['connect'][] event will be emitted.
