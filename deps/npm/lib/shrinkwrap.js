@@ -38,6 +38,11 @@ function shrinkwrap_ (pkginfo, silent, dev, cb) {
         return cb(er)
       if (data.devDependencies) {
         Object.keys(data.devDependencies).forEach(function (dep) {
+          if (data.dependencies && data.dependencies[dep]) {
+            // do not exclude the dev dependency if it's also listed as a dependency
+            return
+          }
+
           log.warn("shrinkwrap", "Excluding devDependency: %s", dep)
           delete pkginfo.dependencies[dep]
         })
