@@ -69,6 +69,10 @@ You can use your own `eval` function if it has following signature:
       callback(null, result);
     }
 
+## repl.setPrompt(prompt)
+
+Sets `prompt` of the existing instance of `REPLServer` of node.
+
 Multiple REPLs may be started against the same running instance of node.  Each
 will share the same global object but will have unique I/O.
 
