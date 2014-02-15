@@ -66,8 +66,13 @@
           ['OS=="solaris"', {
             # pull in V8's postmortem metadata
             'ldflags': [ '-Wl,-z,allextract' ]
-          }, {
-            # Doesn't work with the Solaris linker.
+          }],
+
+          # When compiling `v8ustack.d`, `dtrace` inserts `._SUNW_dof`
+          # section. USDT won't work without that section and g++
+          # (and probably others) is removing it when `--gc-sections` is
+          # present.
+          ['OS != "solaris" and node_use_dtrace!="true"', {
             'ldflags': [ '-Wl,--gc-sections' ],
           }],
           ['clang == 0 and gcc_version >= 40', {
