@@ -32,8 +32,9 @@ For example, you could add this to your bashrc file:
 
 ## repl.start(options)
 
-Returns and starts a `REPLServer` instance. Accepts an "options" Object that
-takes the following values:
+Returns and starts a `REPLServer` instance, that inherits from 
+[Readline Interface][]. Accepts an "options" Object that takes 
+the following values:
 
  - `prompt` - the prompt and `stream` for all I/O. Defaults to `> `.
 
@@ -68,10 +69,6 @@ You can use your own `eval` function if it has following signature:
     function eval(cmd, context, filename, callback) {
       callback(null, result);
     }
-
-## repl.setPrompt(prompt)
-
-Sets `prompt` of the existing instance of `REPLServer` of node.
 
 Multiple REPLs may be started against the same running instance of node.  Each
 will share the same global object but will have unique I/O.
