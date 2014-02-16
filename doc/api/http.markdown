@@ -115,6 +115,17 @@ request body.
 Note that when this event is emitted and handled, the `request` event will
 not be emitted.
 
+### Event: 'checkExpectation'
+
+`function (request, response) { }`
+
+Emitted each time a request with an http Expect header is received, where the
+value is not 100-continue. If this event isn't listened for, the server will
+automatically respond with a 417 Expectation Failed as appropriate.
+
+Note that when this event is emitted and handled, the `request` event will
+not be emitted.
+
 ### Event: 'connect'
 
 `function (request, socket, head) { }`
