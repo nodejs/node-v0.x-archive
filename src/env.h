@@ -173,6 +173,7 @@ namespace node {
   V(windows_verbatim_arguments_string, "windowsVerbatimArguments")            \
   V(writable_string, "writable")                                              \
   V(write_queue_size_string, "writeQueueSize")                                \
+  V(verify_error_string, "verifyError")                                       \
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
   V(async_listener_run_function, v8::Function)                                \
