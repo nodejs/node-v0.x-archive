@@ -37,7 +37,8 @@ s.listen(common.PORT, runTest);
 function runTest() {
   http.get({ port: common.PORT }, function(response) {
     response.on('end', function() {
-      assert.equal(response.headers['test'], '2')
+      assert.equal(response.headers['test'], '2');
+      assert(response.rawHeaders.indexOf('Test') !== -1);
       s.close();
     });
     response.resume();
