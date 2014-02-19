@@ -73,6 +73,13 @@
       <ComponentGroupRef Id="NpmSourceFiles"/>
     </Feature>
 
+    <Feature Id="headers"
+             Level="1"
+             Title="Development headers"
+             Description="Headers used for compiling and linking against node">
+      <ComponentGroupRef Id="HeaderSourceFiles"/>
+    </Feature>
+
     <Feature Level="1"
              Id="DocumentationShortcuts"
              Title="Online documentation shortcuts"
@@ -183,6 +190,9 @@
             <File Id="npm.rc" KeyPath="yes" Source="$(var.RepoDir)\tools\msvs\npm\npmrc"/>
           </Component>
         </Directory>
+      </Directory>
+
+      <Directory Id="IncludeFolder" Name="include">
       </Directory>
     </DirectoryRef>
 
