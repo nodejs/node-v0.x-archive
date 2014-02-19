@@ -36,7 +36,7 @@ non-standard name, run the following instead:
 Prerequisites (Windows only):
 
     * Python 2.6 or 2.7
-    * Visual Studio 2010 or 2012
+    * Visual Studio 2010, 2012 or 2013
 
 Windows:
 
