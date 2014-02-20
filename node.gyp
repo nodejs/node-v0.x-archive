@@ -159,8 +159,19 @@
         }],
         [ 'node_use_dtrace=="true"', {
           'defines': [ 'HAVE_DTRACE=1' ],
-          'dependencies': [ 'node_dtrace_header' ],
+          'dependencies': [
+            'node_dtrace_header',
+          ],
           'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
+
+          'conditions': [
+            ['OS == "freebsd"', {
+              'dependencies': [
+                'specialize_node_d',
+              ],
+            }],
+          ],
+
           #
           # DTrace is supported on solaris, mac, and bsd.  There are three
           # object files associated with DTrace support, but they're not all
@@ -482,8 +493,34 @@
                   ]
                 } ],
               ]
-            }
+            },
           ]
+        } ],
+      ]
+    },
+    {
+      'target_name': 'specialize_node_d',
+      'type': 'none',
+      'conditions': [
+        [ 'node_use_dtrace=="true"', {
+          'actions': [
+            {
+              'action_name': 'specialize_node_d',
+              'inputs': [
+                'src/node.d'
+              ],
+              'outputs': [
+                '<(PRODUCT_DIR)/node.d',
+              ],
+              'action': [
+                'tools/specialize_node_d.py',
+                '<@(_outputs)',
+                '<@(_inputs)',
+                '<@(OS)',
+                '<@(target_arch)',
+              ],
+            },
+          ],
         } ],
       ]
     }
