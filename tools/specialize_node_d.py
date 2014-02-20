@@ -25,8 +25,8 @@ model = r'curpsinfo->pr_dmodel == PR_MODEL_ILP32'
 for line in infile:
   if flavor == 'freebsd':
     line = re.sub('procfs.d', 'psinfo.d', line);
-  if arch == 'x64':
-    line = re.sub(model, '0', line);
-  else:
-    line = re.sub(model, '1', line);
+    if arch == 'x64':
+      line = re.sub(model, '0', line);
+    else:
+      line = re.sub(model, '1', line);
   outfile.write(line);

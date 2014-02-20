@@ -161,16 +161,9 @@
           'defines': [ 'HAVE_DTRACE=1' ],
           'dependencies': [
             'node_dtrace_header',
+            'specialize_node_d',
           ],
           'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
-
-          'conditions': [
-            ['OS == "freebsd"', {
-              'dependencies': [
-                'specialize_node_d',
-              ],
-            }],
-          ],
 
           #
           # DTrace is supported on solaris, mac, and bsd.  There are three
