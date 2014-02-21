@@ -128,7 +128,7 @@ class ContextifyContext {
   // should be fixed properly in V8, and this copy function should be
   // removed once there is a better way.
   void CopyProperties() {
-    HandleScope scope(env()->isolate());
+    HandleScope scope(node_isolate);
 
     Local<Context> context = PersistentToLocal(env()->isolate(), context_);
     Local<Object> global = context->Global()->GetPrototype()->ToObject();
@@ -155,7 +155,7 @@ class ContextifyContext {
         // which doesn't faithfully capture the full range of configurations
         // that can be done using Object.defineProperty.
         if (clone_property_method.IsEmpty()) {
-          Local<String> code = FIXED_ONE_BYTE_STRING(env()->isolate(),
+          Local<String> code = FIXED_ONE_BYTE_STRING(node_isolate,
               "(function cloneProperty(source, key, target) {\n"
               "  if (key === 'Proxy') return;\n"
               "  try {\n"
@@ -167,7 +167,7 @@ class ContextifyContext {
               "  }\n"
               "})");
 
-          Local<String> fname = FIXED_ONE_BYTE_STRING(env()->isolate(),
+          Local<String> fname = FIXED_ONE_BYTE_STRING(node_isolate,
               "binding:script");
           Local<Script> script = Script::Compile(code, fname);
           clone_property_method = Local<Function>::Cast(script->Run());
@@ -186,7 +186,7 @@ class ContextifyContext {
   // NamedPropertyHandler will store a reference to it forever and keep it
   // from getting gc'd.
   Local<Value> CreateDataWrapper(Environment* env) {
-    HandleScope scope(env->isolate());
+    HandleScope scope(node_isolate);
     Local<Object> wrapper =
         env->script_data_constructor_function()->NewInstance();
     if (wrapper.IsEmpty())
@@ -198,11 +198,11 @@ class ContextifyContext {
 
 
   Local<Context> CreateV8Context(Environment* env) {
-    HandleScope scope(env->isolate());
+    HandleScope scope(node_isolate);
     Local<FunctionTemplate> function_template = FunctionTemplate::New();
     function_template->SetHiddenPrototype(true);
 
-    Local<Object> sandbox = PersistentToLocal(env->isolate(), sandbox_);
+    Local<Object> sandbox = PersistentToLocal(node_isolate, sandbox_);
     function_template->SetClassName(sandbox->GetConstructorName());
 
     Local<ObjectTemplate> object_template =
@@ -215,7 +215,7 @@ class ContextifyContext {
                                              CreateDataWrapper(env));
     object_template->SetAccessCheckCallbacks(GlobalPropertyNamedAccessCheck,
                                              GlobalPropertyIndexedAccessCheck);
-    return scope.Close(Context::New(env->isolate(), NULL, object_template));
+    return scope.Close(Context::New(node_isolate, NULL, object_template));
   }
 
 
@@ -238,7 +238,8 @@ class ContextifyContext {
     }
     Local<Object> sandbox = args[0].As<Object>();
 
-    Local<String> hidden_name = env->contextify_hidden_string();
+    Local<String> hidden_name =
+        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
 
     // Don't allow contextifying a sandbox multiple times.
     assert(sandbox->GetHiddenValue(hidden_name).IsEmpty());
@@ -260,8 +261,7 @@ class ContextifyContext {
 
 
   static void IsContext(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(node_isolate);
 
     if (!args[0]->IsObject()) {
       ThrowTypeError("sandbox must be an object");
@@ -269,7 +269,8 @@ class ContextifyContext {
     }
     Local<Object> sandbox = args[0].As<Object>();
 
-    Local<String> hidden_name = env->contextify_hidden_string();
+    Local<String> hidden_name =
+        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
 
     args.GetReturnValue().Set(!sandbox->GetHiddenValue(hidden_name).IsEmpty());
   }
@@ -286,9 +287,9 @@ class ContextifyContext {
 
 
   static ContextifyContext* ContextFromContextifiedSandbox(
-      Environment* env,
       const Local<Object>& sandbox) {
-    Local<String> hidden_name = env->contextify_hidden_string();
+    Local<String> hidden_name =
+        FIXED_ONE_BYTE_STRING(node_isolate, "_contextifyHidden");
     Local<Value> context_external_v = sandbox->GetHiddenValue(hidden_name);
     if (context_external_v.IsEmpty() || !context_external_v->IsExternal()) {
       return NULL;
@@ -318,21 +319,20 @@ class ContextifyContext {
   static void GlobalPropertyGetterCallback(
       Local<String> property,
       const PropertyCallbackInfo<Value>& args) {
-    Isolate* isolate = args.GetIsolate();
-    HandleScope scope(isolate);
+    HandleScope scope(node_isolate);
 
     ContextifyContext* ctx =
         Unwrap<ContextifyContext>(args.Data().As<Object>());
 
-    Local<Object> sandbox = PersistentToLocal(isolate, ctx->sandbox_);
+    Local<Object> sandbox = PersistentToLocal(node_isolate, ctx->sandbox_);
     Local<Value> rv = sandbox->GetRealNamedProperty(property);
     if (rv.IsEmpty()) {
-      Local<Object> proxy_global = PersistentToLocal(isolate,
+      Local<Object> proxy_global = PersistentToLocal(node_isolate,
                                                      ctx->proxy_global_);
       rv = proxy_global->GetRealNamedProperty(property);
     }
     if (!rv.IsEmpty() && rv == ctx->sandbox_) {
-      rv = PersistentToLocal(isolate, ctx->proxy_global_);
+      rv = PersistentToLocal(node_isolate, ctx->proxy_global_);
     }
 
     args.GetReturnValue().Set(rv);
@@ -343,26 +343,25 @@ class ContextifyContext {
       Local<String> property,
       Local<Value> value,
       const PropertyCallbackInfo<Value>& args) {
-    HandleScope scope(args.GetIsolate());
+    HandleScope scope(node_isolate);
 
     ContextifyContext* ctx =
         Unwrap<ContextifyContext>(args.Data().As<Object>());
 
-    PersistentToLocal(args.GetIsolate(), ctx->sandbox_)->Set(property, value);
+    PersistentToLocal(node_isolate, ctx->sandbox_)->Set(property, value);
   }
 
 
   static void GlobalPropertyQueryCallback(
       Local<String> property,
       const PropertyCallbackInfo<Integer>& args) {
-    Isolate* isolate = args.GetIsolate();
-    HandleScope scope(isolate);
+    HandleScope scope(node_isolate);
 
     ContextifyContext* ctx =
         Unwrap<ContextifyContext>(args.Data().As<Object>());
 
-    Local<Object> sandbox = PersistentToLocal(isolate, ctx->sandbox_);
-    Local<Object> proxy_global = PersistentToLocal(isolate,
+    Local<Object> sandbox = PersistentToLocal(node_isolate, ctx->sandbox_);
+    Local<Object> proxy_global = PersistentToLocal(node_isolate,
                                                    ctx->proxy_global_);
 
     bool in_sandbox = sandbox->GetRealNamedProperty(property).IsEmpty();
@@ -377,16 +376,15 @@ class ContextifyContext {
   static void GlobalPropertyDeleterCallback(
       Local<String> property,
       const PropertyCallbackInfo<Boolean>& args) {
-    Isolate* isolate = args.GetIsolate();
-    HandleScope scope(isolate);
+    HandleScope scope(node_isolate);
 
     ContextifyContext* ctx =
         Unwrap<ContextifyContext>(args.Data().As<Object>());
 
-    bool success = PersistentToLocal(isolate,
+    bool success = PersistentToLocal(node_isolate,
                                      ctx->sandbox_)->Delete(property);
     if (!success) {
-      success = PersistentToLocal(isolate,
+      success = PersistentToLocal(node_isolate,
                                   ctx->proxy_global_)->Delete(property);
     }
     args.GetReturnValue().Set(success);
@@ -395,13 +393,12 @@ class ContextifyContext {
 
   static void GlobalPropertyEnumeratorCallback(
       const PropertyCallbackInfo<Array>& args) {
-    Isolate* isolate = args.GetIsolate();
-    HandleScope scope(isolate);
+    HandleScope scope(node_isolate);
 
     ContextifyContext* ctx =
         Unwrap<ContextifyContext>(args.Data().As<Object>());
 
-    Local<Object> sandbox = PersistentToLocal(isolate, ctx->sandbox_);
+    Local<Object> sandbox = PersistentToLocal(node_isolate, ctx->sandbox_);
     args.GetReturnValue().Set(sandbox->GetPropertyNames());
   }
 };
@@ -412,9 +409,9 @@ class ContextifyScript : public BaseObject {
 
  public:
   static void Init(Environment* env, Local<Object> target) {
-    HandleScope scope(env->isolate());
+    HandleScope scope(node_isolate);
     Local<String> class_name =
-        FIXED_ONE_BYTE_STRING(env->isolate(), "ContextifyScript");
+        FIXED_ONE_BYTE_STRING(node_isolate, "ContextifyScript");
 
     Local<FunctionTemplate> script_tmpl = FunctionTemplate::New(New);
     script_tmpl->InstanceTemplate()->SetInternalFieldCount(1);
@@ -431,13 +428,13 @@ class ContextifyScript : public BaseObject {
 
   // args: code, [options]
   static void New(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(node_isolate);
 
     if (!args.IsConstructCall()) {
       return ThrowError("Must call vm.Script as a constructor.");
     }
 
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
     ContextifyScript* contextify_script =
         new ContextifyScript(env, args.This());
 
@@ -462,7 +459,7 @@ class ContextifyScript : public BaseObject {
       try_catch.ReThrow();
       return;
     }
-    contextify_script->script_.Reset(env->isolate(), v8_script);
+    contextify_script->script_.Reset(node_isolate, v8_script);
   }
 
 
@@ -492,8 +489,7 @@ class ContextifyScript : public BaseObject {
 
   // args: sandbox, [options]
   static void RunInContext(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(node_isolate);
 
     // Assemble arguments
     TryCatch try_catch;
@@ -510,7 +506,7 @@ class ContextifyScript : public BaseObject {
 
     // Get the context from the sandbox
     ContextifyContext* contextify_context =
-        ContextifyContext::ContextFromContextifiedSandbox(env, sandbox);
+        ContextifyContext::ContextFromContextifiedSandbox(sandbox);
     if (contextify_context == NULL) {
       return ThrowTypeError(
           "sandbox argument must have been converted to a context.");
@@ -532,9 +528,6 @@ class ContextifyScript : public BaseObject {
 
   static int64_t GetTimeoutArg(const FunctionCallbackInfo<Value>& args,
                                const int i) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
-
     if (args[i]->IsUndefined() || args[i]->IsString()) {
       return -1;
     }
@@ -543,7 +536,7 @@ class ContextifyScript : public BaseObject {
       return -1;
     }
 
-    Local<String> key = env->timeout_string();
+    Local<String> key = FIXED_ONE_BYTE_STRING(node_isolate, "timeout");
     Local<Value> value = args[i].As<Object>()->Get(key);
     if (value->IsUndefined()) {
       return -1;
@@ -560,9 +553,6 @@ class ContextifyScript : public BaseObject {
 
   static bool GetDisplayErrorsArg(const FunctionCallbackInfo<Value>& args,
                                   const int i) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
-
     if (args[i]->IsUndefined() || args[i]->IsString()) {
       return true;
     }
@@ -571,7 +561,7 @@ class ContextifyScript : public BaseObject {
       return false;
     }
 
-    Local<String> key = env->display_errors_string();
+    Local<String> key = FIXED_ONE_BYTE_STRING(node_isolate, "displayErrors");
     Local<Value> value = args[i].As<Object>()->Get(key);
 
     return value->IsUndefined() ? true : value->BooleanValue();
@@ -580,11 +570,8 @@ class ContextifyScript : public BaseObject {
 
   static Local<String> GetFilenameArg(const FunctionCallbackInfo<Value>& args,
                                       const int i) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
-
     Local<String> defaultFilename =
-        FIXED_ONE_BYTE_STRING(env->isolate(), "evalmachine.<anonymous>");
+        FIXED_ONE_BYTE_STRING(node_isolate, "evalmachine.<anonymous>");
 
     if (args[i]->IsUndefined()) {
       return defaultFilename;
@@ -597,7 +584,7 @@ class ContextifyScript : public BaseObject {
       return Local<String>();
     }
 
-    Local<String> key = env->filename_string();
+    Local<String> key = FIXED_ONE_BYTE_STRING(node_isolate, "filename");
     Local<Value> value = args[i].As<Object>()->Get(key);
 
     return value->IsUndefined() ? defaultFilename : value->ToString();
@@ -616,7 +603,7 @@ class ContextifyScript : public BaseObject {
 
     ContextifyScript* wrapped_script =
         Unwrap<ContextifyScript>(args.This());
-    Local<Script> script = PersistentToLocal(env->isolate(),
+    Local<Script> script = PersistentToLocal(node_isolate,
                                              wrapped_script->script_);
 
     Local<Value> result;

@@ -69,14 +69,12 @@ namespace node {
   V(change_string, "change")                                                  \
   V(close_string, "close")                                                    \
   V(code_string, "code")                                                      \
-  V(contextify_hidden_string, "_contextifyHidden")                            \
   V(ctime_string, "ctime")                                                    \
   V(cwd_string, "cwd")                                                        \
   V(debug_port_string, "debugPort")                                           \
   V(debug_string, "debug")                                                    \
   V(detached_string, "detached")                                              \
   V(dev_string, "dev")                                                        \
-  V(display_errors_string, "displayErrors")                                   \
   V(disposed_string, "_disposed")                                             \
   V(domain_string, "domain")                                                  \
   V(exchange_string, "exchange")                                              \
@@ -101,7 +99,6 @@ namespace node {
   V(fatal_exception_string, "_fatalException")                                \
   V(fd_string, "fd")                                                          \
   V(file_string, "file")                                                      \
-  V(filename_string, "filename")                                              \
   V(fingerprint_string, "fingerprint")                                        \
   V(flags_string, "flags")                                                    \
   V(fsevent_string, "FSEvent")                                                \
