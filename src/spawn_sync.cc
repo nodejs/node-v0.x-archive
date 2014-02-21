@@ -940,7 +940,7 @@ bool SyncProcessRunner::CheckRange(Local<Value> js_value) {
 
 int SyncProcessRunner::CopyJsString(Local<Value> js_value,
                                     const char** target) {
-  Isolate* isolate = node_isolate;
+  Isolate* isolate = env()->isolate();
   Local<String> js_string;
   size_t size, written;
   char* buffer;
@@ -965,7 +965,7 @@ int SyncProcessRunner::CopyJsString(Local<Value> js_value,
 
 int SyncProcessRunner::CopyJsStringArray(Local<Value> js_value,
                                          char** target) {
-  Isolate* isolate = node_isolate;
+  Isolate* isolate = env()->isolate();
   Local<Array> js_array;
   uint32_t length;
   size_t list_size, data_size, data_offset;
