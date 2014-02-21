@@ -3084,8 +3084,7 @@ static void RegisterSignalHandler(int signal, void (*handler)(int signal)) {
 
 
 void DebugProcess(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   if (args.Length() != 1) {
     return ThrowError("Invalid number of arguments.");
@@ -3172,8 +3171,7 @@ static int RegisterDebugSignalHandler() {
 
 
 static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
   DWORD pid;
   HANDLE process = NULL;
   HANDLE thread = NULL;
