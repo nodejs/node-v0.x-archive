@@ -769,7 +769,7 @@ void SecureContext::LoadPKCS12(const FunctionCallbackInfo<Value>& args) {
       return ThrowTypeError("Bad password");
     }
     pass = new char[passlen + 1];
-    int pass_written = DecodeWrite(pass, passlen, args[1], BINARY);
+    int pass_written = DecodeWrite(env, pass, passlen, args[1], BINARY);
 
     assert(pass_written == passlen);
     pass[passlen] = '\0';
@@ -1128,7 +1128,8 @@ void SSLWrap<Base>::GetPeerCertificate(
 
 template <class Base>
 void SSLWrap<Base>::GetSession(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Base* w = Unwrap<Base>(args.This());
 
@@ -1142,14 +1143,15 @@ void SSLWrap<Base>::GetSession(const FunctionCallbackInfo<Value>& args) {
   unsigned char* sbuf = new unsigned char[slen];
   unsigned char* p = sbuf;
   i2d_SSL_SESSION(sess, &p);
-  args.GetReturnValue().Set(Encode(sbuf, slen, BUFFER));
+  args.GetReturnValue().Set(Encode(env, sbuf, slen, BUFFER));
   delete[] sbuf;
 }
 
 
 template <class Base>
 void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Base* w = Unwrap<Base>(args.This());
 
@@ -1166,7 +1168,7 @@ void SSLWrap<Base>::SetSession(const FunctionCallbackInfo<Value>& args) {
 
   char* sbuf = new char[slen];
 
-  ssize_t wlen = DecodeWrite(sbuf, slen, args[0], BINARY);
+  ssize_t wlen = DecodeWrite(env, sbuf, slen, args[0], BINARY);
   assert(wlen == slen);
 
   const unsigned char* p = reinterpret_cast<const unsigned char*>(sbuf);
@@ -2414,11 +2416,11 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
-    if (!StringBytes::IsValidString(string, encoding))
+    if (!StringBytes::IsValidString(env, string, encoding))
       return ThrowTypeError("Bad input string");
-    size_t buflen = StringBytes::StorageSize(string, encoding);
+    size_t buflen = StringBytes::StorageSize(env, string, encoding);
     char* buf = new char[buflen];
-    size_t written = StringBytes::Write(buf, buflen, string, encoding);
+    size_t written = StringBytes::Write(env, buf, buflen, string, encoding);
     r = cipher->Update(buf, written, &out, &out_len);
     delete[] buf;
   } else {
@@ -2572,7 +2574,8 @@ bool Hmac::HmacUpdate(const char* data, int len) {
 
 
 void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Hmac* hmac = Unwrap<Hmac>(args.This());
 
@@ -2583,11 +2586,11 @@ void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
-    if (!StringBytes::IsValidString(string, encoding))
+    if (!StringBytes::IsValidString(env, string, encoding))
       return ThrowTypeError("Bad input string");
-    size_t buflen = StringBytes::StorageSize(string, encoding);
+    size_t buflen = StringBytes::StorageSize(env, string, encoding);
     char* buf = new char[buflen];
-    size_t written = StringBytes::Write(buf, buflen, string, encoding);
+    size_t written = StringBytes::Write(env, buf, buflen, string, encoding);
     r = hmac->HmacUpdate(buf, written);
     delete[] buf;
   } else {
@@ -2614,7 +2617,8 @@ bool Hmac::HmacDigest(unsigned char** md_value, unsigned int* md_len) {
 
 
 void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Hmac* hmac = Unwrap<Hmac>(args.This());
 
@@ -2633,7 +2637,7 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
   }
 
   Local<Value> rc = StringBytes::Encode(
-        reinterpret_cast<const char*>(md_value), md_len, encoding);
+        env, reinterpret_cast<const char*>(md_value), md_len, encoding);
   delete[] md_value;
   args.GetReturnValue().Set(rc);
 }
@@ -2689,7 +2693,8 @@ bool Hash::HashUpdate(const char* data, int len) {
 
 
 void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Hash* hash = Unwrap<Hash>(args.This());
 
@@ -2700,11 +2705,11 @@ void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
-    if (!StringBytes::IsValidString(string, encoding))
+    if (!StringBytes::IsValidString(env, string, encoding))
       return ThrowTypeError("Bad input string");
-    size_t buflen = StringBytes::StorageSize(string, encoding);
+    size_t buflen = StringBytes::StorageSize(env, string, encoding);
     char* buf = new char[buflen];
-    size_t written = StringBytes::Write(buf, buflen, string, encoding);
+    size_t written = StringBytes::Write(env, buf, buflen, string, encoding);
     r = hash->HashUpdate(buf, written);
     delete[] buf;
   } else {
@@ -2720,7 +2725,8 @@ void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
 
 
 void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Hash* hash = Unwrap<Hash>(args.This());
 
@@ -2741,7 +2747,7 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
   hash->initialised_ = false;
 
   Local<Value> rc = StringBytes::Encode(
-      reinterpret_cast<const char*>(md_value), md_len, encoding);
+      env, reinterpret_cast<const char*>(md_value), md_len, encoding);
   args.GetReturnValue().Set(rc);
 }
 
@@ -2845,7 +2851,8 @@ SignBase::Error Sign::SignUpdate(const char* data, int len) {
 
 
 void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Sign* sign = Unwrap<Sign>(args.This());
 
@@ -2856,11 +2863,11 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
-    if (!StringBytes::IsValidString(string, encoding))
+    if (!StringBytes::IsValidString(env, string, encoding))
       return ThrowTypeError("Bad input string");
-    size_t buflen = StringBytes::StorageSize(string, encoding);
+    size_t buflen = StringBytes::StorageSize(env, string, encoding);
     char* buf = new char[buflen];
-    size_t written = StringBytes::Write(buf, buflen, string, encoding);
+    size_t written = StringBytes::Write(env, buf, buflen, string, encoding);
     err = sign->SignUpdate(buf, written);
     delete[] buf;
   } else {
@@ -2920,7 +2927,8 @@ SignBase::Error Sign::SignFinal(const char* key_pem,
 
 
 void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Sign* sign = Unwrap<Sign>(args.This());
 
@@ -2956,7 +2964,7 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
   }
 
   Local<Value> rc = StringBytes::Encode(
-      reinterpret_cast<const char*>(md_value), md_len, encoding);
+      env, reinterpret_cast<const char*>(md_value), md_len, encoding);
   delete[] md_value;
   args.GetReturnValue().Set(rc);
 }
@@ -3024,7 +3032,8 @@ SignBase::Error Verify::VerifyUpdate(const char* data, int len) {
 
 
 void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Verify* verify = Unwrap<Verify>(args.This());
 
@@ -3035,11 +3044,11 @@ void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
     enum encoding encoding = ParseEncoding(args[1], BINARY);
-    if (!StringBytes::IsValidString(string, encoding))
+    if (!StringBytes::IsValidString(env, string, encoding))
       return ThrowTypeError("Bad input string");
-    size_t buflen = StringBytes::StorageSize(string, encoding);
+    size_t buflen = StringBytes::StorageSize(env, string, encoding);
     char* buf = new char[buflen];
-    size_t written = StringBytes::Write(buf, buflen, string, encoding);
+    size_t written = StringBytes::Write(env, buf, buflen, string, encoding);
     err = verify->VerifyUpdate(buf, written);
     delete[] buf;
   } else {
@@ -3130,7 +3139,8 @@ SignBase::Error Verify::VerifyFinal(const char* key_pem,
 
 
 void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Verify* verify = Unwrap<Verify>(args.This());
 
@@ -3145,13 +3155,13 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
     encoding = ParseEncoding(args[2]->ToString(), BINARY);
   }
 
-  ssize_t hlen = StringBytes::Size(args[1], encoding);
+  ssize_t hlen = StringBytes::Size(env, args[1], encoding);
 
   // only copy if we need to, because it's a string.
   char* hbuf;
   if (args[1]->IsString()) {
     hbuf = new char[hlen];
-    ssize_t hwritten = StringBytes::Write(hbuf, hlen, args[1], encoding);
+    ssize_t hwritten = StringBytes::Write(env, hbuf, hlen, args[1], encoding);
     assert(hwritten == hlen);
   } else {
     hbuf = Buffer::Data(args[1]);
@@ -3321,7 +3331,8 @@ void DiffieHellman::New(const FunctionCallbackInfo<Value>& args) {
 
 
 void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   DiffieHellman* diffieHellman = Unwrap<DiffieHellman>(args.This());
 
@@ -3338,13 +3349,14 @@ void DiffieHellman::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
   BN_bn2bin(diffieHellman->dh->pub_key,
             reinterpret_cast<unsigned char*>(data));
 
-  args.GetReturnValue().Set(Encode(data, dataSize, BUFFER));
+  args.GetReturnValue().Set(Encode(env, data, dataSize, BUFFER));
   delete[] data;
 }
 
 
 void DiffieHellman::GetPrime(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   DiffieHellman* diffieHellman = Unwrap<DiffieHellman>(args.This());
 
@@ -3356,13 +3368,14 @@ void DiffieHellman::GetPrime(const FunctionCallbackInfo<Value>& args) {
   char* data = new char[dataSize];
   BN_bn2bin(diffieHellman->dh->p, reinterpret_cast<unsigned char*>(data));
 
-  args.GetReturnValue().Set(Encode(data, dataSize, BUFFER));
+  args.GetReturnValue().Set(Encode(env, data, dataSize, BUFFER));
   delete[] data;
 }
 
 
 void DiffieHellman::GetGenerator(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   DiffieHellman* diffieHellman = Unwrap<DiffieHellman>(args.This());
 
@@ -3374,13 +3387,14 @@ void DiffieHellman::GetGenerator(const FunctionCallbackInfo<Value>& args) {
   char* data = new char[dataSize];
   BN_bn2bin(diffieHellman->dh->g, reinterpret_cast<unsigned char*>(data));
 
-  args.GetReturnValue().Set(Encode(data, dataSize, BUFFER));
+  args.GetReturnValue().Set(Encode(env, data, dataSize, BUFFER));
   delete[] data;
 }
 
 
 void DiffieHellman::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   DiffieHellman* diffieHellman = Unwrap<DiffieHellman>(args.This());
 
@@ -3397,13 +3411,14 @@ void DiffieHellman::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
   BN_bn2bin(diffieHellman->dh->pub_key,
             reinterpret_cast<unsigned char*>(data));
 
-  args.GetReturnValue().Set(Encode(data, dataSize, BUFFER));
+  args.GetReturnValue().Set(Encode(env, data, dataSize, BUFFER));
   delete[] data;
 }
 
 
 void DiffieHellman::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   DiffieHellman* diffieHellman = Unwrap<DiffieHellman>(args.This());
 
@@ -3420,13 +3435,14 @@ void DiffieHellman::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
   BN_bn2bin(diffieHellman->dh->priv_key,
             reinterpret_cast<unsigned char*>(data));
 
-  args.GetReturnValue().Set(Encode(data, dataSize, BUFFER));
+  args.GetReturnValue().Set(Encode(env, data, dataSize, BUFFER));
   delete[] data;
 }
 
 
 void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   DiffieHellman* diffieHellman = Unwrap<DiffieHellman>(args.This());
 
@@ -3491,7 +3507,7 @@ void DiffieHellman::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
     memset(data, 0, dataSize - size);
   }
 
-  args.GetReturnValue().Set(Encode(data, dataSize, BUFFER));
+  args.GetReturnValue().Set(Encode(env, data, dataSize, BUFFER));
   delete[] data;
 }
 
@@ -3681,7 +3697,7 @@ void EIO_PBKDF2(uv_work_t* work_req) {
 void EIO_PBKDF2After(PBKDF2Request* req, Local<Value> argv[2]) {
   if (req->error()) {
     argv[0] = Undefined(req->env()->isolate());
-    argv[1] = Encode(req->key(), req->keylen(), BUFFER);
+    argv[1] = Encode(req->env(), req->key(), req->keylen(), BUFFER);
     memset(req->key(), 0, req->keylen());
   } else {
     argv[0] = Exception::Error(req->env()->pbkdf2_error_string());
@@ -3705,8 +3721,8 @@ void EIO_PBKDF2After(uv_work_t* work_req, int status) {
 
 
 void PBKDF2(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   const EVP_MD* digest = NULL;
   const char* type_error = NULL;
@@ -3737,7 +3753,7 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   if (pass == NULL) {
     FatalError("node::PBKDF2()", "Out of Memory");
   }
-  pass_written = DecodeWrite(pass, passlen, args[0], BINARY);
+  pass_written = DecodeWrite(env, pass, passlen, args[0], BINARY);
   assert(pass_written == passlen);
 
   ASSERT_IS_BUFFER(args[1]);
@@ -3751,7 +3767,7 @@ void PBKDF2(const FunctionCallbackInfo<Value>& args) {
   if (salt == NULL) {
     FatalError("node::PBKDF2()", "Out of Memory");
   }
-  salt_written = DecodeWrite(salt, saltlen, args[1], BINARY);
+  salt_written = DecodeWrite(env, salt, saltlen, args[1], BINARY);
   assert(salt_written == saltlen);
 
   if (!args[2]->IsNumber()) {
@@ -4174,7 +4190,8 @@ const char* Certificate::ExportPublicKey(const char* data, int len) {
 
 
 void Certificate::ExportPublicKey(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Certificate* certificate = Unwrap<Certificate>(args.This());
 
@@ -4194,7 +4211,7 @@ void Certificate::ExportPublicKey(const FunctionCallbackInfo<Value>& args) {
   if (pkey == NULL)
     return args.GetReturnValue().SetEmptyString();
 
-  Local<Value> out = Encode(pkey, strlen(pkey), BUFFER);
+  Local<Value> out = Encode(env, pkey, strlen(pkey), BUFFER);
 
   delete[] pkey;
 
@@ -4217,7 +4234,8 @@ const char* Certificate::ExportChallenge(const char* data, int len) {
 
 
 void Certificate::ExportChallenge(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Certificate* crt = Unwrap<Certificate>(args.This());
 
@@ -4237,7 +4255,7 @@ void Certificate::ExportChallenge(const FunctionCallbackInfo<Value>& args) {
   if (cert == NULL)
     return args.GetReturnValue().SetEmptyString();
 
-  Local<Value> outString = Encode(cert, strlen(cert), BUFFER);
+  Local<Value> outString = Encode(env, cert, strlen(cert), BUFFER);
 
   delete[] cert;
 

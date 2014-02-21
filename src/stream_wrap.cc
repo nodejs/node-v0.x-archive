@@ -266,9 +266,9 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
   // computing their actual size, rather than tripling the storage.
   size_t storage_size;
   if (encoding == UTF8 && string->Length() > 65535)
-    storage_size = StringBytes::Size(string, encoding);
+    storage_size = StringBytes::Size(env, string, encoding);
   else
-    storage_size = StringBytes::StorageSize(string, encoding);
+    storage_size = StringBytes::StorageSize(env, string, encoding);
 
   if (storage_size > INT_MAX) {
     args.GetReturnValue().Set(UV_ENOBUFS);
@@ -286,7 +286,8 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
   bool try_write = storage_size + 15 <= sizeof(stack_storage) &&
                    (!wrap->is_named_pipe_ipc() || !args[2]->IsObject());
   if (try_write) {
-    data_size = StringBytes::Write(stack_storage,
+    data_size = StringBytes::Write(env,
+                                   stack_storage,
                                    storage_size,
                                    string,
                                    encoding);
@@ -316,7 +317,7 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
     data_size = buf.len;
   } else {
     // Write it
-    data_size = StringBytes::Write(data, storage_size, string, encoding);
+    data_size = StringBytes::Write(env, data, storage_size, string, encoding);
   }
 
   assert(data_size <= storage_size);
@@ -398,9 +399,9 @@ void StreamWrap::Writev(const FunctionCallbackInfo<Value>& args) {
     enum encoding encoding = ParseEncoding(chunks->Get(i * 2 + 1));
     size_t chunk_size;
     if (encoding == UTF8 && string->Length() > 65535)
-      chunk_size = StringBytes::Size(string, encoding);
+      chunk_size = StringBytes::Size(env, string, encoding);
     else
-      chunk_size = StringBytes::StorageSize(string, encoding);
+      chunk_size = StringBytes::StorageSize(env, string, encoding);
 
     storage_size += chunk_size + 15;
   }
@@ -439,7 +440,7 @@ void StreamWrap::Writev(const FunctionCallbackInfo<Value>& args) {
 
     Handle<String> string = chunk->ToString();
     enum encoding encoding = ParseEncoding(chunks->Get(i * 2 + 1));
-    str_size = StringBytes::Write(str_storage, str_size, string, encoding);
+    str_size = StringBytes::Write(env, str_storage, str_size, string, encoding);
     bufs[i].base = str_storage;
     bufs[i].len = str_size;
     offset += str_size;

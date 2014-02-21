@@ -114,13 +114,14 @@ size_t Length(Handle<Object> obj) {
 
 
 Local<Object> New(Handle<String> string, enum encoding enc) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(node_isolate);
+  HandleScope scope(env->isolate());
 
-  size_t length = StringBytes::Size(string, enc);
+  size_t length = StringBytes::Size(env, string, enc);
 
   Local<Object> buf = New(length);
   char* data = Buffer::Data(buf);
-  StringBytes::Write(data, length, string, enc);
+  StringBytes::Write(env, data, length, string, enc);
 
   return scope.Close(buf);
 }
@@ -259,7 +260,7 @@ void StringSlice(const FunctionCallbackInfo<Value>& args) {
   SLICE_START_END(args[0], args[1], obj_length)
 
   args.GetReturnValue().Set(
-      StringBytes::Encode(obj_data + start, length, encoding));
+      StringBytes::Encode(env, obj_data + start, length, encoding));
 }
 
 
@@ -412,7 +413,8 @@ void StringWrite(const FunctionCallbackInfo<Value>& args) {
   if (offset >= obj_length)
     return ThrowRangeError("Offset is out of bounds");
 
-  uint32_t written = StringBytes::Write(obj_data + offset,
+  uint32_t written = StringBytes::Write(env,
+                                        obj_data + offset,
                                         max_length,
                                         str,
                                         encoding,
@@ -595,7 +597,7 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
   Local<String> s = args[0]->ToString();
   enum encoding e = ParseEncoding(args[1], UTF8);
 
-  uint32_t size = StringBytes::Size(s, e);
+  uint32_t size = StringBytes::Size(env, s, e);
   args.GetReturnValue().Set(size);
 }
 

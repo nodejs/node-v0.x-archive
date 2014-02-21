@@ -787,15 +787,16 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
   bool must_free = false;
 
   // will assign buf and len if string was external
-  if (!StringBytes::GetExternalParts(string,
+  if (!StringBytes::GetExternalParts(env,
+                                     string,
                                      const_cast<const char**>(&buf),
                                      &len)) {
     enum encoding enc = ParseEncoding(args[3], UTF8);
-    len = StringBytes::StorageSize(string, enc);
+    len = StringBytes::StorageSize(env, string, enc);
     buf = new char[len];
     // StorageSize may return too large a char, so correct the actual length
     // by the write size
-    len = StringBytes::Write(buf, len, args[1], enc);
+    len = StringBytes::Write(env, buf, len, args[1], enc);
     must_free = true;
   }
   pos = GET_OFFSET(args[2]);

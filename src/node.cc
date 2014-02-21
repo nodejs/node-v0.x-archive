@@ -1241,15 +1241,21 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
   }
 }
 
-Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
-  return StringBytes::Encode(static_cast<const char*>(buf),
+Local<Value> Encode(Environment* env,
+                    const void *buf,
+                    size_t len,
+                    enum encoding encoding) {
+  return StringBytes::Encode(env,
+                             static_cast<const char*>(buf),
                              len,
                              encoding);
 }
 
 // Returns -1 if the handle was not valid for decoding
-ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
-  HandleScope scope(node_isolate);
+ssize_t DecodeBytes(Environment* env,
+                    v8::Handle<v8::Value> val,
+                    enum encoding encoding) {
+  HandleScope scope(env->isolate());
 
   if (val->IsArray()) {
     fprintf(stderr, "'raw' encoding (array of integers) has been removed. "
@@ -1258,7 +1264,7 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
-  return StringBytes::Size(val, encoding);
+  return StringBytes::Size(env, val, encoding);
 }
 
 #ifndef MIN
@@ -1266,11 +1272,12 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
 #endif
 
 // Returns number of bytes written.
-ssize_t DecodeWrite(char *buf,
+ssize_t DecodeWrite(Environment* env,
+                    char *buf,
                     size_t buflen,
                     v8::Handle<v8::Value> val,
                     enum encoding encoding) {
-  return StringBytes::Write(buf, buflen, val, encoding, NULL);
+  return StringBytes::Write(env, buf, buflen, val, encoding, NULL);
 }
 
 void AppendExceptionLine(Environment* env,

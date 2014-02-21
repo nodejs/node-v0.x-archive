@@ -65,6 +65,8 @@
 // terminally confused when it's done in node_internals.h
 namespace node {
 
+class Environment;
+
 NODE_EXTERN v8::Local<v8::Value> ErrnoException(int errorno,
                                                 const char* syscall = NULL,
                                                 const char* message = NULL,
@@ -191,15 +193,19 @@ enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
 NODE_EXTERN void FatalException(const v8::TryCatch& try_catch);
 
-NODE_EXTERN v8::Local<v8::Value> Encode(const void *buf, size_t len,
+NODE_EXTERN v8::Local<v8::Value> Encode(Environment* env,
+                                        const void* buf,
+                                        size_t len,
                                         enum encoding encoding = BINARY);
 
 // Returns -1 if the handle was not valid for decoding
-NODE_EXTERN ssize_t DecodeBytes(v8::Handle<v8::Value>,
+NODE_EXTERN ssize_t DecodeBytes(Environment* env,
+                                v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);
 
 // returns bytes written.
-NODE_EXTERN ssize_t DecodeWrite(char *buf,
+NODE_EXTERN ssize_t DecodeWrite(Environment* env,
+                                char* buf,
                                 size_t buflen,
                                 v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);
