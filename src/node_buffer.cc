@@ -155,7 +155,7 @@ Local<Object> New(Environment* env, size_t length) {
   } else {
     data = NULL;
   }
-  smalloc::Alloc(obj, data, length);
+  smalloc::Alloc(env, obj, data, length);
 
   return scope.Close(obj);
 }
@@ -193,7 +193,7 @@ Local<Object> New(Environment* env, const char* data, size_t length) {
     new_data = NULL;
   }
 
-  smalloc::Alloc(obj, new_data, length);
+  smalloc::Alloc(env, obj, new_data, length);
 
   return scope.Close(obj);
 }
@@ -222,7 +222,7 @@ Local<Object> New(Environment* env,
   Local<Value> arg = Uint32::NewFromUnsigned(length, env->isolate());
   Local<Object> obj = env->buffer_constructor_function()->NewInstance(1, &arg);
 
-  smalloc::Alloc(obj, data, length, callback, hint);
+  smalloc::Alloc(env, obj, data, length, callback, hint);
 
   return scope.Close(obj);
 }
@@ -244,7 +244,7 @@ Local<Object> Use(Environment* env, char* data, uint32_t length) {
   Local<Value> arg = Uint32::NewFromUnsigned(length, env->isolate());
   Local<Object> obj = env->buffer_constructor_function()->NewInstance(1, &arg);
 
-  smalloc::Alloc(obj, data, length);
+  smalloc::Alloc(env, obj, data, length);
 
   return scope.Close(obj);
 }

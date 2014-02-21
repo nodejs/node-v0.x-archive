@@ -95,7 +95,8 @@ size_t ExternalArraySize(enum ExternalArrayType type) {
 
 // copyOnto(source, source_start, dest, dest_start, copy_length)
 void CopyOnto(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   if (!args[0]->IsObject())
     return ThrowTypeError("source must be an object");
@@ -171,7 +172,8 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    dest._data = sliceOnto(source, dest, start, end);
 void SliceOnto(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Local<Object> source = args[0].As<Object>();
   Local<Object> dest = args[1].As<Object>();
@@ -211,7 +213,8 @@ void SliceOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    alloc(obj, n[, type]);
 void Alloc(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Local<Object> obj = args[0].As<Object>();
 
@@ -232,19 +235,22 @@ void Alloc(const FunctionCallbackInfo<Value>& args) {
     length *= type_length;
   }
 
-  Alloc(obj, length, array_type);
+  Alloc(env, obj, length, array_type);
   args.GetReturnValue().Set(obj);
 }
 
 
-void Alloc(Handle<Object> obj, size_t length, enum ExternalArrayType type) {
+void Alloc(Environment* env,
+           Handle<Object> obj,
+           size_t length,
+           enum ExternalArrayType type) {
   size_t type_size = ExternalArraySize(type);
 
   assert(length <= kMaxLength);
   assert(type_size > 0);
 
   if (length == 0)
-    return Alloc(obj, NULL, length, type);
+    return Alloc(env, obj, NULL, length, type);
 
   char* data = static_cast<char*>(malloc(length));
   if (data == NULL) {
@@ -252,17 +258,18 @@ void Alloc(Handle<Object> obj, size_t length, enum ExternalArrayType type) {
                " v8::ExternalArrayType)", "Out Of Memory");
   }
 
-  Alloc(obj, data, length, type);
+  Alloc(env, obj, data, length, type);
 }
 
 
-void Alloc(Handle<Object> obj,
+void Alloc(Environment* env,
+           Handle<Object> obj,
            char* data,
            size_t length,
            enum ExternalArrayType type) {
   assert(!obj->HasIndexedPropertiesInExternalArrayData());
-  Persistent<Object> p_obj(node_isolate, obj);
-  node_isolate->AdjustAmountOfExternalAllocatedMemory(length);
+  Persistent<Object> p_obj(env->isolate(), obj);
+  env->isolate()->AdjustAmountOfExternalAllocatedMemory(length);
   p_obj.MakeWeak(data, TargetCallback);
   p_obj.MarkIndependent();
   p_obj.SetWrapperClassId(ALLOC_ID);
@@ -293,20 +300,20 @@ void TargetCallback(Isolate* isolate,
 
 // for internal use: dispose(obj);
 void AllocDispose(const FunctionCallbackInfo<Value>& args) {
-  AllocDispose(args[0].As<Object>());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  AllocDispose(env, args[0].As<Object>());
 }
 
 
-void AllocDispose(Handle<Object> obj) {
-  HandleScope handle_scope(node_isolate);
-  Environment* env = Environment::GetCurrent(node_isolate);
+void AllocDispose(Environment* env, Handle<Object> obj) {
+  HandleScope handle_scope(env->isolate());
 
   if (env->using_smalloc_alloc_cb()) {
     Local<Value> ext_v = obj->GetHiddenValue(env->smalloc_p_string());
     if (ext_v->IsExternal()) {
       Local<External> ext = ext_v.As<External>();
       CallbackInfo* cb_info = static_cast<CallbackInfo*>(ext->Value());
-      TargetFreeCallback(node_isolate, &cb_info->p_obj, cb_info);
+      TargetFreeCallback(env->isolate(), &cb_info->p_obj, cb_info);
       return;
     }
   }
@@ -329,12 +336,13 @@ void AllocDispose(Handle<Object> obj) {
     free(data);
   }
   if (length != 0) {
-    node_isolate->AdjustAmountOfExternalAllocatedMemory(-length);
+    env->isolate()->AdjustAmountOfExternalAllocatedMemory(-length);
   }
 }
 
 
-void Alloc(Handle<Object> obj,
+void Alloc(Environment* env,
+           Handle<Object> obj,
            size_t length,
            FreeCallback fn,
            void* hint,
@@ -349,11 +357,12 @@ void Alloc(Handle<Object> obj,
   length *= type_size;
 
   char* data = new char[length];
-  Alloc(obj, data, length, fn, hint, type);
+  Alloc(env, obj, data, length, fn, hint, type);
 }
 
 
-void Alloc(Handle<Object> obj,
+void Alloc(Environment* env,
+           Handle<Object> obj,
            char* data,
            size_t length,
            FreeCallback fn,
@@ -361,18 +370,17 @@ void Alloc(Handle<Object> obj,
            enum ExternalArrayType type) {
   assert(!obj->HasIndexedPropertiesInExternalArrayData());
 
-  HandleScope handle_scope(node_isolate);
-  Environment* env = Environment::GetCurrent(node_isolate);
+  HandleScope handle_scope(env->isolate());
   env->set_using_smalloc_alloc_cb(true);
 
   CallbackInfo* cb_info = new CallbackInfo;
   cb_info->cb = fn;
   cb_info->hint = hint;
-  cb_info->p_obj.Reset(node_isolate, obj);
+  cb_info->p_obj.Reset(env->isolate(), obj);
   obj->SetHiddenValue(env->smalloc_p_string(), External::New(cb_info));
 
-  node_isolate->AdjustAmountOfExternalAllocatedMemory(length +
-                                                      sizeof(*cb_info));
+  env->isolate()->AdjustAmountOfExternalAllocatedMemory(length +
+                                                        sizeof(*cb_info));
   cb_info->p_obj.MakeWeak(cb_info, TargetFreeCallback);
   cb_info->p_obj.MarkIndependent();
   cb_info->p_obj.SetWrapperClassId(ALLOC_ID);
@@ -404,12 +412,13 @@ void TargetFreeCallback(Isolate* isolate,
 
 
 void HasExternalData(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   args.GetReturnValue().Set(args[0]->IsObject() &&
-                            HasExternalData(args[0].As<Object>()));
+                            HasExternalData(env, args[0].As<Object>()));
 }
 
 
-bool HasExternalData(Local<Object> obj) {
+bool HasExternalData(Environment* env, Local<Object> obj) {
   return obj->HasIndexedPropertiesInExternalArrayData();
 }
 
@@ -485,7 +494,7 @@ void Initialize(Handle<Object> exports,
 
   NODE_SET_METHOD(exports, "hasExternalData", HasExternalData);
 
-  exports->Set(FIXED_ONE_BYTE_STRING(node_isolate, "kMaxLength"),
+  exports->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kMaxLength"),
                Uint32::NewFromUnsigned(kMaxLength, env->isolate()));
 
   HeapProfiler* heap_profiler = env->isolate()->GetHeapProfiler();
