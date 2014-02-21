@@ -76,6 +76,7 @@ namespace node {
   V(dev_string, "dev")                                                        \
   V(disposed_string, "_disposed")                                             \
   V(domain_string, "domain")                                                  \
+  V(exchange_string, "exchange")                                              \
   V(idle_string, "idle")                                                      \
   V(irq_string, "irq")                                                        \
   V(enter_string, "enter")                                                    \
@@ -89,6 +90,7 @@ namespace node {
   V(exiting_string, "_exiting")                                               \
   V(exit_code_string, "exitCode")                                             \
   V(exit_string, "exit")                                                      \
+  V(expire_string, "expire")                                                  \
   V(exponent_string, "exponent")                                              \
   V(exports_string, "exports")                                                \
   V(ext_key_usage_string, "ext_key_usage")                                    \
@@ -105,6 +107,7 @@ namespace node {
   V(heap_size_limit_string, "heap_size_limit")                                \
   V(heap_total_string, "heapTotal")                                           \
   V(heap_used_string, "heapUsed")                                             \
+  V(hostmaster_string, "hostmaster")                                          \
   V(ignore_string, "ignore")                                                  \
   V(immediate_callback_string, "_immediateCallback")                          \
   V(inherit_string, "inherit")                                                \
@@ -121,6 +124,7 @@ namespace node {
   V(max_buffer_string, "maxBuffer")                                           \
   V(message_string, "message")                                                \
   V(method_string, "method")                                                  \
+  V(minttl_string, "minttl")                                                  \
   V(mode_string, "mode")                                                      \
   V(model_string, "model")                                                    \
   V(modulus_string, "modulus")                                                \
@@ -130,6 +134,7 @@ namespace node {
   V(netmask_string, "netmask")                                                \
   V(nice_string, "nice")                                                      \
   V(nlink_string, "nlink")                                                    \
+  V(nsname_string, "nsname")                                                  \
   V(offset_string, "offset")                                                  \
   V(onchange_string, "onchange")                                              \
   V(onclienthello_string, "onclienthello")                                    \
@@ -148,23 +153,32 @@ namespace node {
   V(onsignal_string, "onsignal")                                              \
   V(onstop_string, "onstop")                                                  \
   V(output_string, "output")                                                  \
+  V(order_string, "order")                                                    \
   V(owner_string, "owner")                                                    \
   V(path_string, "path")                                                      \
   V(pbkdf2_error_string, "PBKDF2 Error")                                      \
   V(pid_string, "pid")                                                        \
   V(pipe_string, "pipe")                                                      \
   V(port_string, "port")                                                      \
+  V(preference_string, "preference")                                          \
+  V(priority_string, "priority")                                              \
   V(processed_string, "processed")                                            \
   V(prototype_string, "prototype")                                            \
   V(rdev_string, "rdev")                                                      \
   V(readable_string, "readable")                                              \
   V(received_shutdown_string, "receivedShutdown")                             \
+  V(refresh_string, "refresh")                                                \
+  V(regexp_string, "regexp")                                                  \
   V(rename_string, "rename")                                                  \
+  V(replacement_string, "replacement")                                        \
+  V(retry_string, "retry")                                                    \
   V(rss_string, "rss")                                                        \
+  V(serial_string, "serial")                                                  \
   V(scavenge_string, "scavenge")                                              \
   V(scopeid_string, "scopeid")                                                \
   V(sent_shutdown_string, "sentShutdown")                                     \
   V(serial_number_string, "serialNumber")                                     \
+  V(service_string, "service")                                                \
   V(servername_string, "servername")                                          \
   V(session_id_string, "sessionId")                                           \
   V(should_keep_alive_string, "shouldKeepAlive")                              \
@@ -211,6 +225,7 @@ namespace node {
   V(version_major_string, "versionMajor")                                     \
   V(version_minor_string, "versionMinor")                                     \
   V(version_string, "version")                                                \
+  V(weight_string, "weight")                                                  \
   V(windows_verbatim_arguments_string, "windowsVerbatimArguments")            \
   V(writable_string, "writable")                                              \
   V(write_queue_size_string, "writeQueueSize")                                \
