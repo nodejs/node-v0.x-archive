@@ -95,6 +95,7 @@ namespace node {
   V(file_string, "file")                                                      \
   V(fingerprint_string, "fingerprint")                                        \
   V(flags_string, "flags")                                                    \
+  V(fsevent_string, "FSEvent")                                                \
   V(gid_string, "gid")                                                        \
   V(handle_string, "handle")                                                  \
   V(headers_string, "headers")                                                \
