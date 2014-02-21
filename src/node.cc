@@ -2789,7 +2789,7 @@ void Load(Environment* env) {
   Local<Object> global = env->context()->Global();
 
 #if defined HAVE_DTRACE || defined HAVE_ETW
-  InitDTrace(global);
+  InitDTrace(env, global);
 #endif
 
 #if defined HAVE_PERFCTR

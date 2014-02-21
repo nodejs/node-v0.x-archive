@@ -234,6 +234,7 @@ namespace node {
   V(windows_verbatim_arguments_string, "windowsVerbatimArguments")            \
   V(writable_string, "writable")                                              \
   V(write_queue_size_string, "writeQueueSize")                                \
+  V(x_forwarded_string, "x-forwarded-for")                                    \
   V(zero_return_string, "ZERO_RETURN")                                        \
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
