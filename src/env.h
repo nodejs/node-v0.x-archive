@@ -63,6 +63,7 @@ namespace node {
   V(blocks_string, "blocks")                                                  \
   V(buffer_string, "buffer")                                                  \
   V(bytes_string, "bytes")                                                    \
+  V(byte_length_string, "byteLength")                                         \
   V(callback_string, "callback")                                              \
   V(change_string, "change")                                                  \
   V(close_string, "close")                                                    \
@@ -129,6 +130,7 @@ namespace node {
   V(netmask_string, "netmask")                                                \
   V(nice_string, "nice")                                                      \
   V(nlink_string, "nlink")                                                    \
+  V(offset_string, "offset")                                                  \
   V(onchange_string, "onchange")                                              \
   V(onclienthello_string, "onclienthello")                                    \
   V(oncomplete_string, "oncomplete")                                          \
@@ -153,6 +155,7 @@ namespace node {
   V(pipe_string, "pipe")                                                      \
   V(port_string, "port")                                                      \
   V(processed_string, "processed")                                            \
+  V(prototype_string, "prototype")                                            \
   V(rdev_string, "rdev")                                                      \
   V(readable_string, "readable")                                              \
   V(received_shutdown_string, "receivedShutdown")                             \

@@ -127,8 +127,8 @@ Local<Object> New(Handle<String> string, enum encoding enc) {
 
 
 Local<Object> New(size_t length) {
-  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
+  HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, length);
   return handle_scope.Close(obj);
 }
@@ -137,11 +137,11 @@ Local<Object> New(size_t length) {
 // TODO(trevnorris): these have a flaw by needing to call the Buffer inst then
 // Alloc. continue to look for a better architecture.
 Local<Object> New(Environment* env, size_t length) {
-  HandleScope scope(node_isolate);
+  HandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
-  Local<Value> arg = Uint32::NewFromUnsigned(length, node_isolate);
+  Local<Value> arg = Uint32::NewFromUnsigned(length, env->isolate());
   Local<Object> obj = env->buffer_constructor_function()->NewInstance(1, &arg);
 
   // TODO(trevnorris): done like this to handle HasInstance since only checks
@@ -162,8 +162,8 @@ Local<Object> New(Environment* env, size_t length) {
 
 
 Local<Object> New(const char* data, size_t length) {
-  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
+  HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length);
   return handle_scope.Close(obj);
 }
@@ -173,11 +173,11 @@ Local<Object> New(const char* data, size_t length) {
 // but for consistency w/ the other should use data. And a copy version renamed
 // to something else.
 Local<Object> New(Environment* env, const char* data, size_t length) {
-  HandleScope scope(node_isolate);
+  HandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
-  Local<Value> arg = Uint32::NewFromUnsigned(length, node_isolate);
+  Local<Value> arg = Uint32::NewFromUnsigned(length, env->isolate());
   Local<Object> obj = env->buffer_constructor_function()->NewInstance(1, &arg);
 
   // TODO(trevnorris): done like this to handle HasInstance since only checks
@@ -203,8 +203,8 @@ Local<Object> New(char* data,
                   size_t length,
                   smalloc::FreeCallback callback,
                   void* hint) {
-  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
+  HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length, callback, hint);
   return handle_scope.Close(obj);
 }
@@ -215,11 +215,11 @@ Local<Object> New(Environment* env,
                   size_t length,
                   smalloc::FreeCallback callback,
                   void* hint) {
-  HandleScope scope(node_isolate);
+  HandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
-  Local<Value> arg = Uint32::NewFromUnsigned(length, node_isolate);
+  Local<Value> arg = Uint32::NewFromUnsigned(length, env->isolate());
   Local<Object> obj = env->buffer_constructor_function()->NewInstance(1, &arg);
 
   smalloc::Alloc(obj, data, length, callback, hint);
@@ -229,19 +229,19 @@ Local<Object> New(Environment* env,
 
 
 Local<Object> Use(char* data, uint32_t length) {
-  HandleScope handle_scope(node_isolate);
   Environment* env = Environment::GetCurrent(node_isolate);
+  HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::Use(env, data, length);
   return handle_scope.Close(obj);
 }
 
 
 Local<Object> Use(Environment* env, char* data, uint32_t length) {
-  HandleScope scope(node_isolate);
+  HandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
-  Local<Value> arg = Uint32::NewFromUnsigned(length, node_isolate);
+  Local<Value> arg = Uint32::NewFromUnsigned(length, env->isolate());
   Local<Object> obj = env->buffer_constructor_function()->NewInstance(1, &arg);
 
   smalloc::Alloc(obj, data, length);
@@ -252,7 +252,8 @@ Local<Object> Use(Environment* env, char* data, uint32_t length) {
 
 template <encoding encoding>
 void StringSlice(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This())
   SLICE_START_END(args[0], args[1], obj_length)
@@ -294,7 +295,8 @@ void Base64Slice(const FunctionCallbackInfo<Value>& args) {
 
 // bytesCopied = buffer.copy(target[, targetStart][, sourceStart][, sourceEnd]);
 void Copy(const FunctionCallbackInfo<Value> &args) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   Local<Object> target = args[0]->ToObject();
 
@@ -334,7 +336,8 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
 
 // buffer.fill(value[, start][, end]);
 void Fill(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This())
   SLICE_START_END(args[1], args[2], obj_length)
@@ -379,7 +382,8 @@ void Fill(const FunctionCallbackInfo<Value>& args) {
 
 template <encoding encoding>
 void StringWrite(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This())
 
@@ -562,7 +566,8 @@ void WriteDoubleBE(const FunctionCallbackInfo<Value>& args) {
 
 
 void ToArrayBuffer(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This());
   void* adata = malloc(obj_length);
@@ -581,7 +586,8 @@ void ToArrayBuffer(const FunctionCallbackInfo<Value>& args) {
 
 
 void ByteLength(const FunctionCallbackInfo<Value> &args) {
-  HandleScope scope(node_isolate);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   if (!args[0]->IsString())
     return ThrowTypeError("Argument must be a string");
@@ -596,15 +602,14 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
 
 // pass Buffer object to load prototype methods
 void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   assert(args[0]->IsFunction());
 
   Local<Function> bv = args[0].As<Function>();
   env->set_buffer_constructor_function(bv);
-  Local<Value> proto_v =
-      bv->Get(FIXED_ONE_BYTE_STRING(node_isolate, "prototype"));
+  Local<Value> proto_v = bv->Get(env->prototype_string());
 
   assert(proto_v->IsObject());
 
@@ -640,15 +645,15 @@ void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
   NODE_SET_METHOD(proto, "fill", Fill);
 
   // for backwards compatibility
-  proto->Set(FIXED_ONE_BYTE_STRING(node_isolate, "offset"),
-             Uint32::New(0, node_isolate),
+  proto->Set(env->offset_string(),
+             Uint32::New(0, env->isolate()),
              v8::ReadOnly);
 
   assert(args[1]->IsObject());
 
   Local<Object> internal = args[1].As<Object>();
 
-  internal->Set(FIXED_ONE_BYTE_STRING(node_isolate, "byteLength"),
+  internal->Set(env->byte_length_string(),
                 FunctionTemplate::New(ByteLength)->GetFunction());
 }
 
