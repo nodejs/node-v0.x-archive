@@ -232,6 +232,7 @@ namespace node {
   V(version_string, "version")                                                \
   V(weight_string, "weight")                                                  \
   V(windows_verbatim_arguments_string, "windowsVerbatimArguments")            \
+  V(wrap_string, "wrap")                                                      \
   V(writable_string, "writable")                                              \
   V(write_queue_size_string, "writeQueueSize")                                \
   V(x_forwarded_string, "x-forwarded-for")                                    \
