@@ -142,8 +142,7 @@ static double prog_start_time;
 static bool debugger_running;
 static uv_async_t dispatch_debug_messages_async;
 
-// Declared in node_internals.h
-Isolate* node_isolate = NULL;
+static Isolate* node_isolate = NULL;
 
 
 class ArrayBufferAllocator : public ArrayBuffer::Allocator {
