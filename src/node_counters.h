@@ -23,7 +23,6 @@
 #define SRC_NODE_COUNTERS_H_
 
 #include "node.h"
-#include "env.h"
 
 #ifdef HAVE_PERFCTR
 #include "node_win32_perfctr_provider.h"
@@ -44,6 +43,7 @@
 #endif
 
 #include "v8.h"
+#include "env.h"
 
 namespace node {
 
