@@ -116,8 +116,7 @@ size_t Length(Handle<Object> obj) {
 }
 
 
-Local<Object> New(Handle<String> string, enum encoding enc) {
-  Isolate* isolate = node_isolate;
+Local<Object> New(Isolate* isolate, Handle<String> string, enum encoding enc) {
   HandleScope scope(isolate);
 
   size_t length = StringBytes::Size(isolate, string, enc);
@@ -130,8 +129,7 @@ Local<Object> New(Handle<String> string, enum encoding enc) {
 }
 
 
-Local<Object> New(size_t length) {
-  Isolate* isolate = node_isolate;
+Local<Object> New(Isolate* isolate, size_t length) {
   HandleScope handle_scope(isolate);
   Local<Object> obj = Buffer::New(Environment::GetCurrent(isolate), length);
   return handle_scope.Close(obj);
@@ -165,8 +163,8 @@ Local<Object> New(Environment* env, size_t length) {
 }
 
 
-Local<Object> New(const char* data, size_t length) {
-  Environment* env = Environment::GetCurrent(node_isolate);
+Local<Object> New(Isolate* isolate, const char* data, size_t length) {
+  Environment* env = Environment::GetCurrent(isolate);
   HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length);
   return handle_scope.Close(obj);
@@ -203,11 +201,12 @@ Local<Object> New(Environment* env, const char* data, size_t length) {
 }
 
 
-Local<Object> New(char* data,
+Local<Object> New(Isolate* isolate,
+                  char* data,
                   size_t length,
                   smalloc::FreeCallback callback,
                   void* hint) {
-  Environment* env = Environment::GetCurrent(node_isolate);
+  Environment* env = Environment::GetCurrent(isolate);
   HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length, callback, hint);
   return handle_scope.Close(obj);
@@ -232,8 +231,8 @@ Local<Object> New(Environment* env,
 }
 
 
-Local<Object> Use(char* data, uint32_t length) {
-  Environment* env = Environment::GetCurrent(node_isolate);
+Local<Object> Use(Isolate* isolate, char* data, uint32_t length) {
+  Environment* env = Environment::GetCurrent(isolate);
   HandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::Use(env, data, length);
   return handle_scope.Close(obj);
