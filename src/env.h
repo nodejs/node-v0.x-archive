@@ -63,6 +63,7 @@ namespace node {
   V(blocks_string, "blocks")                                                  \
   V(buffer_string, "buffer")                                                  \
   V(bytes_string, "bytes")                                                    \
+  V(bytes_parsed_string, "bytesParsed")                                       \
   V(byte_length_string, "byteLength")                                         \
   V(callback_string, "callback")                                              \
   V(change_string, "change")                                                  \
@@ -158,6 +159,7 @@ namespace node {
   V(output_string, "output")                                                  \
   V(order_string, "order")                                                    \
   V(owner_string, "owner")                                                    \
+  V(parse_error_string, "Parse Error")                                        \
   V(path_string, "path")                                                      \
   V(pbkdf2_error_string, "PBKDF2 Error")                                      \
   V(pid_string, "pid")                                                        \
