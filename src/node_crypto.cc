@@ -194,7 +194,9 @@ static int CryptoPemCallback(char *buf, int size, int rwflag, void *u) {
 }
 
 
-void ThrowCryptoErrorHelper(unsigned long err, bool is_type_error) {
+void ThrowCryptoErrorHelper(Environment* env,
+                            unsigned long err,
+                            bool is_type_error) {
   HandleScope scope(node_isolate);
   char errmsg[128];
   ERR_error_string_n(err, errmsg, sizeof(errmsg));
@@ -205,13 +207,13 @@ void ThrowCryptoErrorHelper(unsigned long err, bool is_type_error) {
 }
 
 
-void ThrowCryptoError(unsigned long err) {
-  ThrowCryptoErrorHelper(err, false);
+void ThrowCryptoError(Environment* env, unsigned long err) {
+  ThrowCryptoErrorHelper(env, err, false);
 }
 
 
-void ThrowCryptoTypeError(unsigned long err) {
-  ThrowCryptoErrorHelper(err, true);
+void ThrowCryptoTypeError(Environment* env, unsigned long err) {
+  ThrowCryptoErrorHelper(env, err, true);
 }
 
 
@@ -416,7 +418,7 @@ void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
     if (!err) {
       return ThrowError("PEM_read_bio_PrivateKey");
     }
-    return ThrowCryptoError(err);
+    return ThrowCryptoError(env, err);
   }
 
   SSL_CTX_use_PrivateKey(sc->ctx_, key);
@@ -515,7 +517,7 @@ void SecureContext::SetCert(const FunctionCallbackInfo<Value>& args) {
     if (!err) {
       return ThrowError("SSL_CTX_use_certificate_chain");
     }
-    return ThrowCryptoError(err);
+    return ThrowCryptoError(env, err);
   }
 }
 
@@ -2427,7 +2429,7 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
 
   if (!r) {
     delete[] out;
-    return ThrowCryptoTypeError(ERR_get_error());
+    return ThrowCryptoTypeError(env, ERR_get_error());
   }
 
   Local<Object> buf = Buffer::New(env, reinterpret_cast<char*>(out), out_len);
@@ -2497,7 +2499,7 @@ void CipherBase::Final(const FunctionCallbackInfo<Value>& args) {
     out_value = NULL;
     out_len = 0;
     if (!r)
-      return ThrowCryptoTypeError(ERR_get_error());
+      return ThrowCryptoTypeError(env, ERR_get_error());
   }
 
   args.GetReturnValue().Set(
@@ -2761,7 +2763,7 @@ void SignBase::CheckThrow(SignBase::Error error) {
       {
         unsigned long err = ERR_get_error();
         if (err)
-          return ThrowCryptoError(err);
+          return ThrowCryptoError(env(), err);
         switch (error) {
           case kSignInit:
             return ThrowError("EVP_SignInit_ex failed");
@@ -4272,6 +4274,7 @@ void InitCryptoOnce() {
 
 #ifndef OPENSSL_NO_ENGINE
 void SetEngine(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   CHECK(args.Length() >= 2 && args[0]->IsString());
   unsigned int flags = args[1]->Uint32Value();
 
@@ -4300,14 +4303,14 @@ void SetEngine(const FunctionCallbackInfo<Value>& args) {
       snprintf(tmp, sizeof(tmp), "Engine \"%s\" was not found", *engine_id);
       return ThrowError(tmp);
     } else {
-      return ThrowCryptoError(err);
+      return ThrowCryptoError(env, err);
     }
   }
 
   int r = ENGINE_set_default(engine, flags);
   ENGINE_free(engine);
   if (r == 0)
-    return ThrowCryptoError(ERR_get_error());
+    return ThrowCryptoError(env, ERR_get_error());
 }
 #endif  // !OPENSSL_NO_ENGINE
 
