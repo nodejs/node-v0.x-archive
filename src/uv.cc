@@ -43,7 +43,7 @@ void ErrName(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
   int err = args[0]->Int32Value();
   if (err >= 0)
-    return ThrowError("err >= 0");
+    return env->ThrowError("err >= 0");
   const char* name = uv_err_name(err);
   args.GetReturnValue().Set(OneByteString(env->isolate(), name));
 }

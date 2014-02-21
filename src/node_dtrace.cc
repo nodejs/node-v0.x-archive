@@ -70,7 +70,7 @@ using v8::Value;
 
 #define SLURP_STRING(obj, member, valp) \
   if (!(obj)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
         "expected object for " #obj " to contain string member " #member); \
   } \
   String::Utf8Value _##member(obj->Get(OneByteString(env->isolate(), \
@@ -80,7 +80,7 @@ using v8::Value;
 
 #define SLURP_INT(obj, member, valp) \
   if (!(obj)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
       "expected object for " #obj " to contain integer member " #member); \
   } \
   *valp = obj->Get(OneByteString(env->isolate(), #member)) \
@@ -88,14 +88,14 @@ using v8::Value;
 
 #define SLURP_OBJECT(obj, member, valp) \
   if (!(obj)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
       "expected object for " #obj " to contain object member " #member); \
   } \
   *valp = Local<Object>::Cast(obj->Get(OneByteString(env->isolate(), #member)));
 
 #define SLURP_CONNECTION(arg, conn) \
   if (!(arg)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
       "expected argument " #arg " to be a connection object"); \
   } \
   node_dtrace_connection_t conn; \
@@ -113,7 +113,7 @@ using v8::Value;
 
 #define SLURP_CONNECTION_HTTP_CLIENT(arg, conn) \
   if (!(arg)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
       "expected argument " #arg " to be a connection object"); \
   } \
   node_dtrace_connection_t conn; \
@@ -125,11 +125,11 @@ using v8::Value;
 
 #define SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(arg0, arg1, conn) \
   if (!(arg0)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
       "expected argument " #arg0 " to be a connection object"); \
   } \
   if (!(arg1)->IsObject()) { \
-    return ThrowError( \
+    return env->ThrowError( \
       "expected argument " #arg1 " to be a connection object"); \
   } \
   node_dtrace_connection_t conn; \
@@ -169,7 +169,7 @@ void DTRACE_NET_SOCKET_READ(const FunctionCallbackInfo<Value>& args) {
   SLURP_CONNECTION(args[0], conn);
 
   if (!args[1]->IsNumber()) {
-    return ThrowError("expected argument 1 to be number of bytes");
+    return env->ThrowError("expected argument 1 to be number of bytes");
   }
 
   int nbytes = args[1]->Int32Value();
@@ -185,7 +185,7 @@ void DTRACE_NET_SOCKET_WRITE(const FunctionCallbackInfo<Value>& args) {
   SLURP_CONNECTION(args[0], conn);
 
   if (!args[1]->IsNumber()) {
-    return ThrowError("expected argument 1 to be number of bytes");
+    return env->ThrowError("expected argument 1 to be number of bytes");
   }
 
   int nbytes = args[1]->Int32Value();
@@ -211,7 +211,7 @@ void DTRACE_HTTP_SERVER_REQUEST(const FunctionCallbackInfo<Value>& args) {
   SLURP_OBJECT(arg0, headers, &headers);
 
   if (!(headers)->IsObject()) {
-    return ThrowError(
+    return env->ThrowError(
       "expected object for request to contain string member headers");
   }
 

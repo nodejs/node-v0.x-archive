@@ -677,11 +677,12 @@ const char *signo_string(int signo) {
 }
 
 
-Local<Value> ErrnoException(int errorno,
+Local<Value> ErrnoException(Isolate* isolate,
+                            int errorno,
                             const char *syscall,
                             const char *msg,
                             const char *path) {
-  Environment* env = Environment::GetCurrent(node_isolate);
+  Environment* env = Environment::GetCurrent(isolate);
 
   Local<Value> e;
   Local<String> estring = OneByteString(env->isolate(), errno_string(errorno));
@@ -723,11 +724,12 @@ Local<Value> ErrnoException(int errorno,
 
 
 // hack alert! copy of ErrnoException, tuned for uv errors
-Local<Value> UVException(int errorno,
+Local<Value> UVException(Isolate* isolate,
+                         int errorno,
                          const char *syscall,
                          const char *msg,
                          const char *path) {
-  Environment* env = Environment::GetCurrent(node_isolate);
+  Environment* env = Environment::GetCurrent(isolate);
 
   if (!msg || !msg[0])
     msg = uv_strerror(errorno);
@@ -1518,13 +1520,14 @@ static void Chdir(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (args.Length() != 1 || !args[0]->IsString()) {
-    return ThrowError("Bad argument.");  // FIXME(bnoordhuis) ThrowTypeError?
+    // FIXME(bnoordhuis) ThrowTypeError?
+    return env->ThrowError("Bad argument.");
   }
 
   String::Utf8Value path(args[0]);
   int err = uv_chdir(*path);
   if (err) {
-    return ThrowUVException(err, "uv_chdir");
+    return env->ThrowUVException(err, "uv_chdir");
   }
 }
 
@@ -1541,7 +1544,7 @@ static void Cwd(const FunctionCallbackInfo<Value>& args) {
 
   int err = uv_cwd(buf, ARRAY_SIZE(buf) - 1);
   if (err) {
-    return ThrowUVException(err, "uv_cwd");
+    return env->ThrowUVException(err, "uv_cwd");
   }
 
   buf[ARRAY_SIZE(buf) - 1] = '\0';
@@ -1560,7 +1563,7 @@ static void Umask(const FunctionCallbackInfo<Value>& args) {
     old = umask(0);
     umask(static_cast<mode_t>(old));
   } else if (!args[0]->IsInt32() && !args[0]->IsString()) {
-    return ThrowTypeError("argument must be an integer or octal string.");
+    return env->ThrowTypeError("argument must be an integer or octal string.");
   } else {
     int oct;
     if (args[0]->IsInt32()) {
@@ -1573,7 +1576,7 @@ static void Umask(const FunctionCallbackInfo<Value>& args) {
       for (int i = 0; i < str.length(); i++) {
         char c = (*str)[i];
         if (c > '7' || c < '0') {
-          return ThrowTypeError("invalid octal string");
+          return env->ThrowTypeError("invalid octal string");
         }
         oct *= 8;
         oct += c - '0';
@@ -1705,17 +1708,17 @@ static void SetGid(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
-    return ThrowTypeError("setgid argument must be a number or a string");
+    return env->ThrowTypeError("setgid argument must be a number or a string");
   }
 
   gid_t gid = gid_by_name(args[0]);
 
   if (gid == gid_not_found) {
-    return ThrowError("setgid group id does not exist");
+    return env->ThrowError("setgid group id does not exist");
   }
 
   if (setgid(gid)) {
-    return ThrowErrnoException(errno, "setgid");
+    return env->ThrowErrnoException(errno, "setgid");
   }
 }
 
@@ -1725,17 +1728,17 @@ static void SetUid(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
-    return ThrowTypeError("setuid argument must be a number or a string");
+    return env->ThrowTypeError("setuid argument must be a number or a string");
   }
 
   uid_t uid = uid_by_name(args[0]);
 
   if (uid == uid_not_found) {
-    return ThrowError("setuid user id does not exist");
+    return env->ThrowError("setuid user id does not exist");
   }
 
   if (setuid(uid)) {
-    return ThrowErrnoException(errno, "setuid");
+    return env->ThrowErrnoException(errno, "setuid");
   }
 }
 
@@ -1747,7 +1750,7 @@ static void GetGroups(const FunctionCallbackInfo<Value>& args) {
   int ngroups = getgroups(0, NULL);
 
   if (ngroups == -1) {
-    return ThrowErrnoException(errno, "getgroups");
+    return env->ThrowErrnoException(errno, "getgroups");
   }
 
   gid_t* groups = new gid_t[ngroups];
@@ -1756,7 +1759,7 @@ static void GetGroups(const FunctionCallbackInfo<Value>& args) {
 
   if (ngroups == -1) {
     delete[] groups;
-    return ThrowErrnoException(errno, "getgroups");
+    return env->ThrowErrnoException(errno, "getgroups");
   }
 
   Local<Array> groups_list = Array::New(ngroups);
@@ -1784,7 +1787,7 @@ static void SetGroups(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (!args[0]->IsArray()) {
-    return ThrowTypeError("argument 1 must be an array");
+    return env->ThrowTypeError("argument 1 must be an array");
   }
 
   Local<Array> groups_list = args[0].As<Array>();
@@ -1796,7 +1799,7 @@ static void SetGroups(const FunctionCallbackInfo<Value>& args) {
 
     if (gid == gid_not_found) {
       delete[] groups;
-      return ThrowError("group name not found");
+      return env->ThrowError("group name not found");
     }
 
     groups[i] = gid;
@@ -1806,7 +1809,7 @@ static void SetGroups(const FunctionCallbackInfo<Value>& args) {
   delete[] groups;
 
   if (rc == -1) {
-    return ThrowErrnoException(errno, "setgroups");
+    return env->ThrowErrnoException(errno, "setgroups");
   }
 }
 
@@ -1816,11 +1819,11 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
-    return ThrowTypeError("argument 1 must be a number or a string");
+    return env->ThrowTypeError("argument 1 must be a number or a string");
   }
 
   if (!args[1]->IsUint32() && !args[1]->IsString()) {
-    return ThrowTypeError("argument 2 must be a number or a string");
+    return env->ThrowTypeError("argument 2 must be a number or a string");
   }
 
   String::Utf8Value arg0(args[0]);
@@ -1837,7 +1840,7 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
   }
 
   if (user == NULL) {
-    return ThrowError("initgroups user not found");
+    return env->ThrowError("initgroups user not found");
   }
 
   extra_group = gid_by_name(args[1]);
@@ -1845,7 +1848,7 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
   if (extra_group == gid_not_found) {
     if (must_free)
       free(user);
-    return ThrowError("initgroups extra group not found");
+    return env->ThrowError("initgroups extra group not found");
   }
 
   int rc = initgroups(user, extra_group);
@@ -1855,7 +1858,7 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
   }
 
   if (rc) {
-    return ThrowErrnoException(errno, "initgroups");
+    return env->ThrowErrnoException(errno, "initgroups");
   }
 }
 
@@ -1886,7 +1889,7 @@ void MemoryUsage(const FunctionCallbackInfo<Value>& args) {
   size_t rss;
   int err = uv_resident_set_memory(&rss);
   if (err) {
-    return ThrowUVException(err, "uv_resident_set_memory");
+    return env->ThrowUVException(err, "uv_resident_set_memory");
   }
 
   // V8 memory usage
@@ -1912,7 +1915,7 @@ void Kill(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (args.Length() != 2) {
-    return ThrowError("Bad argument.");
+    return env->ThrowError("Bad argument.");
   }
 
   int pid = args[0]->IntegerValue();
@@ -1938,7 +1941,8 @@ void Hrtime(const FunctionCallbackInfo<Value>& args) {
   if (args.Length() > 0) {
     // return a time diff tuple
     if (!args[0]->IsArray()) {
-      return ThrowTypeError("process.hrtime() only accepts an Array tuple.");
+      return env->ThrowTypeError(
+          "process.hrtime() only accepts an Array tuple.");
     }
     Local<Array> inArray = Local<Array>::Cast(args[0]);
     uint64_t seconds = inArray->Get(0)->Uint32Value();
@@ -1991,7 +1995,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   uv_lib_t lib;
 
   if (args.Length() < 2) {
-    ThrowError("process.dlopen takes exactly 2 arguments.");
+    env->ThrowError("process.dlopen takes exactly 2 arguments.");
     return;
   }
 
@@ -2007,7 +2011,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
     // Windows needs to add the filename into the error message
     errmsg = String::Concat(errmsg, args[1]->ToString());
 #endif  // _WIN32
-    ThrowException(Exception::Error(errmsg));
+    env->isolate()->ThrowException(Exception::Error(errmsg));
     return;
   }
 
@@ -2020,7 +2024,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   modpending = NULL;
 
   if (mp == NULL) {
-    ThrowError("Module did not self-register.");
+    env->ThrowError("Module did not self-register.");
     return;
   }
   if (mp->nm_version != NODE_MODULE_VERSION) {
@@ -2029,11 +2033,11 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
              sizeof(errmsg),
              "Module version mismatch. Expected %d, got %d.",
              NODE_MODULE_VERSION, mp->nm_version);
-    ThrowError(errmsg);
+    env->ThrowError(errmsg);
     return;
   }
   if (mp->nm_flags & NM_F_BUILTIN) {
-    ThrowError("Built-in module self-registered.");
+    env->ThrowError("Built-in module self-registered.");
     return;
   }
 
@@ -2046,7 +2050,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   } else if (mp->nm_register_func != NULL) {
     mp->nm_register_func(exports, module, mp->nm_priv);
   } else {
-    ThrowError("Module has no declared entry point.");
+    env->ThrowError("Module has no declared entry point.");
     return;
   }
 
@@ -2169,7 +2173,7 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
     DefineJavaScript(env, exports);
     cache->Set(module, exports);
   } else {
-    return ThrowError("No such module");
+    return env->ThrowError("No such module");
   }
 
   args.GetReturnValue().Set(exports);
@@ -3084,10 +3088,11 @@ static void RegisterSignalHandler(int signal, void (*handler)(int signal)) {
 
 
 void DebugProcess(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
 
   if (args.Length() != 1) {
-    return ThrowError("Invalid number of arguments.");
+    return env->ThrowError("Invalid number of arguments.");
   }
 
   pid_t pid;
@@ -3096,7 +3101,7 @@ void DebugProcess(const FunctionCallbackInfo<Value>& args) {
   pid = args[0]->IntegerValue();
   r = kill(pid, SIGUSR1);
   if (r != 0) {
-    return ThrowErrnoException(errno, "kill");
+    return env->ThrowErrnoException(errno, "kill");
   }
 }
 
@@ -3180,7 +3185,7 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
   LPTHREAD_START_ROUTINE* handler = NULL;
 
   if (args.Length() != 1) {
-    ThrowError("Invalid number of arguments.");
+    env->ThrowError("Invalid number of arguments.");
     goto out;
   }
 
@@ -3192,20 +3197,21 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                         FALSE,
                         pid);
   if (process == NULL) {
-    ThrowException(WinapiErrnoException(GetLastError(), "OpenProcess"));
+    env->ThrowException(WinapiErrnoException(GetLastError(), "OpenProcess"));
     goto out;
   }
 
   if (GetDebugSignalHandlerMappingName(pid,
                                        mapping_name,
                                        ARRAY_SIZE(mapping_name)) < 0) {
-    ThrowErrnoException(errno, "sprintf");
+    env->ThrowErrnoException(errno, "sprintf");
     goto out;
   }
 
   mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, mapping_name);
   if (mapping == NULL) {
-    ThrowException(WinapiErrnoException(GetLastError(), "OpenFileMappingW"));
+    env->ThrowException(WinapiErrnoException(GetLastError(),
+                                             "OpenFileMappingW"));
     goto out;
   }
 
@@ -3216,7 +3222,7 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                     0,
                     sizeof *handler));
   if (handler == NULL || *handler == NULL) {
-    ThrowException(WinapiErrnoException(GetLastError(), "MapViewOfFile"));
+    env->ThrowException(WinapiErrnoException(GetLastError(), "MapViewOfFile"));
     goto out;
   }
 
@@ -3228,13 +3234,15 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                               0,
                               NULL);
   if (thread == NULL) {
-    ThrowException(WinapiErrnoException(GetLastError(), "CreateRemoteThread"));
+    env->ThrowException(WinapiErrnoException(GetLastError(),
+                                             "CreateRemoteThread"));
     goto out;
   }
 
   // Wait for the thread to terminate
   if (WaitForSingleObject(thread, INFINITE) != WAIT_OBJECT_0) {
-    ThrowException(WinapiErrnoException(GetLastError(), "WaitForSingleObject"));
+    env->ThrowException(WinapiErrnoException(GetLastError(),
+                                             "WaitForSingleObject"));
     goto out;
   }
 

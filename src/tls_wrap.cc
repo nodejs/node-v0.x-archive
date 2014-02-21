@@ -209,12 +209,16 @@ void TLSCallbacks::Wrap(const FunctionCallbackInfo<Value>& args) {
   HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
-  if (args.Length() < 1 || !args[0]->IsObject())
-    return ThrowTypeError("First argument should be a StreamWrap instance");
-  if (args.Length() < 2 || !args[1]->IsObject())
-    return ThrowTypeError("Second argument should be a SecureContext instance");
+  if (args.Length() < 1 || !args[0]->IsObject()) {
+    return env->ThrowTypeError(
+        "First argument should be a StreamWrap instance");
+  }
+  if (args.Length() < 2 || !args[1]->IsObject()) {
+    return env->ThrowTypeError(
+        "Second argument should be a SecureContext instance");
+  }
   if (args.Length() < 3 || !args[2]->IsBoolean())
-    return ThrowTypeError("Third argument should be boolean");
+    return env->ThrowTypeError("Third argument should be boolean");
 
   Local<Object> stream = args[0].As<Object>();
   Local<Object> sc = args[1].As<Object>();
@@ -267,7 +271,7 @@ void TLSCallbacks::Start(const FunctionCallbackInfo<Value>& args) {
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   if (wrap->started_)
-    return ThrowError("Already started.");
+    return env->ThrowError("Already started.");
   wrap->started_ = true;
 
   // Send ClientHello handshake
@@ -671,7 +675,7 @@ void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   if (args.Length() < 2 || !args[0]->IsBoolean() || !args[1]->IsBoolean())
-    return ThrowTypeError("Bad arguments, expected two booleans");
+    return env->ThrowTypeError("Bad arguments, expected two booleans");
 
   int verify_mode;
   if (wrap->is_server()) {
@@ -749,10 +753,10 @@ void TLSCallbacks::SetServername(const FunctionCallbackInfo<Value>& args) {
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.This());
 
   if (args.Length() < 1 || !args[0]->IsString())
-    return ThrowTypeError("First argument should be a string");
+    return env->ThrowTypeError("First argument should be a string");
 
   if (wrap->started_)
-    return ThrowError("Already started.");
+    return env->ThrowError("Already started.");
 
   if (!wrap->is_client())
     return;

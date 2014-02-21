@@ -109,7 +109,7 @@ void FSEventWrap::Start(const FunctionCallbackInfo<Value>& args) {
   FSEventWrap* wrap = Unwrap<FSEventWrap>(args.This());
 
   if (args.Length() < 1 || !args[0]->IsString()) {
-    return ThrowTypeError("Bad arguments");
+    return env->ThrowTypeError("Bad arguments");
   }
 
   String::Utf8Value path(args[0]);

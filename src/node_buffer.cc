@@ -37,7 +37,9 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define CHECK_NOT_OOB(r)                                                    \
-  do { if (!(r)) return ThrowRangeError("out of range index"); } while (0)
+  do {                                                                      \
+    if (!(r)) return env->ThrowRangeError("out of range index");            \
+  } while (0)
 
 #define ARGS_THIS(argT)                                                     \
   Local<Object> obj = argT;                                                 \
@@ -302,7 +304,7 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
   Local<Object> target = args[0]->ToObject();
 
   if (!HasInstance(target))
-    return ThrowTypeError("first arg should be a Buffer");
+    return env->ThrowTypeError("first arg should be a Buffer");
 
   ARGS_THIS(args.This())
   size_t target_length = target->GetIndexedPropertiesExternalArrayDataLength();
@@ -321,7 +323,7 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
     return args.GetReturnValue().Set(0);
 
   if (source_start > obj_length)
-    return ThrowRangeError("out of range index");
+    return env->ThrowRangeError("out of range index");
 
   if (source_end - source_start > target_length - target_start)
     source_end = source_start + target_length - target_start;
@@ -389,12 +391,12 @@ void StringWrite(const FunctionCallbackInfo<Value>& args) {
   ARGS_THIS(args.This())
 
   if (!args[0]->IsString())
-    return ThrowTypeError("Argument must be a string");
+    return env->ThrowTypeError("Argument must be a string");
 
   Local<String> str = args[0]->ToString();
 
   if (encoding == HEX && str->Length() % 2 != 0)
-    return ThrowTypeError("Invalid hex string");
+    return env->ThrowTypeError("Invalid hex string");
 
   size_t offset;
   size_t max_length;
@@ -411,7 +413,7 @@ void StringWrite(const FunctionCallbackInfo<Value>& args) {
     max_length = max_length / 2;
 
   if (offset >= obj_length)
-    return ThrowRangeError("Offset is out of bounds");
+    return env->ThrowRangeError("Offset is out of bounds");
 
   uint32_t written = StringBytes::Write(env,
                                         obj_data + offset,
@@ -465,6 +467,7 @@ static inline void Swizzle(char* start, unsigned int len) {
 
 template <typename T, enum Endianness endianness>
 void ReadFloatGeneric(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   bool doAssert = !args[1]->BooleanValue();
   size_t offset;
 
@@ -473,7 +476,7 @@ void ReadFloatGeneric(const FunctionCallbackInfo<Value>& args) {
   if (doAssert) {
     size_t len = Length(args.This());
     if (offset + sizeof(T) > len || offset + sizeof(T) < offset)
-      return ThrowRangeError("Trying to read beyond buffer length");
+      return env->ThrowRangeError("Trying to read beyond buffer length");
   }
 
   union NoAlias {
@@ -514,20 +517,21 @@ void ReadDoubleBE(const FunctionCallbackInfo<Value>& args) {
 
 template <typename T, enum Endianness endianness>
 uint32_t WriteFloatGeneric(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
   bool doAssert = !args[2]->BooleanValue();
 
   T val = static_cast<T>(args[0]->NumberValue());
   size_t offset;
 
   if (!ParseArrayIndex(args[1], 0, &offset)) {
-    ThrowRangeError("out of range index");
+    env->ThrowRangeError("out of range index");
     return 0;
   }
 
   if (doAssert) {
     size_t len = Length(args.This());
     if (offset + sizeof(T) > len || offset + sizeof(T) < offset) {
-      ThrowRangeError("Trying to write beyond buffer length");
+      env->ThrowRangeError("Trying to write beyond buffer length");
       return 0;
     }
   }
@@ -592,7 +596,7 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
   HandleScope scope(env->isolate());
 
   if (!args[0]->IsString())
-    return ThrowTypeError("Argument must be a string");
+    return env->ThrowTypeError("Argument must be a string");
 
   Local<String> s = args[0]->ToString();
   enum encoding e = ParseEncoding(args[1], UTF8);

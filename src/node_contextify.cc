@@ -230,22 +230,21 @@ class ContextifyContext {
 
 
   static void MakeContext(const FunctionCallbackInfo<Value>& args) {
-    Isolate* isolate = args.GetIsolate();
-    HandleScope handle_scope(isolate);
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
 
     if (!args[0]->IsObject()) {
-      return ThrowTypeError("sandbox argument must be an object.");
+      return env->ThrowTypeError("sandbox argument must be an object.");
     }
     Local<Object> sandbox = args[0].As<Object>();
 
     Local<String> hidden_name =
-        FIXED_ONE_BYTE_STRING(isolate, "_contextifyHidden");
+        FIXED_ONE_BYTE_STRING(env->isolate(), "_contextifyHidden");
 
     // Don't allow contextifying a sandbox multiple times.
     assert(sandbox->GetHiddenValue(hidden_name).IsEmpty());
 
     TryCatch try_catch;
-    Environment* env = Environment::GetCurrent(isolate);
     ContextifyContext* context = new ContextifyContext(env, sandbox);
 
     if (try_catch.HasCaught()) {
@@ -262,16 +261,17 @@ class ContextifyContext {
 
 
   static void IsContext(const FunctionCallbackInfo<Value>& args) {
-    HandleScope scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
 
     if (!args[0]->IsObject()) {
-      ThrowTypeError("sandbox must be an object");
+      env->ThrowTypeError("sandbox must be an object");
       return;
     }
     Local<Object> sandbox = args[0].As<Object>();
 
     Local<String> hidden_name =
-        FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_contextifyHidden");
+        FIXED_ONE_BYTE_STRING(env->isolate(), "_contextifyHidden");
 
     args.GetReturnValue().Set(!sandbox->GetHiddenValue(hidden_name).IsEmpty());
   }
@@ -434,14 +434,13 @@ class ContextifyScript : public BaseObject {
 
   // args: code, [options]
   static void New(const FunctionCallbackInfo<Value>& args) {
-    Isolate* isolate = args.GetIsolate();
-    HandleScope scope(isolate);
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
 
     if (!args.IsConstructCall()) {
-      return ThrowError("Must call vm.Script as a constructor.");
+      return env->ThrowError("Must call vm.Script as a constructor.");
     }
 
-    Environment* env = Environment::GetCurrent(isolate);
     ContextifyScript* contextify_script =
         new ContextifyScript(env, args.This());
 
@@ -497,12 +496,14 @@ class ContextifyScript : public BaseObject {
 
   // args: sandbox, [options]
   static void RunInContext(const FunctionCallbackInfo<Value>& args) {
-    HandleScope scope(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
 
     // Assemble arguments
     TryCatch try_catch;
     if (!args[0]->IsObject()) {
-      return ThrowTypeError("contextifiedSandbox argument must be an object.");
+      return env->ThrowTypeError(
+          "contextifiedSandbox argument must be an object.");
     }
     Local<Object> sandbox = args[0].As<Object>();
     int64_t timeout = GetTimeoutArg(args, 1);
@@ -514,10 +515,10 @@ class ContextifyScript : public BaseObject {
 
     // Get the context from the sandbox
     ContextifyContext* contextify_context =
-        ContextifyContext::ContextFromContextifiedSandbox(args.GetIsolate(),
+        ContextifyContext::ContextFromContextifiedSandbox(env->isolate(),
                                                           sandbox);
     if (contextify_context == NULL) {
-      return ThrowTypeError(
+      return env->ThrowTypeError(
           "sandbox argument must have been converted to a context.");
     }
 
@@ -541,7 +542,8 @@ class ContextifyScript : public BaseObject {
       return -1;
     }
     if (!args[i]->IsObject()) {
-      ThrowTypeError("options must be an object");
+      Environment::ThrowTypeError(args.GetIsolate(),
+                                  "options must be an object");
       return -1;
     }
 
@@ -553,7 +555,8 @@ class ContextifyScript : public BaseObject {
     int64_t timeout = value->IntegerValue();
 
     if (timeout <= 0) {
-      ThrowRangeError("timeout must be a positive number");
+      Environment::ThrowRangeError(args.GetIsolate(),
+                                   "timeout must be a positive number");
       return -1;
     }
     return timeout;
@@ -566,7 +569,8 @@ class ContextifyScript : public BaseObject {
       return true;
     }
     if (!args[i]->IsObject()) {
-      ThrowTypeError("options must be an object");
+      Environment::ThrowTypeError(args.GetIsolate(),
+                                  "options must be an object");
       return false;
     }
 
@@ -590,7 +594,8 @@ class ContextifyScript : public BaseObject {
       return args[i].As<String>();
     }
     if (!args[i]->IsObject()) {
-      ThrowTypeError("options must be an object");
+      Environment::ThrowTypeError(args.GetIsolate(),
+                                  "options must be an object");
       return Local<String>();
     }
 
@@ -607,7 +612,8 @@ class ContextifyScript : public BaseObject {
                           const FunctionCallbackInfo<Value>& args,
                           TryCatch& try_catch) {
     if (!ContextifyScript::InstanceOf(env, args.This())) {
-      ThrowTypeError("Script methods can only be called on script instances.");
+      env->ThrowTypeError(
+          "Script methods can only be called on script instances.");
       return false;
     }
 
@@ -626,7 +632,7 @@ class ContextifyScript : public BaseObject {
 
     if (try_catch.HasCaught() && try_catch.HasTerminated()) {
       V8::CancelTerminateExecution(args.GetIsolate());
-      ThrowError("Script execution timed out.");
+      env->ThrowError("Script execution timed out.");
       return false;
     }
 

@@ -79,7 +79,7 @@ static void GetHostname(const FunctionCallbackInfo<Value>& args) {
 #else  // __MINGW32__
     int errorno = WSAGetLastError();
 #endif  // __POSIX__
-    return ThrowErrnoException(errorno, "gethostname");
+    return env->ThrowErrnoException(errorno, "gethostname");
   }
   buf[sizeof(buf) - 1] = '\0';
 
@@ -95,7 +95,7 @@ static void GetOSType(const FunctionCallbackInfo<Value>& args) {
 #ifdef __POSIX__
   struct utsname info;
   if (uname(&info) < 0) {
-    return ThrowErrnoException(errno, "uname");
+    return env->ThrowErrnoException(errno, "uname");
   }
   rval = info.sysname;
 #else  // __MINGW32__
@@ -114,7 +114,7 @@ static void GetOSRelease(const FunctionCallbackInfo<Value>& args) {
 #ifdef __POSIX__
   struct utsname info;
   if (uname(&info) < 0) {
-    return ThrowErrnoException(errno, "uname");
+    return env->ThrowErrnoException(errno, "uname");
   }
   rval = info.release;
 #else  // __MINGW32__
@@ -241,7 +241,7 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
   if (err == UV_ENOSYS) {
     args.GetReturnValue().Set(ret);
   } else if (err) {
-    return ThrowUVException(err, "uv_interface_addresses");
+    return env->ThrowUVException(err, "uv_interface_addresses");
   }
 
   for (i = 0; i < count; i++) {

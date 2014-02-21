@@ -391,6 +391,23 @@ class Environment {
   inline bool printed_error() const;
   inline void set_printed_error(bool value);
 
+  inline void ThrowError(const char* errmsg);
+  inline void ThrowTypeError(const char* errmsg);
+  inline void ThrowRangeError(const char* errmsg);
+  inline void ThrowErrnoException(int errorno,
+                                  const char* syscall = NULL,
+                                  const char* message = NULL,
+                                  const char* path = NULL);
+  inline void ThrowUVException(int errorno,
+                               const char* syscall = NULL,
+                               const char* message = NULL,
+                               const char* path = NULL);
+
+  // Convenience methods for contextify
+  inline static void ThrowError(v8::Isolate* isolate, const char* errmsg);
+  inline static void ThrowTypeError(v8::Isolate* isolate, const char* errmsg);
+  inline static void ThrowRangeError(v8::Isolate* isolate, const char* errmsg);
+
   // Strings are shared across shared contexts. The getters simply proxy to
   // the per-isolate primitive.
 #define V(PropertyName, StringValue)                                          \

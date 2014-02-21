@@ -60,7 +60,7 @@ using v8::Value;
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define TYPE_ERROR(msg) ThrowTypeError(msg)
+#define TYPE_ERROR(msg) env->ThrowTypeError(msg)
 
 #define THROW_BAD_ARGS TYPE_ERROR("Bad argument")
 
@@ -98,11 +98,11 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
 
 #define ASSERT_OFFSET(a) \
   if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
-    return ThrowTypeError("Not an integer"); \
+    return env->ThrowTypeError("Not an integer"); \
   }
 #define ASSERT_TRUNCATE_LENGTH(a) \
   if (!(a)->IsUndefined() && !(a)->IsNull() && !IsInt64((a)->NumberValue())) { \
-    return ThrowTypeError("Not an integer"); \
+    return env->ThrowTypeError("Not an integer"); \
   }
 #define GET_OFFSET(a) ((a)->IsNumber() ? (a)->IntegerValue() : -1)
 #define GET_TRUNCATE_LENGTH(a) ((a)->IntegerValue())
@@ -290,9 +290,9 @@ struct fs_req_wrap {
         (err == UV_EEXIST ||                                                  \
          err == UV_ENOTEMPTY ||                                               \
          err == UV_EPERM)) {                                                  \
-      return ThrowUVException(err, #func, "", dest);                          \
+      return env->ThrowUVException(err, #func, "", dest);                     \
     } else {                                                                  \
-      return ThrowUVException(err, #func, "", path);                          \
+      return env->ThrowUVException(err, #func, "", path);                     \
     }                                                                         \
   }                                                                           \
 
@@ -478,7 +478,7 @@ static void Symlink(const FunctionCallbackInfo<Value>& args) {
     } else if (strcmp(*mode, "junction") == 0) {
       flags |= UV_FS_SYMLINK_JUNCTION;
     } else if (strcmp(*mode, "file") != 0) {
-      return ThrowError("Unknown symlink type");
+      return env->ThrowError("Unknown symlink type");
     }
   }
 
@@ -759,13 +759,13 @@ static void WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   Local<Value> cb = args[5];
 
   if (off > buffer_length)
-    return ThrowRangeError("offset out of bounds");
+    return env->ThrowRangeError("offset out of bounds");
   if (len > buffer_length)
-    return ThrowRangeError("length out of bounds");
+    return env->ThrowRangeError("length out of bounds");
   if (off + len < off)
-    return ThrowRangeError("off + len overflow");
+    return env->ThrowRangeError("off + len overflow");
   if (!Buffer::IsWithinBounds(off, len, buffer_length))
-    return ThrowRangeError("off + len > buffer.length");
+    return env->ThrowRangeError("off + len > buffer.length");
 
   buf += off;
 
@@ -792,7 +792,7 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   if (!args[0]->IsInt32())
-    return ThrowTypeError("First argument must be file descriptor");
+    return env->ThrowTypeError("First argument must be file descriptor");
 
   Local<Value> cb;
   Local<Value> string = args[1];
@@ -876,7 +876,7 @@ static void Read(const FunctionCallbackInfo<Value>& args) {
   char * buf = NULL;
 
   if (!Buffer::HasInstance(args[1])) {
-    return ThrowError("Second argument needs to be a buffer");
+    return env->ThrowError("Second argument needs to be a buffer");
   }
 
   Local<Object> buffer_obj = args[1]->ToObject();
@@ -885,12 +885,12 @@ static void Read(const FunctionCallbackInfo<Value>& args) {
 
   size_t off = args[2]->Int32Value();
   if (off >= buffer_length) {
-    return ThrowError("Offset is out of bounds");
+    return env->ThrowError("Offset is out of bounds");
   }
 
   len = args[3]->Int32Value();
   if (!Buffer::IsWithinBounds(off, len, buffer_length))
-    return ThrowRangeError("Length extends beyond buffer");
+    return env->ThrowRangeError("Length extends beyond buffer");
 
   pos = GET_OFFSET(args[4]);
 

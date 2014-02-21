@@ -120,41 +120,6 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 # define NO_RETURN
 #endif
 
-// this would have been a template function were it not for the fact that g++
-// sometimes fails to resolve it...
-#define THROW_ERROR(fun)                                                      \
-  do {                                                                        \
-    v8::HandleScope scope(node_isolate);                                      \
-    v8::ThrowException(fun(OneByteString(node_isolate, errmsg)));             \
-  }                                                                           \
-  while (0)
-
-inline static void ThrowError(const char* errmsg) {
-  THROW_ERROR(v8::Exception::Error);
-}
-
-inline static void ThrowTypeError(const char* errmsg) {
-  THROW_ERROR(v8::Exception::TypeError);
-}
-
-inline static void ThrowRangeError(const char* errmsg) {
-  THROW_ERROR(v8::Exception::RangeError);
-}
-
-inline static void ThrowErrnoException(int errorno,
-                                       const char* syscall = NULL,
-                                       const char* message = NULL,
-                                       const char* path = NULL) {
-  v8::ThrowException(ErrnoException(errorno, syscall, message, path));
-}
-
-inline static void ThrowUVException(int errorno,
-                                    const char* syscall = NULL,
-                                    const char* message = NULL,
-                                    const char* path = NULL) {
-  v8::ThrowException(UVException(errorno, syscall, message, path));
-}
-
 void AppendExceptionLine(Environment* env,
                          v8::Handle<v8::Value> er,
                          v8::Handle<v8::Message> message);

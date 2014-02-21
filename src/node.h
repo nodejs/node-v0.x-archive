@@ -67,14 +67,39 @@ namespace node {
 
 class Environment;
 
-NODE_EXTERN v8::Local<v8::Value> ErrnoException(int errorno,
+NODE_EXTERN v8::Local<v8::Value> ErrnoException(v8::Isolate* isolate,
+                                                int errorno,
                                                 const char* syscall = NULL,
                                                 const char* message = NULL,
                                                 const char* path = NULL);
-NODE_EXTERN v8::Local<v8::Value> UVException(int errorno,
+NODE_EXTERN v8::Local<v8::Value> UVException(v8::Isolate* isolate,
+                                             int errorno,
                                              const char* syscall = NULL,
                                              const char* message = NULL,
                                              const char* path = NULL);
+
+/* Deprecated methods */
+inline v8::Local<v8::Value> ErrnoException(int errorno,
+                                           const char* syscall = NULL,
+                                           const char* message = NULL,
+                                           const char* path = NULL) {
+  return ErrnoException(v8::Isolate::GetCurrent(),
+                        errorno,
+                        syscall,
+                        message,
+                        path);
+}
+
+inline v8::Local<v8::Value> UVException(int errorno,
+                                        const char* syscall = NULL,
+                                        const char* message = NULL,
+                                        const char* path = NULL) {
+  return UVException(v8::Isolate::GetCurrent(),
+                     errorno,
+                     syscall,
+                     message,
+                     path);
+}
 
 /*
  * MakeCallback doesn't have a HandleScope. That means the callers scope

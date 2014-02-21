@@ -99,17 +99,17 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (!args[0]->IsObject())
-    return ThrowTypeError("source must be an object");
+    return env->ThrowTypeError("source must be an object");
   if (!args[2]->IsObject())
-    return ThrowTypeError("dest must be an object");
+    return env->ThrowTypeError("dest must be an object");
 
   Local<Object> source = args[0].As<Object>();
   Local<Object> dest = args[2].As<Object>();
 
   if (!source->HasIndexedPropertiesInExternalArrayData())
-    return ThrowError("source has no external array data");
+    return env->ThrowError("source has no external array data");
   if (!dest->HasIndexedPropertiesInExternalArrayData())
-    return ThrowError("dest has no external array data");
+    return env->ThrowError("dest has no external array data");
 
   size_t source_start = args[1]->Uint32Value();
   size_t dest_start = args[3]->Uint32Value();
@@ -132,16 +132,16 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
   // optimization for Uint8 arrays (i.e. Buffers)
   if (source_size != 1 && dest_size != 1) {
     if (source_size == 0)
-      return ThrowTypeError("unknown source external array type");
+      return env->ThrowTypeError("unknown source external array type");
     if (dest_size == 0)
-      return ThrowTypeError("unknown dest external array type");
+      return env->ThrowTypeError("unknown dest external array type");
 
     if (source_length * source_size < source_length)
-      return ThrowRangeError("source_length * source_size overflow");
+      return env->ThrowRangeError("source_length * source_size overflow");
     if (copy_length * source_size < copy_length)
-      return ThrowRangeError("copy_length * source_size overflow");
+      return env->ThrowRangeError("copy_length * source_size overflow");
     if (dest_length * dest_size < dest_length)
-      return ThrowRangeError("dest_length * dest_size overflow");
+      return env->ThrowRangeError("dest_length * dest_size overflow");
 
     source_length *= source_size;
     copy_length *= source_size;
@@ -150,19 +150,19 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
 
   // necessary to check in case (source|dest)_start _and_ copy_length overflow
   if (copy_length > source_length)
-    return ThrowRangeError("copy_length > source_length");
+    return env->ThrowRangeError("copy_length > source_length");
   if (copy_length > dest_length)
-    return ThrowRangeError("copy_length > dest_length");
+    return env->ThrowRangeError("copy_length > dest_length");
   if (source_start > source_length)
-    return ThrowRangeError("source_start > source_length");
+    return env->ThrowRangeError("source_start > source_length");
   if (dest_start > dest_length)
-    return ThrowRangeError("dest_start > dest_length");
+    return env->ThrowRangeError("dest_start > dest_length");
 
   // now we can guarantee these will catch oob access and *_start overflow
   if (source_start + copy_length > source_length)
-    return ThrowRangeError("source_start + copy_length > source_length");
+    return env->ThrowRangeError("source_start + copy_length > source_length");
   if (dest_start + copy_length > dest_length)
-    return ThrowRangeError("dest_start + copy_length > dest_length");
+    return env->ThrowRangeError("dest_start + copy_length > dest_length");
 
   memmove(dest_data + dest_start, source_data + source_start, copy_length);
 }
@@ -220,7 +220,7 @@ void Alloc(const FunctionCallbackInfo<Value>& args) {
 
   // can't perform this check in JS
   if (obj->HasIndexedPropertiesInExternalArrayData())
-    return ThrowTypeError("object already has external array data");
+    return env->ThrowTypeError("object already has external array data");
 
   size_t length = args[1]->Uint32Value();
   enum ExternalArrayType array_type;

@@ -374,12 +374,12 @@ class ZCtx : public AsyncWrap {
     Environment* env = Environment::GetCurrent(args.GetIsolate());
 
     if (args.Length() < 1 || !args[0]->IsInt32()) {
-      return ThrowTypeError("Bad argument");
+      return env->ThrowTypeError("Bad argument");
     }
     node_zlib_mode mode = static_cast<node_zlib_mode>(args[0]->Int32Value());
 
     if (mode < DEFLATE || mode > UNZIP) {
-      return ThrowTypeError("Bad argument");
+      return env->ThrowTypeError("Bad argument");
     }
 
     new ZCtx(env, args.This(), mode);
