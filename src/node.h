@@ -61,6 +61,8 @@
 #include "v8.h"  // NOLINT(build/include_order)
 #include "node_version.h"  // NODE_MODULE_VERSION
 
+#define NODE_DEPRECATED(msg, fn) V8_DEPRECATED(msg, fn)
+
 // Forward-declare these functions now to stop MSVS from becoming
 // terminally confused when it's done in node_internals.h
 namespace node {
@@ -78,17 +80,18 @@ NODE_EXTERN v8::Local<v8::Value> UVException(v8::Isolate* isolate,
                                              const char* message = NULL,
                                              const char* path = NULL);
 
-/* Deprecated methods */
-inline v8::Local<v8::Value> ErrnoException(int errorno,
-                                           const char* syscall = NULL,
-                                           const char* message = NULL,
-                                           const char* path = NULL) {
+NODE_DEPRECATED("Use UVException(isolate, ...)",
+                inline v8::Local<v8::Value> ErrnoException(
+      int errorno,
+      const char* syscall = NULL,
+      const char* message = NULL,
+      const char* path = NULL) {
   return ErrnoException(v8::Isolate::GetCurrent(),
                         errorno,
                         syscall,
                         message,
                         path);
-}
+})
 
 inline v8::Local<v8::Value> UVException(int errorno,
                                         const char* syscall = NULL,
@@ -213,9 +216,23 @@ inline void NODE_SET_PROTOTYPE_METHOD(v8::Handle<v8::FunctionTemplate> recv,
 }
 #define NODE_SET_PROTOTYPE_METHOD node::NODE_SET_PROTOTYPE_METHOD
 
-enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
+enum encoding ParseEncoding(v8::Isolate* isolate,
+                            v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
-NODE_EXTERN void FatalException(const v8::TryCatch& try_catch);
+NODE_DEPRECATED("Use ParseEncoding(isolate, ...)",
+                inline enum encoding ParseEncoding(
+      v8::Handle<v8::Value> encoding_v,
+      enum encoding _default = BINARY) {
+  return ParseEncoding(v8::Isolate::GetCurrent(), encoding_v, _default);
+})
+
+NODE_EXTERN void FatalException(v8::Isolate* isolate,
+                                const v8::TryCatch& try_catch);
+
+NODE_DEPRECATED("Use FatalException(isolate, ...)",
+                inline void FatalException(const v8::TryCatch& try_catch) {
+  return FatalException(v8::Isolate::GetCurrent(), try_catch);
+})
 
 NODE_EXTERN v8::Local<v8::Value> Encode(const void* buf,
                                         size_t len,
@@ -232,9 +249,23 @@ NODE_EXTERN ssize_t DecodeWrite(char* buf,
                                 enum encoding encoding = BINARY);
 
 #ifdef _WIN32
-NODE_EXTERN v8::Local<v8::Value> WinapiErrnoException(int errorno,
-    const char *syscall = NULL,  const char *msg = "",
+NODE_EXTERN v8::Local<v8::Value> WinapiErrnoException(
+    v8::Isolate* isolate,
+    int errorno,
+    const char *syscall = NULL,
+    const char *msg = "",
     const char *path = NULL);
+
+NODE_DEPRECATED("Use WinapiErrnoException(isolate, ...)",
+                inline v8::Local<v8::Value> WinapiErrnoException(int errorno,
+    const char *syscall = NULL,  const char *msg = "",
+    const char *path = NULL) {
+  return WinapiErrnoException(v8::Isolate::GetCurrent(),
+                              errorno,
+                              syscall,
+                              msg,
+                              path);
+})
 #endif
 
 const char *signo_string(int errorno);

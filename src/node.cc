@@ -811,12 +811,11 @@ static const char *winapi_strerror(const int errorno) {
 }
 
 
-Local<Value> WinapiErrnoException(int errorno,
+Local<Value> WinapiErrnoException(Environment* env,
+                                  int errorno,
                                   const char* syscall,
                                   const char* msg,
                                   const char* path) {
-  Environment* env = Environment::GetCurrent(node_isolate);
-
   Local<Value> e;
   if (!msg || !msg[0]) {
     msg = winapi_strerror(errorno);
@@ -847,6 +846,15 @@ Local<Value> WinapiErrnoException(int errorno,
   }
 
   return e;
+}
+
+
+Local<Value> WinapiErrnoException(int errorno,
+                                  const char* syscall,
+                                  const char* msg,
+                                  const char* path) {
+  Environment* env = Environment::GetCurrent(Isolate::GetCurrent());
+  return WinapiErrnoException(env, errorno, syscall, msg, path);
 }
 #endif
 
@@ -1146,11 +1154,12 @@ Handle<Value> MakeCallback(Environment* env,
 }
 
 
-Handle<Value> MakeCallback(Handle<Object> recv,
+Handle<Value> MakeCallback(Isolate* isolate,
+                           Handle<Object> recv,
                            const char* method,
                            int argc,
                            Handle<Value> argv[]) {
-  HandleScope handle_scope(node_isolate);  // FIXME(bnoordhuis) Isolate-ify.
+  HandleScope handle_scope(isolate);
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
@@ -1158,11 +1167,12 @@ Handle<Value> MakeCallback(Handle<Object> recv,
 }
 
 
-Handle<Value> MakeCallback(Handle<Object> recv,
+Handle<Value> MakeCallback(Isolate* isolate,
+                           Handle<Object> recv,
                            Handle<String> symbol,
                            int argc,
                            Handle<Value> argv[]) {
-  HandleScope handle_scope(node_isolate);  // FIXME(bnoordhuis) Isolate-ify.
+  HandleScope handle_scope(isolate);
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
@@ -1170,11 +1180,12 @@ Handle<Value> MakeCallback(Handle<Object> recv,
 }
 
 
-Handle<Value> MakeCallback(Handle<Object> recv,
+Handle<Value> MakeCallback(Isolate* isolate,
+                           Handle<Object> recv,
                            Handle<Function> callback,
                            int argc,
                            Handle<Value> argv[]) {
-  HandleScope handle_scope(node_isolate);  // FIXME(bnoordhuis) Isolate-ify.
+  HandleScope handle_scope(isolate);
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
@@ -1196,8 +1207,10 @@ Handle<Value> MakeDomainCallback(Handle<Object> recv,
 }
 
 
-enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
-  HandleScope scope(node_isolate);
+enum encoding ParseEncoding(Isolate* isolate,
+                            Handle<Value> encoding_v,
+                            enum encoding _default) {
+  HandleScope scope(isolate);
 
   if (!encoding_v->IsString())
     return _default;
@@ -2097,10 +2110,12 @@ NO_RETURN void FatalError(const char* location, const char* message) {
 }
 
 
-void FatalException(Handle<Value> error, Handle<Message> message) {
-  HandleScope scope(node_isolate);
+void FatalException(Isolate* isolate,
+                    Handle<Value> error,
+                    Handle<Message> message) {
+  HandleScope scope(isolate);
 
-  Environment* env = Environment::GetCurrent(node_isolate);
+  Environment* env = Environment::GetCurrent(isolate);
   Local<Object> process_object = env->process_object();
   Local<String> fatal_exception_string = env->fatal_exception_string();
   Local<Function> fatal_exception_function =
@@ -2135,18 +2150,18 @@ void FatalException(Handle<Value> error, Handle<Message> message) {
 }
 
 
-void FatalException(const TryCatch& try_catch) {
-  HandleScope scope(node_isolate);
+void FatalException(Isolate* isolate, const TryCatch& try_catch) {
+  HandleScope scope(isolate);
   // TODO(bajtos) do not call FatalException if try_catch is verbose
   // (requires V8 API to expose getter for try_catch.is_verbose_)
-  FatalException(try_catch.Exception(), try_catch.Message());
+  FatalException(isolate, try_catch.Exception(), try_catch.Message());
 }
 
 
 void OnMessage(Handle<Message> message, Handle<Value> error) {
   // The current version of V8 sends messages for errors only
   // (thus `error` is always set).
-  FatalException(error, message);
+  FatalException(Isolate::GetCurrent(), error, message);
 }
 
 
@@ -2383,8 +2398,7 @@ static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
 }
 
 
-static Handle<Object> GetFeatures() {
-  Environment* env = Environment::GetCurrent(node_isolate);
+static Handle<Object> GetFeatures(Environment* env) {
   HandleScope scope(env->isolate());
 
   Local<Object> obj = Object::New();
@@ -2636,7 +2650,7 @@ void SetupProcessObject(Environment* env,
   process->Set(env->env_string(), process_env);
 
   READONLY_PROPERTY(process, "pid", Integer::New(getpid(), env->isolate()));
-  READONLY_PROPERTY(process, "features", GetFeatures());
+  READONLY_PROPERTY(process, "features", GetFeatures(env));
   process->SetAccessor(env->need_imm_cb_string(),
       NeedImmediateCallbackGetter,
       NeedImmediateCallbackSetter);
@@ -3029,9 +3043,8 @@ static void DispatchMessagesDebugAgentCallback() {
 
 
 // Called from the main thread.
-static void EnableDebug(bool wait_connect) {
+static void EnableDebug(Isolate* isolate, bool wait_connect) {
   assert(debugger_running == false);
-  Isolate* isolate = node_isolate;  // TODO(bnoordhuis) Multi-isolate support.
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
   v8::Debug::SetDebugMessageDispatchHandler(DispatchMessagesDebugAgentCallback,
@@ -3067,7 +3080,7 @@ static void EnableDebug(bool wait_connect) {
 static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle, int status) {
   if (debugger_running == false) {
     fprintf(stderr, "Starting debugger agent.\n");
-    EnableDebug(false);
+    EnableDebug(node_isolate, false);
   }
   Isolate::Scope isolate_scope(node_isolate);
   v8::Debug::ProcessDebugMessages();
@@ -3196,7 +3209,8 @@ static int RegisterDebugSignalHandler() {
 
 
 static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
   DWORD pid;
   HANDLE process = NULL;
   HANDLE thread = NULL;
@@ -3217,7 +3231,8 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                         FALSE,
                         pid);
   if (process == NULL) {
-    env->ThrowException(WinapiErrnoException(GetLastError(), "OpenProcess"));
+    env->ThrowException(
+        WinapiErrnoException(env, GetLastError(), "OpenProcess"));
     goto out;
   }
 
@@ -3230,7 +3245,8 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
 
   mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, mapping_name);
   if (mapping == NULL) {
-    env->ThrowException(WinapiErrnoException(GetLastError(),
+    env->ThrowException(WinapiErrnoException(env,
+                                             GetLastError(),
                                              "OpenFileMappingW"));
     goto out;
   }
@@ -3242,7 +3258,8 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                     0,
                     sizeof *handler));
   if (handler == NULL || *handler == NULL) {
-    env->ThrowException(WinapiErrnoException(GetLastError(), "MapViewOfFile"));
+    env->ThrowException(
+        WinapiErrnoException(env, GetLastError(), "MapViewOfFile"));
     goto out;
   }
 
@@ -3254,14 +3271,16 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                               0,
                               NULL);
   if (thread == NULL) {
-    env->ThrowException(WinapiErrnoException(GetLastError(),
+    env->ThrowException(WinapiErrnoException(env,
+                                             GetLastError(),
                                              "CreateRemoteThread"));
     goto out;
   }
 
   // Wait for the thread to terminate
   if (WaitForSingleObject(thread, INFINITE) != WAIT_OBJECT_0) {
-    env->ThrowException(WinapiErrnoException(GetLastError(),
+    env->ThrowException(WinapiErrnoException(env,
+                                             GetLastError(),
                                              "WaitForSingleObject"));
     goto out;
   }
@@ -3385,7 +3404,7 @@ void Init(int* argc,
 
   // If the --debug flag was specified then initialize the debug thread.
   if (use_debug_agent) {
-    EnableDebug(debug_wait_connect);
+    EnableDebug(node_isolate, debug_wait_connect);
   } else {
     RegisterDebugSignalHandler();
   }

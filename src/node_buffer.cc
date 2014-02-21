@@ -599,7 +599,7 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
     return env->ThrowTypeError("Argument must be a string");
 
   Local<String> s = args[0]->ToString();
-  enum encoding e = ParseEncoding(args[1], UTF8);
+  enum encoding e = ParseEncoding(env->isolate(), args[1], UTF8);
 
   uint32_t size = StringBytes::Size(env, s, e);
   args.GetReturnValue().Set(size);

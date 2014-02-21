@@ -2424,7 +2424,7 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
   // Only copy the data if we have to, because it's a string
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
-    enum encoding encoding = ParseEncoding(args[1], BINARY);
+    enum encoding encoding = ParseEncoding(env->isolate(), args[1], BINARY);
     if (!StringBytes::IsValidString(env, string, encoding))
       return env->ThrowTypeError("Bad input string");
     size_t buflen = StringBytes::StorageSize(env, string, encoding);
@@ -2595,7 +2595,7 @@ void Hmac::HmacUpdate(const FunctionCallbackInfo<Value>& args) {
   bool r;
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
-    enum encoding encoding = ParseEncoding(args[1], BINARY);
+    enum encoding encoding = ParseEncoding(env->isolate(), args[1], BINARY);
     if (!StringBytes::IsValidString(env, string, encoding))
       return env->ThrowTypeError("Bad input string");
     size_t buflen = StringBytes::StorageSize(env, string, encoding);
@@ -2634,7 +2634,7 @@ void Hmac::HmacDigest(const FunctionCallbackInfo<Value>& args) {
 
   enum encoding encoding = BUFFER;
   if (args.Length() >= 1) {
-    encoding = ParseEncoding(args[0]->ToString(), BUFFER);
+    encoding = ParseEncoding(env->isolate(), args[0]->ToString(), BUFFER);
   }
 
   unsigned char* md_value = NULL;
@@ -2714,7 +2714,7 @@ void Hash::HashUpdate(const FunctionCallbackInfo<Value>& args) {
   bool r;
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
-    enum encoding encoding = ParseEncoding(args[1], BINARY);
+    enum encoding encoding = ParseEncoding(env->isolate(), args[1], BINARY);
     if (!StringBytes::IsValidString(env, string, encoding))
       return env->ThrowTypeError("Bad input string");
     size_t buflen = StringBytes::StorageSize(env, string, encoding);
@@ -2746,7 +2746,7 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
 
   enum encoding encoding = BUFFER;
   if (args.Length() >= 1) {
-    encoding = ParseEncoding(args[0]->ToString(), BUFFER);
+    encoding = ParseEncoding(env->isolate(), args[0]->ToString(), BUFFER);
   }
 
   unsigned char md_value[EVP_MAX_MD_SIZE];
@@ -2872,7 +2872,7 @@ void Sign::SignUpdate(const FunctionCallbackInfo<Value>& args) {
   Error err;
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
-    enum encoding encoding = ParseEncoding(args[1], BINARY);
+    enum encoding encoding = ParseEncoding(env->isolate(), args[1], BINARY);
     if (!StringBytes::IsValidString(env, string, encoding))
       return env->ThrowTypeError("Bad input string");
     size_t buflen = StringBytes::StorageSize(env, string, encoding);
@@ -2948,7 +2948,7 @@ void Sign::SignFinal(const FunctionCallbackInfo<Value>& args) {
   unsigned int len = args.Length();
   enum encoding encoding = BUFFER;
   if (len >= 2 && args[1]->IsString()) {
-    encoding = ParseEncoding(args[1]->ToString(), BUFFER);
+    encoding = ParseEncoding(env->isolate(), args[1]->ToString(), BUFFER);
   }
 
   String::Utf8Value passphrase(args[2]);
@@ -3053,7 +3053,7 @@ void Verify::VerifyUpdate(const FunctionCallbackInfo<Value>& args) {
   Error err;
   if (args[0]->IsString()) {
     Local<String> string = args[0].As<String>();
-    enum encoding encoding = ParseEncoding(args[1], BINARY);
+    enum encoding encoding = ParseEncoding(env->isolate(), args[1], BINARY);
     if (!StringBytes::IsValidString(env, string, encoding))
       return env->ThrowTypeError("Bad input string");
     size_t buflen = StringBytes::StorageSize(env, string, encoding);
@@ -3162,7 +3162,7 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
   // BINARY works for both buffers and binary strings.
   enum encoding encoding = BINARY;
   if (args.Length() >= 3) {
-    encoding = ParseEncoding(args[2]->ToString(), BINARY);
+    encoding = ParseEncoding(env->isolate(), args[2]->ToString(), BINARY);
   }
 
   ssize_t hlen = StringBytes::Size(env, args[1], encoding);

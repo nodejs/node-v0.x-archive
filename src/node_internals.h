@@ -184,6 +184,13 @@ NODE_EXTERN ssize_t DecodeWrite(Environment* env,
                                 v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);
 
+NODE_EXTERN v8::Local<v8::Value> WinapiErrnoException(
+    Environment* env,
+    int errorno,
+    const char *syscall = NULL,
+    const char *msg = "",
+    const char *path = NULL);
+
 }  // namespace node
 
 #endif  // SRC_NODE_INTERNALS_H_
