@@ -197,7 +197,7 @@ static int CryptoPemCallback(char *buf, int size, int rwflag, void *u) {
 void ThrowCryptoErrorHelper(Environment* env,
                             unsigned long err,
                             bool is_type_error) {
-  HandleScope scope(node_isolate);
+  HandleScope scope(env->isolate());
   char errmsg[128];
   ERR_error_string_n(err, errmsg, sizeof(errmsg));
   if (is_type_error)
