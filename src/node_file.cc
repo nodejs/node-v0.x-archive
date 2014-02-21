@@ -1092,7 +1092,7 @@ void InitFs(Handle<Object> target,
   NODE_SET_METHOD(target, "utimes", UTimes);
   NODE_SET_METHOD(target, "futimes", FUTimes);
 
-  StatWatcher::Initialize(target);
+  StatWatcher::Initialize(env, target);
 }
 
 }  // end namespace node
