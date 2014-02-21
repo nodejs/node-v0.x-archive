@@ -4019,7 +4019,7 @@ void GetSSLCiphers(const FunctionCallbackInfo<Value>& args) {
 
 class CipherPushContext {
  public:
-  CipherPushContext(Environment* env) : arr(Array::New()), env_(env) {
+  explicit CipherPushContext(Environment* env) : arr(Array::New()), env_(env) {
   }
 
   inline Environment* env() const { return env_; }
