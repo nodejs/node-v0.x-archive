@@ -75,6 +75,8 @@ namespace node {
   V(dev_string, "dev")                                                        \
   V(disposed_string, "_disposed")                                             \
   V(domain_string, "domain")                                                  \
+  V(idle_string, "idle")                                                      \
+  V(irq_string, "irq")                                                        \
   V(enter_string, "enter")                                                    \
   V(env_pairs_string, "envPairs")                                             \
   V(env_string, "env")                                                        \
@@ -107,20 +109,25 @@ namespace node {
   V(inherit_string, "inherit")                                                \
   V(ino_string, "ino")                                                        \
   V(input_string, "input")                                                    \
+  V(internal_string, "internal")                                              \
   V(ipv4_string, "IPv4")                                                      \
   V(ipv6_lc_string, "ipv6")                                                   \
   V(ipv6_string, "IPv6")                                                      \
   V(issuer_string, "issuer")                                                  \
   V(kill_signal_string, "killSignal")                                         \
+  V(mac_string, "mac")                                                        \
   V(mark_sweep_compact_string, "mark-sweep-compact")                          \
   V(max_buffer_string, "maxBuffer")                                           \
   V(message_string, "message")                                                \
   V(method_string, "method")                                                  \
   V(mode_string, "mode")                                                      \
+  V(model_string, "model")                                                    \
   V(modulus_string, "modulus")                                                \
   V(mtime_string, "mtime")                                                    \
   V(name_string, "name")                                                      \
   V(need_imm_cb_string, "_needImmediateCallback")                             \
+  V(netmask_string, "netmask")                                                \
+  V(nice_string, "nice")                                                      \
   V(nlink_string, "nlink")                                                    \
   V(onchange_string, "onchange")                                              \
   V(onclienthello_string, "onclienthello")                                    \
@@ -152,6 +159,7 @@ namespace node {
   V(rename_string, "rename")                                                  \
   V(rss_string, "rss")                                                        \
   V(scavenge_string, "scavenge")                                              \
+  V(scopeid_string, "scopeid")                                                \
   V(sent_shutdown_string, "sentShutdown")                                     \
   V(serial_number_string, "serialNumber")                                     \
   V(servername_string, "servername")                                          \
@@ -162,6 +170,7 @@ namespace node {
   V(smalloc_p_string, "_smalloc_p")                                           \
   V(sni_context_err_string, "Invalid SNI context")                            \
   V(sni_context_string, "sni_context")                                        \
+  V(speed_string, "speed")                                                    \
   V(stack_string, "stack")                                                    \
   V(status_code_string, "statusCode")                                         \
   V(status_message_string, "statusMessage")                                   \
@@ -169,11 +178,13 @@ namespace node {
   V(stdio_string, "stdio")                                                    \
   V(subject_string, "subject")                                                \
   V(subjectaltname_string, "subjectaltname")                                  \
+  V(sys_string, "sys")                                                        \
   V(syscall_string, "syscall")                                                \
   V(tick_callback_string, "_tickCallback")                                    \
   V(tick_domain_cb_string, "_tickDomainCallback")                             \
   V(tick_info_string, "_tickInfo")                                            \
   V(timeout_string, "timeout")                                                \
+  V(times_string, "times")                                                    \
   V(timestamp_string, "timestamp")                                            \
   V(title_string, "title")                                                    \
   V(tls_npn_string, "tls_npn")                                                \
@@ -185,9 +196,11 @@ namespace node {
   V(total_physical_size_string, "total_physical_size")                        \
   V(type_string, "type")                                                      \
   V(uid_string, "uid")                                                        \
+  V(unknown_string, "<unknown>")                                              \
   V(upgrade_string, "upgrade")                                                \
   V(url_string, "url")                                                        \
   V(used_heap_size_string, "used_heap_size")                                  \
+  V(user_string, "user")                                                      \
   V(uv_string, "uv")                                                          \
   V(valid_from_string, "valid_from")                                          \
   V(valid_to_string, "valid_to")                                              \
