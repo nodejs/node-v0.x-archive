@@ -140,15 +140,18 @@ namespace node {
   V(output_string, "output")                                                  \
   V(owner_string, "owner")                                                    \
   V(path_string, "path")                                                      \
+  V(pbkdf2_error_string, "PBKDF2 Error")                                      \
   V(pid_string, "pid")                                                        \
   V(pipe_string, "pipe")                                                      \
   V(port_string, "port")                                                      \
   V(processed_string, "processed")                                            \
   V(rdev_string, "rdev")                                                      \
   V(readable_string, "readable")                                              \
+  V(received_shutdown_string, "receivedShutdown")                             \
   V(rename_string, "rename")                                                  \
   V(rss_string, "rss")                                                        \
   V(scavenge_string, "scavenge")                                              \
+  V(sent_shutdown_string, "sentShutdown")                                     \
   V(serial_number_string, "serialNumber")                                     \
   V(servername_string, "servername")                                          \
   V(session_id_string, "sessionId")                                           \
@@ -194,6 +197,7 @@ namespace node {
   V(windows_verbatim_arguments_string, "windowsVerbatimArguments")            \
   V(writable_string, "writable")                                              \
   V(write_queue_size_string, "writeQueueSize")                                \
+  V(zero_return_string, "ZERO_RETURN")                                        \
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
   V(async_listener_run_function, v8::Function)                                \

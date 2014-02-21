@@ -816,7 +816,7 @@ void TLSCallbacks::Initialize(Handle<Object> target,
                             "enableHelloParser",
                             EnableHelloParser);
 
-  SSLWrap<TLSCallbacks>::AddMethods(t);
+  SSLWrap<TLSCallbacks>::AddMethods(env, t);
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   NODE_SET_PROTOTYPE_METHOD(t, "getServername", GetServername);
