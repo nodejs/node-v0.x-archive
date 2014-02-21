@@ -234,19 +234,42 @@ NODE_DEPRECATED("Use FatalException(isolate, ...)",
   return FatalException(v8::Isolate::GetCurrent(), try_catch);
 })
 
-NODE_EXTERN v8::Local<v8::Value> Encode(const void* buf,
+NODE_EXTERN v8::Local<v8::Value> Encode(v8::Isolate* isolate,
+                                        const void* buf,
                                         size_t len,
                                         enum encoding encoding = BINARY);
+NODE_DEPRECATED("Use Encode(isolate, ...)",
+                inline v8::Local<v8::Value> Encode(
+    const void* buf,
+    size_t len,
+    enum encoding encoding = BINARY) {
+  return Encode(v8::Isolate::GetCurrent(), buf, len, encoding);
+})
 
 // Returns -1 if the handle was not valid for decoding
-NODE_EXTERN ssize_t DecodeBytes(v8::Handle<v8::Value>,
+NODE_EXTERN ssize_t DecodeBytes(v8::Isolate* isolate,
+                                v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);
+NODE_DEPRECATED("Use DecodeBytes(isolate, ...)",
+                inline ssize_t DecodeBytes(
+    v8::Handle<v8::Value> val,
+    enum encoding encoding = BINARY) {
+  return DecodeBytes(v8::Isolate::GetCurrent(), val, encoding);
+})
 
 // returns bytes written.
-NODE_EXTERN ssize_t DecodeWrite(char* buf,
+NODE_EXTERN ssize_t DecodeWrite(v8::Isolate* isolate,
+                                char* buf,
                                 size_t buflen,
                                 v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);
+NODE_DEPRECATED("Use DecodeWrite(isolate, ...)",
+                inline ssize_t DecodeWrite(char* buf,
+                                           size_t buflen,
+                                           v8::Handle<v8::Value> val,
+                                           enum encoding encoding = BINARY) {
+  return DecodeWrite(v8::Isolate::GetCurrent(), buf, buflen, val, encoding);
+})
 
 #ifdef _WIN32
 NODE_EXTERN v8::Local<v8::Value> WinapiErrnoException(

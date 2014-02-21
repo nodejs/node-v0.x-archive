@@ -68,6 +68,7 @@ using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::Handle;
 using v8::HandleScope;
+using v8::Isolate;
 using v8::Local;
 using v8::Number;
 using v8::Object;
@@ -116,23 +117,23 @@ size_t Length(Handle<Object> obj) {
 
 
 Local<Object> New(Handle<String> string, enum encoding enc) {
-  Environment* env = Environment::GetCurrent(node_isolate);
-  HandleScope scope(env->isolate());
+  Isolate* isolate = node_isolate;
+  HandleScope scope(isolate);
 
-  size_t length = StringBytes::Size(env, string, enc);
+  size_t length = StringBytes::Size(isolate, string, enc);
 
   Local<Object> buf = New(length);
   char* data = Buffer::Data(buf);
-  StringBytes::Write(env, data, length, string, enc);
+  StringBytes::Write(isolate, data, length, string, enc);
 
   return scope.Close(buf);
 }
 
 
 Local<Object> New(size_t length) {
-  Environment* env = Environment::GetCurrent(node_isolate);
-  HandleScope handle_scope(env->isolate());
-  Local<Object> obj = Buffer::New(env, length);
+  Isolate* isolate = node_isolate;
+  HandleScope handle_scope(isolate);
+  Local<Object> obj = Buffer::New(Environment::GetCurrent(isolate), length);
   return handle_scope.Close(obj);
 }
 
@@ -262,7 +263,7 @@ void StringSlice(const FunctionCallbackInfo<Value>& args) {
   SLICE_START_END(args[0], args[1], obj_length)
 
   args.GetReturnValue().Set(
-      StringBytes::Encode(env, obj_data + start, length, encoding));
+      StringBytes::Encode(env->isolate(), obj_data + start, length, encoding));
 }
 
 
@@ -415,7 +416,7 @@ void StringWrite(const FunctionCallbackInfo<Value>& args) {
   if (offset >= obj_length)
     return env->ThrowRangeError("Offset is out of bounds");
 
-  uint32_t written = StringBytes::Write(env,
+  uint32_t written = StringBytes::Write(env->isolate(),
                                         obj_data + offset,
                                         max_length,
                                         str,
@@ -601,7 +602,7 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
   Local<String> s = args[0]->ToString();
   enum encoding e = ParseEncoding(env->isolate(), args[1], UTF8);
 
-  uint32_t size = StringBytes::Size(env, s, e);
+  uint32_t size = StringBytes::Size(env->isolate(), s, e);
   args.GetReturnValue().Set(size);
 }
 
