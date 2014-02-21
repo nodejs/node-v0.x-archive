@@ -1244,13 +1244,20 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
 }
 
 Local<Value> Encode(Environment* env,
-                    const void *buf,
+                    const void* buf,
                     size_t len,
                     enum encoding encoding) {
   return StringBytes::Encode(env,
                              static_cast<const char*>(buf),
                              len,
                              encoding);
+}
+
+Local<Value> Encode(const void* buf,
+                    size_t len,
+                    enum encoding encoding) {
+  Environment* env = Environment::GetCurrent(Isolate::GetCurrent());
+  return Encode(env, buf, len, encoding);
 }
 
 // Returns -1 if the handle was not valid for decoding
@@ -1269,17 +1276,30 @@ ssize_t DecodeBytes(Environment* env,
   return StringBytes::Size(env, val, encoding);
 }
 
+ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
+  Environment* env = Environment::GetCurrent(Isolate::GetCurrent());
+  return DecodeBytes(env, val, encoding);
+}
+
 #ifndef MIN
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
 // Returns number of bytes written.
 ssize_t DecodeWrite(Environment* env,
-                    char *buf,
+                    char* buf,
                     size_t buflen,
                     v8::Handle<v8::Value> val,
                     enum encoding encoding) {
   return StringBytes::Write(env, buf, buflen, val, encoding, NULL);
+}
+
+ssize_t DecodeWrite(char* buf,
+                    size_t buflen,
+                    v8::Handle<v8::Value> val,
+                    enum encoding encoding) {
+  Environment* env = Environment::GetCurrent(Isolate::GetCurrent());
+  return DecodeWrite(env, buf, buflen, val, encoding);
 }
 
 void AppendExceptionLine(Environment* env,

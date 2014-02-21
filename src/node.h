@@ -65,7 +65,7 @@
 // terminally confused when it's done in node_internals.h
 namespace node {
 
-class Environment;
+enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER};
 
 NODE_EXTERN v8::Local<v8::Value> ErrnoException(v8::Isolate* isolate,
                                                 int errorno,
@@ -213,24 +213,20 @@ inline void NODE_SET_PROTOTYPE_METHOD(v8::Handle<v8::FunctionTemplate> recv,
 }
 #define NODE_SET_PROTOTYPE_METHOD node::NODE_SET_PROTOTYPE_METHOD
 
-enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER};
 enum encoding ParseEncoding(v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
 NODE_EXTERN void FatalException(const v8::TryCatch& try_catch);
 
-NODE_EXTERN v8::Local<v8::Value> Encode(Environment* env,
-                                        const void* buf,
+NODE_EXTERN v8::Local<v8::Value> Encode(const void* buf,
                                         size_t len,
                                         enum encoding encoding = BINARY);
 
 // Returns -1 if the handle was not valid for decoding
-NODE_EXTERN ssize_t DecodeBytes(Environment* env,
-                                v8::Handle<v8::Value>,
+NODE_EXTERN ssize_t DecodeBytes(v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);
 
 // returns bytes written.
-NODE_EXTERN ssize_t DecodeWrite(Environment* env,
-                                char* buf,
+NODE_EXTERN ssize_t DecodeWrite(char* buf,
                                 size_t buflen,
                                 v8::Handle<v8::Value>,
                                 enum encoding encoding = BINARY);

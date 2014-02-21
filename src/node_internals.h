@@ -22,6 +22,7 @@
 #ifndef SRC_NODE_INTERNALS_H_
 #define SRC_NODE_INTERNALS_H_
 
+#include "node.h"
 #include "env.h"
 #include "util.h"
 #include "util-inl.h"
@@ -169,6 +170,19 @@ inline MUST_USE_RESULT bool ParseArrayIndex(v8::Handle<v8::Value> arg,
   *ret = static_cast<size_t>(tmp_i);
   return true;
 }
+
+NODE_EXTERN v8::Local<v8::Value> Encode(Environment* env,
+                                        const void* buf,
+                                        size_t len,
+                                        enum encoding encoding = BINARY);
+NODE_EXTERN ssize_t DecodeBytes(Environment* env,
+                                v8::Handle<v8::Value>,
+                                enum encoding encoding = BINARY);
+NODE_EXTERN ssize_t DecodeWrite(Environment* env,
+                                char* buf,
+                                size_t buflen,
+                                v8::Handle<v8::Value>,
+                                enum encoding encoding = BINARY);
 
 }  // namespace node
 
