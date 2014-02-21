@@ -74,6 +74,48 @@ class StringBytes {
                                      const char* buf,
                                      size_t buflen,
                                      enum encoding encoding);
+
+  // Deprecated legacy interface
+
+  static inline bool IsValidString(v8::Handle<v8::String> string,
+                                   enum encoding enc) {
+    Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+    return IsValidString(env, string, enc);
+  }
+
+  static inline size_t StorageSize(v8::Handle<v8::Value> val,
+                                   enum encoding enc) {
+    Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+    return StorageSize(env, val, enc);
+  }
+
+  static inline size_t Size(v8::Handle<v8::Value> val, enum encoding enc) {
+    Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+    return Size(env, val, enc);
+  }
+
+  static inline bool GetExternalParts(v8::Handle<v8::Value> val,
+                                      const char** data,
+                                      size_t* len) {
+    Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+    return GetExternalParts(env, val, data, len);
+  }
+
+  static inline size_t Write(char* buf,
+                             size_t buflen,
+                             v8::Handle<v8::Value> val,
+                             enum encoding enc,
+                             int* chars_written = NULL) {
+    Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+    return Write(env, buf, buflen, val, enc, chars_written);
+  }
+
+  static inline v8::Local<v8::Value> Encode(const char* buf,
+                                            size_t buflen,
+                                            enum encoding encoding) {
+    Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+    return Encode(env, buf, buflen, encoding);
+  }
 };
 
 }  // namespace node
