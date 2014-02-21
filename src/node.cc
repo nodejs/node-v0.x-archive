@@ -2260,7 +2260,7 @@ static void EnvQuery(Local<String> property,
 static void EnvDeleter(Local<String> property,
                        const PropertyCallbackInfo<Boolean>& info) {
   HandleScope scope(node_isolate);
-  bool rc = true;
+  bool rc;
 #ifdef __POSIX__
   String::Utf8Value key(property);
   rc = getenv(*key) != NULL;
@@ -2274,6 +2274,8 @@ static void EnvDeleter(Local<String> property,
     // false if it is still there.
     rc = GetEnvironmentVariableW(key_ptr, NULL, NULL) == 0 &&
          GetLastError() != ERROR_SUCCESS;
+  } else {
+    rc = true;
   }
 #endif
   info.GetReturnValue().Set(rc);

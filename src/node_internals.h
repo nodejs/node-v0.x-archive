@@ -109,7 +109,7 @@ inline static int snprintf(char* buf, unsigned int len, const char* fmt, ...) {
 #endif
 
 #ifndef ROUND_UP
-# define ROUND_UP(a, b) ((a) % (b) ? ((a) + (b)) - ((a) % (b)) : (a))
+# define ROUND_UP(a, b) (((a) % (b)) ? ((a) + (b)) - ((a) % (b)) : (a))
 #endif
 
 #if defined(__GNUC__) && __GNUC__ >= 4
