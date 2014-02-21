@@ -2159,7 +2159,7 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "natives")) {
     exports = Object::New();
-    DefineJavaScript(exports);
+    DefineJavaScript(env, exports);
     cache->Set(module, exports);
   } else {
     return ThrowError("No such module");
@@ -2769,7 +2769,7 @@ void Load(Environment* env) {
   try_catch.SetVerbose(false);
 
   Local<String> script_name = FIXED_ONE_BYTE_STRING(env->isolate(), "node.js");
-  Local<Value> f_value = ExecuteString(env, MainSource(), script_name);
+  Local<Value> f_value = ExecuteString(env, MainSource(env), script_name);
   if (try_catch.HasCaught())  {
     ReportException(env, try_catch);
     exit(10);
