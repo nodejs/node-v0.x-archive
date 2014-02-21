@@ -171,6 +171,38 @@ inline MUST_USE_RESULT bool ParseArrayIndex(v8::Handle<v8::Value> arg,
   return true;
 }
 
+NODE_DEPRECATED("Use env->ThrowError()",
+                inline void ThrowError(const char* errmsg) {
+  Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+  return env->ThrowError(errmsg);
+})
+NODE_DEPRECATED("Use env->ThrowTypeError()",
+                inline void ThrowTypeError(const char* errmsg) {
+  Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+  return env->ThrowTypeError(errmsg);
+})
+NODE_DEPRECATED("Use env->ThrowRangeError()",
+                inline void ThrowRangeError(const char* errmsg) {
+  Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+  return env->ThrowRangeError(errmsg);
+})
+NODE_DEPRECATED("Use env->ThrowErrnoException()",
+                inline void ThrowErrnoException(int errorno,
+                                                const char* syscall = NULL,
+                                                const char* message = NULL,
+                                                const char* path = NULL) {
+  Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+  return env->ThrowErrnoException(errorno, syscall, message, path);
+})
+NODE_DEPRECATED("Use env->ThrowUVException()",
+                inline void ThrowUVException(int errorno,
+                                                const char* syscall = NULL,
+                                                const char* message = NULL,
+                                                const char* path = NULL) {
+  Environment* env = Environment::GetCurrent(v8::Isolate::GetCurrent());
+  return env->ThrowUVException(errorno, syscall, message, path);
+})
+
 }  // namespace node
 
 #endif  // SRC_NODE_INTERNALS_H_
