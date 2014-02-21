@@ -23,6 +23,7 @@
 #define SRC_NODE_COUNTERS_H_
 
 #include "node.h"
+#include "env.h"
 
 #ifdef HAVE_PERFCTR
 #include "node_win32_perfctr_provider.h"
@@ -46,7 +47,7 @@
 
 namespace node {
 
-void InitPerfCounters(v8::Handle<v8::Object> target);
+void InitPerfCounters(Environment* env, v8::Handle<v8::Object> target);
 void TermPerfCounters(v8::Handle<v8::Object> target);
 
 }  // namespace node

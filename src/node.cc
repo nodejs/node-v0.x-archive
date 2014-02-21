@@ -2793,7 +2793,7 @@ void Load(Environment* env) {
 #endif
 
 #if defined HAVE_PERFCTR
-  InitPerfCounters(global);
+  InitPerfCounters(env, global);
 #endif
 
   // Enable handling of uncaught exceptions
