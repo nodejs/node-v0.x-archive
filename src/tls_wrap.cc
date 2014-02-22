@@ -39,6 +39,7 @@ using crypto::SSLWrap;
 using crypto::SecureContext;
 using v8::Boolean;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -408,7 +409,7 @@ const char* TLSCallbacks::PrintErrors() {
 
 
 Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
-  HandleScope scope(env()->isolate());
+  EscapableHandleScope scope(env()->isolate());
 
   *err = SSL_get_error(ssl_, status);
   switch (*err) {
@@ -417,7 +418,7 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
     case SSL_ERROR_WANT_WRITE:
       break;
     case SSL_ERROR_ZERO_RETURN:
-      return env()->zero_return_string();
+      return scope.Escape(env()->zero_return_string());
       break;
     default:
       {
@@ -434,7 +435,7 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
           *msg = buf;
         }
 
-        return exception;
+        return scope.Escape(exception);
       }
   }
   return Local<Value>();

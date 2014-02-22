@@ -63,6 +63,7 @@ namespace Buffer {
 
 using v8::ArrayBuffer;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -117,7 +118,7 @@ size_t Length(Handle<Object> obj) {
 
 
 Local<Object> New(Isolate* isolate, Handle<String> string, enum encoding enc) {
-  HandleScope scope(isolate);
+  EscapableHandleScope scope(isolate);
 
   size_t length = StringBytes::Size(isolate, string, enc);
 
@@ -125,21 +126,21 @@ Local<Object> New(Isolate* isolate, Handle<String> string, enum encoding enc) {
   char* data = Buffer::Data(buf);
   StringBytes::Write(isolate, data, length, string, enc);
 
-  return buf;
+  return scope.Escape(buf);
 }
 
 
 Local<Object> New(Isolate* isolate, size_t length) {
-  HandleScope handle_scope(isolate);
+  EscapableHandleScope handle_scope(isolate);
   Local<Object> obj = Buffer::New(Environment::GetCurrent(isolate), length);
-  return obj;
+  return handle_scope.Escape(obj);
 }
 
 
 // TODO(trevnorris): these have a flaw by needing to call the Buffer inst then
 // Alloc. continue to look for a better architecture.
 Local<Object> New(Environment* env, size_t length) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
@@ -159,15 +160,15 @@ Local<Object> New(Environment* env, size_t length) {
   }
   smalloc::Alloc(env, obj, data, length);
 
-  return obj;
+  return scope.Escape(obj);
 }
 
 
 Local<Object> New(Isolate* isolate, const char* data, size_t length) {
   Environment* env = Environment::GetCurrent(isolate);
-  HandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length);
-  return obj;
+  return handle_scope.Escape(obj);
 }
 
 
@@ -175,7 +176,7 @@ Local<Object> New(Isolate* isolate, const char* data, size_t length) {
 // but for consistency w/ the other should use data. And a copy version renamed
 // to something else.
 Local<Object> New(Environment* env, const char* data, size_t length) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
@@ -197,7 +198,7 @@ Local<Object> New(Environment* env, const char* data, size_t length) {
 
   smalloc::Alloc(env, obj, new_data, length);
 
-  return obj;
+  return scope.Escape(obj);
 }
 
 
@@ -207,9 +208,9 @@ Local<Object> New(Isolate* isolate,
                   smalloc::FreeCallback callback,
                   void* hint) {
   Environment* env = Environment::GetCurrent(isolate);
-  HandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length, callback, hint);
-  return obj;
+  return handle_scope.Escape(obj);
 }
 
 
@@ -218,7 +219,7 @@ Local<Object> New(Environment* env,
                   size_t length,
                   smalloc::FreeCallback callback,
                   void* hint) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
@@ -227,20 +228,20 @@ Local<Object> New(Environment* env,
 
   smalloc::Alloc(env, obj, data, length, callback, hint);
 
-  return obj;
+  return scope.Escape(obj);
 }
 
 
 Local<Object> Use(Isolate* isolate, char* data, uint32_t length) {
   Environment* env = Environment::GetCurrent(isolate);
-  HandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::Use(env, data, length);
-  return obj;
+  return handle_scope.Escape(obj);
 }
 
 
 Local<Object> Use(Environment* env, char* data, uint32_t length) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
 
   assert(length <= kMaxLength);
 
@@ -249,7 +250,7 @@ Local<Object> Use(Environment* env, char* data, uint32_t length) {
 
   smalloc::Alloc(env, obj, data, length);
 
-  return obj;
+  return scope.Escape(obj);
 }
 
 

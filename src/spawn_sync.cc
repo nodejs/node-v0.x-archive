@@ -31,6 +31,7 @@ namespace node {
 
 using v8::Array;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::FunctionCallbackInfo;
 using v8::Handle;
 using v8::HandleScope;
@@ -429,7 +430,7 @@ Environment* SyncProcessRunner::env() const {
 
 
 Local<Object> SyncProcessRunner::Run(Local<Value> options) {
-  HandleScope scope(env()->isolate());
+  EscapableHandleScope scope(env()->isolate());
 
   assert(lifecycle_ == kUninitialized);
 
@@ -438,7 +439,7 @@ Local<Object> SyncProcessRunner::Run(Local<Value> options) {
 
   Local<Object> result = BuildResultObject();
 
-  return result;
+  return scope.Escape(result);
 }
 
 
@@ -640,7 +641,7 @@ void SyncProcessRunner::SetPipeError(int pipe_error) {
 
 
 Local<Object> SyncProcessRunner::BuildResultObject() {
-  HandleScope scope(env()->isolate());
+  EscapableHandleScope scope(env()->isolate());
 
   Local<Object> js_result = Object::New(env()->isolate());
 
@@ -670,7 +671,7 @@ Local<Object> SyncProcessRunner::BuildResultObject() {
   js_result->Set(env()->pid_string(),
                  Number::New(env()->isolate(), uv_process_.pid));
 
-  return js_result;
+  return scope.Escape(js_result);
 }
 
 
@@ -678,7 +679,7 @@ Local<Array> SyncProcessRunner::BuildOutputArray() {
   assert(lifecycle_ >= kInitialized);
   assert(stdio_pipes_ != NULL);
 
-  HandleScope scope(env()->isolate());
+  EscapableHandleScope scope(env()->isolate());
   Local<Array> js_output = Array::New(env()->isolate(), stdio_count_);
 
   for (uint32_t i = 0; i < stdio_count_; i++) {
@@ -689,7 +690,7 @@ Local<Array> SyncProcessRunner::BuildOutputArray() {
       js_output->Set(i, Null(env()->isolate()));
   }
 
-  return js_output;
+  return scope.Escape(js_output);
 }
 
 

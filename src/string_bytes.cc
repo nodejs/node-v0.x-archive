@@ -36,6 +36,7 @@
 
 namespace node {
 
+using v8::EscapableHandleScope;
 using v8::Handle;
 using v8::HandleScope;
 using v8::Isolate;
@@ -66,27 +67,27 @@ class ExternString: public ResourceType {
     static Local<String> NewFromCopy(Isolate* isolate,
                                      const TypeName* data,
                                      size_t length) {
-      HandleScope scope(isolate);
+      EscapableHandleScope scope(isolate);
 
       if (length == 0)
-        return String::Empty(isolate);
+        return scope.Escape(String::Empty(isolate));
 
       TypeName* new_data = new TypeName[length];
       memcpy(new_data, data, length * sizeof(*new_data));
 
-      return ExternString<ResourceType, TypeName>::New(isolate,
-                                                       new_data,
-                                                       length);
+      return scope.Escape(ExternString<ResourceType, TypeName>::New(isolate,
+                                                                    new_data,
+                                                                    length));
     }
 
     // uses "data" for external resource, and will be free'd on gc
     static Local<String> New(Isolate* isolate,
                              const TypeName* data,
                              size_t length) {
-      HandleScope scope(isolate);
+      EscapableHandleScope scope(isolate);
 
       if (length == 0)
-        return String::Empty(isolate);
+        return scope.Escape(String::Empty(isolate));
 
       ExternString* h_str = new ExternString<ResourceType, TypeName>(isolate,
                                                                      data,
@@ -94,7 +95,7 @@ class ExternString: public ResourceType {
       Local<String> str = String::NewExternal(isolate, h_str);
       isolate->AdjustAmountOfExternalAllocatedMemory(length);
 
-      return str;
+      return scope.Escape(str);
     }
 
     inline Isolate* isolate() const { return isolate_; }
@@ -676,16 +677,16 @@ Local<Value> StringBytes::Encode(Isolate* isolate,
                                  const char* buf,
                                  size_t buflen,
                                  enum encoding encoding) {
-  HandleScope scope(isolate);
+  EscapableHandleScope scope(isolate);
 
   assert(buflen <= Buffer::kMaxLength);
   if (!buflen && encoding != BUFFER)
-    return String::Empty(isolate);
+    return scope.Escape(String::Empty(isolate));
 
   Local<String> val;
   switch (encoding) {
     case BUFFER:
-      return Buffer::New(buf, buflen);
+      return scope.Escape(Buffer::New(buf, buflen));
 
     case ASCII:
       if (contains_non_ascii(buf, buflen)) {
@@ -767,7 +768,7 @@ Local<Value> StringBytes::Encode(Isolate* isolate,
       break;
   }
 
-  return val;
+  return scope.Escape(val);
 }
 
 }  // namespace node

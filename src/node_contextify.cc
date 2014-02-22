@@ -35,6 +35,7 @@ using v8::AccessType;
 using v8::Array;
 using v8::Boolean;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::External;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -193,19 +194,19 @@ class ContextifyContext {
   // NamedPropertyHandler will store a reference to it forever and keep it
   // from getting gc'd.
   Local<Value> CreateDataWrapper(Environment* env) {
-    HandleScope scope(env->isolate());
+    EscapableHandleScope scope(env->isolate());
     Local<Object> wrapper =
         env->script_data_constructor_function()->NewInstance();
     if (wrapper.IsEmpty())
-      return Handle<Value>();
+      return scope.Escape(Local<Value>::New(env->isolate(), Handle<Value>()));
 
     Wrap<ContextifyContext>(wrapper, this);
-    return wrapper;
+    return scope.Escape(wrapper);
   }
 
 
   Local<Context> CreateV8Context(Environment* env) {
-    HandleScope scope(env->isolate());
+    EscapableHandleScope scope(env->isolate());
     Local<FunctionTemplate> function_template =
         FunctionTemplate::New(env->isolate());
     function_template->SetHiddenPrototype(true);
@@ -223,7 +224,7 @@ class ContextifyContext {
                                              CreateDataWrapper(env));
     object_template->SetAccessCheckCallbacks(GlobalPropertyNamedAccessCheck,
                                              GlobalPropertyIndexedAccessCheck);
-    return Context::New(env->isolate(), NULL, object_template);
+    return scope.Escape(Context::New(env->isolate(), NULL, object_template));
   }
 
 

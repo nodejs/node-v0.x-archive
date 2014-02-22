@@ -37,6 +37,7 @@
 namespace node {
 
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -54,13 +55,13 @@ typedef class ReqWrap<uv_connect_t> ConnectWrap;
 
 
 Local<Object> TCPWrap::Instantiate(Environment* env) {
-  HandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
   assert(env->tcp_constructor_template().IsEmpty() == false);
   Local<Function> constructor = env->tcp_constructor_template()->GetFunction();
   assert(constructor.IsEmpty() == false);
   Local<Object> instance = constructor->NewInstance();
   assert(instance.IsEmpty() == false);
-  return instance;
+  return handle_scope.Escape(instance);
 }
 
 
@@ -441,7 +442,7 @@ void TCPWrap::Connect6(const FunctionCallbackInfo<Value>& args) {
 Local<Object> AddressToJS(Environment* env,
                           const sockaddr* addr,
                           Local<Object> info) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
   char ip[INET6_ADDRSTRLEN];
   const sockaddr_in *a4;
   const sockaddr_in6 *a6;
@@ -473,7 +474,7 @@ Local<Object> AddressToJS(Environment* env,
     info->Set(env->address_string(), String::Empty(env->isolate()));
   }
 
-  return info;
+  return scope.Escape(info);
 }
 
 

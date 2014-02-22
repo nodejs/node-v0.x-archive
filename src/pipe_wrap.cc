@@ -36,6 +36,7 @@ namespace node {
 
 using v8::Boolean;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -59,13 +60,13 @@ uv_pipe_t* PipeWrap::UVHandle() {
 
 
 Local<Object> PipeWrap::Instantiate(Environment* env) {
-  HandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
   assert(!env->pipe_constructor_template().IsEmpty());
   Local<Function> constructor = env->pipe_constructor_template()->GetFunction();
   assert(!constructor.IsEmpty());
   Local<Object> instance = constructor->NewInstance();
   assert(!instance.IsEmpty());
-  return instance;
+  return handle_scope.Escape(instance);
 }
 
 

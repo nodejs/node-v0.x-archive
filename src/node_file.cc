@@ -46,6 +46,7 @@ namespace node {
 
 using v8::Array;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -326,7 +327,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   // If you hit this assertion, you forgot to enter the v8::Context first.
   assert(env->context() == env->isolate()->GetCurrentContext());
 
-  HandleScope handle_scope(env->isolate());
+  EscapableHandleScope handle_scope(env->isolate());
 
   Local<Object> stats = env->stats_constructor_function()->NewInstance();
   if (stats.IsEmpty()) {
@@ -392,7 +393,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   X(birthtime, birthtim)
 #undef X
 
-  return stats;
+  return handle_scope.Escape(stats);
 }
 
 static void Stat(const FunctionCallbackInfo<Value>& args) {

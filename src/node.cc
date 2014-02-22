@@ -1158,11 +1158,12 @@ Handle<Value> MakeCallback(Isolate* isolate,
                            const char* method,
                            int argc,
                            Handle<Value> argv[]) {
-  HandleScope handle_scope(isolate);
+  EscapableHandleScope handle_scope(isolate);
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
-  return MakeCallback(env, recv, method, argc, argv);
+  return handle_scope.Escape(
+      Local<Value>::New(isolate, MakeCallback(env, recv, method, argc, argv)));
 }
 
 
@@ -1171,11 +1172,12 @@ Handle<Value> MakeCallback(Isolate* isolate,
                            Handle<String> symbol,
                            int argc,
                            Handle<Value> argv[]) {
-  HandleScope handle_scope(isolate);
+  EscapableHandleScope handle_scope(isolate);
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
-  return MakeCallback(env, recv, symbol, argc, argv);
+  return handle_scope.Escape(
+      Local<Value>::New(isolate, MakeCallback(env, recv, symbol, argc, argv)));
 }
 
 
@@ -1184,11 +1186,13 @@ Handle<Value> MakeCallback(Isolate* isolate,
                            Handle<Function> callback,
                            int argc,
                            Handle<Value> argv[]) {
-  HandleScope handle_scope(isolate);
+  EscapableHandleScope handle_scope(isolate);
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
-  return MakeCallback(env, recv.As<Value>(), callback, argc, argv);
+  return handle_scope.Escape(Local<Value>::New(
+        isolate,
+        MakeCallback(env, recv.As<Value>(), callback, argc, argv)));
 }
 
 
@@ -1199,8 +1203,10 @@ Handle<Value> MakeDomainCallback(Handle<Object> recv,
   Local<Context> context = recv->CreationContext();
   Environment* env = Environment::GetCurrent(context);
   Context::Scope context_scope(context);
-  HandleScope handle_scope(env->isolate());
-  return MakeDomainCallback(env, recv, callback, argc, argv);
+  EscapableHandleScope handle_scope(env->isolate());
+  return handle_scope.Escape(Local<Value>::New(
+      env->isolate(),
+      MakeDomainCallback(env, recv, callback, argc, argv)));
 }
 
 
@@ -2376,7 +2382,7 @@ static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
 
 
 static Handle<Object> GetFeatures(Environment* env) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
 
   Local<Object> obj = Object::New(env->isolate());
 #if defined(DEBUG) && DEBUG
@@ -2408,7 +2414,7 @@ static Handle<Object> GetFeatures(Environment* env) {
   obj->Set(env->tls_string(),
            Boolean::New(env->isolate(), get_builtin_module("crypto") != NULL));
 
-  return obj;
+  return scope.Escape(obj);
 }
 
 

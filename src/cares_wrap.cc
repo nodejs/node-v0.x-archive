@@ -50,6 +50,7 @@ namespace cares_wrap {
 
 using v8::Array;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::Handle;
@@ -194,7 +195,7 @@ static void ares_sockstate_cb(void* data,
 
 
 static Local<Array> HostentToAddresses(Environment* env, struct hostent* host) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
   Local<Array> addresses = Array::New(env->isolate());
 
   char ip[INET6_ADDRSTRLEN];
@@ -204,12 +205,12 @@ static Local<Array> HostentToAddresses(Environment* env, struct hostent* host) {
     addresses->Set(i, address);
   }
 
-  return addresses;
+  return scope.Escape(addresses);
 }
 
 
 static Local<Array> HostentToNames(Environment* env, struct hostent* host) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
   Local<Array> names = Array::New(env->isolate());
 
   for (uint32_t i = 0; host->h_aliases[i] != NULL; ++i) {
@@ -217,7 +218,7 @@ static Local<Array> HostentToNames(Environment* env, struct hostent* host) {
     names->Set(i, address);
   }
 
-  return names;
+  return scope.Escape(names);
 }
 
 

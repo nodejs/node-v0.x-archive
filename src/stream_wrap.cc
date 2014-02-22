@@ -41,6 +41,7 @@ namespace node {
 
 using v8::Array;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::FunctionCallbackInfo;
 using v8::Handle;
 using v8::HandleScope;
@@ -127,7 +128,7 @@ void StreamWrap::OnAlloc(uv_handle_t* handle,
 
 template <class WrapType, class UVType>
 static Local<Object> AcceptHandle(Environment* env, uv_stream_t* pipe) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
   Local<Object> wrap_obj;
   UVType* handle;
 
@@ -141,7 +142,7 @@ static Local<Object> AcceptHandle(Environment* env, uv_stream_t* pipe) {
   if (uv_accept(pipe, reinterpret_cast<uv_stream_t*>(handle)))
     abort();
 
-  return wrap_obj;
+  return scope.Escape(wrap_obj);
 }
 
 
