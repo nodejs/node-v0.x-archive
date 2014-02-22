@@ -331,7 +331,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 
   Local<Object> stats = env->stats_constructor_function()->NewInstance();
   if (stats.IsEmpty()) {
-    return Local<Object>();
+    return handle_scope.Escape(Local<Object>());
   }
 
   // The code below is very nasty-looking but it prevents a segmentation fault
@@ -349,7 +349,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   {                                                                           \
     Local<Value> val = Integer::New(env->isolate(), s->st_##name);            \
     if (val.IsEmpty())                                                        \
-      return Local<Object>();                                                 \
+      return handle_scope.Escape(Local<Object>());                            \
     stats->Set(env->name ## _string(), val);                                  \
   }
   X(dev)
@@ -368,7 +368,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     Local<Value> val = Number::New(env->isolate(),                            \
                                    static_cast<double>(s->st_##name));        \
     if (val.IsEmpty())                                                        \
-      return Local<Object>();                                                 \
+      return handle_scope.Escape(Local<Object>());                            \
     stats->Set(env->name ## _string(), val);                                  \
   }
   X(ino)
@@ -384,7 +384,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     msecs += static_cast<double>(s->st_##rec.tv_nsec / 1000000);              \
     Local<Value> val = v8::Date::New(env->isolate(), msecs);                  \
     if (val.IsEmpty())                                                        \
-      return Local<Object>();                                                 \
+      return handle_scope.Escape(Local<Object>());                            \
     stats->Set(env->name ## _string(), val);                                  \
   }
   X(atime, atim)

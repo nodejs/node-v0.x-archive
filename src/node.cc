@@ -3529,10 +3529,12 @@ int Start(int argc, char** argv) {
     // environment with Environment::GetCurrentChecked().
     // TODO(bnoordhuis) Reorder the debugger initialization logic so it can
     // be removed.
-    Context::Scope context_scope(env->context());
-    uv_run(env->event_loop(), UV_RUN_DEFAULT);
-    code = EmitExit(env);
-    RunAtExit(env);
+    {
+      Context::Scope context_scope(env->context());
+      uv_run(env->event_loop(), UV_RUN_DEFAULT);
+      code = EmitExit(env);
+      RunAtExit(env);
+    }
     env->Dispose();
     env = NULL;
   }
