@@ -93,6 +93,7 @@ using v8::Array;
 using v8::ArrayBuffer;
 using v8::Boolean;
 using v8::Context;
+using v8::EscapableHandleScope;
 using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -1451,7 +1452,7 @@ static void ReportException(Environment* env, const TryCatch& try_catch) {
 static Local<Value> ExecuteString(Environment* env,
                                   Handle<String> source,
                                   Handle<Value> filename) {
-  HandleScope scope(env->isolate());
+  EscapableHandleScope scope(env->isolate());
   TryCatch try_catch;
 
   // try_catch must be nonverbose to disable FatalException() handler,
@@ -1470,7 +1471,7 @@ static Local<Value> ExecuteString(Environment* env,
     exit(4);
   }
 
-  return result;
+  return scope.Escape(result);
 }
 
 
