@@ -54,10 +54,17 @@ using v8::String;
 using v8::TryCatch;
 using v8::V8;
 using v8::Value;
+using v8::WeakCallbackData;
 
 
 class ContextifyContext {
- private:
+ protected:
+  enum Kind {
+    kSandbox,
+    kContext,
+    kProxyGlobal
+  };
+
   Environment* const env_;
   Persistent<Object> sandbox_;
   Persistent<Context> context_;
@@ -71,28 +78,28 @@ class ContextifyContext {
         context_(env->isolate(), CreateV8Context(env)),
         // Wait for sandbox_, proxy_global_, and context_ to die
         references_(0) {
-    sandbox_.MakeWeak(this, WeakCallback);
+    sandbox_.SetWeak(this, WeakCallback<Object, kSandbox>);
     sandbox_.MarkIndependent();
     references_++;
 
     // Allocation failure or maximum call stack size reached
     if (context_.IsEmpty())
       return;
-    context_.MakeWeak(this, WeakCallback);
+    context_.SetWeak(this, WeakCallback<Context, kContext>);
     context_.MarkIndependent();
     references_++;
 
     proxy_global_.Reset(env->isolate(), context()->Global());
-    proxy_global_.MakeWeak(this, WeakCallback);
+    proxy_global_.SetWeak(this, WeakCallback<Object, kProxyGlobal>);
     proxy_global_.MarkIndependent();
     references_++;
   }
 
 
   ~ContextifyContext() {
-    context_.Dispose();
-    proxy_global_.Dispose();
-    sandbox_.Dispose();
+    context_.Reset();
+    proxy_global_.Reset();
+    sandbox_.Reset();
   }
 
 
@@ -190,16 +197,17 @@ class ContextifyContext {
     Local<Object> wrapper =
         env->script_data_constructor_function()->NewInstance();
     if (wrapper.IsEmpty())
-      return scope.Close(Handle<Value>());
+      return Handle<Value>();
 
     Wrap<ContextifyContext>(wrapper, this);
-    return scope.Close(wrapper);
+    return wrapper;
   }
 
 
   Local<Context> CreateV8Context(Environment* env) {
     HandleScope scope(env->isolate());
-    Local<FunctionTemplate> function_template = FunctionTemplate::New();
+    Local<FunctionTemplate> function_template =
+        FunctionTemplate::New(env->isolate());
     function_template->SetHiddenPrototype(true);
 
     Local<Object> sandbox = PersistentToLocal(env->isolate(), sandbox_);
@@ -215,12 +223,13 @@ class ContextifyContext {
                                              CreateDataWrapper(env));
     object_template->SetAccessCheckCallbacks(GlobalPropertyNamedAccessCheck,
                                              GlobalPropertyIndexedAccessCheck);
-    return scope.Close(Context::New(env->isolate(), NULL, object_template));
+    return Context::New(env->isolate(), NULL, object_template);
   }
 
 
   static void Init(Environment* env, Local<Object> target) {
-    Local<FunctionTemplate> function_template = FunctionTemplate::New();
+    Local<FunctionTemplate> function_template =
+        FunctionTemplate::New(env->isolate());
     function_template->InstanceTemplate()->SetInternalFieldCount(1);
     env->set_script_data_constructor_function(function_template->GetFunction());
 
@@ -255,7 +264,7 @@ class ContextifyContext {
     if (context->context().IsEmpty())
       return;
 
-    Local<External> hidden_context = External::New(context);
+    Local<External> hidden_context = External::New(env->isolate(), context);
     sandbox->SetHiddenValue(hidden_name, hidden_context);
   }
 
@@ -277,11 +286,16 @@ class ContextifyContext {
   }
 
 
-  template <class T>
-  static void WeakCallback(Isolate* isolate,
-                           Persistent<T>* target,
-                           ContextifyContext* context) {
-    target->ClearWeak();
+  template <class T, Kind kind>
+  static void WeakCallback(const WeakCallbackData<T, ContextifyContext>& data) {
+    ContextifyContext* context = data.GetParameter();
+    if (kind == kSandbox)
+      context->sandbox_.ClearWeak();
+    else if (kind == kContext)
+      context->context_.ClearWeak();
+    else
+      context->proxy_global_.ClearWeak();
+
     if (--context->references_ == 0)
       delete context;
   }
@@ -419,7 +433,8 @@ class ContextifyScript : public BaseObject {
     Local<String> class_name =
         FIXED_ONE_BYTE_STRING(env->isolate(), "ContextifyScript");
 
-    Local<FunctionTemplate> script_tmpl = FunctionTemplate::New(New);
+    Local<FunctionTemplate> script_tmpl = FunctionTemplate::New(env->isolate(),
+                                                                New);
     script_tmpl->InstanceTemplate()->SetInternalFieldCount(1);
     script_tmpl->SetClassName(class_name);
     NODE_SET_PROTOTYPE_METHOD(script_tmpl, "runInContext", RunInContext);
@@ -453,7 +468,7 @@ class ContextifyScript : public BaseObject {
       return;
     }
 
-    Local<Context> context = Context::GetCurrent();
+    Local<Context> context = env->context();
     Context::Scope context_scope(context);
 
     Local<Script> v8_script = Script::New(code, filename);
@@ -657,7 +672,7 @@ class ContextifyScript : public BaseObject {
 
 
   ~ContextifyScript() {
-    script_.Dispose();
+    script_.Reset();
   }
 };
 

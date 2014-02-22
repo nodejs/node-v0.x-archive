@@ -70,7 +70,7 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
   void* operator new(size_t size, char* storage) { return storage; }
 
   FSReqWrap(Environment* env, const char* syscall, char* data = NULL)
-    : ReqWrap<uv_fs_t>(env, Object::New()),
+    : ReqWrap<uv_fs_t>(env, Object::New(env->isolate())),
       syscall_(syscall),
       data_(data),
       dest_len_(0) {
@@ -179,11 +179,11 @@ static void After(uv_fs_t *req) {
         break;
 
       case UV_FS_OPEN:
-        argv[1] = Integer::New(req->result, env->isolate());
+        argv[1] = Integer::New(env->isolate(), req->result);
         break;
 
       case UV_FS_WRITE:
-        argv[1] = Integer::New(req->result, env->isolate());
+        argv[1] = Integer::New(env->isolate(), req->result);
         break;
 
       case UV_FS_STAT:
@@ -200,7 +200,7 @@ static void After(uv_fs_t *req) {
 
       case UV_FS_READ:
         // Buffer interface
-        argv[1] = Integer::New(req->result, env->isolate());
+        argv[1] = Integer::New(env->isolate(), req->result);
         break;
 
       case UV_FS_READDIR:
@@ -208,7 +208,7 @@ static void After(uv_fs_t *req) {
           char *namebuf = static_cast<char*>(req->ptr);
           int nnames = req->result;
 
-          Local<Array> names = Array::New(nnames);
+          Local<Array> names = Array::New(env->isolate(), nnames);
 
           for (int i = 0; i < nnames; i++) {
             Local<String> name = String::NewFromUtf8(env->isolate(), namebuf);
@@ -346,7 +346,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   // and make sure that we bail out when V8 returns an empty handle.
 #define X(name)                                                               \
   {                                                                           \
-    Local<Value> val = Integer::New(s->st_##name, env->isolate());            \
+    Local<Value> val = Integer::New(env->isolate(), s->st_##name);            \
     if (val.IsEmpty())                                                        \
       return Local<Object>();                                                 \
     stats->Set(env->name ## _string(), val);                                  \
@@ -364,7 +364,8 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 
 #define X(name)                                                               \
   {                                                                           \
-    Local<Value> val = Number::New(static_cast<double>(s->st_##name));        \
+    Local<Value> val = Number::New(env->isolate(),                            \
+                                   static_cast<double>(s->st_##name));        \
     if (val.IsEmpty())                                                        \
       return Local<Object>();                                                 \
     stats->Set(env->name ## _string(), val);                                  \
@@ -380,7 +381,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   {                                                                           \
     double msecs = static_cast<double>(s->st_##rec.tv_sec) * 1000;            \
     msecs += static_cast<double>(s->st_##rec.tv_nsec / 1000000);              \
-    Local<Value> val = v8::Date::New(msecs);                                  \
+    Local<Value> val = v8::Date::New(env->isolate(), msecs);                  \
     if (val.IsEmpty())                                                        \
       return Local<Object>();                                                 \
     stats->Set(env->name ## _string(), val);                                  \
@@ -391,7 +392,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   X(birthtime, birthtim)
 #undef X
 
-  return handle_scope.Close(stats);
+  return stats;
 }
 
 static void Stat(const FunctionCallbackInfo<Value>& args) {
@@ -685,7 +686,7 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
     assert(SYNC_REQ.result >= 0);
     char* namebuf = static_cast<char*>(SYNC_REQ.ptr);
     uint32_t nnames = SYNC_REQ.result;
-    Local<Array> names = Array::New(nnames);
+    Local<Array> names = Array::New(env->isolate(), nnames);
 
     for (uint32_t i = 0; i < nnames; ++i) {
       names->Set(i, String::NewFromUtf8(env->isolate(), namebuf));
@@ -1081,7 +1082,8 @@ void InitFs(Handle<Object> target,
   Environment* env = Environment::GetCurrent(context);
 
   // Initialize the stats object
-  Local<Function> constructor = FunctionTemplate::New()->GetFunction();
+  Local<Function> constructor =
+      FunctionTemplate::New(env->isolate())->GetFunction();
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Stats"), constructor);
   env->set_stats_constructor_function(constructor);
 

@@ -294,7 +294,7 @@ void TargetCallback(Isolate* isolate,
     isolate->AdjustAmountOfExternalAllocatedMemory(-len);
     free(data);
   }
-  (*target).Dispose();
+  (*target).Reset();
 }
 
 
@@ -405,7 +405,7 @@ void TargetFreeCallback(Isolate* isolate,
     len *= array_size;
   }
   isolate->AdjustAmountOfExternalAllocatedMemory(-(len + sizeof(*cb_info)));
-  cb_info->p_obj.Dispose();
+  cb_info->p_obj.Reset();
   cb_info->cb(data, cb_info->hint);
   delete cb_info;
 }

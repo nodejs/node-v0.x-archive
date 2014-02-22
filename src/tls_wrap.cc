@@ -104,11 +104,11 @@ TLSCallbacks::~TLSCallbacks() {
   clear_in_ = NULL;
 
   sc_ = NULL;
-  sc_handle_.Dispose();
-  persistent().Dispose();
+  sc_handle_.Reset();
+  persistent().Reset();
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-  sni_context_.Dispose();
+  sni_context_.Reset();
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 
   // Move all writes to pending
@@ -794,7 +794,7 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
     return SSL_TLSEXT_ERR_NOACK;
   }
 
-  p->sni_context_.Dispose();
+  p->sni_context_.Reset();
   p->sni_context_.Reset(env->isolate(), ctx);
 
   SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());

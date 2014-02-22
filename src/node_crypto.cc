@@ -1444,7 +1444,7 @@ int SSLWrap<Base>::SelectNextProtoCallback(SSL* s,
   Context::Scope context_scope(env->context());
 
   // Release old protocol handler if present
-  w->selected_npn_proto_.Dispose();
+  w->selected_npn_proto_.Reset();
 
   if (w->npn_protos_.IsEmpty()) {
     // We should at least select one protocol
@@ -1785,7 +1785,7 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
 
     // Call the SNI callback and use its return value as context
     if (!conn->sniObject_.IsEmpty()) {
-      conn->sniContext_.Dispose();
+      conn->sniContext_.Reset();
 
       Local<Value> arg = PersistentToLocal(env->isolate(), conn->servername_);
       Local<Value> ret = conn->MakeCallback(env->onselect_string(), 1, &arg);
@@ -3647,7 +3647,7 @@ class PBKDF2Request : public AsyncWrap {
   }
 
   ~PBKDF2Request() {
-    persistent().Dispose();
+    persistent().Reset();
   }
 
   uv_work_t* work_req() {
@@ -3902,7 +3902,7 @@ class RandomBytesRequest : public AsyncWrap {
   }
 
   ~RandomBytesRequest() {
-    persistent().Dispose();
+    persistent().Reset();
   }
 
   uv_work_t* work_req() {
