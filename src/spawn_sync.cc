@@ -438,7 +438,7 @@ Local<Object> SyncProcessRunner::Run(Local<Value> options) {
 
   Local<Object> result = BuildResultObject();
 
-  return scope.Close(result);
+  return result;
 }
 
 
@@ -642,10 +642,12 @@ void SyncProcessRunner::SetPipeError(int pipe_error) {
 Local<Object> SyncProcessRunner::BuildResultObject() {
   HandleScope scope(env()->isolate());
 
-  Local<Object> js_result = Object::New();
+  Local<Object> js_result = Object::New(env()->isolate());
 
-  if (GetError() != 0)
-    js_result->Set(env()->error_string(), Integer::New(GetError()));
+  if (GetError() != 0) {
+    js_result->Set(env()->error_string(),
+                   Integer::New(env()->isolate(), GetError()));
+  }
 
   if (exit_status_ >= 0)
     js_result->Set(env()->status_string(),
@@ -658,7 +660,7 @@ Local<Object> SyncProcessRunner::BuildResultObject() {
     js_result->Set(env()->signal_string(),
         String::NewFromUtf8(env()->isolate(), signo_string(term_signal_)));
   else
-    js_result->Set(env()->signal_string(), Null());
+    js_result->Set(env()->signal_string(), Null(env()->isolate()));
 
   if (exit_status_ >= 0)
     js_result->Set(env()->output_string(), BuildOutputArray());
@@ -668,7 +670,7 @@ Local<Object> SyncProcessRunner::BuildResultObject() {
   js_result->Set(env()->pid_string(),
                  Number::New(env()->isolate(), uv_process_.pid));
 
-  return scope.Close(js_result);
+  return js_result;
 }
 
 
@@ -677,17 +679,17 @@ Local<Array> SyncProcessRunner::BuildOutputArray() {
   assert(stdio_pipes_ != NULL);
 
   HandleScope scope(env()->isolate());
-  Local<Array> js_output = Array::New(stdio_count_);
+  Local<Array> js_output = Array::New(env()->isolate(), stdio_count_);
 
   for (uint32_t i = 0; i < stdio_count_; i++) {
     SyncProcessStdioPipe* h = stdio_pipes_[i];
     if (h != NULL && h->writable())
       js_output->Set(i, h->GetOutputAsBuffer());
     else
-      js_output->Set(i, Null());
+      js_output->Set(i, Null(env()->isolate()));
   }
 
-  return scope.Close(js_output);
+  return js_output;
 }
 
 

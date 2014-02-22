@@ -417,7 +417,7 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
     case SSL_ERROR_WANT_WRITE:
       break;
     case SSL_ERROR_ZERO_RETURN:
-      return scope.Close(env()->zero_return_string());
+      return env()->zero_return_string();
       break;
     default:
       {
@@ -434,7 +434,7 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
           *msg = buf;
         }
 
-        return scope.Close(exception);
+        return exception;
       }
   }
   return Local<Value>();
@@ -457,7 +457,7 @@ void TLSCallbacks::ClearOut() {
     read = SSL_read(ssl_, out, sizeof(out));
     if (read > 0) {
       Local<Value> argv[] = {
-        Integer::New(read, env()->isolate()),
+        Integer::New(env()->isolate(), read),
         Buffer::New(env(), out, read)
       };
       wrap()->MakeCallback(env()->onread_string(), ARRAY_SIZE(argv), argv);
@@ -467,7 +467,7 @@ void TLSCallbacks::ClearOut() {
   int flags = SSL_get_shutdown(ssl_);
   if (!eof_ && flags & SSL_RECEIVED_SHUTDOWN) {
     eof_ = true;
-    Local<Value> arg = Integer::New(UV_EOF, env()->isolate());
+    Local<Value> arg = Integer::New(env()->isolate(), UV_EOF);
     wrap()->MakeCallback(env()->onread_string(), 1, &arg);
   }
 
@@ -634,7 +634,7 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
 
     HandleScope handle_scope(env()->isolate());
     Context::Scope context_scope(env()->context());
-    Local<Value> arg = Integer::New(nread, env()->isolate());
+    Local<Value> arg = Integer::New(env()->isolate(), nread);
     wrap()->MakeCallback(env()->onread_string(), 1, &arg);
     return;
   }
@@ -812,7 +812,7 @@ void TLSCallbacks::Initialize(Handle<Object> target,
 
   NODE_SET_METHOD(target, "wrap", TLSCallbacks::Wrap);
 
-  Local<FunctionTemplate> t = FunctionTemplate::New();
+  Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate());
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "TLSWrap"));
 

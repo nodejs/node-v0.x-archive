@@ -69,14 +69,14 @@ class ExternString: public ResourceType {
       HandleScope scope(isolate);
 
       if (length == 0)
-        return scope.Close(String::Empty(isolate));
+        return String::Empty(isolate);
 
       TypeName* new_data = new TypeName[length];
       memcpy(new_data, data, length * sizeof(*new_data));
 
-      return scope.Close(ExternString<ResourceType, TypeName>::New(isolate,
-                                                                   new_data,
-                                                                   length));
+      return ExternString<ResourceType, TypeName>::New(isolate,
+                                                       new_data,
+                                                       length);
     }
 
     // uses "data" for external resource, and will be free'd on gc
@@ -86,15 +86,15 @@ class ExternString: public ResourceType {
       HandleScope scope(isolate);
 
       if (length == 0)
-        return scope.Close(String::Empty(isolate));
+        return String::Empty(isolate);
 
       ExternString* h_str = new ExternString<ResourceType, TypeName>(isolate,
                                                                      data,
                                                                      length);
-      Local<String> str = String::NewExternal(h_str);
+      Local<String> str = String::NewExternal(isolate, h_str);
       isolate->AdjustAmountOfExternalAllocatedMemory(length);
 
-      return scope.Close(str);
+      return str;
     }
 
     inline Isolate* isolate() const { return isolate_; }
@@ -680,12 +680,12 @@ Local<Value> StringBytes::Encode(Isolate* isolate,
 
   assert(buflen <= Buffer::kMaxLength);
   if (!buflen && encoding != BUFFER)
-    return scope.Close(String::Empty(isolate));
+    return String::Empty(isolate);
 
   Local<String> val;
   switch (encoding) {
     case BUFFER:
-      return scope.Close(Buffer::New(buf, buflen));
+      return Buffer::New(buf, buflen);
 
     case ASCII:
       if (contains_non_ascii(buf, buflen)) {
@@ -767,7 +767,7 @@ Local<Value> StringBytes::Encode(Isolate* isolate,
       break;
   }
 
-  return scope.Close(val);
+  return val;
 }
 
 }  // namespace node

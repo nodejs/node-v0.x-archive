@@ -65,7 +65,7 @@ Local<Object> PipeWrap::Instantiate(Environment* env) {
   assert(!constructor.IsEmpty());
   Local<Object> instance = constructor->NewInstance();
   assert(!instance.IsEmpty());
-  return handle_scope.Close(instance);
+  return instance;
 }
 
 
@@ -74,7 +74,7 @@ void PipeWrap::Initialize(Handle<Object> target,
                           Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
-  Local<FunctionTemplate> t = FunctionTemplate::New(New);
+  Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe"));
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
@@ -145,7 +145,7 @@ void PipeWrap::Bind(const FunctionCallbackInfo<Value>& args) {
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.This());
 
-  String::AsciiValue name(args[0]);
+  String::Utf8Value name(args[0]);
   int err = uv_pipe_bind(&wrap->handle_, *name);
   args.GetReturnValue().Set(err);
 }
@@ -193,8 +193,8 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   assert(pipe_wrap->persistent().IsEmpty() == false);
 
   Local<Value> argv[] = {
-    Integer::New(status, env->isolate()),
-    Undefined()
+    Integer::New(env->isolate(), status),
+    Undefined(env->isolate())
   };
 
   if (status != 0) {
@@ -242,11 +242,11 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
 
   Local<Object> req_wrap_obj = req_wrap->object();
   Local<Value> argv[5] = {
-    Integer::New(status, env->isolate()),
+    Integer::New(env->isolate(), status),
     wrap->object(),
     req_wrap_obj,
-    Boolean::New(readable),
-    Boolean::New(writable)
+    Boolean::New(env->isolate(), readable),
+    Boolean::New(env->isolate(), writable)
   };
 
   req_wrap->MakeCallback(env->oncomplete_string(), ARRAY_SIZE(argv), argv);
@@ -266,7 +266,7 @@ void PipeWrap::Open(const FunctionCallbackInfo<Value>& args) {
   int err = uv_pipe_open(&wrap->handle_, fd);
 
   if (err != 0)
-    ThrowException(UVException(err, "uv_pipe_open"));
+    env->isolate()->ThrowException(UVException(err, "uv_pipe_open"));
 }
 
 
@@ -280,7 +280,7 @@ void PipeWrap::Connect(const FunctionCallbackInfo<Value>& args) {
   assert(args[1]->IsString());
 
   Local<Object> req_wrap_obj = args[0].As<Object>();
-  String::AsciiValue name(args[1]);
+  String::Utf8Value name(args[1]);
 
   ConnectWrap* req_wrap = new ConnectWrap(env,
                                           req_wrap_obj,

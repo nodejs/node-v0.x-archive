@@ -83,7 +83,7 @@ void StreamWrap::GetFD(Local<String>, const PropertyCallbackInfo<Value>& args) {
 void StreamWrap::UpdateWriteQueueSize() {
   HandleScope scope(env()->isolate());
   Local<Integer> write_queue_size =
-      Integer::NewFromUnsigned(stream()->write_queue_size, env()->isolate());
+      Integer::NewFromUnsigned(env()->isolate(), stream()->write_queue_size);
   object()->Set(env()->write_queue_size_string(), write_queue_size);
 }
 
@@ -141,7 +141,7 @@ static Local<Object> AcceptHandle(Environment* env, uv_stream_t* pipe) {
   if (uv_accept(pipe, reinterpret_cast<uv_stream_t*>(handle)))
     abort();
 
-  return scope.Close(wrap_obj);
+  return wrap_obj;
 }
 
 
@@ -242,7 +242,7 @@ void StreamWrap::WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   if (msg != NULL)
     req_wrap_obj->Set(env->error_string(), OneByteString(env->isolate(), msg));
   req_wrap_obj->Set(env->bytes_string(),
-                    Integer::NewFromUnsigned(length, env->isolate()));
+                    Integer::NewFromUnsigned(env->isolate(), length));
   args.GetReturnValue().Set(err);
 }
 
@@ -368,7 +368,7 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
   if (msg != NULL)
     req_wrap_obj->Set(env->error_string(), OneByteString(env->isolate(), msg));
   req_wrap_obj->Set(env->bytes_string(),
-                    Integer::NewFromUnsigned(data_size, env->isolate()));
+                    Integer::NewFromUnsigned(env->isolate(), data_size));
   args.GetReturnValue().Set(err);
 }
 
@@ -515,10 +515,10 @@ void StreamWrap::AfterWrite(uv_write_t* req, int status) {
   wrap->callbacks()->AfterWrite(req_wrap);
 
   Local<Value> argv[] = {
-    Integer::New(status, env->isolate()),
+    Integer::New(env->isolate(), status),
     wrap->object(),
     req_wrap_obj,
-    Undefined()
+    Undefined(env->isolate())
   };
 
   const char* msg = wrap->callbacks()->Error();
@@ -566,7 +566,7 @@ void StreamWrap::AfterShutdown(uv_shutdown_t* req, int status) {
 
   Local<Object> req_wrap_obj = req_wrap->object();
   Local<Value> argv[3] = {
-    Integer::New(status, env->isolate()),
+    Integer::New(env->isolate(), status),
     wrap->object(),
     req_wrap_obj
   };
@@ -680,9 +680,9 @@ void StreamWrapCallbacks::DoRead(uv_stream_t* handle,
   Context::Scope context_scope(env->context());
 
   Local<Value> argv[] = {
-    Integer::New(nread, env->isolate()),
-    Undefined(),
-    Undefined()
+    Integer::New(env->isolate(), nread),
+    Undefined(env->isolate()),
+    Undefined(env->isolate())
   };
 
   if (nread < 0)  {
