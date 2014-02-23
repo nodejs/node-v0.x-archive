@@ -218,6 +218,17 @@
                 '<(SHARED_INTERMEDIATE_DIR)/node_dtrace_provider.o',
                 '<(SHARED_INTERMEDIATE_DIR)/libuv_dtrace_provider.o',
               ],
+            }, {
+              'sources': [
+                'src/dtrace-provider/dtrace_argument.cc',
+                'src/dtrace-provider/dtrace_probe.cc',
+                'src/dtrace-provider/dtrace_provider.cc',
+                'src/dtrace-provider/dtrace_provider.h',
+              ],
+              'include_dirs': [ 'deps/libusdt' ],
+              'dependencies': [
+                './deps/libusdt/libusdt.gyp:libusdt',
+              ],
             }],
             [ 'OS!="mac" and OS!="linux"', {
               'sources': [

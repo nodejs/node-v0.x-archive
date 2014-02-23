@@ -104,6 +104,36 @@ inline void Wrap(v8::Local<v8::Object> object, void* pointer);
 template <typename TypeName>
 inline TypeName* Unwrap(v8::Local<v8::Object> object);
 
+class AsciiValue {
+  public:
+    explicit AsciiValue(v8::Handle<v8::String> value)
+      : val_(value), str_(NULL) {
+    }
+
+    ~AsciiValue() {
+      if (str_ != NULL)
+        free(str_);
+    }
+
+    char* operator*() {
+      if (str_ == NULL) {
+        size_t len = val_->Length();
+        uint8_t* str = static_cast<uint8_t*>(malloc(len));
+        size_t written = val_->WriteOneByte(str);
+
+        if (written != len)
+          str = static_cast<uint8_t*>(realloc(str, written));
+
+        str_ = reinterpret_cast<char*>(str);
+      }
+      return str_;
+    };
+
+  private:
+    v8::Handle<v8::String> val_;
+    char* str_;
+};
+
 }  // namespace node
 
 #endif  // SRC_UTIL_H_
