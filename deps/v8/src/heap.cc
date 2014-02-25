@@ -1084,7 +1084,7 @@ bool Heap::PerformGarbageCollection(
   GCType gc_type =
       collector == MARK_COMPACTOR ? kGCTypeMarkSweepCompact : kGCTypeScavenge;
 
-  {
+  { AllowHeapAllocation allow_allocation;
     GCTracer::Scope scope(tracer, GCTracer::Scope::EXTERNAL);
     VMState<EXTERNAL> state(isolate_);
     HandleScope handle_scope(isolate_);
@@ -1193,7 +1193,7 @@ bool Heap::PerformGarbageCollection(
         amount_of_external_allocated_memory_;
   }
 
-  {
+  { AllowHeapAllocation allow_allocation;
     GCTracer::Scope scope(tracer, GCTracer::Scope::EXTERNAL);
     VMState<EXTERNAL> state(isolate_);
     HandleScope handle_scope(isolate_);
