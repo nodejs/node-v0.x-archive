@@ -60,7 +60,7 @@ struct CallbackInfo {
   Persistent<Object> p_obj;
 };
 
-void TargetCallback(const WeakCallbackData<Object, char>& data);
+void TargetCallback(const WeakCallbackData<Object, CallbackInfo>& data);
 void TargetFreeCallback(Isolate* isolate,
                         Persistent<Object>* target,
                         CallbackInfo* cb_info);
@@ -267,20 +267,24 @@ void Alloc(Environment* env,
            char* data,
            size_t length,
            enum ExternalArrayType type) {
+  CallbackInfo* cb_info = new CallbackInfo;
+  cb_info->cb = NULL;
+  cb_info->hint = data;
+  cb_info->p_obj.Reset(env->isolate(), obj);
+  cb_info->p_obj.SetWeak(cb_info, TargetCallback);
+  cb_info->p_obj.MarkIndependent();
+  cb_info->p_obj.SetWrapperClassId(ALLOC_ID);
+
   assert(!obj->HasIndexedPropertiesInExternalArrayData());
-  Persistent<Object> p_obj(env->isolate(), obj);
   env->isolate()->AdjustAmountOfExternalAllocatedMemory(length);
-  p_obj.SetWeak(data, TargetCallback);
-  p_obj.MarkIndependent();
-  p_obj.SetWrapperClassId(ALLOC_ID);
   size_t size = length / ExternalArraySize(type);
   obj->SetIndexedPropertiesToExternalArrayData(data, type, size);
 }
 
 
-void TargetCallback(const WeakCallbackData<Object, char>& data) {
+void TargetCallback(const WeakCallbackData<Object, CallbackInfo>& data) {
   HandleScope handle_scope(data.GetIsolate());
-  char* info = data.GetParameter();
+  CallbackInfo* info = data.GetParameter();
 
   Local<Object> obj = data.GetValue();
   size_t len = obj->GetIndexedPropertiesExternalArrayDataLength();
@@ -290,13 +294,13 @@ void TargetCallback(const WeakCallbackData<Object, char>& data) {
   assert(array_size > 0);
   assert(array_size * len >= len);
   len *= array_size;
-  if (info != NULL && len > 0) {
+  if (info->hint != NULL && len > 0) {
     data.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(-len);
-    free(info);
+    free(info->hint);
   }
 
-  // XXX: Persistent is no longer passed here
-  // persistent.Reset();
+  info->p_obj.Reset();
+  delete info;
 }
 
 
