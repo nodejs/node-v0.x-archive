@@ -46,6 +46,12 @@ assert.equal(util.inspect(a), '[ \'foo\', , \'baz\' ]');
 assert.equal(util.inspect(a, true), '[ \'foo\', , \'baz\', [length]: 3 ]');
 assert.equal(util.inspect(new Array(5)), '[ , , , ,  ]');
 
+// test for large sparse array
+assert.equal(util.inspect(new Array(0xFFFFFFFF)), '[ 4294967294:  ]');
+a = new Array(50001);
+a[10000] = 1; a[20000] = 2; a[20001] = 3; a[20003] = 4;
+assert.equal(util.inspect(a), '[ 10000: 1, 20000: 2, 3, , 4, 50000:  ]');
+
 // test for property descriptors
 var getter = Object.create(null, {
   a: {
