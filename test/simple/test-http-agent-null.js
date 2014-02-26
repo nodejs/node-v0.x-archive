@@ -24,13 +24,15 @@ var assert = require('assert');
 var http = require('http');
 var net = require('net');
 
-var called = false;
+var request = 0;
+var response = 0;
 process.on('exit', function() {
-  assert(called, 'http.get() callback function was not called');
+  assert.equal(request, 1, 'http server "request" callback was not called');
+  assert.equal(response, 1, 'http request "response" callback was not called');
 });
 
-http.createServer(function(req, res) {
-  this.close();
+var server = http.createServer(function(req, res) {
+  request++;
   res.end();
 }).listen(function() {
   var options = {
@@ -38,6 +40,8 @@ http.createServer(function(req, res) {
     port: this.address().port
   };
   http.get(options, function(res) {
-    called = true;
+    response++;
+    res.resume();
+    server.close();
   });
 });
