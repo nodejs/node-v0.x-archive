@@ -62,6 +62,7 @@ namespace node {
   V(blksize_string, "blksize")                                                \
   V(blocks_string, "blocks")                                                  \
   V(buffer_string, "buffer")                                                  \
+  V(build_stats_object_string, "buildStatsObject")                            \
   V(bytes_string, "bytes")                                                    \
   V(bytes_parsed_string, "bytesParsed")                                       \
   V(byte_length_string, "byteLength")                                         \

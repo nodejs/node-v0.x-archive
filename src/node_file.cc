@@ -345,13 +345,13 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   //
   // We need to check the return value of Integer::New() and Date::New()
   // and make sure that we bail out when V8 returns an empty handle.
+
+  // Integers.
 #define X(name)                                                               \
-  {                                                                           \
-    Local<Value> val = Integer::New(env->isolate(), s->st_##name);            \
-    if (val.IsEmpty())                                                        \
-      return handle_scope.Escape(Local<Object>());                            \
-    stats->Set(env->name ## _string(), val);                                  \
-  }
+  Local<Value> name = Integer::New(env->isolate(), s->st_##name);             \
+  if (name.IsEmpty())                                                         \
+    return handle_scope.Escape(Local<Object>());                              \
+
   X(dev)
   X(mode)
   X(nlink)
@@ -360,38 +360,61 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   X(rdev)
 # if defined(__POSIX__)
   X(blksize)
+# else
+  Local<Value> blksize = Undefined(node_isolate);
 # endif
 #undef X
 
+  // Numbers.
 #define X(name)                                                               \
-  {                                                                           \
-    Local<Value> val = Number::New(env->isolate(),                            \
-                                   static_cast<double>(s->st_##name));        \
-    if (val.IsEmpty())                                                        \
-      return handle_scope.Escape(Local<Object>());                            \
-    stats->Set(env->name ## _string(), val);                                  \
-  }
+  Local<Value> name = Number::New(env->isolate(),                             \
+                                  static_cast<double>(s->st_##name));         \
+  if (name.IsEmpty())                                                         \
+    return handle_scope.Escape(Local<Object>());                              \
+
   X(ino)
   X(size)
 # if defined(__POSIX__)
   X(blocks)
+# else
+  Local<Value> blocks = Undefined(node_isolate);
 # endif
 #undef X
 
-#define X(name, rec)                                                          \
-  {                                                                           \
-    double msecs = static_cast<double>(s->st_##rec.tv_sec) * 1000;            \
-    msecs += static_cast<double>(s->st_##rec.tv_nsec / 1000000);              \
-    Local<Value> val = v8::Date::New(env->isolate(), msecs);                  \
-    if (val.IsEmpty())                                                        \
-      return handle_scope.Escape(Local<Object>());                            \
-    stats->Set(env->name ## _string(), val);                                  \
-  }
+  // Dates.
+#define X(name, rec)                                                        \
+  double msecs_##name = static_cast<double>(s->st_##rec.tv_sec) * 1000;     \
+  msecs_##name += static_cast<double>(s->st_##rec.tv_nsec / 1000000);       \
+  Local<Value> name = v8::Date::New(env->isolate(), msecs_##name);          \
+  if (name.IsEmpty())                                                       \
+    return handle_scope.Escape(Local<Object>());                            \
+
   X(atime, atim)
   X(mtime, mtim)
   X(ctime, ctim)
   X(birthtime, birthtim)
 #undef X
+
+  Local<Value> argv[13] = {
+    dev,
+    mode,
+    nlink,
+    uid,
+    gid,
+    rdev,
+    ino,
+    size,
+    blocks,
+    atime,
+    mtime,
+    ctime,
+    birthtime
+  };
+
+  // Call out to JavaScript to build the object.
+  Local<Value> fnVal = stats->Get(env->build_stats_object_string());
+  Local<Function> fn = fnVal.As<Function>();
+  fn->Call(stats, 13, argv);
 
   return handle_scope.Escape(stats);
 }
