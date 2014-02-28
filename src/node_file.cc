@@ -395,7 +395,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   X(birthtime, birthtim)
 #undef X
 
-  Local<Value> argv[13] = {
+  Local<Value> argv[] = {
     dev,
     mode,
     nlink,
