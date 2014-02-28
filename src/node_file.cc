@@ -414,7 +414,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   // Call out to JavaScript to build the object.
   Local<Value> fnVal = stats->Get(env->build_stats_object_string());
   Local<Function> fn = fnVal.As<Function>();
-  fn->Call(stats, 13, argv);
+  fn->Call(stats, ARRAY_SIZE(argv), argv);
 
   return handle_scope.Escape(stats);
 }
