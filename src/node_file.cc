@@ -361,7 +361,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 # if defined(__POSIX__)
   X(blksize)
 # else
-  Local<Value> blksize = Undefined(node_isolate);
+  Local<Value> blksize = Undefined(env->isolate());
 # endif
 #undef X
 
@@ -377,7 +377,7 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 # if defined(__POSIX__)
   X(blocks)
 # else
-  Local<Value> blocks = Undefined(node_isolate);
+  Local<Value> blocks = Undefined(env->isolate());
 # endif
 #undef X
 
