@@ -3536,7 +3536,8 @@ int Start(int argc, char** argv) {
       more = uv_run(env->event_loop(), UV_RUN_ONCE);
       if (more == false) {
         EmitBeforeExit(env);
-        more = uv_run(env->event_loop(), UV_RUN_NOWAIT);
+        more = uv_loop_alive(env->event_loop());
+        uv_run(env->event_loop(), UV_RUN_NOWAIT);
       }
     } while (more == true);
     code = EmitExit(env);
