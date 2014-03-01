@@ -242,6 +242,7 @@ namespace node {
   V(async_listener_unload_function, v8::Function)                             \
   V(binding_cache_object, v8::Object)                                         \
   V(buffer_constructor_function, v8::Function)                                \
+  V(build_stats_object_function, v8::Function)                                \
   V(context, v8::Context)                                                     \
   V(domain_array, v8::Array)                                                  \
   V(gc_info_callback_function, v8::Function)                                  \

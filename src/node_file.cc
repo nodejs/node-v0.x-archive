@@ -323,16 +323,11 @@ static void Close(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
+Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   // If you hit this assertion, you forgot to enter the v8::Context first.
   assert(env->context() == env->isolate()->GetCurrentContext());
 
   EscapableHandleScope handle_scope(env->isolate());
-
-  Local<Object> stats = env->stats_constructor_function()->NewInstance();
-  if (stats.IsEmpty()) {
-    return handle_scope.Escape(Local<Object>());
-  }
 
   // The code below is very nasty-looking but it prevents a segmentation fault
   // when people run JS code like the snippet below. It's apparently more
@@ -395,7 +390,14 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   X(birthtime, birthtim)
 #undef X
 
+  Local<Object> stats = env->stats_constructor_function()->NewInstance();
+  if (stats.IsEmpty()) {
+    return handle_scope.Escape(Local<Object>());
+  }
+
+  // Pass stats as the first argument, this is the object we are modifying.
   Local<Value> argv[] = {
+    stats,
     dev,
     mode,
     nlink,
@@ -411,10 +413,9 @@ Local<Object> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     birthtime
   };
 
-  // Call out to JavaScript to build the object.
-  Local<Value> fnVal = stats->Get(env->build_stats_object_string());
-  Local<Function> fn = fnVal.As<Function>();
-  fn->Call(stats, ARRAY_SIZE(argv), argv);
+  // Call out to JavaScript to set the object properties.
+  env->build_stats_object_function()->Call(
+      env->process_object(), ARRAY_SIZE(argv), argv);
 
   return handle_scope.Escape(stats);
 }
@@ -1104,6 +1105,13 @@ static void FUTimes(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+// Store a reference to the function that was passed in.
+void BindBuildStatsObject(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+
+  Local<Function> build_stats_object_function = args[0].As<Function>();
+  env->set_build_stats_object_function(build_stats_object_function);
+}
 
 void InitFs(Handle<Object> target,
             Handle<Value> unused,
@@ -1116,6 +1124,10 @@ void InitFs(Handle<Object> target,
       FunctionTemplate::New(env->isolate())->GetFunction();
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Stats"), constructor);
   env->set_stats_constructor_function(constructor);
+
+  // Add a buildStatsObject method to fs.
+  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "bindBuildStatsObject"),
+              FunctionTemplate::New(BindBuildStatsObject)->GetFunction());
 
   NODE_SET_METHOD(target, "close", Close);
   NODE_SET_METHOD(target, "open", Open);
