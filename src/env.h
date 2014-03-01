@@ -62,7 +62,6 @@ namespace node {
   V(blksize_string, "blksize")                                                \
   V(blocks_string, "blocks")                                                  \
   V(buffer_string, "buffer")                                                  \
-  V(build_stats_object_string, "buildStatsObject")                            \
   V(bytes_string, "bytes")                                                    \
   V(bytes_parsed_string, "bytesParsed")                                       \
   V(byte_length_string, "byteLength")                                         \
@@ -242,8 +241,8 @@ namespace node {
   V(async_listener_unload_function, v8::Function)                             \
   V(binding_cache_object, v8::Object)                                         \
   V(buffer_constructor_function, v8::Function)                                \
-  V(build_stats_object_function, v8::Function)                                \
   V(context, v8::Context)                                                     \
+  V(create_stats_object_function, v8::Function)                               \
   V(domain_array, v8::Array)                                                  \
   V(gc_info_callback_function, v8::Function)                                  \
   V(module_load_list_array, v8::Array)                                        \
@@ -252,7 +251,6 @@ namespace node {
   V(script_context_constructor_template, v8::FunctionTemplate)                \
   V(script_data_constructor_function, v8::Function)                           \
   V(secure_context_constructor_template, v8::FunctionTemplate)                \
-  V(stats_constructor_function, v8::Function)                                 \
   V(tcp_constructor_template, v8::FunctionTemplate)                           \
   V(tick_callback_function, v8::Function)                                     \
   V(tls_wrap_constructor_function, v8::Function)                              \

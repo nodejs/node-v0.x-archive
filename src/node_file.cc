@@ -390,14 +390,8 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   X(birthtime, birthtim)
 #undef X
 
-  Local<Object> stats = env->stats_constructor_function()->NewInstance();
-  if (stats.IsEmpty()) {
-    return handle_scope.Escape(Local<Object>());
-  }
-
   // Pass stats as the first argument, this is the object we are modifying.
   Local<Value> argv[] = {
-    stats,
     dev,
     mode,
     nlink,
@@ -413,9 +407,13 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     birthtime
   };
 
-  // Call out to JavaScript to set the object properties.
-  env->build_stats_object_function()->Call(
-      env->process_object(), ARRAY_SIZE(argv), argv);
+  // Call out to JavaScript to create the stats object.
+  Local<Value> stats = env->create_stats_object_function()->Call(
+        env->process_object(), ARRAY_SIZE(argv), argv);
+
+  if (stats.IsEmpty()) {
+    return handle_scope.Escape(Local<Object>());
+  }
 
   return handle_scope.Escape(stats);
 }
@@ -1105,12 +1103,11 @@ static void FUTimes(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-// Store a reference to the function that was passed in.
-void BindBuildStatsObject(const FunctionCallbackInfo<Value>& args) {
+void SetCreateStatsObjectFunction(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
-  Local<Function> build_stats_object_function = args[0].As<Function>();
-  env->set_build_stats_object_function(build_stats_object_function);
+  Local<Function> create_stats_object_function = args[0].As<Function>();
+  env->set_create_stats_object_function(create_stats_object_function);
 }
 
 void InitFs(Handle<Object> target,
@@ -1119,15 +1116,10 @@ void InitFs(Handle<Object> target,
             void* priv) {
   Environment* env = Environment::GetCurrent(context);
 
-  // Initialize the stats object
-  Local<Function> constructor =
-      FunctionTemplate::New(env->isolate())->GetFunction();
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Stats"), constructor);
-  env->set_stats_constructor_function(constructor);
-
-  // Add a buildStatsObject method to fs.
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "bindBuildStatsObject"),
-              FunctionTemplate::New(BindBuildStatsObject)->GetFunction());
+  // Function which creates a new Stats object.
+  target->Set(
+      FIXED_ONE_BYTE_STRING(env->isolate(), "setCreateStatsObjectFunction"),
+      FunctionTemplate::New(SetCreateStatsObjectFunction)->GetFunction());
 
   NODE_SET_METHOD(target, "close", Close);
   NODE_SET_METHOD(target, "open", Open);
