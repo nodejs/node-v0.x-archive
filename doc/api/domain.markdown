@@ -9,6 +9,15 @@ will be notified, rather than losing the context of the error in the
 `process.on('uncaughtException')` handler, or causing the program to
 exit immediately with an error code.
 
+## Warning: Don't cache `process.nextTick`!
+
+Do not cache `process.nextTick` as it will be replaced with a different
+reference (implementation) to provide domains support as soon as you do
+`require('domain')` in your code.
+
+It also means that you better to `require('domain')` in your code as
+soon as possible if you are planning to use domains in your application.
+
 ## Warning: Don't Ignore Errors!
 
 <!-- type=misc -->
