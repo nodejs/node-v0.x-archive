@@ -256,13 +256,11 @@
           domainModule.active = process.domain = null;
         } catch (er2) {
           // The domain error handler threw!  oh no!
-          // See if another domain can catch THIS error,
+          // See if parent domain can catch THIS error,
           // or else crash on the original one.
           // If the user already exited it, then don't double-exit.
-          if (domain === domainModule.active)
-            domainStack.pop();
-          if (domainStack.length) {
-            var parentDomain = domainStack[domainStack.length - 1];
+          if (domain.parent) {
+            var parentDomain = domain.parent;
             process.domain = domainModule.active = parentDomain;
             caught = process._fatalException(er2);
           } else
