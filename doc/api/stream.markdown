@@ -209,6 +209,43 @@ descriptor) has been closed. Not all streams will emit this.
 
 Emitted if there was an error receiving data.
 
+#### Event: 'pipe'
+
+* `src` {[Writable][] Stream} destination stream to where this readable is
+piping.
+
+This is emitted whenever the `pipe()` method is called on the readable
+stream, adding the writable to its set of destinations.
+
+```javascript
+var writer = getWritableStreamSomehow();
+var reader = getReadableStreamSomehow();
+reader.on('pipe', function(dest) {
+  console.error('something is piping into the writer');
+  assert.equal(dest, writer);
+});
+reader.pipe(writer);
+```
+
+#### Event: 'unpipe'
+
+* `src` {[Writable][] Stream} The source stream that [unpiped][] this readable
+* `err` {Error} The error (if any) that triggered this unpipe event
+
+This is emitted whenever the [`unpipe()`][] method is called on a
+readable stream, removing the given writable from its set of destinations.
+
+```javascript
+var writer = getWritableStreamSomehow();
+var reader = getReadableStreamSomehow();
+reader.on('unpipe', function(dest, err) {
+  console.error('something has stopped piping into the writer');
+  assert.equal(dest, writer);
+});
+reader.pipe(writer);
+reader.unpipe(writer);
+```
+
 #### readable.read([size])
 
 * `size` {Number} Optional argument to specify how much data to read.
@@ -600,6 +637,7 @@ reader.pipe(writer);
 #### Event: 'unpipe'
 
 * `src` {[Readable][] Stream} The source stream that [unpiped][] this writable
+* `err` {Error} The error (if any) that triggered this unpipe event
 
 This is emitted whenever the [`unpipe()`][] method is called on a
 readable stream, removing this writable from its set of destinations.
@@ -607,7 +645,7 @@ readable stream, removing this writable from its set of destinations.
 ```javascript
 var writer = getWritableStreamSomehow();
 var reader = getReadableStreamSomehow();
-writer.on('unpipe', function(src) {
+writer.on('unpipe', function(src, err) {
   console.error('something has stopped piping into the writer');
   assert.equal(src, reader);
 });
