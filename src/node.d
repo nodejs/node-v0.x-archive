@@ -75,12 +75,14 @@ typedef struct {
 typedef struct {
 	uint32_t version;
 	uint64_t dummy1;
+  uint64_t dummy2;
 } node_dtrace_http_request_t;
 
 typedef struct {
 	uint32_t version;
 	uint64_t dummy2;
 	uint64_t dummy3;
+  uint64_t dummy4;
 } node_dtrace_http_server_request_t;
 
 /*
@@ -156,16 +158,16 @@ translator node_http_request_t <node_dtrace_http_server_request_t *nd> {
 	method = (*(uint32_t *)copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ?
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v0_t *)nd)->method,
+		        &((node_dtrace_http_server_request_v0_t *)nd)->method,
 		        sizeof (uint64_t))) :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->method,
+		        &((node_dtrace_http_server_request_v1_t *)nd)->method,
 		        sizeof (uint64_t)));
 
 	forwardedFor = (*(uint32_t *)copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ? "" :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->
+		        &((node_dtrace_http_server_request_v1_t *)nd)->
 		        forwardedFor, sizeof (uint64_t)));
 };
 
@@ -177,19 +179,19 @@ translator node_http_request_t <node_dtrace_http_client_request_t *nd> {
 	url = (*(uint32_t *)copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ?
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v0_t *)nd)->url,
+		        &((node_dtrace_http_server_request_v0_t *)nd)->url,
 		        sizeof (uint64_t))) :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->url,
-		        sizeof (uint64_t))));
+		        &((node_dtrace_http_server_request_v1_t *)nd)->url,
+		        sizeof (uint64_t)));
 
 	method = (*(uint32_t *)copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ?
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v0_t *)nd)->method,
+		        &((node_dtrace_http_server_request_v0_t *)nd)->method,
 		        sizeof (uint64_t))) :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->method,
+		        &((node_dtrace_http_server_request_v1_t *)nd)->method,
 		        sizeof (uint64_t)));
 
 	forwardedFor = "";
@@ -204,26 +206,25 @@ translator node_http_request_t <node_dtrace_http_client_request_t *nd> {
 translator node_http_request_t <node_dtrace_http_request_t *nd> {
 	url = (*(uint32_t *)copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ?
-	    (curpsinfo->pr_dmodel == PR_MODEL_ILP32 ?
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v0_t *)nd)->url,
+		        &((node_dtrace_http_server_request_v0_t *)nd)->url,
 		        sizeof (uint64_t))) :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->url,
-		        sizeof (uint64_t))));
+		        &((node_dtrace_http_server_request_v1_t *)nd)->url,
+		        sizeof (uint64_t)));
 
 	method = (*(uint32_t *)copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ?
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v0_t *)nd)->method,
+		        &((node_dtrace_http_server_request_v0_t *)nd)->method,
 		        sizeof (uint64_t))) :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->method,
+		        &((node_dtrace_http_server_request_v1_t *)nd)->method,
 		        sizeof (uint64_t)));
 
 	forwardedFor = (*(uint32_t *) copyin((uintptr_t)(uint32_t *)nd,
 		sizeof (uint32_t))) >= 4096 ? "" :
 		    copyinstr(*(uint64_t *)copyin((uintptr_t)
-		        &((node_dtrace_http_server_request64_v1_t *)nd)->
+		        &((node_dtrace_http_server_request_v1_t *)nd)->
 		        forwardedFor, sizeof (uint64_t)));
 };
