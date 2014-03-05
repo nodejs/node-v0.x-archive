@@ -189,7 +189,6 @@
           'defines': [ 'HAVE_DTRACE=1' ],
           'dependencies': [
             'node_dtrace_header',
-            'specialize_node_d',
           ],
           'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
 
@@ -553,31 +552,5 @@
         } ],
       ]
     },
-    {
-      'target_name': 'specialize_node_d',
-      'type': 'none',
-      'conditions': [
-        [ 'node_use_dtrace=="true"', {
-          'actions': [
-            {
-              'action_name': 'specialize_node_d',
-              'inputs': [
-                'src/node.d'
-              ],
-              'outputs': [
-                '<(PRODUCT_DIR)/node.d',
-              ],
-              'action': [
-                'tools/specialize_node_d.py',
-                '<@(_outputs)',
-                '<@(_inputs)',
-                '<@(OS)',
-                '<@(target_arch)',
-              ],
-            },
-          ],
-        } ],
-      ]
-    }
   ] # end targets
 }
