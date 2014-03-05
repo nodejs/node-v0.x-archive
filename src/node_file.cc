@@ -377,17 +377,19 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
 #undef X
 
   // Dates.
-#define X(name, rec)                                                        \
-  double msecs_##name = static_cast<double>(s->st_##rec.tv_sec) * 1000;     \
-  msecs_##name += static_cast<double>(s->st_##rec.tv_nsec / 1000000);       \
-  Local<Value> name = v8::Date::New(env->isolate(), msecs_##name);          \
-  if (name.IsEmpty())                                                       \
+#define X(name)                                                             \
+  Local<Value> name##_msec =                                                \
+    Number::New(env->isolate(),                                             \
+        (static_cast<double>(s->st_##name.tv_sec) * 1000) +                 \
+        (static_cast<double>(s->st_##name.tv_nsec) * 1000000));             \
+                                                                            \
+  if (name##_msec.IsEmpty())                                                \
     return handle_scope.Escape(Local<Object>());                            \
 
-  X(atime, atim)
-  X(mtime, mtim)
-  X(ctime, ctim)
-  X(birthtime, birthtim)
+  X(atim)
+  X(mtim)
+  X(ctim)
+  X(birthtim)
 #undef X
 
   // Pass stats as the first argument, this is the object we are modifying.
@@ -401,10 +403,10 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
     ino,
     size,
     blocks,
-    atime,
-    mtime,
-    ctime,
-    birthtime
+    atim_msec,
+    mtim_msec,
+    ctim_msec,
+    birthtim_msec
   };
 
   // Call out to JavaScript to create the stats object.
