@@ -408,8 +408,8 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   };
 
   // Call out to JavaScript to create the stats object.
-  Local<Value> stats = env->create_stats_object_function()->Call(
-        env->process_object(), ARRAY_SIZE(argv), argv);
+  Local<Value> stats =
+    env->fs_stats_constructor_function()->NewInstance(ARRAY_SIZE(argv), argv);
 
   if (stats.IsEmpty()) {
     return handle_scope.Escape(Local<Object>());
@@ -1103,11 +1103,12 @@ static void FUTimes(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-void SetCreateStatsObjectFunction(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+void FSInitialize(const FunctionCallbackInfo<Value>& args) {
+  Local<Function> stats_constructor = args[0].As<Function>();
+  assert(stats_constructor->IsFunction());
 
-  Local<Function> create_stats_object_function = args[0].As<Function>();
-  env->set_create_stats_object_function(create_stats_object_function);
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  env->set_fs_stats_constructor_function(stats_constructor);
 }
 
 void InitFs(Handle<Object> target,
@@ -1118,8 +1119,8 @@ void InitFs(Handle<Object> target,
 
   // Function which creates a new Stats object.
   target->Set(
-      FIXED_ONE_BYTE_STRING(env->isolate(), "setCreateStatsObjectFunction"),
-      FunctionTemplate::New(SetCreateStatsObjectFunction)->GetFunction());
+      FIXED_ONE_BYTE_STRING(env->isolate(), "FSInitialize"),
+      FunctionTemplate::New(FSInitialize)->GetFunction());
 
   NODE_SET_METHOD(target, "close", Close);
   NODE_SET_METHOD(target, "open", Open);
