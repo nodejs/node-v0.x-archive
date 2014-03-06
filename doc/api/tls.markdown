@@ -536,7 +536,8 @@ more information.
 
 Add secure context that will be used if client request's SNI hostname is
 matching passed `hostname` (wildcards can be used). `credentials` can contain
-`key`, `cert` and `ca`.
+`key`, `cert`, `ca` and/or any other properties from `crypto.createCredentials`
+`options` argument.
 
 ### server.maxConnections
 
