@@ -27,10 +27,12 @@
 #if !defined(_MSC_VER)
 #include <unistd.h>
 #endif
-#include <fcntl.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#define _XOPEN_SOURCE 500
+#include <fcntl.h>
 
 #if HAVE_OPENSSL
 # include <openssl/ssl.h>
@@ -1020,6 +1022,10 @@ void DefineSystemConstants(Handle<Object> target) {
 
 #ifdef O_DIRECT
   NODE_DEFINE_CONSTANT(target, O_DIRECT);
+#endif
+
+#ifdef O_NONBLOCK
+  NODE_DEFINE_CONSTANT(target, O_NONBLOCK);
 #endif
 
 #ifdef S_IRWXU
