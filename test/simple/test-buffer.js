@@ -993,3 +993,26 @@ for (var i = 0; i < 5; i++)
 b.fill('ghijk');
 for (var i = 0; i < 5; i++)
   assert.notEqual(d[i], b[i]);
+
+// Test Compare
+var b = new Buffer(1).fill('a');
+var c = new Buffer(1).fill('c');
+var d = new Buffer(2).fill('aa');
+
+assert.equal(b.compare(c), -2);
+assert.equal(c.compare(d), 2);
+assert.equal(d.compare(b), 1);
+assert.equal(b.compare(d), -1);
+
+assert.equal(Buffer.compare(b, c), 2);
+
+// Test Equals
+var b = new Buffer(5).fill('abcdf');
+var c = new Buffer(5).fill('abcdf');
+var d = new Buffer(5).fill('abcde');
+var e = new Buffer(6).fill('abcdef');
+
+assert(b.equals(c));
+assert(!c.equals(d));
+assert(!d.equals(e));
+
