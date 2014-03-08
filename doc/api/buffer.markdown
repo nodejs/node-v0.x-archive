@@ -207,6 +207,21 @@ Example: copy an ASCII string into a buffer, one byte at a time:
 
     // node.js
 
+### buf.equals(otherBuffer)
+
+* `otherBuffer` Buffer object - Buffer to compare with
+
+Returns a boolean of whether `this` and `otherBuffer` have the same
+bytes.
+
+### buf.equalsConstantTime(otherBuffer)
+
+* `otherBuffer` Buffer object - Buffer to compare with
+
+Returns a boolean of whether `this` and `otherBuffer` have the same
+bytes, but in constant time.
+
+
 ### buf.copy(targetBuffer, [targetStart], [sourceStart], [sourceEnd])
 
 * `targetBuffer` Buffer object - Buffer to copy into

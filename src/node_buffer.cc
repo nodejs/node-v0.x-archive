@@ -605,6 +605,55 @@ void ByteLength(const FunctionCallbackInfo<Value> &args) {
   args.GetReturnValue().Set(size);
 }
 
+void Compare(const FunctionCallbackInfo<Value> &args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
+  ARGS_THIS(args.This())
+
+  Local<Object> other = args[0]->ToObject();
+  if (!HasInstance(other))
+    return env->ThrowTypeError("first arg should be a Buffer");
+
+  size_t other_length = other->GetIndexedPropertiesExternalArrayDataLength();
+  char* other_data = static_cast<char*>(
+    other->GetIndexedPropertiesExternalArrayData());
+
+  size_t cmp_length = MIN(obj_length, other_length);
+
+  int val = memcmp(obj_data, other_data, cmp_length);
+  if (!val) {
+    val = (int)(obj_length - other_length);
+  }
+
+  args.GetReturnValue().Set(val);
+}
+
+void EqualsConstantTime(const FunctionCallbackInfo<Value> &args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
+  ARGS_THIS(args.This())
+  Local<Object> other = args[0]->ToObject();
+
+  if (!HasInstance(other))
+    return env->ThrowTypeError("first arg should be a Buffer");
+
+  size_t other_length = other->GetIndexedPropertiesExternalArrayDataLength();
+  char* other_data = static_cast<char*>(
+    other->GetIndexedPropertiesExternalArrayData());
+
+  bool isEqual = true;
+  if (obj_length != other_length) {
+    isEqual = false;
+  } else {
+    size_t i;
+    unsigned char result = 0;
+    for (i = 0; i < obj_length; i++) {
+      result |= obj_data[i] ^ other_data[i];
+    }
+    isEqual = result == 0;
+  }
+  args.GetReturnValue().Set(isEqual);
+}
 
 // pass Buffer object to load prototype methods
 void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
@@ -649,6 +698,9 @@ void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
 
   NODE_SET_METHOD(proto, "copy", Copy);
   NODE_SET_METHOD(proto, "fill", Fill);
+
+  NODE_SET_METHOD(proto, "compare", Compare);
+  NODE_SET_METHOD(proto, "equalsConstantTime", EqualsConstantTime);
 
   // for backwards compatibility
   proto->Set(env->offset_string(),
