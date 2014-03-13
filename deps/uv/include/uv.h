@@ -405,12 +405,11 @@ typedef void (*uv_shutdown_cb)(uv_shutdown_t* req, int status);
 typedef void (*uv_connection_cb)(uv_stream_t* server, int status);
 typedef void (*uv_close_cb)(uv_handle_t* handle);
 typedef void (*uv_poll_cb)(uv_poll_t* handle, int status, int events);
-typedef void (*uv_timer_cb)(uv_timer_t* handle, int status);
-/* TODO: do these really need a status argument? */
-typedef void (*uv_async_cb)(uv_async_t* handle, int status);
-typedef void (*uv_prepare_cb)(uv_prepare_t* handle, int status);
-typedef void (*uv_check_cb)(uv_check_t* handle, int status);
-typedef void (*uv_idle_cb)(uv_idle_t* handle, int status);
+typedef void (*uv_timer_cb)(uv_timer_t* handle);
+typedef void (*uv_async_cb)(uv_async_t* handle);
+typedef void (*uv_prepare_cb)(uv_prepare_t* handle);
+typedef void (*uv_check_cb)(uv_check_t* handle);
+typedef void (*uv_idle_cb)(uv_idle_t* handle);
 typedef void (*uv_exit_cb)(uv_process_t*, int64_t exit_status, int term_signal);
 typedef void (*uv_walk_cb)(uv_handle_t* handle, void* arg);
 typedef void (*uv_fs_cb)(uv_fs_t* req);

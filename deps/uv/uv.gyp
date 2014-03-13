@@ -217,6 +217,7 @@
             'src/unix/linux-syscalls.c',
             'src/unix/linux-syscalls.h',
             'src/unix/pthread-fixes.c',
+            'src/unix/android-ifaddrs.c'
           ],
           'link_settings': {
             'libraries': [ '-ldl' ],
@@ -238,7 +239,6 @@
           },
         }],
         [ 'OS=="aix"', {
-          'include_dirs': [ 'src/ares/config_aix' ],
           'sources': [ 'src/unix/aix.c' ],
           'defines': [
             '_ALL_SOURCE',

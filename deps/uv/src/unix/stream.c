@@ -1127,7 +1127,7 @@ static void uv__read(uv_stream_t* stream) {
       if (is_ipc) {
         err = uv__stream_recv_cmsg(stream, &msg);
         if (err != 0) {
-          stream->read_cb(stream, err, NULL);
+          stream->read_cb(stream, err, &buf);
           return;
         }
       }
