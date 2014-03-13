@@ -675,7 +675,8 @@ void SecureContext::SetOptions(const FunctionCallbackInfo<Value>& args) {
     return sc->env()->ThrowTypeError("Bad parameter");
   }
 
-  SSL_CTX_set_options(sc->ctx_, args[0]->IntegerValue());
+  SSL_CTX_set_options(sc->ctx_,
+                      static_cast<long>(args[0]->IntegerValue()));
 }
 
 
