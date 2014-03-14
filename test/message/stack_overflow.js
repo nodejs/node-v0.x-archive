@@ -25,7 +25,9 @@
 var common = require('../common');
 var assert = require('assert');
 
-common.error('before');
+Error.stackTraceLimit = 0;
+
+console.error('before');
 
 // stack overflow
 function stackOverflow() {
@@ -33,4 +35,4 @@ function stackOverflow() {
 }
 stackOverflow();
 
-common.error('after');
+console.error('after');

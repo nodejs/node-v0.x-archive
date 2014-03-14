@@ -50,8 +50,8 @@ namespace internal {
   HT(compile_eval, V8.CompileEval)                                    \
   HT(compile_lazy, V8.CompileLazy)
 
-
 #define HISTOGRAM_PERCENTAGE_LIST(HP)                                 \
+  /* Heap fragmentation. */                                           \
   HP(external_fragmentation_total,                                    \
      V8.MemoryExternalFragmentationTotal)                             \
   HP(external_fragmentation_old_pointer_space,                        \
@@ -64,12 +64,30 @@ namespace internal {
      V8.MemoryExternalFragmentationMapSpace)                          \
   HP(external_fragmentation_cell_space,                               \
      V8.MemoryExternalFragmentationCellSpace)                         \
+  HP(external_fragmentation_property_cell_space,                      \
+     V8.MemoryExternalFragmentationPropertyCellSpace)                 \
   HP(external_fragmentation_lo_space,                                 \
      V8.MemoryExternalFragmentationLoSpace)                           \
+  /* Percentages of heap committed to each space. */                  \
+  HP(heap_fraction_new_space,                                         \
+     V8.MemoryHeapFractionNewSpace)                                   \
+  HP(heap_fraction_old_pointer_space,                                 \
+     V8.MemoryHeapFractionOldPointerSpace)                            \
+  HP(heap_fraction_old_data_space,                                    \
+     V8.MemoryHeapFractionOldDataSpace)                               \
+  HP(heap_fraction_code_space,                                        \
+     V8.MemoryHeapFractionCodeSpace)                                  \
   HP(heap_fraction_map_space,                                         \
      V8.MemoryHeapFractionMapSpace)                                   \
   HP(heap_fraction_cell_space,                                        \
      V8.MemoryHeapFractionCellSpace)                                  \
+  HP(heap_fraction_property_cell_space,                               \
+     V8.MemoryHeapFractionPropertyCellSpace)                          \
+  HP(heap_fraction_lo_space,                                          \
+     V8.MemoryHeapFractionLoSpace)                                    \
+  /* Percentage of crankshafted codegen. */                           \
+  HP(codegen_fraction_crankshaft,                                     \
+     V8.CodegenFractionCrankshaft)                                    \
 
 
 #define HISTOGRAM_MEMORY_LIST(HM)                                     \
@@ -78,7 +96,13 @@ namespace internal {
   HM(heap_sample_map_space_committed,                                 \
      V8.MemoryHeapSampleMapSpaceCommitted)                            \
   HM(heap_sample_cell_space_committed,                                \
-     V8.MemoryHeapSampleCellSpaceCommitted)
+     V8.MemoryHeapSampleCellSpaceCommitted)                           \
+  HM(heap_sample_property_cell_space_committed,                       \
+     V8.MemoryHeapSamplePropertyCellSpaceCommitted)                   \
+  HM(heap_sample_code_space_committed,                                \
+     V8.MemoryHeapSampleCodeSpaceCommitted)                           \
+  HM(heap_sample_maximum_committed,                                   \
+     V8.MemoryHeapSampleMaximumCommitted)                             \
 
 
 // WARNING: STATS_COUNTER_LIST_* is a very large macro that is causing MSVC
@@ -89,8 +113,6 @@ namespace internal {
 #define STATS_COUNTER_LIST_1(SC)                                      \
   /* Global Handle Count*/                                            \
   SC(global_handles, V8.GlobalHandles)                                \
-  /* Mallocs from PCRE */                                             \
-  SC(pcre_mallocs, V8.PcreMallocCount)                                \
   /* OS Memory allocated */                                           \
   SC(memory_allocated, V8.OsMemoryAllocated)                          \
   SC(normalized_maps, V8.NormalizedMaps)                              \
@@ -99,7 +121,7 @@ namespace internal {
   SC(alive_after_last_gc, V8.AliveAfterLastGC)                        \
   SC(objs_since_last_young, V8.ObjsSinceLastYoung)                    \
   SC(objs_since_last_full, V8.ObjsSinceLastFull)                      \
-  SC(symbol_table_capacity, V8.SymbolTableCapacity)                   \
+  SC(string_table_capacity, V8.StringTableCapacity)                   \
   SC(number_of_symbols, V8.NumberOfSymbols)                           \
   SC(script_wrappers, V8.ScriptWrappers)                              \
   SC(call_initialize_stubs, V8.CallInitializeStubs)                   \
@@ -109,8 +131,6 @@ namespace internal {
   SC(arguments_adaptors, V8.ArgumentsAdaptors)                        \
   SC(compilation_cache_hits, V8.CompilationCacheHits)                 \
   SC(compilation_cache_misses, V8.CompilationCacheMisses)             \
-  SC(regexp_cache_hits, V8.RegExpCacheHits)                           \
-  SC(regexp_cache_misses, V8.RegExpCacheMisses)                       \
   SC(string_ctor_calls, V8.StringConstructorCalls)                    \
   SC(string_ctor_conversions, V8.StringConstructorConversions)        \
   SC(string_ctor_cached_number, V8.StringConstructorCachedNumber)     \
@@ -128,8 +148,6 @@ namespace internal {
   SC(total_preparse_symbols_skipped, V8.TotalPreparseSymbolSkipped)   \
   /* Amount of compiled source code. */                               \
   SC(total_compile_size, V8.TotalCompileSize)                         \
-  /* Amount of source code compiled with the old codegen. */          \
-  SC(total_old_codegen_source_size, V8.TotalOldCodegenSourceSize)     \
   /* Amount of source code compiled with the full codegen. */         \
   SC(total_full_codegen_source_size, V8.TotalFullCodegenSourceSize)   \
   /* Number of contexts created from scratch. */                      \
@@ -156,8 +174,6 @@ namespace internal {
      V8.GCCompactorCausedByPromotedData)                              \
   SC(gc_compactor_caused_by_oldspace_exhaustion,                      \
      V8.GCCompactorCausedByOldspaceExhaustion)                        \
-  SC(gc_compactor_caused_by_weak_handles,                             \
-     V8.GCCompactorCausedByWeakHandles)                               \
   SC(gc_last_resort_from_js, V8.GCLastResortFromJS)                   \
   SC(gc_last_resort_from_handles, V8.GCLastResortFromHandles)         \
   /* How is the generic keyed-load stub used? */                      \
@@ -172,39 +188,9 @@ namespace internal {
   SC(keyed_call_generic_smi_dict, V8.KeyedCallGenericSmiDict)         \
   SC(keyed_call_generic_lookup_cache, V8.KeyedCallGenericLookupCache) \
   SC(keyed_call_generic_lookup_dict, V8.KeyedCallGenericLookupDict)   \
-  SC(keyed_call_generic_value_type, V8.KeyedCallGenericValueType)     \
   SC(keyed_call_generic_slow, V8.KeyedCallGenericSlow)                \
   SC(keyed_call_generic_slow_load, V8.KeyedCallGenericSlowLoad)       \
-  /* Count how much the monomorphic keyed-load stubs are hit. */      \
-  SC(keyed_load_function_prototype, V8.KeyedLoadFunctionPrototype)    \
-  SC(keyed_load_string_length, V8.KeyedLoadStringLength)              \
-  SC(keyed_load_array_length, V8.KeyedLoadArrayLength)                \
-  SC(keyed_load_constant_function, V8.KeyedLoadConstantFunction)      \
-  SC(keyed_load_field, V8.KeyedLoadField)                             \
-  SC(keyed_load_callback, V8.KeyedLoadCallback)                       \
-  SC(keyed_load_interceptor, V8.KeyedLoadInterceptor)                 \
-  SC(keyed_load_inline, V8.KeyedLoadInline)                           \
-  SC(keyed_load_inline_miss, V8.KeyedLoadInlineMiss)                  \
-  SC(named_load_inline, V8.NamedLoadInline)                           \
-  SC(named_load_inline_miss, V8.NamedLoadInlineMiss)                  \
-  SC(named_load_global_inline, V8.NamedLoadGlobalInline)              \
-  SC(named_load_global_inline_miss, V8.NamedLoadGlobalInlineMiss)     \
-  SC(dont_delete_hint_hit, V8.DontDeleteHintHit)                      \
-  SC(dont_delete_hint_miss, V8.DontDeleteHintMiss)                    \
   SC(named_load_global_stub, V8.NamedLoadGlobalStub)                  \
-  SC(named_load_global_stub_miss, V8.NamedLoadGlobalStubMiss)         \
-  SC(keyed_store_field, V8.KeyedStoreField)                           \
-  SC(named_store_inline_field, V8.NamedStoreInlineField)              \
-  SC(keyed_store_inline, V8.KeyedStoreInline)                         \
-  SC(named_load_inline_generic, V8.NamedLoadInlineGeneric)            \
-  SC(named_load_inline_field, V8.NamedLoadInlineFast)                 \
-  SC(keyed_load_inline_generic, V8.KeyedLoadInlineGeneric)            \
-  SC(keyed_load_inline_fast, V8.KeyedLoadInlineFast)                  \
-  SC(keyed_store_inline_generic, V8.KeyedStoreInlineGeneric)          \
-  SC(keyed_store_inline_fast, V8.KeyedStoreInlineFast)                \
-  SC(named_store_inline_generic, V8.NamedStoreInlineGeneric)          \
-  SC(named_store_inline_fast, V8.NamedStoreInlineFast)                \
-  SC(keyed_store_inline_miss, V8.KeyedStoreInlineMiss)                \
   SC(named_store_global_inline, V8.NamedStoreGlobalInline)            \
   SC(named_store_global_inline_miss, V8.NamedStoreGlobalInlineMiss)   \
   SC(keyed_store_polymorphic_stubs, V8.KeyedStorePolymorphicStubs)    \
@@ -226,7 +212,6 @@ namespace internal {
   SC(call_global_inline_miss, V8.CallGlobalInlineMiss)                \
   SC(constructed_objects, V8.ConstructedObjects)                      \
   SC(constructed_objects_runtime, V8.ConstructedObjectsRuntime)       \
-  SC(constructed_objects_stub, V8.ConstructedObjectsStub)             \
   SC(negative_lookups, V8.NegativeLookups)                            \
   SC(negative_lookups_miss, V8.NegativeLookupsMiss)                   \
   SC(megamorphic_stub_cache_probes, V8.MegamorphicStubCacheProbes)    \
@@ -238,9 +223,6 @@ namespace internal {
   SC(enum_cache_hits, V8.EnumCacheHits)                               \
   SC(enum_cache_misses, V8.EnumCacheMisses)                           \
   SC(zone_segment_bytes, V8.ZoneSegmentBytes)                         \
-  SC(compute_entry_frame, V8.ComputeEntryFrame)                       \
-  SC(generic_binary_stub_calls, V8.GenericBinaryStubCalls)            \
-  SC(generic_binary_stub_calls_regs, V8.GenericBinaryStubCallsRegs)   \
   SC(fast_new_closure_total, V8.FastNewClosureTotal)                  \
   SC(fast_new_closure_try_optimized, V8.FastNewClosureTryOptimized)   \
   SC(fast_new_closure_install_optimized, V8.FastNewClosureInstallOptimized) \
@@ -260,24 +242,22 @@ namespace internal {
   SC(math_asin, V8.MathAsin)                                          \
   SC(math_atan, V8.MathAtan)                                          \
   SC(math_atan2, V8.MathAtan2)                                        \
-  SC(math_ceil, V8.MathCeil)                                          \
-  SC(math_cos, V8.MathCos)                                            \
   SC(math_exp, V8.MathExp)                                            \
   SC(math_floor, V8.MathFloor)                                        \
   SC(math_log, V8.MathLog)                                            \
   SC(math_pow, V8.MathPow)                                            \
   SC(math_round, V8.MathRound)                                        \
-  SC(math_sin, V8.MathSin)                                            \
   SC(math_sqrt, V8.MathSqrt)                                          \
-  SC(math_tan, V8.MathTan)                                            \
-  SC(transcendental_cache_hit, V8.TranscendentalCacheHit)             \
-  SC(transcendental_cache_miss, V8.TranscendentalCacheMiss)           \
   SC(stack_interrupts, V8.StackInterrupts)                            \
   SC(runtime_profiler_ticks, V8.RuntimeProfilerTicks)                 \
-  SC(smi_checks_removed, V8.SmiChecksRemoved)                         \
-  SC(map_checks_removed, V8.MapChecksRemoved)                         \
-  SC(quote_json_char_count, V8.QuoteJsonCharacterCount)               \
-  SC(quote_json_char_recount, V8.QuoteJsonCharacterReCount)           \
+  SC(bounds_checks_eliminated, V8.BoundsChecksEliminated)             \
+  SC(bounds_checks_hoisted, V8.BoundsChecksHoisted)                   \
+  SC(soft_deopts_requested, V8.SoftDeoptsRequested)                   \
+  SC(soft_deopts_inserted, V8.SoftDeoptsInserted)                     \
+  SC(soft_deopts_executed, V8.SoftDeoptsExecuted)                     \
+  /* Number of write barriers in generated code. */                   \
+  SC(write_barriers_dynamic, V8.WriteBarriersDynamic)                 \
+  SC(write_barriers_static, V8.WriteBarriersStatic)                   \
   SC(new_space_bytes_available, V8.MemoryNewSpaceBytesAvailable)      \
   SC(new_space_bytes_committed, V8.MemoryNewSpaceBytesCommitted)      \
   SC(new_space_bytes_used, V8.MemoryNewSpaceBytesUsed)                \
@@ -298,6 +278,12 @@ namespace internal {
   SC(cell_space_bytes_available, V8.MemoryCellSpaceBytesAvailable)    \
   SC(cell_space_bytes_committed, V8.MemoryCellSpaceBytesCommitted)    \
   SC(cell_space_bytes_used, V8.MemoryCellSpaceBytesUsed)              \
+  SC(property_cell_space_bytes_available,                             \
+     V8.MemoryPropertyCellSpaceBytesAvailable)                        \
+  SC(property_cell_space_bytes_committed,                             \
+     V8.MemoryPropertyCellSpaceBytesCommitted)                        \
+  SC(property_cell_space_bytes_used,                                  \
+     V8.MemoryPropertyCellSpaceBytesUsed)                             \
   SC(lo_space_bytes_available, V8.MemoryLoSpaceBytesAvailable)        \
   SC(lo_space_bytes_committed, V8.MemoryLoSpaceBytesCommitted)        \
   SC(lo_space_bytes_used, V8.MemoryLoSpaceBytesUsed)
@@ -349,6 +335,14 @@ class Counters {
   FIXED_ARRAY_SUB_INSTANCE_TYPE_LIST(SC)
 #undef SC
 
+#define SC(name) \
+  StatsCounter* count_of_CODE_AGE_##name() \
+    { return &count_of_CODE_AGE_##name##_; } \
+  StatsCounter* size_of_CODE_AGE_##name() \
+    { return &size_of_CODE_AGE_##name##_; }
+  CODE_AGE_LIST_COMPLETE(SC)
+#undef SC
+
   enum Id {
 #define RATE_ID(name, caption) k_##name,
     HISTOGRAM_TIMER_LIST(RATE_ID)
@@ -374,15 +368,12 @@ class Counters {
     kSizeOfFIXED_ARRAY__##name,
     FIXED_ARRAY_SUB_INSTANCE_TYPE_LIST(COUNTER_ID)
 #undef COUNTER_ID
-#define COUNTER_ID(name) k_##name,
-    STATE_TAG_LIST(COUNTER_ID)
+#define COUNTER_ID(name) kCountOfCODE_AGE__##name, \
+    kSizeOfCODE_AGE__##name,
+    CODE_AGE_LIST_COMPLETE(COUNTER_ID)
 #undef COUNTER_ID
     stats_counter_count
   };
-
-  StatsCounter* state_counters(StateTag state) {
-    return &state_counters_[state];
-  }
 
   void ResetHistograms();
 
@@ -426,16 +417,15 @@ class Counters {
   FIXED_ARRAY_SUB_INSTANCE_TYPE_LIST(SC)
 #undef SC
 
-  enum {
-#define COUNTER_ID(name) __##name,
-    STATE_TAG_LIST(COUNTER_ID)
-#undef COUNTER_ID
-    kSlidingStateWindowCounterCount
-  };
+#define SC(name) \
+  StatsCounter size_of_CODE_AGE_##name##_; \
+  StatsCounter count_of_CODE_AGE_##name##_;
+  CODE_AGE_LIST_COMPLETE(SC)
+#undef SC
 
-  // Sliding state window counters.
-  StatsCounter state_counters_[kSlidingStateWindowCounterCount];
   friend class Isolate;
+
+  explicit Counters(Isolate* isolate);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(Counters);
 };

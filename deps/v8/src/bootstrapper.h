@@ -44,8 +44,8 @@ class SourceCodeCache BASE_EMBEDDED {
  public:
   explicit SourceCodeCache(Script::Type type): type_(type), cache_(NULL) { }
 
-  void Initialize(bool create_heap_objects) {
-    cache_ = create_heap_objects ? HEAP->empty_fixed_array() : NULL;
+  void Initialize(Isolate* isolate, bool create_heap_objects) {
+    cache_ = create_heap_objects ? isolate->heap()->empty_fixed_array() : NULL;
   }
 
   void Iterate(ObjectVisitor* v) {
@@ -54,8 +54,8 @@ class SourceCodeCache BASE_EMBEDDED {
 
   bool Lookup(Vector<const char> name, Handle<SharedFunctionInfo>* handle) {
     for (int i = 0; i < cache_->length(); i+=2) {
-      SeqAsciiString* str = SeqAsciiString::cast(cache_->get(i));
-      if (str->IsEqualTo(name)) {
+      SeqOneByteString* str = SeqOneByteString::cast(cache_->get(i));
+      if (str->IsUtf8EqualTo(name)) {
         *handle = Handle<SharedFunctionInfo>(
             SharedFunctionInfo::cast(cache_->get(i + 1)));
         return true;
@@ -65,13 +65,14 @@ class SourceCodeCache BASE_EMBEDDED {
   }
 
   void Add(Vector<const char> name, Handle<SharedFunctionInfo> shared) {
-    HandleScope scope;
+    Isolate* isolate = shared->GetIsolate();
+    Factory* factory = isolate->factory();
+    HandleScope scope(isolate);
     int length = cache_->length();
-    Handle<FixedArray> new_array =
-        FACTORY->NewFixedArray(length + 2, TENURED);
+    Handle<FixedArray> new_array = factory->NewFixedArray(length + 2, TENURED);
     cache_->CopyTo(0, *new_array, 0, cache_->length());
     cache_ = *new_array;
-    Handle<String> str = FACTORY->NewStringFromAscii(name, TENURED);
+    Handle<String> str = factory->NewStringFromAscii(name, TENURED);
     cache_->set(length, *str);
     cache_->set(length + 1, *shared);
     Script::cast(shared->script())->set_type(Smi::FromInt(type_));
@@ -88,6 +89,9 @@ class SourceCodeCache BASE_EMBEDDED {
 // context.
 class Bootstrapper {
  public:
+  static void InitializeOncePerProcess();
+  static void TearDownExtensions();
+
   // Requires: Heap::SetUp has been called.
   void Initialize(bool create_heap_objects);
   void TearDown();
@@ -95,16 +99,12 @@ class Bootstrapper {
   // Creates a JavaScript Global Context with initial object graph.
   // The returned value is a global handle casted to V8Environment*.
   Handle<Context> CreateEnvironment(
-      Isolate* isolate,
       Handle<Object> global_object,
       v8::Handle<v8::ObjectTemplate> global_template,
       v8::ExtensionConfiguration* extensions);
 
   // Detach the environment from its outer global object.
   void DetachGlobal(Handle<Context> env);
-
-  // Reattach an outer global object to an environment.
-  void ReattachGlobal(Handle<Context> env, Handle<JSGlobalProxy> global_proxy);
 
   // Traverses the pointers for memory management.
   void Iterate(ObjectVisitor* v);
@@ -132,6 +132,7 @@ class Bootstrapper {
   SourceCodeCache* extensions_cache() { return &extensions_cache_; }
 
  private:
+  Isolate* isolate_;
   typedef int NestingCounterType;
   NestingCounterType nesting_;
   SourceCodeCache extensions_cache_;
@@ -144,7 +145,13 @@ class Bootstrapper {
   friend class Isolate;
   friend class NativesExternalStringResource;
 
-  Bootstrapper();
+  explicit Bootstrapper(Isolate* isolate);
+
+  static v8::Extension* free_buffer_extension_;
+  static v8::Extension* gc_extension_;
+  static v8::Extension* externalize_string_extension_;
+  static v8::Extension* statistics_extension_;
+  static v8::Extension* trigger_failure_extension_;
 
   DISALLOW_COPY_AND_ASSIGN(Bootstrapper);
 };
@@ -152,15 +159,18 @@ class Bootstrapper {
 
 class BootstrapperActive BASE_EMBEDDED {
  public:
-  BootstrapperActive() {
-    ++Isolate::Current()->bootstrapper()->nesting_;
+  explicit BootstrapperActive(Bootstrapper* bootstrapper)
+      : bootstrapper_(bootstrapper) {
+    ++bootstrapper_->nesting_;
   }
 
   ~BootstrapperActive() {
-    --Isolate::Current()->bootstrapper()->nesting_;
+    --bootstrapper_->nesting_;
   }
 
  private:
+  Bootstrapper* bootstrapper_;
+
   DISALLOW_COPY_AND_ASSIGN(BootstrapperActive);
 };
 

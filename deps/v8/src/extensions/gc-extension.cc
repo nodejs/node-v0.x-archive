@@ -26,28 +26,23 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "gc-extension.h"
+#include "platform.h"
 
 namespace v8 {
 namespace internal {
 
-const char* const GCExtension::kSource = "native function gc();";
 
-
-v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunction(
+v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunctionTemplate(
+    v8::Isolate* isolate,
     v8::Handle<v8::String> str) {
-  return v8::FunctionTemplate::New(GCExtension::GC);
+  return v8::FunctionTemplate::New(isolate, GCExtension::GC);
 }
 
 
-v8::Handle<v8::Value> GCExtension::GC(const v8::Arguments& args) {
-  HEAP->CollectAllGarbage(Heap::kNoGCFlags, "gc extension");
-  return v8::Undefined();
-}
-
-
-void GCExtension::Register() {
-  static GCExtension gc_extension;
-  static v8::DeclareExtension declaration(&gc_extension);
+void GCExtension::GC(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  args.GetIsolate()->RequestGarbageCollectionForTesting(
+      args[0]->BooleanValue() ? v8::Isolate::kMinorGarbageCollection
+                              : v8::Isolate::kFullGarbageCollection);
 }
 
 } }  // namespace v8::internal

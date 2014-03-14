@@ -39,13 +39,11 @@ import sys
 import tempfile
 import time
 import threading
+import utils
 
 from os.path import join, dirname, abspath, basename, isdir, exists
 from datetime import datetime
 from Queue import Queue, Empty
-
-sys.path.append(dirname(__file__) + "/../deps/v8/tools");
-import utils
 
 VERBOSE = False
 
@@ -1324,7 +1322,14 @@ def GetSpecialCommandProcessor(value):
     return ExpandCommand
 
 
-BUILT_IN_TESTS = ['simple', 'pummel', 'message', 'internet', 'gc']
+BUILT_IN_TESTS = [
+  'simple',
+  'pummel',
+  'message',
+  'internet',
+  'gc',
+  'debugger',
+]
 
 
 def GetSuites(test_root):

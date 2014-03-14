@@ -25,11 +25,10 @@
 var common = require('../common');
 var assert = require('assert');
 
-var Buffer = require('buffer').Buffer,
-    fs = require('fs'),
+var fs = require('fs'),
     dgram = require('dgram'), server, client,
     server_port = 20989,
-    message_to_send = new Buffer('A message to send'),
+    message_to_send = 'A message to send',
     timer;
 
 server = dgram.createSocket('udp4');
@@ -54,13 +53,11 @@ server.on('listening', function() {
     server.close();
   });
   client.send(message_to_send, 0, message_to_send.length,
-              server_port, 'localhost', function(err, bytes) {
+              server_port, 'localhost', function(err) {
         if (err) {
           console.log('Caught error in client send.');
           throw err;
         }
-        console.log('client wrote ' + bytes + ' bytes.');
-        assert.strictEqual(bytes, message_to_send.length);
       });
   client.on('close',
             function() {

@@ -36,14 +36,11 @@
 namespace v8 {
 
 
-void HandleDebugEvent(DebugEvent event,
-                      Handle<Object> exec_state,
-                      Handle<Object> event_data,
-                      Handle<Value> data);
+void HandleDebugEvent(const Debug::EventDetails& event_details);
 
 // Start the remove debugger connecting to a V8 debugger agent on the specified
 // port.
-void RunRemoteDebugger(int port);
+void RunRemoteDebugger(Isolate* isolate, int port);
 
 // Forward declerations.
 class RemoteDebuggerEvent;
@@ -53,10 +50,10 @@ class ReceiverThread;
 // Remote debugging class.
 class RemoteDebugger {
  public:
-  explicit RemoteDebugger(int port)
-      : port_(port),
-        event_access_(i::OS::CreateMutex()),
-        event_available_(i::OS::CreateSemaphore(0)),
+  explicit RemoteDebugger(Isolate* isolate, int port)
+      : isolate_(isolate),
+        port_(port),
+        event_available_(0),
         head_(NULL), tail_(NULL) {}
   void Run();
 
@@ -79,14 +76,15 @@ class RemoteDebugger {
   // Get connection to agent in debugged V8.
   i::Socket* conn() { return conn_; }
 
+  Isolate* isolate_;
   int port_;  // Port used to connect to debugger V8.
   i::Socket* conn_;  // Connection to debugger agent in debugged V8.
 
   // Linked list of events from debugged V8 and from keyboard input. Access to
   // the list is guarded by a mutex and a semaphore signals new items in the
   // list.
-  i::Mutex* event_access_;
-  i::Semaphore* event_available_;
+  i::Mutex event_access_;
+  i::Semaphore event_available_;
   RemoteDebuggerEvent* head_;
   RemoteDebuggerEvent* tail_;
 
@@ -137,7 +135,7 @@ class RemoteDebuggerEvent {
   static const int kDisconnect = 3;
 
   int type() { return type_; }
-  char* data() { return *data_; }
+  char* data() { return data_.get(); }
 
  private:
   void set_next(RemoteDebuggerEvent* event) { next_ = event; }

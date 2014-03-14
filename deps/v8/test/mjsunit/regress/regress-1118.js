@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --noparallel-recompilation
+// Flags: --allow-natives-syntax
 
 // An exception thrown in a function optimized by on-stack replacement (OSR)
 // should be able to construct a receiver from all optimized stack frames.
@@ -52,8 +52,10 @@ function h() {
     g();
   } else {
     // Run for a bit as long as h is unoptimized.
-    while (%GetOptimizationStatus(h) == 2) {
-      for (var j = 0; j < 100; j++) g();
+    if (%GetOptimizationStatus(h) != 4) {
+      while (%GetOptimizationCount(h) == 0) {
+        for (var j = 0; j < 100; j++) g();
+      }
     }
     g();
   }

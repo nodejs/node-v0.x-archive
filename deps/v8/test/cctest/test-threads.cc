@@ -33,26 +33,6 @@
 #include "cctest.h"
 
 
-TEST(Preemption) {
-  v8::Locker locker;
-  v8::V8::Initialize();
-  v8::HandleScope scope;
-  v8::Context::Scope context_scope(v8::Context::New());
-
-  v8::Locker::StartPreemption(100);
-
-  v8::Handle<v8::Script> script = v8::Script::Compile(
-      v8::String::New("var count = 0; var obj = new Object(); count++;\n"));
-
-  script->Run();
-
-  v8::Locker::StopPreemption();
-  v8::internal::OS::Sleep(500);  // Make sure the timer fires.
-
-  script->Run();
-}
-
-
 enum Turn {
   FILL_CACHE,
   CLEAN_CACHE,
@@ -67,15 +47,19 @@ class ThreadA : public v8::internal::Thread {
  public:
   ThreadA() : Thread("ThreadA") { }
   void Run() {
-    v8::Locker locker;
-    v8::HandleScope scope;
-    v8::Context::Scope context_scope(v8::Context::New());
+    v8::Isolate* isolate = CcTest::isolate();
+    v8::Locker locker(isolate);
+    v8::Isolate::Scope isolate_scope(isolate);
+    v8::HandleScope scope(isolate);
+    v8::Handle<v8::Context> context = v8::Context::New(isolate);
+    v8::Context::Scope context_scope(context);
 
     CHECK_EQ(FILL_CACHE, turn);
 
     // Fill String.search cache.
     v8::Handle<v8::Script> script = v8::Script::Compile(
-        v8::String::New(
+        v8::String::NewFromUtf8(
+          isolate,
           "for (var i = 0; i < 3; i++) {"
           "  var result = \"a\".search(\"a\");"
           "  if (result != 0) throw \"result: \" + result + \" @\" + i;"
@@ -86,7 +70,7 @@ class ThreadA : public v8::internal::Thread {
     turn = CLEAN_CACHE;
     do {
       {
-        v8::Unlocker unlocker;
+        v8::Unlocker unlocker(CcTest::isolate());
         Thread::YieldCPU();
       }
     } while (turn != SECOND_TIME_FILL_CACHE);
@@ -105,13 +89,16 @@ class ThreadB : public v8::internal::Thread {
   void Run() {
     do {
       {
-        v8::Locker locker;
+        v8::Isolate* isolate = CcTest::isolate();
+        v8::Locker locker(isolate);
+        v8::Isolate::Scope isolate_scope(isolate);
         if (turn == CLEAN_CACHE) {
-          v8::HandleScope scope;
-          v8::Context::Scope context_scope(v8::Context::New());
+          v8::HandleScope scope(isolate);
+          v8::Handle<v8::Context> context = v8::Context::New(isolate);
+          v8::Context::Scope context_scope(context);
 
           // Clear the caches by forcing major GC.
-          HEAP->CollectAllGarbage(v8::internal::Heap::kNoGCFlags);
+          CcTest::heap()->CollectAllGarbage(v8::internal::Heap::kNoGCFlags);
           turn = SECOND_TIME_FILL_CACHE;
           break;
         }
@@ -124,8 +111,6 @@ class ThreadB : public v8::internal::Thread {
 
 
 TEST(JSFunctionResultCachesInTwoThreads) {
-  v8::V8::Initialize();
-
   ThreadA threadA;
   ThreadB threadB;
 
@@ -169,22 +154,23 @@ class ThreadIdValidationThread : public v8::internal::Thread {
   i::Semaphore* semaphore_;
 };
 
+
 TEST(ThreadIdValidation) {
   const int kNThreads = 100;
   i::List<ThreadIdValidationThread*> threads(kNThreads);
   i::List<i::ThreadId> refs(kNThreads);
-  i::Semaphore* semaphore = i::OS::CreateSemaphore(0);
+  i::Semaphore semaphore(0);
   ThreadIdValidationThread* prev = NULL;
   for (int i = kNThreads - 1; i >= 0; i--) {
     ThreadIdValidationThread* newThread =
-        new ThreadIdValidationThread(prev, &refs, i, semaphore);
+        new ThreadIdValidationThread(prev, &refs, i, &semaphore);
     threads.Add(newThread);
     prev = newThread;
     refs.Add(i::ThreadId::Invalid());
   }
   prev->Start();
   for (int i = 0; i < kNThreads; i++) {
-    semaphore->Wait();
+    semaphore.Wait();
   }
   for (int i = 0; i < kNThreads; i++) {
     delete threads[i];

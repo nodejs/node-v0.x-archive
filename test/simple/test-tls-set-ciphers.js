@@ -20,15 +20,16 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var common = require('../common');
+
+if (!common.opensslCli) {
+  console.error('Skipping because node compiled without OpenSSL CLI.');
+  process.exit(0);
+}
+
 var assert = require('assert');
 var exec = require('child_process').exec;
 var tls = require('tls');
 var fs = require('fs');
-
-if (process.platform === 'win32') {
-  console.log("Skipping test, you probably don't have openssl installed.");
-  process.exit();
-}
 
 var options = {
   key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
@@ -51,7 +52,7 @@ var server = tls.createServer(options, function(conn) {
 });
 
 server.listen(common.PORT, '127.0.0.1', function() {
-  var cmd = 'openssl s_client -cipher ' + options.ciphers +
+  var cmd = common.opensslCli + ' s_client -cipher ' + options.ciphers +
             ' -connect 127.0.0.1:' + common.PORT;
 
   exec(cmd, function(err, stdout, stderr) {

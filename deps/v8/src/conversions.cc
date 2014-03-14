@@ -26,13 +26,19 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdarg.h>
-#include <math.h>
 #include <limits.h>
+#include <cmath>
 
 #include "conversions-inl.h"
 #include "dtoa.h"
+#include "list-inl.h"
 #include "strtod.h"
 #include "utils.h"
+
+#ifndef _STLP_VENDOR_CSTD
+// STLPort doesn't import fpclassify into the std namespace.
+using std::fpclassify;
+#endif
 
 namespace v8 {
 namespace internal {
@@ -40,8 +46,11 @@ namespace internal {
 
 double StringToDouble(UnicodeCache* unicode_cache,
                       const char* str, int flags, double empty_string_val) {
-  const char* end = str + StrLength(str);
-  return InternalStringToDouble(unicode_cache, str, end, flags,
+  // We cast to const uint8_t* here to avoid instantiating the
+  // InternalStringToDouble() template for const char* as well.
+  const uint8_t* start = reinterpret_cast<const uint8_t*>(str);
+  const uint8_t* end = start + StrLength(str);
+  return InternalStringToDouble(unicode_cache, start, end, flags,
                                 empty_string_val);
 }
 
@@ -50,10 +59,14 @@ double StringToDouble(UnicodeCache* unicode_cache,
                       Vector<const char> str,
                       int flags,
                       double empty_string_val) {
-  const char* end = str.start() + str.length();
-  return InternalStringToDouble(unicode_cache, str.start(), end, flags,
+  // We cast to const uint8_t* here to avoid instantiating the
+  // InternalStringToDouble() template for const char* as well.
+  const uint8_t* start = reinterpret_cast<const uint8_t*>(str.start());
+  const uint8_t* end = start + str.length();
+  return InternalStringToDouble(unicode_cache, start, end, flags,
                                 empty_string_val);
 }
+
 
 double StringToDouble(UnicodeCache* unicode_cache,
                       Vector<const uc16> str,
@@ -381,15 +394,16 @@ char* DoubleToRadixCString(double value, int radix) {
   if (is_negative) value = -value;
 
   // Get the integer part and the decimal part.
-  double integer_part = floor(value);
+  double integer_part = std::floor(value);
   double decimal_part = value - integer_part;
 
   // Convert the integer part starting from the back.  Always generate
   // at least one digit.
   int integer_pos = kBufferSize - 2;
   do {
-    integer_buffer[integer_pos--] =
-        chars[static_cast<int>(fmod(integer_part, radix))];
+    double remainder = std::fmod(integer_part, radix);
+    integer_buffer[integer_pos--] = chars[static_cast<int>(remainder)];
+    integer_part -= remainder;
     integer_part /= radix;
   } while (integer_part >= 1.0);
   // Sanity check.
@@ -410,8 +424,8 @@ char* DoubleToRadixCString(double value, int radix) {
   while ((decimal_part > 0.0) && (decimal_pos < kBufferSize - 1)) {
     decimal_part *= radix;
     decimal_buffer[decimal_pos++] =
-        chars[static_cast<int>(floor(decimal_part))];
-    decimal_part -= floor(decimal_part);
+        chars[static_cast<int>(std::floor(decimal_part))];
+    decimal_part -= std::floor(decimal_part);
   }
   decimal_buffer[decimal_pos] = '\0';
 

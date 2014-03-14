@@ -26,10 +26,15 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 {
-  'includes': ['../build/common.gypi'],
   'variables': {
+    'v8_code': 1,
     'console%': '',
+    # Enable support for Intel VTune. Supported on ia32/x64 only
+    'v8_enable_vtunejit%': 0,
+    'v8_enable_i18n_support%': 1,
+    'v8_toolset_for_d8%': 'target',
   },
+  'includes': ['../build/toolchain.gypi', '../build/features.gypi'],
   'targets': [
     {
       'target_name': 'd8',
@@ -45,6 +50,13 @@
         'd8.cc',
       ],
       'conditions': [
+        [ 'want_separate_host_toolset==1', {
+          'toolsets': [ '<(v8_toolset_for_d8)', ],
+        }],
+        [ 'console=="readline"', {
+          'libraries': [ '-lreadline', ],
+          'sources': [ 'd8-readline.cc' ],
+        }],
         [ 'component!="shared_library"', {
           'sources': [ 'd8-debug.cc', '<(SHARED_INTERMEDIATE_DIR)/d8-js.cc', ],
           'conditions': [
@@ -57,17 +69,30 @@
                 'd8_js2c',
               ],
             }],
-            [ 'console=="readline"', {
-              'libraries': [ '-lreadline', ],
-              'sources': [ 'd8-readline.cc' ],
-            }],
             ['(OS=="linux" or OS=="mac" or OS=="freebsd" or OS=="netbsd" \
-               or OS=="openbsd" or OS=="solaris" or OS=="android")', {
+               or OS=="openbsd" or OS=="solaris" or OS=="android" \
+               or OS=="qnx")', {
               'sources': [ 'd8-posix.cc', ]
             }],
             [ 'OS=="win"', {
               'sources': [ 'd8-windows.cc', ]
             }],
+          ],
+        }],
+        ['v8_enable_vtunejit==1', {
+          'dependencies': [
+            '../src/third_party/vtune/v8vtune.gyp:v8_vtune',
+          ],
+        }],
+        ['v8_enable_i18n_support==1', {
+          'dependencies': [
+            '<(icu_gyp_path):icui18n',
+            '<(icu_gyp_path):icuuc',
+          ],
+        }],
+        ['OS=="win" and v8_enable_i18n_support==1', {
+          'dependencies': [
+            '<(icu_gyp_path):icudata',
           ],
         }],
       ],

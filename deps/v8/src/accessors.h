@@ -56,8 +56,7 @@ namespace internal {
   V(ScriptContextData)              \
   V(ScriptEvalFromScript)           \
   V(ScriptEvalFromScriptPosition)   \
-  V(ScriptEvalFromFunctionName)     \
-  V(ObjectPrototype)
+  V(ScriptEvalFromFunctionName)
 
 // Accessors contains all predefined proxy accessors.
 
@@ -78,49 +77,89 @@ class Accessors : public AllStatic {
   };
 
   // Accessor functions called directly from the runtime system.
-  MUST_USE_RESULT static MaybeObject* FunctionGetPrototype(Object* object,
-                                                           void*);
-  MUST_USE_RESULT static MaybeObject* FunctionSetPrototype(JSObject* object,
-                                                      Object* value,
-                                                      void*);
-  static MaybeObject* FunctionGetArguments(Object* object, void*);
+  static Handle<Object> FunctionSetPrototype(Handle<JSFunction> object,
+                                             Handle<Object> value);
+  static Handle<Object> FunctionGetPrototype(Handle<JSFunction> object);
+  static Handle<Object> FunctionGetArguments(Handle<JSFunction> object);
 
   // Accessor infos.
   static Handle<AccessorInfo> MakeModuleExport(
       Handle<String> name, int index, PropertyAttributes attributes);
 
+  // Returns true for properties that are accessors to object fields.
+  // If true, *object_offset contains offset of object field.
+  template <class T>
+  static bool IsJSObjectFieldAccessor(typename T::TypeHandle type,
+                                      Handle<String> name,
+                                      int* object_offset);
+
+
  private:
   // Accessor functions only used through the descriptor.
-  static MaybeObject* FunctionGetLength(Object* object, void*);
-  static MaybeObject* FunctionGetName(Object* object, void*);
-  static MaybeObject* FunctionGetCaller(Object* object, void*);
-  MUST_USE_RESULT static MaybeObject* ArraySetLength(JSObject* object,
-                                                     Object* value, void*);
-  static MaybeObject* ArrayGetLength(Object* object, void*);
-  static MaybeObject* StringGetLength(Object* object, void*);
-  static MaybeObject* ScriptGetName(Object* object, void*);
-  static MaybeObject* ScriptGetId(Object* object, void*);
-  static MaybeObject* ScriptGetSource(Object* object, void*);
-  static MaybeObject* ScriptGetLineOffset(Object* object, void*);
-  static MaybeObject* ScriptGetColumnOffset(Object* object, void*);
-  static MaybeObject* ScriptGetData(Object* object, void*);
-  static MaybeObject* ScriptGetType(Object* object, void*);
-  static MaybeObject* ScriptGetCompilationType(Object* object, void*);
-  static MaybeObject* ScriptGetLineEnds(Object* object, void*);
-  static MaybeObject* ScriptGetContextData(Object* object, void*);
-  static MaybeObject* ScriptGetEvalFromScript(Object* object, void*);
-  static MaybeObject* ScriptGetEvalFromScriptPosition(Object* object, void*);
-  static MaybeObject* ScriptGetEvalFromFunctionName(Object* object, void*);
-  static MaybeObject* ObjectGetPrototype(Object* receiver, void*);
-  static MaybeObject* ObjectSetPrototype(JSObject* receiver,
-                                         Object* value,
-                                         void*);
+  static MaybeObject* FunctionSetPrototype(Isolate* isolate,
+                                           JSObject* object,
+                                           Object*,
+                                           void*);
+  static MaybeObject* FunctionGetPrototype(Isolate* isolate,
+                                           Object* object,
+                                           void*);
+  static MaybeObject* FunctionGetLength(Isolate* isolate,
+                                        Object* object,
+                                        void*);
+  static MaybeObject* FunctionGetName(Isolate* isolate, Object* object, void*);
+  static MaybeObject* FunctionGetArguments(Isolate* isolate,
+                                           Object* object,
+                                           void*);
+  static MaybeObject* FunctionGetCaller(Isolate* isolate,
+                                        Object* object,
+                                        void*);
+  static MaybeObject* ArraySetLength(Isolate* isolate,
+                                     JSObject* object,
+                                     Object*,
+                                     void*);
+  static MaybeObject* ArrayGetLength(Isolate* isolate, Object* object, void*);
+  static MaybeObject* StringGetLength(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ScriptGetName(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ScriptGetId(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ScriptGetSource(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ScriptGetLineOffset(Isolate* isolate,
+                                          Object* object,
+                                          void*);
+  static MaybeObject* ScriptGetColumnOffset(Isolate* isolate,
+                                            Object* object,
+                                            void*);
+  static MaybeObject* ScriptGetData(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ScriptGetType(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ScriptGetCompilationType(Isolate* isolate,
+                                               Object* object,
+                                               void*);
+  static MaybeObject* ScriptGetLineEnds(Isolate* isolate,
+                                        Object* object,
+                                        void*);
+  static MaybeObject* ScriptGetContextData(Isolate* isolate,
+                                           Object* object,
+                                           void*);
+  static MaybeObject* ScriptGetEvalFromScript(Isolate* isolate,
+                                              Object* object,
+                                              void*);
+  static MaybeObject* ScriptGetEvalFromScriptPosition(Isolate* isolate,
+                                                      Object* object,
+                                                      void*);
+  static MaybeObject* ScriptGetEvalFromFunctionName(Isolate* isolate,
+                                                    Object* object,
+                                                    void*);
 
   // Helper functions.
-  static Object* FlattenNumber(Object* value);
-  static MaybeObject* IllegalSetter(JSObject*, Object*, void*);
-  static Object* IllegalGetAccessor(Object* object, void*);
-  static MaybeObject* ReadOnlySetAccessor(JSObject*, Object* value, void*);
+  static Handle<Object> FlattenNumber(Isolate* isolate, Handle<Object> value);
+  static MaybeObject* IllegalSetter(Isolate* isolate,
+                                    JSObject*,
+                                    Object*,
+                                    void*);
+  static Object* IllegalGetAccessor(Isolate* isolate, Object* object, void*);
+  static MaybeObject* ReadOnlySetAccessor(Isolate* isolate,
+                                          JSObject*,
+                                          Object* value,
+                                          void*);
 };
 
 } }  // namespace v8::internal

@@ -27,12 +27,17 @@
 
 // CPU specific code for arm independent of OS goes here.
 #ifdef __arm__
+#ifdef __QNXNTO__
+#include <sys/mman.h>  // for cache flushing.
+#undef MAP_TYPE
+#else
 #include <sys/syscall.h>  // for cache flushing.
+#endif
 #endif
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_ARM)
+#if V8_TARGET_ARCH_ARM
 
 #include "cpu.h"
 #include "macro-assembler.h"
@@ -57,13 +62,15 @@ void CPU::FlushICache(void* start, size_t size) {
     return;
   }
 
-#if defined (USE_SIMULATOR)
+#if defined(USE_SIMULATOR)
   // Not generating ARM instructions for C-code. This means that we are
   // building an ARM emulator based target.  We should notify the simulator
   // that the Icache was flushed.
   // None of this code ends up in the snapshot so there are no issues
   // around whether or not to generate the code when building snapshots.
   Simulator::FlushICache(Isolate::Current()->simulator_i_cache(), start, size);
+#elif V8_OS_QNX
+  msync(start, size, MS_SYNC | MS_INVALIDATE_ICACHE);
 #else
   // Ideally, we would call
   //   syscall(__ARM_NR_cacheflush, start,
@@ -103,15 +110,6 @@ void CPU::FlushICache(void* start, size_t size) {
         : "0" (beg), "r" (end), "r" (flg), "r" (__ARM_NR_cacheflush)
         : "r3");
   #endif
-#endif
-}
-
-
-void CPU::DebugBreak() {
-#if !defined (__arm__) || !defined(CAN_USE_ARMV5_INSTRUCTIONS)
-  UNIMPLEMENTED();  // when building ARM emulator target
-#else
-  asm volatile("bkpt 0");
 #endif
 }
 

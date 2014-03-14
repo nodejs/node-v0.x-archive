@@ -38,7 +38,7 @@ namespace internal {
 
 class PrettyPrinter: public AstVisitor {
  public:
-  PrettyPrinter();
+  explicit PrettyPrinter(Zone* zone);
   virtual ~PrettyPrinter();
 
   // The following routines print a node into a string.
@@ -50,7 +50,7 @@ class PrettyPrinter: public AstVisitor {
   void Print(const char* format, ...);
 
   // Print a node to stdout.
-  static void PrintOut(AstNode* node);
+  static void PrintOut(Zone* zone, AstNode* node);
 
   // Individual nodes
 #define DECLARE_VISIT(type) virtual void Visit##type(type* node);
@@ -74,13 +74,15 @@ class PrettyPrinter: public AstVisitor {
   void PrintDeclarations(ZoneList<Declaration*>* declarations);
   void PrintFunctionLiteral(FunctionLiteral* function);
   void PrintCaseClause(CaseClause* clause);
+
+  DEFINE_AST_VISITOR_SUBCLASS_MEMBERS();
 };
 
 
 // Prints the AST structure
 class AstPrinter: public PrettyPrinter {
  public:
-  AstPrinter();
+  explicit AstPrinter(Zone* zone);
   virtual ~AstPrinter();
 
   const char* PrintProgram(FunctionLiteral* program);
@@ -104,7 +106,7 @@ class AstPrinter: public PrettyPrinter {
   void PrintLiteralWithModeIndented(const char* info,
                                     Variable* var,
                                     Handle<Object> value);
-  void PrintLabelsIndented(const char* info, ZoneStringList* labels);
+  void PrintLabelsIndented(ZoneStringList* labels);
 
   void inc_indent() { indent_++; }
   void dec_indent() { indent_--; }

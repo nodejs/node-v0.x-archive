@@ -91,9 +91,8 @@ var qsWeirdObjects = [
 ];
 // }}}
 
-var Script = require('vm').Script;
-var foreignObject = Script.runInContext('({"foo": ["bar", "baz"]})',
-                                        Script.createContext());
+var vm = require('vm');
+var foreignObject = vm.runInNewContext('({"foo": ["bar", "baz"]})');
 
 var qsNoMungeTestCases = [
   ['', {}],
@@ -125,7 +124,7 @@ qsWeirdObjects.forEach(function(testCase) {
 });
 
 qsNoMungeTestCases.forEach(function(testCase) {
-  assert.deepEqual(testCase[0], qs.stringify(testCase[1], '&', '=', false));
+  assert.deepEqual(testCase[0], qs.stringify(testCase[1], '&', '='));
 });
 
 // test the nested qs-in-qs case

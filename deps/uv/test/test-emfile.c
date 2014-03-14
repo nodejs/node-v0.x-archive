@@ -46,10 +46,10 @@ TEST_IMPL(emfile) {
   int first_fd;
 
   loop = uv_default_loop();
-  addr = uv_ip4_addr("127.0.0.1", TEST_PORT);
+  ASSERT(0 == uv_ip4_addr("127.0.0.1", TEST_PORT, &addr));
   ASSERT(0 == uv_tcp_init(loop, &server_handle));
   ASSERT(0 == uv_tcp_init(loop, &client_handle));
-  ASSERT(0 == uv_tcp_bind(&server_handle, addr));
+  ASSERT(0 == uv_tcp_bind(&server_handle, (const struct sockaddr*) &addr, 0));
   ASSERT(0 == uv_listen((uv_stream_t*) &server_handle, 8, connection_cb));
 
   /* Lower the file descriptor limit and use up all fds save one. */
@@ -73,7 +73,10 @@ TEST_IMPL(emfile) {
    * handling logic in src/unix/stream.c should ensure that connect_cb() runs
    * whereas connection_cb() should *not* run.
    */
-  ASSERT(0 == uv_tcp_connect(&connect_req, &client_handle, addr, connect_cb));
+  ASSERT(0 == uv_tcp_connect(&connect_req,
+                             &client_handle,
+                             (const struct sockaddr*) &addr,
+                             connect_cb));
   ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
   ASSERT(1 == connect_cb_called);
 

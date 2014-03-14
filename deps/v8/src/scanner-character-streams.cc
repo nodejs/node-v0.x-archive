@@ -46,6 +46,7 @@ BufferedUtf16CharacterStream::BufferedUtf16CharacterStream()
   buffer_end_ = buffer_;
 }
 
+
 BufferedUtf16CharacterStream::~BufferedUtf16CharacterStream() { }
 
 void BufferedUtf16CharacterStream::PushBack(uc32 character) {
@@ -112,6 +113,7 @@ unsigned BufferedUtf16CharacterStream::SlowSeekForward(unsigned delta) {
   pushback_limit_ = NULL;
   return BufferSeekForward(delta);
 }
+
 
 // ----------------------------------------------------------------------------
 // GenericStringUtf16CharacterStream
@@ -211,11 +213,11 @@ unsigned Utf8ToUtf16CharacterStream::FillBuffer(unsigned char_position,
 
 
 static const byte kUtf8MultiByteMask = 0xC0;
-static const byte kUtf8MultiByteCharStart = 0xC0;
 static const byte kUtf8MultiByteCharFollower = 0x80;
 
 
 #ifdef DEBUG
+static const byte kUtf8MultiByteCharStart = 0xC0;
 static bool IsUtf8MultiCharacterStart(byte first_byte) {
   return (first_byte & kUtf8MultiByteMask) == kUtf8MultiByteCharStart;
 }

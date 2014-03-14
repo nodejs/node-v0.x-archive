@@ -25,20 +25,38 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#if V8_TARGET_ARCH_MIPS
 
-#include "frames-inl.h"
-#include "mips/assembler-mips-inl.h"
+#include "assembler.h"
+#include "assembler-mips.h"
+#include "assembler-mips-inl.h"
+#include "frames.h"
 
 namespace v8 {
 namespace internal {
 
 
-Address ExitFrame::ComputeStackPointer(Address fp) {
-  return Memory::Address_at(fp + ExitFrameConstants::kSPOffset);
+Register JavaScriptFrame::fp_register() { return v8::internal::fp; }
+Register JavaScriptFrame::context_register() { return cp; }
+Register JavaScriptFrame::constant_pool_pointer_register() {
+  UNREACHABLE();
+  return no_reg;
+}
+
+
+Register StubFailureTrampolineFrame::fp_register() { return v8::internal::fp; }
+Register StubFailureTrampolineFrame::context_register() { return cp; }
+Register StubFailureTrampolineFrame::constant_pool_pointer_register() {
+  UNREACHABLE();
+  return no_reg;
+}
+
+
+Object*& ExitFrame::constant_pool_slot() const {
+  UNREACHABLE();
+  return Memory::Object_at(NULL);
 }
 
 

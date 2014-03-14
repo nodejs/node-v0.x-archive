@@ -33,30 +33,23 @@
 namespace v8 {
 namespace internal {
 
-const char* StringsStorage::GetFunctionName(String* name) {
-  return GetFunctionName(GetName(name));
-}
-
-
-const char* StringsStorage::GetFunctionName(const char* name) {
-  return strlen(name) > 0 ? name : ProfileGenerator::kAnonymousFunctionName;
-}
-
-
 CodeEntry::CodeEntry(Logger::LogEventsAndTags tag,
-                     const char* name_prefix,
                      const char* name,
+                     const char* name_prefix,
                      const char* resource_name,
                      int line_number,
-                     int security_token_id)
+                     int column_number)
     : tag_(tag),
+      builtin_id_(Builtins::builtin_count),
       name_prefix_(name_prefix),
       name_(name),
       resource_name_(resource_name),
       line_number_(line_number),
+      column_number_(column_number),
       shared_id_(0),
-      security_token_id_(security_token_id) {
-}
+      script_id_(v8::Script::kNoScriptId),
+      no_frame_ranges_(NULL),
+      bailout_reason_(kEmptyBailoutReason) { }
 
 
 bool CodeEntry::is_js_function_tag(Logger::LogEventsAndTags tag) {
@@ -72,77 +65,9 @@ bool CodeEntry::is_js_function_tag(Logger::LogEventsAndTags tag) {
 ProfileNode::ProfileNode(ProfileTree* tree, CodeEntry* entry)
     : tree_(tree),
       entry_(entry),
-      total_ticks_(0),
       self_ticks_(0),
-      children_(CodeEntriesMatch) {
-}
-
-
-CodeEntry* ProfileGenerator::EntryForVMState(StateTag tag) {
-  switch (tag) {
-    case GC:
-      return gc_entry_;
-    case JS:
-    case COMPILER:
-    case PARALLEL_COMPILER_PROLOGUE:
-    // DOM events handlers are reported as OTHER / EXTERNAL entries.
-    // To avoid confusing people, let's put all these entries into
-    // one bucket.
-    case OTHER:
-    case EXTERNAL:
-      return program_entry_;
-    default: return NULL;
-  }
-}
-
-
-HeapEntry* HeapGraphEdge::from() const {
-  return &snapshot()->entries()[from_index_];
-}
-
-
-HeapSnapshot* HeapGraphEdge::snapshot() const {
-  return to_entry_->snapshot();
-}
-
-
-int HeapEntry::index() const {
-  return static_cast<int>(this - &snapshot_->entries().first());
-}
-
-
-int HeapEntry::set_children_index(int index) {
-  children_index_ = index;
-  int next_index = index + children_count_;
-  children_count_ = 0;
-  return next_index;
-}
-
-
-HeapGraphEdge** HeapEntry::children_arr() {
-  ASSERT(children_index_ >= 0);
-  return &snapshot_->children()[children_index_];
-}
-
-
-SnapshotObjectId HeapObjectsMap::GetNthGcSubrootId(int delta) {
-  return kGcRootsFirstSubrootId + delta * kObjectIdStep;
-}
-
-
-HeapObject* V8HeapExplorer::GetNthGcSubrootObject(int delta) {
-  return reinterpret_cast<HeapObject*>(
-      reinterpret_cast<char*>(kFirstGcSubrootObject) +
-      delta * HeapObjectsMap::kObjectIdStep);
-}
-
-
-int V8HeapExplorer::GetGcSubrootOrder(HeapObject* subroot) {
-  return static_cast<int>(
-      (reinterpret_cast<char*>(subroot) -
-       reinterpret_cast<char*>(kFirstGcSubrootObject)) /
-      HeapObjectsMap::kObjectIdStep);
-}
+      children_(CodeEntriesMatch),
+      id_(tree->next_node_id()) { }
 
 } }  // namespace v8::internal
 

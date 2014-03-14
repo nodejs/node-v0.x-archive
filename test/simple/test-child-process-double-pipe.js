@@ -23,21 +23,24 @@ var is_windows = process.platform === 'win32';
 
 var common = require('../common');
 var assert = require('assert'),
+    os = require('os'),
     util = require('util'),
     spawn = require('child_process').spawn;
 
 // We're trying to reproduce:
 // $ echo "hello\nnode\nand\nworld" | grep o | sed s/o/a/
 
-var grep = spawn('grep', ['o']),
-    sed = spawn('sed', ['s/o/O/']),
-    echo;
+var grep, sed, echo;
 
 if (is_windows) {
+  grep = spawn('grep', ['--binary', 'o']),
+  sed = spawn('sed', ['--binary', 's/o/O/']),
   echo = spawn('cmd.exe',
                ['/c', 'echo', 'hello&&', 'echo',
                 'node&&', 'echo', 'and&&', 'echo', 'world']);
 } else {
+  grep = spawn('grep', ['o']),
+  sed = spawn('sed', ['s/o/O/']),
   echo = spawn('echo', ['hello\nnode\nand\nworld\n']);
 }
 
@@ -113,5 +116,5 @@ sed.stdout.on('data', function(data) {
 });
 
 sed.stdout.on('end', function(code) {
-  assert.equal(result, 'hellO\nnOde\nwOrld\n');
+  assert.equal(result, 'hellO' + os.EOL + 'nOde' + os.EOL  +'wOrld' + os.EOL);
 });

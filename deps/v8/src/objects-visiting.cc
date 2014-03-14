@@ -45,8 +45,8 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
   if (instance_type < FIRST_NONSTRING_TYPE) {
     switch (instance_type & kStringRepresentationMask) {
       case kSeqStringTag:
-        if ((instance_type & kStringEncodingMask) == kAsciiStringTag) {
-          return kVisitSeqAsciiString;
+        if ((instance_type & kStringEncodingMask) == kOneByteStringTag) {
+          return kVisitSeqOneByteString;
         } else {
           return kVisitSeqTwoByteString;
         }
@@ -82,6 +82,9 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case FIXED_DOUBLE_ARRAY_TYPE:
       return kVisitFixedDoubleArray;
 
+    case CONSTANT_POOL_ARRAY_TYPE:
+      return kVisitConstantPoolArray;
+
     case ODDBALL_TYPE:
       return kVisitOddball;
 
@@ -91,7 +94,10 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case CODE_TYPE:
       return kVisitCode;
 
-    case JS_GLOBAL_PROPERTY_CELL_TYPE:
+    case CELL_TYPE:
+      return kVisitCell;
+
+    case PROPERTY_CELL_TYPE:
       return kVisitPropertyCell;
 
     case JS_SET_TYPE:
@@ -106,6 +112,9 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
 
     case JS_WEAK_MAP_TYPE:
       return kVisitJSWeakMap;
+
+    case JS_WEAK_SET_TYPE:
+      return kVisitJSWeakSet;
 
     case JS_REGEXP_TYPE:
       return kVisitJSRegExp;
@@ -128,11 +137,24 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
                                  kVisitDataObjectGeneric,
                                  Foreign::kSize);
 
+    case SYMBOL_TYPE:
+      return kVisitSymbol;
+
     case FILLER_TYPE:
       return kVisitDataObjectGeneric;
 
+    case JS_ARRAY_BUFFER_TYPE:
+      return kVisitJSArrayBuffer;
+
+    case JS_TYPED_ARRAY_TYPE:
+      return kVisitJSTypedArray;
+
+    case JS_DATA_VIEW_TYPE:
+      return kVisitJSDataView;
+
     case JS_OBJECT_TYPE:
     case JS_CONTEXT_EXTENSION_OBJECT_TYPE:
+    case JS_GENERATOR_OBJECT_TYPE:
     case JS_MODULE_TYPE:
     case JS_VALUE_TYPE:
     case JS_DATE_TYPE:
@@ -149,23 +171,36 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
       return kVisitJSFunction;
 
     case HEAP_NUMBER_TYPE:
-    case EXTERNAL_PIXEL_ARRAY_TYPE:
-    case EXTERNAL_BYTE_ARRAY_TYPE:
-    case EXTERNAL_UNSIGNED_BYTE_ARRAY_TYPE:
-    case EXTERNAL_SHORT_ARRAY_TYPE:
-    case EXTERNAL_UNSIGNED_SHORT_ARRAY_TYPE:
-    case EXTERNAL_INT_ARRAY_TYPE:
-    case EXTERNAL_UNSIGNED_INT_ARRAY_TYPE:
-    case EXTERNAL_FLOAT_ARRAY_TYPE:
-    case EXTERNAL_DOUBLE_ARRAY_TYPE:
+#define EXTERNAL_ARRAY_CASE(Type, type, TYPE, ctype, size)                     \
+    case EXTERNAL_##TYPE##_ARRAY_TYPE:
+
+    TYPED_ARRAYS(EXTERNAL_ARRAY_CASE)
       return GetVisitorIdForSize(kVisitDataObject,
                                  kVisitDataObjectGeneric,
                                  instance_size);
+#undef EXTERNAL_ARRAY_CASE
+
+    case FIXED_UINT8_ARRAY_TYPE:
+    case FIXED_INT8_ARRAY_TYPE:
+    case FIXED_UINT16_ARRAY_TYPE:
+    case FIXED_INT16_ARRAY_TYPE:
+    case FIXED_UINT32_ARRAY_TYPE:
+    case FIXED_INT32_ARRAY_TYPE:
+    case FIXED_FLOAT32_ARRAY_TYPE:
+    case FIXED_UINT8_CLAMPED_ARRAY_TYPE:
+      return kVisitFixedTypedArray;
+
+    case FIXED_FLOAT64_ARRAY_TYPE:
+      return kVisitFixedFloat64Array;
 
 #define MAKE_STRUCT_CASE(NAME, Name, name) \
         case NAME##_TYPE:
       STRUCT_LIST(MAKE_STRUCT_CASE)
 #undef MAKE_STRUCT_CASE
+          if (instance_type == ALLOCATION_SITE_TYPE) {
+            return kVisitAllocationSite;
+          }
+
           return GetVisitorIdForSize(kVisitStruct,
                                      kVisitStructGeneric,
                                      instance_size);

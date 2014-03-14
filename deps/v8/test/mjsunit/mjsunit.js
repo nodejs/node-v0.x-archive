@@ -54,6 +54,10 @@ var assertSame;
 // and the properties of non-Array objects).
 var assertEquals;
 
+
+// The difference between expected and found value is within certain tolerance.
+var assertEqualsDelta;
+
 // The found object is an Array with the same length and elements
 // as the expected object. The expected object doesn't need to be an Array,
 // as long as it's "array-ish".
@@ -98,6 +102,14 @@ var assertInstanceof;
 
 // Assert that this code is never executed (i.e., always fails if executed).
 var assertUnreachable;
+
+// Assert that the function code is (not) optimized.  If "no sync" is passed
+// as second argument, we do not wait for the concurrent optimization thread to
+// finish when polling for optimization status.
+// Only works with --allow-natives-syntax.
+var assertOptimized;
+var assertUnoptimized;
+
 
 (function () {  // Scope for utility functions.
 
@@ -239,6 +251,12 @@ var assertUnreachable;
   };
 
 
+  assertEqualsDelta =
+      function assertEqualsDelta(expected, found, delta, name_opt) {
+    assertTrue(Math.abs(expected - found) <= delta, name_opt);
+  };
+
+
   assertArrayEquals = function assertArrayEquals(expected, found, name_opt) {
     var start = "";
     if (name_opt) {
@@ -353,5 +371,25 @@ var assertUnreachable;
     throw new MjsUnitAssertionError(message);
   };
 
-})();
 
+  var OptimizationStatus;
+  try {
+    OptimizationStatus =
+      new Function("fun", "sync", "return %GetOptimizationStatus(fun, sync);");
+  } catch (e) {
+    OptimizationStatus = function() {
+      throw new Error("natives syntax not allowed");
+    }
+  }
+
+  assertUnoptimized = function assertUnoptimized(fun, sync_opt, name_opt) {
+    if (sync_opt === undefined) sync_opt = "";
+    assertTrue(OptimizationStatus(fun, sync_opt) != 1, name_opt);
+  }
+
+  assertOptimized = function assertOptimized(fun, sync_opt, name_opt) {
+    if (sync_opt === undefined) sync_opt = "";
+    assertTrue(OptimizationStatus(fun, sync_opt) != 2, name_opt);
+  }
+
+})();

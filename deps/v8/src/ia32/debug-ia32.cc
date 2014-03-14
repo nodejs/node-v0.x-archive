@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
 
 #include "codegen.h"
 #include "debug.h"
@@ -49,8 +49,8 @@ bool BreakLocationIterator::IsDebugBreakAtReturn() {
 void BreakLocationIterator::SetDebugBreakAtReturn() {
   ASSERT(Assembler::kJSReturnSequenceLength >=
          Assembler::kCallInstructionLength);
-  Isolate* isolate = Isolate::Current();
-  rinfo()->PatchCodeWithCall(isolate->debug()->debug_break_return()->entry(),
+  rinfo()->PatchCodeWithCall(
+      debug_info_->GetIsolate()->debug()->debug_break_return()->entry(),
       Assembler::kJSReturnSequenceLength - Assembler::kCallInstructionLength);
 }
 
@@ -79,7 +79,7 @@ bool BreakLocationIterator::IsDebugBreakAtSlot() {
 
 void BreakLocationIterator::SetDebugBreakAtSlot() {
   ASSERT(IsDebugBreakSlot());
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = debug_info_->GetIsolate();
   rinfo()->PatchCodeWithCall(
       isolate->debug()->debug_break_slot()->entry(),
       Assembler::kDebugBreakSlotLength - Assembler::kCallInstructionLength);
@@ -90,6 +90,7 @@ void BreakLocationIterator::ClearDebugBreakAtSlot() {
   ASSERT(IsDebugBreakSlot());
   rinfo()->PatchCode(original_rinfo()->pc(), Assembler::kDebugBreakSlotLength);
 }
+
 
 // All debug break stubs support padding for LiveEdit.
 const bool Debug::FramePaddingLayout::kIsSupported = true;
@@ -127,7 +128,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
       if ((non_object_regs & (1 << r)) != 0) {
         if (FLAG_debug_code) {
           __ test(reg, Immediate(0xc0000000));
-          __ Assert(zero, "Unable to encode value as smi");
+          __ Assert(zero, kUnableToEncodeValueAsSmi);
         }
         __ SmiTag(reg);
         __ push(reg);
@@ -240,6 +241,15 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
 }
 
 
+void Debug::GenerateCompareNilICDebugBreak(MacroAssembler* masm) {
+  // Register state for CompareNil IC
+  // ----------- S t a t e -------------
+  //  -- eax    : value
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, eax.bit(), 0, false);
+}
+
+
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
   // Register state for keyed IC call call (from ic-ia32.cc)
   // ----------- S t a t e -------------
@@ -270,10 +280,12 @@ void Debug::GenerateCallFunctionStubDebugBreak(MacroAssembler* masm) {
 void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
   // Register state for CallFunctionStub (from code-stubs-ia32.cc).
   // ----------- S t a t e -------------
-  //  -- ebx: cache cell for call target
+  //  -- ebx: feedback array
+  //  -- edx: slot in feedback array
   //  -- edi: function
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, ebx.bit() | edi.bit(), 0, false);
+  Generate_DebugBreakCallHelper(masm, ebx.bit() | edx.bit() | edi.bit(),
+                                0, false);
 }
 
 
@@ -296,11 +308,13 @@ void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
   // above IC call.
   // ----------- S t a t e -------------
   //  -- eax: number of arguments (not smi)
-  //  -- ebx: cache cell for call target
+  //  -- ebx: feedback array
+  //  -- edx: feedback slot (smi)
   //  -- edi: constructor function
   // -----------------------------------
   // The number of arguments in eax is not smi encoded.
-  Generate_DebugBreakCallHelper(masm, ebx.bit() | edi.bit(), eax.bit(), false);
+  Generate_DebugBreakCallHelper(masm, ebx.bit() | edx.bit() | edi.bit(),
+                                eax.bit(), false);
 }
 
 

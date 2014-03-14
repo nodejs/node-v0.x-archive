@@ -184,7 +184,9 @@ class Simulator {
   // architecture specification and is off by a 8 from the currently executing
   // instruction.
   void set_register(int reg, int32_t value);
+  void set_dw_register(int dreg, const int* dbl);
   int32_t get_register(int reg) const;
+  double get_double_from_register_pair(int reg);
   // Same for FPURegisters.
   void set_fpu_register(int fpureg, int32_t value);
   void set_fpu_register_float(int fpureg, float value);
@@ -201,6 +203,10 @@ class Simulator {
   void set_pc(int32_t value);
   int32_t get_pc() const;
 
+  Address get_sp() {
+    return reinterpret_cast<Address>(static_cast<intptr_t>(get_register(sp)));
+  }
+
   // Accessor to the internal simulator stack area.
   uintptr_t StackLimit() const;
 
@@ -214,6 +220,8 @@ class Simulator {
   // generated RegExp code with 7 parameters. This is a convenience function,
   // which sets up the simulator state and grabs the result on return.
   int32_t Call(byte* entry, int argument_count, ...);
+  // Alternative: call a 2-argument double function.
+  double CallFP(byte* entry, double d0, double d1);
 
   // Push an address onto the JS stack.
   uintptr_t PushAddress(uintptr_t address);
@@ -285,6 +293,7 @@ class Simulator {
                              int64_t& i64hilo,
                              uint64_t& u64hilo,
                              int32_t& next_pc,
+                             int32_t& return_addr_reg,
                              bool& do_interrupt);
 
   void DecodeTypeImmediate(Instruction* instr);
@@ -312,8 +321,6 @@ class Simulator {
     if (instr->InstructionBits() == nopInstr) {
       // Short-cut generic nop instructions. They are always valid and they
       // never change the simulator state.
-      set_register(pc, reinterpret_cast<int32_t>(instr) +
-                       Instruction::kInstrSize);
       return;
     }
 
@@ -347,12 +354,11 @@ class Simulator {
   static void* RedirectExternalReference(void* external_function,
                                          ExternalReference::Type type);
 
-  // For use in calls that take double value arguments.
-  void GetFpArgs(double* x, double* y);
-  void GetFpArgs(double* x);
-  void GetFpArgs(double* x, int32_t* y);
+  // Handle arguments and return value for runtime FP functions.
+  void GetFpArgs(double* x, double* y, int32_t* z);
   void SetFpResult(const double& result);
 
+  void CallInternal(byte* entry);
 
   // Architecture state.
   // Registers.
@@ -386,14 +392,14 @@ class Simulator {
   static const uint32_t kStopDisabledBit = 1 << 31;
 
   // A stop is enabled, meaning the simulator will stop when meeting the
-  // instruction, if bit 31 of watched_stops[code].count is unset.
-  // The value watched_stops[code].count & ~(1 << 31) indicates how many times
+  // instruction, if bit 31 of watched_stops_[code].count is unset.
+  // The value watched_stops_[code].count & ~(1 << 31) indicates how many times
   // the breakpoint was hit or gone through.
   struct StopCountAndDesc {
     uint32_t count;
     char* desc;
   };
-  StopCountAndDesc watched_stops[kMaxStopCode + 1];
+  StopCountAndDesc watched_stops_[kMaxStopCode + 1];
 };
 
 

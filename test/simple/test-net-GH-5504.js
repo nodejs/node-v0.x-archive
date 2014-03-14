@@ -51,7 +51,7 @@ function server() {
       console.error('_socketEnd');
     });
     socket.write(content);
-  }).listen(3000, function() {
+  }).listen(common.PORT, function() {
     console.log('listening');
   });
 }
@@ -60,7 +60,7 @@ function client() {
   var net = require('net');
   var client = net.connect({
     host: 'localhost',
-    port: 3000
+    port: common.PORT
   }, function() {
     client.destroy();
   });
@@ -73,7 +73,12 @@ function parent() {
   var serverExited = false;
   var clientExited = false;
   var serverListened = false;
-  var opt = { env: { NODE_DEBUG: 'net' } };
+  var opt = {
+    env: {
+      NODE_DEBUG: 'net',
+      NODE_COMMON_PORT: process.env.NODE_COMMON_PORT,
+    }
+  };
 
   process.on('exit', function() {
     assert(serverExited);
@@ -88,7 +93,7 @@ function parent() {
     setTimeout(function() {
       throw new Error('hang');
     });
-  }, 1000).unref();
+  }, 4000).unref();
 
   var s = spawn(node, [__filename, 'server'], opt);
   var c;

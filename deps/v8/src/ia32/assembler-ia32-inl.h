@@ -46,12 +46,22 @@ namespace v8 {
 namespace internal {
 
 
+static const byte kCallOpcode = 0xE8;
+static const int kNoCodeAgeSequenceLength = 5;
+
+
 // The modes possibly affected by apply must be in kApplyMask.
 void RelocInfo::apply(intptr_t delta) {
-  if (rmode_ == RUNTIME_ENTRY || IsCodeTarget(rmode_)) {
+  if (IsRuntimeEntry(rmode_) || IsCodeTarget(rmode_)) {
     int32_t* p = reinterpret_cast<int32_t*>(pc_);
     *p -= delta;  // Relocate entry.
     CPU::FlushICache(p, sizeof(uint32_t));
+  } else if (rmode_ == CODE_AGE_SEQUENCE) {
+    if (*pc_ == kCallOpcode) {
+      int32_t* p = reinterpret_cast<int32_t*>(pc_ + 1);
+      *p -= delta;  // Relocate entry.
+      CPU::FlushICache(p, sizeof(uint32_t));
+    }
   } else if (rmode_ == JS_RETURN && IsPatchedReturnSequence()) {
     // Special handling of js_return when a break point is set (call
     // instruction has been inserted).
@@ -74,13 +84,13 @@ void RelocInfo::apply(intptr_t delta) {
 
 
 Address RelocInfo::target_address() {
-  ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY);
+  ASSERT(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_));
   return Assembler::target_address_at(pc_);
 }
 
 
 Address RelocInfo::target_address_address() {
-  ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY
+  ASSERT(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_)
                               || rmode_ == EMBEDDED_OBJECT
                               || rmode_ == EXTERNAL_REFERENCE);
   return reinterpret_cast<Address>(pc_);
@@ -94,7 +104,7 @@ int RelocInfo::target_address_size() {
 
 void RelocInfo::set_target_address(Address target, WriteBarrierMode mode) {
   Assembler::set_target_address_at(pc_, target);
-  ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY);
+  ASSERT(IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_));
   if (mode == UPDATE_WRITE_BARRIER && host() != NULL && IsCodeTarget(rmode_)) {
     Object* target_code = Code::GetCodeFromTargetAddress(target);
     host()->GetHeap()->incremental_marking()->RecordWriteIntoCode(
@@ -115,14 +125,9 @@ Handle<Object> RelocInfo::target_object_handle(Assembler* origin) {
 }
 
 
-Object** RelocInfo::target_object_address() {
-  ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
-  return &Memory::Object_at(pc_);
-}
-
-
 void RelocInfo::set_target_object(Object* target, WriteBarrierMode mode) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
+  ASSERT(!target->IsConsString());
   Memory::Object_at(pc_) = target;
   CPU::FlushICache(pc_, sizeof(Address));
   if (mode == UPDATE_WRITE_BARRIER &&
@@ -134,30 +139,41 @@ void RelocInfo::set_target_object(Object* target, WriteBarrierMode mode) {
 }
 
 
-Address* RelocInfo::target_reference_address() {
+Address RelocInfo::target_reference() {
   ASSERT(rmode_ == RelocInfo::EXTERNAL_REFERENCE);
-  return reinterpret_cast<Address*>(pc_);
+  return Memory::Address_at(pc_);
 }
 
 
-Handle<JSGlobalPropertyCell> RelocInfo::target_cell_handle() {
-  ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
+Address RelocInfo::target_runtime_entry(Assembler* origin) {
+  ASSERT(IsRuntimeEntry(rmode_));
+  return reinterpret_cast<Address>(*reinterpret_cast<int32_t*>(pc_));
+}
+
+
+void RelocInfo::set_target_runtime_entry(Address target,
+                                         WriteBarrierMode mode) {
+  ASSERT(IsRuntimeEntry(rmode_));
+  if (target_address() != target) set_target_address(target, mode);
+}
+
+
+Handle<Cell> RelocInfo::target_cell_handle() {
+  ASSERT(rmode_ == RelocInfo::CELL);
   Address address = Memory::Address_at(pc_);
-  return Handle<JSGlobalPropertyCell>(
-      reinterpret_cast<JSGlobalPropertyCell**>(address));
+  return Handle<Cell>(reinterpret_cast<Cell**>(address));
 }
 
 
-JSGlobalPropertyCell* RelocInfo::target_cell() {
-  ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
-  return JSGlobalPropertyCell::FromValueAddress(Memory::Address_at(pc_));
+Cell* RelocInfo::target_cell() {
+  ASSERT(rmode_ == RelocInfo::CELL);
+  return Cell::FromValueAddress(Memory::Address_at(pc_));
 }
 
 
-void RelocInfo::set_target_cell(JSGlobalPropertyCell* cell,
-                                WriteBarrierMode mode) {
-  ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
-  Address address = cell->address() + JSGlobalPropertyCell::kValueOffset;
+void RelocInfo::set_target_cell(Cell* cell, WriteBarrierMode mode) {
+  ASSERT(rmode_ == RelocInfo::CELL);
+  Address address = cell->address() + Cell::kValueOffset;
   Memory::Address_at(pc_) = address;
   CPU::FlushICache(pc_, sizeof(Address));
   if (mode == UPDATE_WRITE_BARRIER && host() != NULL) {
@@ -166,6 +182,28 @@ void RelocInfo::set_target_cell(JSGlobalPropertyCell* cell,
     host()->GetHeap()->incremental_marking()->RecordWrite(
         host(), NULL, cell);
   }
+}
+
+
+Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
+  ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  ASSERT(*pc_ == kCallOpcode);
+  return Memory::Object_Handle_at(pc_ + 1);
+}
+
+
+Code* RelocInfo::code_age_stub() {
+  ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  ASSERT(*pc_ == kCallOpcode);
+  return Code::GetCodeFromTargetAddress(
+      Assembler::target_address_at(pc_ + 1));
+}
+
+
+void RelocInfo::set_code_age_stub(Code* stub) {
+  ASSERT(*pc_ == kCallOpcode);
+  ASSERT(rmode_ == RelocInfo::CODE_AGE_SEQUENCE);
+  Assembler::set_target_address_at(pc_ + 1, stub->instruction_start());
 }
 
 
@@ -205,8 +243,20 @@ Object** RelocInfo::call_object_address() {
 }
 
 
+void RelocInfo::WipeOut() {
+  if (IsEmbeddedObject(rmode_) || IsExternalReference(rmode_)) {
+    Memory::Address_at(pc_) = NULL;
+  } else if (IsCodeTarget(rmode_) || IsRuntimeEntry(rmode_)) {
+    // Effectively write zero into the relocation.
+    Assembler::set_target_address_at(pc_, pc_ + sizeof(int32_t));
+  } else {
+    UNREACHABLE();
+  }
+}
+
+
 bool RelocInfo::IsPatchedReturnSequence() {
-  return *pc_ == 0xE8;
+  return *pc_ == kCallOpcode;
 }
 
 
@@ -215,28 +265,29 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 }
 
 
-void RelocInfo::Visit(ObjectVisitor* visitor) {
+void RelocInfo::Visit(Isolate* isolate, ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     visitor->VisitEmbeddedPointer(this);
     CPU::FlushICache(pc_, sizeof(Address));
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
-  } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {
-    visitor->VisitGlobalPropertyCell(this);
+  } else if (mode == RelocInfo::CELL) {
+    visitor->VisitCell(this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
     visitor->VisitExternalReference(this);
     CPU::FlushICache(pc_, sizeof(Address));
-#ifdef ENABLE_DEBUGGER_SUPPORT
-  // TODO(isolates): Get a cached isolate below.
+  } else if (RelocInfo::IsCodeAgeSequence(mode)) {
+    visitor->VisitCodeAgeSequence(this);
+  #ifdef ENABLE_DEBUGGER_SUPPORT
   } else if (((RelocInfo::IsJSReturn(mode) &&
               IsPatchedReturnSequence()) ||
              (RelocInfo::IsDebugBreakSlot(mode) &&
               IsPatchedDebugBreakSlotSequence())) &&
-             Isolate::Current()->debug()->has_break_points()) {
+             isolate->debug()->has_break_points()) {
     visitor->VisitDebugTarget(this);
 #endif
-  } else if (mode == RelocInfo::RUNTIME_ENTRY) {
+  } else if (IsRuntimeEntry(mode)) {
     visitor->VisitRuntimeEntry(this);
   }
 }
@@ -250,11 +301,13 @@ void RelocInfo::Visit(Heap* heap) {
     CPU::FlushICache(pc_, sizeof(Address));
   } else if (RelocInfo::IsCodeTarget(mode)) {
     StaticVisitor::VisitCodeTarget(heap, this);
-  } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {
-    StaticVisitor::VisitGlobalPropertyCell(heap, this);
+  } else if (mode == RelocInfo::CELL) {
+    StaticVisitor::VisitCell(heap, this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
     StaticVisitor::VisitExternalReference(this);
     CPU::FlushICache(pc_, sizeof(Address));
+  } else if (RelocInfo::IsCodeAgeSequence(mode)) {
+    StaticVisitor::VisitCodeAgeSequence(heap, this);
 #ifdef ENABLE_DEBUGGER_SUPPORT
   } else if (heap->isolate()->debug()->has_break_points() &&
              ((RelocInfo::IsJSReturn(mode) &&
@@ -263,7 +316,7 @@ void RelocInfo::Visit(Heap* heap) {
               IsPatchedDebugBreakSlotSequence()))) {
     StaticVisitor::VisitDebugTarget(heap, this);
 #endif
-  } else if (mode == RelocInfo::RUNTIME_ENTRY) {
+  } else if (IsRuntimeEntry(mode)) {
     StaticVisitor::VisitRuntimeEntry(this);
   }
 }
@@ -272,7 +325,7 @@ void RelocInfo::Visit(Heap* heap) {
 
 Immediate::Immediate(int x)  {
   x_ = x;
-  rmode_ = RelocInfo::NONE;
+  rmode_ = RelocInfo::NONE32;
 }
 
 
@@ -289,29 +342,30 @@ Immediate::Immediate(Label* internal_offset) {
 
 
 Immediate::Immediate(Handle<Object> handle) {
+  AllowDeferredHandleDereference using_raw_address;
   // Verify all Objects referred by code are NOT in new space.
   Object* obj = *handle;
-  ASSERT(!HEAP->InNewSpace(obj));
   if (obj->IsHeapObject()) {
+    ASSERT(!HeapObject::cast(obj)->GetHeap()->InNewSpace(obj));
     x_ = reinterpret_cast<intptr_t>(handle.location());
     rmode_ = RelocInfo::EMBEDDED_OBJECT;
   } else {
     // no relocation needed
     x_ =  reinterpret_cast<intptr_t>(obj);
-    rmode_ = RelocInfo::NONE;
+    rmode_ = RelocInfo::NONE32;
   }
 }
 
 
 Immediate::Immediate(Smi* value) {
   x_ = reinterpret_cast<intptr_t>(value);
-  rmode_ = RelocInfo::NONE;
+  rmode_ = RelocInfo::NONE32;
 }
 
 
 Immediate::Immediate(Address addr) {
   x_ = reinterpret_cast<int32_t>(addr);
-  rmode_ = RelocInfo::NONE;
+  rmode_ = RelocInfo::NONE32;
 }
 
 
@@ -322,6 +376,7 @@ void Assembler::emit(uint32_t x) {
 
 
 void Assembler::emit(Handle<Object> handle) {
+  AllowDeferredHandleDereference heap_object_check;
   // Verify all Objects referred by code are NOT in new space.
   Object* obj = *handle;
   ASSERT(!isolate()->heap()->InNewSpace(obj));
@@ -338,10 +393,19 @@ void Assembler::emit(Handle<Object> handle) {
 void Assembler::emit(uint32_t x, RelocInfo::Mode rmode, TypeFeedbackId id) {
   if (rmode == RelocInfo::CODE_TARGET && !id.IsNone()) {
     RecordRelocInfo(RelocInfo::CODE_TARGET_WITH_ID, id.ToInt());
-  } else if (rmode != RelocInfo::NONE) {
+  } else if (!RelocInfo::IsNone(rmode)
+      && rmode != RelocInfo::CODE_AGE_SEQUENCE) {
     RecordRelocInfo(rmode);
   }
   emit(x);
+}
+
+
+void Assembler::emit(Handle<Code> code,
+                     RelocInfo::Mode rmode,
+                     TypeFeedbackId id) {
+  AllowDeferredHandleDereference embedding_raw_address;
+  emit(reinterpret_cast<intptr_t>(code.location()), rmode, id);
 }
 
 
@@ -351,7 +415,7 @@ void Assembler::emit(const Immediate& x) {
     emit_code_relative_offset(label);
     return;
   }
-  if (x.rmode_ != RelocInfo::NONE) RecordRelocInfo(x.rmode_);
+  if (!RelocInfo::IsNone(x.rmode_)) RecordRelocInfo(x.rmode_);
   emit(x.x_);
 }
 
@@ -368,7 +432,7 @@ void Assembler::emit_code_relative_offset(Label* label) {
 
 
 void Assembler::emit_w(const Immediate& x) {
-  ASSERT(x.rmode_ == RelocInfo::NONE);
+  ASSERT(RelocInfo::IsNone(x.rmode_));
   uint16_t value = static_cast<uint16_t>(x.x_);
   reinterpret_cast<uint16_t*>(pc_)[0] = value;
   pc_ += sizeof(uint16_t);

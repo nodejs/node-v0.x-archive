@@ -59,7 +59,7 @@ bool SafepointEntry::HasRegisterAt(int reg_index) const {
 
 
 SafepointTable::SafepointTable(Code* code) {
-  ASSERT(code->kind() == Code::OPTIMIZED_FUNCTION);
+  ASSERT(code->is_crankshafted());
   code_ = code;
   Address header = code->instruction_start() + code->safepoint_table_offset();
   length_ = Memory::uint32_at(header + kLengthOffset);
@@ -83,7 +83,7 @@ SafepointEntry SafepointTable::FindEntry(Address pc) const {
 }
 
 
-void SafepointTable::PrintEntry(unsigned index) const {
+void SafepointTable::PrintEntry(unsigned index, FILE* out) const {
   disasm::NameConverter converter;
   SafepointEntry entry = GetEntry(index);
   uint8_t* bits = entry.bits();
@@ -93,25 +93,25 @@ void SafepointTable::PrintEntry(unsigned index) const {
     ASSERT(IsAligned(kNumSafepointRegisters, kBitsPerByte));
     const int first = kNumSafepointRegisters >> kBitsPerByteLog2;
     int last = entry_size_ - 1;
-    for (int i = first; i < last; i++) PrintBits(bits[i], kBitsPerByte);
+    for (int i = first; i < last; i++) PrintBits(out, bits[i], kBitsPerByte);
     int last_bits = code_->stack_slots() - ((last - first) * kBitsPerByte);
-    PrintBits(bits[last], last_bits);
+    PrintBits(out, bits[last], last_bits);
 
     // Print the registers (if any).
     if (!entry.HasRegisters()) return;
     for (int j = 0; j < kNumSafepointRegisters; j++) {
       if (entry.HasRegisterAt(j)) {
-        PrintF(" | %s", converter.NameOfCPURegister(j));
+        PrintF(out, " | %s", converter.NameOfCPURegister(j));
       }
     }
   }
 }
 
 
-void SafepointTable::PrintBits(uint8_t byte, int digits) {
+void SafepointTable::PrintBits(FILE* out, uint8_t byte, int digits) {
   ASSERT(digits >= 0 && digits <= kBitsPerByte);
   for (int i = 0; i < digits; i++) {
-    PrintF("%c", ((byte & (1 << i)) == 0) ? '0' : '1');
+    PrintF(out, "%c", ((byte & (1 << i)) == 0) ? '0' : '1');
   }
 }
 
@@ -158,14 +158,6 @@ unsigned SafepointTableBuilder::GetCodeOffset() const {
 
 
 void SafepointTableBuilder::Emit(Assembler* assembler, int bits_per_entry) {
-  // For lazy deoptimization we need space to patch a call after every call.
-  // Ensure there is always space for such patching, even if the code ends
-  // in a call.
-  int target_offset = assembler->pc_offset() + Deoptimizer::patch_size();
-  while (assembler->pc_offset() < target_offset) {
-    assembler->nop();
-  }
-
   // Make sure the safepoint table is properly aligned. Pad with nops.
   assembler->Align(kIntSize);
   assembler->RecordComment(";;; Safepoint table.");

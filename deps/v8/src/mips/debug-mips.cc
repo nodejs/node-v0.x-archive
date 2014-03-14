@@ -29,7 +29,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#if V8_TARGET_ARCH_MIPS
 
 #include "codegen.h"
 #include "debug.h"
@@ -60,7 +60,7 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   // li and Call pseudo-instructions emit two instructions each.
   patcher.masm()->li(v8::internal::t9,
       Operand(reinterpret_cast<int32_t>(
-          Isolate::Current()->debug()->debug_break_return()->entry())));
+        debug_info_->GetIsolate()->debug()->debug_break_return()->entry())));
   patcher.masm()->Call(v8::internal::t9);
   patcher.masm()->nop();
   patcher.masm()->nop();
@@ -105,7 +105,7 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   //   call t9          (jalr t9 / nop instruction pair)
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
   patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int32_t>(
-      Isolate::Current()->debug()->debug_break_slot()->entry())));
+      debug_info_->GetIsolate()->debug()->debug_break_slot()->entry())));
   patcher.masm()->Call(v8::internal::t9);
 }
 
@@ -142,8 +142,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         if ((non_object_regs & (1 << r)) != 0) {
           if (FLAG_debug_code) {
             __ And(at, reg, 0xc0000000);
-            __ Assert(
-                eq, "Unable to encode value as smi", at, Operand(zero_reg));
+            __ Assert(eq, kUnableToEncodeValueAsSmi, at, Operand(zero_reg));
           }
           __ sll(reg, reg, kSmiTagSize);
         }
@@ -236,6 +235,15 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
 }
 
 
+void Debug::GenerateCompareNilICDebugBreak(MacroAssembler* masm) {
+  // Register state for CompareNil IC
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, a0.bit(), 0);
+}
+
+
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
   // Calling convention for IC call (from ic-mips.cc).
   // ----------- S t a t e -------------
@@ -266,9 +274,10 @@ void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
   // Register state for CallFunctionStub (from code-stubs-mips.cc).
   // ----------- S t a t e -------------
   //  -- a1 : function
-  //  -- a2 : cache cell for call target
+  //  -- a2 : feedback array
+  //  -- a3 : slot in feedback array
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, a1.bit() | a2.bit(), 0);
+  Generate_DebugBreakCallHelper(masm, a1.bit() | a2.bit() | a3.bit(), 0);
 }
 
 
@@ -287,9 +296,10 @@ void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
   // ----------- S t a t e -------------
   //  -- a0     : number of arguments (not smi)
   //  -- a1     : constructor function
-  //  -- a2     : cache cell for call target
+  //  -- a2     : feedback array
+  //  -- a3     : feedback slot (smi)
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, a1.bit() | a2.bit(), a0.bit());
+  Generate_DebugBreakCallHelper(masm, a1.bit() | a2.bit() | a3.bit(), a0.bit());
 }
 
 
@@ -316,12 +326,12 @@ void Debug::GenerateSlotDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GeneratePlainReturnLiveEdit(MacroAssembler* masm) {
-  masm->Abort("LiveEdit frame dropping is not supported on mips");
+  masm->Abort(kLiveEditFrameDroppingIsNotSupportedOnMips);
 }
 
 
 void Debug::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
-  masm->Abort("LiveEdit frame dropping is not supported on mips");
+  masm->Abort(kLiveEditFrameDroppingIsNotSupportedOnMips);
 }
 
 

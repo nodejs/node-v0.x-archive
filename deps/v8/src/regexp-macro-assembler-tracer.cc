@@ -38,8 +38,8 @@ RegExpMacroAssemblerTracer::RegExpMacroAssemblerTracer(
   RegExpMacroAssembler(assembler->zone()),
   assembler_(assembler) {
   unsigned int type = assembler->Implementation();
-  ASSERT(type < 5);
-  const char* impl_names[] = {"IA32", "ARM", "MIPS", "X64", "Bytecode"};
+  ASSERT(type < 6);
+  const char* impl_names[] = {"IA32", "ARM", "A64", "MIPS", "X64", "Bytecode"};
   PrintF("RegExpMacroAssembler%s();\n", impl_names[type]);
 }
 
@@ -383,21 +383,6 @@ void RegExpMacroAssemblerTracer::CheckNotBackReferenceIgnoreCase(
 }
 
 
-void RegExpMacroAssemblerTracer::CheckCharacters(Vector<const uc16> str,
-                                                 int cp_offset,
-                                                 Label* on_failure,
-                                                 bool check_end_of_string) {
-  PrintF(" %s(str=\"",
-         check_end_of_string ? "CheckCharacters" : "CheckCharactersUnchecked");
-  for (int i = 0; i < str.length(); i++) {
-    PrintF("0x%04x", str[i]);
-  }
-  PrintF("\", cp_offset=%d, label[%08x])\n",
-         cp_offset, LabelToInt(on_failure));
-  assembler_->CheckCharacters(str, cp_offset, on_failure, check_end_of_string);
-}
-
-
 bool RegExpMacroAssemblerTracer::CheckSpecialCharacterClass(
     uc16 type,
     Label* on_no_match) {
@@ -442,7 +427,7 @@ RegExpMacroAssembler::IrregexpImplementation
 
 
 Handle<HeapObject> RegExpMacroAssemblerTracer::GetCode(Handle<String> source) {
-  PrintF(" GetCode(%s);\n", *(source->ToCString()));
+  PrintF(" GetCode(%s);\n", source->ToCString().get());
   return assembler_->GetCode(source);
 }
 

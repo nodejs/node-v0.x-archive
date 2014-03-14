@@ -86,6 +86,7 @@ void FunctionLoggingParserRecorder::WriteString(Vector<const char> str) {
   }
 }
 
+
 // ----------------------------------------------------------------------------
 // PartialParserRecorder -  Record both function entries and symbols.
 
@@ -95,7 +96,7 @@ Vector<unsigned> PartialParserRecorder::ExtractData() {
   Vector<unsigned> data = Vector<unsigned>::New(total_size);
   preamble_[PreparseDataConstants::kFunctionsSizeOffset] = function_size;
   preamble_[PreparseDataConstants::kSymbolCountOffset] = 0;
-  memcpy(data.start(), preamble_, sizeof(preamble_));
+  OS::MemCopy(data.start(), preamble_, sizeof(preamble_));
   int symbol_start = PreparseDataConstants::kHeaderSize + function_size;
   if (function_size > 0) {
     function_store_.WriteTo(data.SubVector(PreparseDataConstants::kHeaderSize,
@@ -113,7 +114,7 @@ CompleteParserRecorder::CompleteParserRecorder()
       literal_chars_(0),
       symbol_store_(0),
       symbol_keys_(0),
-      symbol_table_(vector_compare),
+      string_table_(vector_compare),
       symbol_id_(0) {
 }
 
@@ -123,7 +124,7 @@ void CompleteParserRecorder::LogSymbol(int start,
                                        bool is_ascii,
                                        Vector<const byte> literal_bytes) {
   Key key = { is_ascii, literal_bytes };
-  HashMap::Entry* entry = symbol_table_.Lookup(&key, hash, true);
+  HashMap::Entry* entry = string_table_.Lookup(&key, hash, true);
   int id = static_cast<int>(reinterpret_cast<intptr_t>(entry->value));
   if (id == 0) {
     // Copy literal contents for later comparison.
@@ -151,7 +152,7 @@ Vector<unsigned> CompleteParserRecorder::ExtractData() {
   Vector<unsigned> data = Vector<unsigned>::New(total_size);
   preamble_[PreparseDataConstants::kFunctionsSizeOffset] = function_size;
   preamble_[PreparseDataConstants::kSymbolCountOffset] = symbol_id_;
-  memcpy(data.start(), preamble_, sizeof(preamble_));
+  OS::MemCopy(data.start(), preamble_, sizeof(preamble_));
   int symbol_start = PreparseDataConstants::kHeaderSize + function_size;
   if (function_size > 0) {
     function_store_.WriteTo(data.SubVector(PreparseDataConstants::kHeaderSize,

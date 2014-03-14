@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-collections --expose-gc
+// Flags: --harmony-collections --expose-gc --allow-natives-syntax
 
 
 // Test valid getter and setter calls on Sets.
@@ -35,6 +35,7 @@ function TestValidSetCalls(m) {
   assertDoesNotThrow(function () { m.delete(new Object) });
 }
 TestValidSetCalls(new Set);
+TestValidSetCalls(new WeakSet);
 
 
 // Test valid getter and setter calls on Maps and WeakMaps
@@ -85,6 +86,7 @@ function TestSetBehavior(set) {
   }
 }
 TestSetBehavior(new Set);
+TestSet(new WeakSet, new Object);
 
 
 // Test expected mapping behavior for Maps and WeakMaps
@@ -185,6 +187,7 @@ function TestEnumerable(func) {
 TestEnumerable(Set);
 TestEnumerable(Map);
 TestEnumerable(WeakMap);
+TestEnumerable(WeakSet);
 
 
 // Test arbitrary properties on Maps and WeakMaps
@@ -204,9 +207,10 @@ TestArbitrary(new WeakMap);
 
 
 // Test direct constructor call
-assertTrue(Set() instanceof Set);
-assertTrue(Map() instanceof Map);
-assertTrue(WeakMap() instanceof WeakMap);
+assertThrows(function() { Set(); }, TypeError);
+assertThrows(function() { Map(); }, TypeError);
+assertThrows(function() { WeakMap(); }, TypeError);
+assertThrows(function() { WeakSet(); }, TypeError);
 
 
 // Test whether NaN values as keys are treated correctly.
@@ -234,6 +238,7 @@ assertTrue(s instanceof Set);
 assertTrue(Set.prototype.add instanceof Function)
 assertTrue(Set.prototype.has instanceof Function)
 assertTrue(Set.prototype.delete instanceof Function)
+assertTrue(Set.prototype.clear instanceof Function)
 
 
 // Test some common JavaScript idioms for Maps
@@ -243,6 +248,7 @@ assertTrue(Map.prototype.set instanceof Function)
 assertTrue(Map.prototype.get instanceof Function)
 assertTrue(Map.prototype.has instanceof Function)
 assertTrue(Map.prototype.delete instanceof Function)
+assertTrue(Map.prototype.clear instanceof Function)
 
 
 // Test some common JavaScript idioms for WeakMaps
@@ -252,6 +258,77 @@ assertTrue(WeakMap.prototype.set instanceof Function)
 assertTrue(WeakMap.prototype.get instanceof Function)
 assertTrue(WeakMap.prototype.has instanceof Function)
 assertTrue(WeakMap.prototype.delete instanceof Function)
+assertTrue(WeakMap.prototype.clear instanceof Function)
+
+
+// Test some common JavaScript idioms for WeakSets
+var s = new WeakSet;
+assertTrue(s instanceof WeakSet);
+assertTrue(WeakSet.prototype.add instanceof Function)
+assertTrue(WeakSet.prototype.has instanceof Function)
+assertTrue(WeakSet.prototype.delete instanceof Function)
+assertTrue(WeakSet.prototype.clear instanceof Function)
+
+
+// Test class of instance and prototype.
+assertEquals("Set", %_ClassOf(new Set))
+assertEquals("Object", %_ClassOf(Set.prototype))
+assertEquals("Map", %_ClassOf(new Map))
+assertEquals("Object", %_ClassOf(Map.prototype))
+assertEquals("WeakMap", %_ClassOf(new WeakMap))
+assertEquals("Object", %_ClassOf(WeakMap.prototype))
+assertEquals("WeakSet", %_ClassOf(new WeakSet))
+assertEquals("Object", %_ClassOf(WeakMap.prototype))
+
+
+// Test name of constructor.
+assertEquals("Set", Set.name);
+assertEquals("Map", Map.name);
+assertEquals("WeakMap", WeakMap.name);
+assertEquals("WeakSet", WeakSet.name);
+
+
+// Test prototype property of Set, Map, WeakMap and WeakSet.
+function TestPrototype(C) {
+  assertTrue(C.prototype instanceof Object);
+  assertEquals({
+    value: {},
+    writable: true,  // TODO(2793): This should be non-writable.
+    enumerable: false,
+    configurable: false
+  }, Object.getOwnPropertyDescriptor(C, "prototype"));
+}
+TestPrototype(Set);
+TestPrototype(Map);
+TestPrototype(WeakMap);
+TestPrototype(WeakSet);
+
+
+// Test constructor property of the Set, Map, WeakMap and WeakSet prototype.
+function TestConstructor(C) {
+  assertFalse(C === Object.prototype.constructor);
+  assertSame(C, C.prototype.constructor);
+  assertSame(C, (new C).__proto__.constructor);
+}
+TestConstructor(Set);
+TestConstructor(Map);
+TestConstructor(WeakMap);
+TestConstructor(WeakSet);
+
+
+// Test the Set, Map, WeakMap and WeakSet global properties themselves.
+function TestDescriptor(global, C) {
+  assertEquals({
+    value: C,
+    writable: true,
+    enumerable: false,
+    configurable: true
+  }, Object.getOwnPropertyDescriptor(global, C.name));
+}
+TestDescriptor(this, Set);
+TestDescriptor(this, Map);
+TestDescriptor(this, WeakMap);
+TestDescriptor(this, WeakSet);
 
 
 // Regression test for WeakMap prototype.
@@ -283,15 +360,19 @@ var alwaysBogus = [ undefined, null, true, "x", 23, {} ];
 var bogusReceiversTestSet = [
   { proto: Set.prototype,
     funcs: [ 'add', 'has', 'delete' ],
-    receivers: alwaysBogus.concat([ new Map, new WeakMap ]),
+    receivers: alwaysBogus.concat([ new Map, new WeakMap, new WeakSet ]),
   },
   { proto: Map.prototype,
     funcs: [ 'get', 'set', 'has', 'delete' ],
-    receivers: alwaysBogus.concat([ new Set, new WeakMap ]),
+    receivers: alwaysBogus.concat([ new Set, new WeakMap, new WeakSet ]),
   },
   { proto: WeakMap.prototype,
     funcs: [ 'get', 'set', 'has', 'delete' ],
-    receivers: alwaysBogus.concat([ new Set, new Map ]),
+    receivers: alwaysBogus.concat([ new Set, new Map, new WeakSet ]),
+  },
+  { proto: WeakSet.prototype,
+    funcs: [ 'add', 'has', 'delete' ],
+    receivers: alwaysBogus.concat([ new Set, new Map, new WeakMap ]),
   },
 ];
 function TestBogusReceivers(testSet) {
@@ -314,3 +395,114 @@ TestBogusReceivers(bogusReceiversTestSet);
 // There is a proposed stress-test available at the es-discuss mailing list
 // which cannot be reasonably automated.  Check it out by hand if you like:
 // https://mail.mozilla.org/pipermail/es-discuss/2011-May/014096.html
+
+
+// Set and Map size getters
+var setSizeDescriptor = Object.getOwnPropertyDescriptor(Set.prototype, 'size');
+assertEquals(undefined, setSizeDescriptor.value);
+assertEquals(undefined, setSizeDescriptor.set);
+assertTrue(setSizeDescriptor.get instanceof Function);
+assertEquals(undefined, setSizeDescriptor.get.prototype);
+assertFalse(setSizeDescriptor.enumerable);
+assertTrue(setSizeDescriptor.configurable);
+
+var s = new Set();
+assertFalse(s.hasOwnProperty('size'));
+for (var i = 0; i < 10; i++) {
+  assertEquals(i, s.size);
+  s.add(i);
+}
+for (var i = 9; i >= 0; i--) {
+  s.delete(i);
+  assertEquals(i, s.size);
+}
+
+
+var mapSizeDescriptor = Object.getOwnPropertyDescriptor(Map.prototype, 'size');
+assertEquals(undefined, mapSizeDescriptor.value);
+assertEquals(undefined, mapSizeDescriptor.set);
+assertTrue(mapSizeDescriptor.get instanceof Function);
+assertEquals(undefined, mapSizeDescriptor.get.prototype);
+assertFalse(mapSizeDescriptor.enumerable);
+assertTrue(mapSizeDescriptor.configurable);
+
+var m = new Map();
+assertFalse(m.hasOwnProperty('size'));
+for (var i = 0; i < 10; i++) {
+  assertEquals(i, m.size);
+  m.set(i, i);
+}
+for (var i = 9; i >= 0; i--) {
+  m.delete(i);
+  assertEquals(i, m.size);
+}
+
+
+// Test Set clear
+(function() {
+  var s = new Set();
+  s.add(42);
+  assertTrue(s.has(42));
+  assertEquals(1, s.size);
+  s.clear();
+  assertFalse(s.has(42));
+  assertEquals(0, s.size);
+})();
+
+
+// Test Map clear
+(function() {
+  var m = new Map();
+  m.set(42, true);
+  assertTrue(m.has(42));
+  assertEquals(1, m.size);
+  m.clear();
+  assertFalse(m.has(42));
+  assertEquals(0, m.size);
+})();
+
+
+// Test WeakMap clear
+(function() {
+  var k = new Object();
+  var w = new WeakMap();
+  w.set(k, 23);
+  assertTrue(w.has(k));
+  assertEquals(23, w.get(k));
+  w.clear();
+  assertFalse(w.has(k));
+  assertEquals(undefined, w.get(k));
+})();
+
+
+// Test WeakSet clear
+(function() {
+  var k = new Object();
+  var w = new WeakSet();
+  w.add(k);
+  assertTrue(w.has(k));
+  w.clear();
+  assertFalse(w.has(k));
+})();
+
+
+(function TestMinusZeroSet() {
+  var m = new Set();
+  m.add(0);
+  m.add(-0);
+  assertEquals(1, m.size);
+  assertTrue(m.has(0));
+  assertTrue(m.has(-0));
+})();
+
+
+(function TestMinusZeroMap() {
+  var m = new Map();
+  m.set(0, 'plus');
+  m.set(-0, 'minus');
+  assertEquals(1, m.size);
+  assertTrue(m.has(0));
+  assertTrue(m.has(-0));
+  assertEquals('minus', m.get(0));
+  assertEquals('minus', m.get(-0));
+})();

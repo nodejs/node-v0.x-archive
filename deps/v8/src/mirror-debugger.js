@@ -117,7 +117,7 @@ function LookupMirror(handle) {
  * @returns {Mirror} the mirror reflects the undefined value
  */
 function GetUndefinedMirror() {
-  return MakeMirror(void 0);
+  return MakeMirror(UNDEFINED);
 }
 
 
@@ -173,7 +173,7 @@ PropertyKind.Indexed = 2;
 var PropertyType = {};
 PropertyType.Normal                  = 0;
 PropertyType.Field                   = 1;
-PropertyType.ConstantFunction        = 2;
+PropertyType.Constant                = 2;
 PropertyType.Callbacks               = 3;
 PropertyType.Handler                 = 4;
 PropertyType.Interceptor             = 5;
@@ -482,7 +482,7 @@ ValueMirror.prototype.value = function() {
  * @extends ValueMirror
  */
 function UndefinedMirror() {
-  %_CallFunction(this, UNDEFINED_TYPE, void 0, ValueMirror);
+  %_CallFunction(this, UNDEFINED_TYPE, UNDEFINED, ValueMirror);
 }
 inherits(UndefinedMirror, ValueMirror);
 
@@ -637,8 +637,9 @@ ObjectMirror.prototype.propertyNames = function(kind, limit) {
 
   // Find all the named properties.
   if (kind & PropertyKind.Named) {
-    // Get the local property names.
-    propertyNames = %GetLocalPropertyNames(this.value_);
+    // Get all the local property names.
+    propertyNames =
+        %GetLocalPropertyNames(this.value_, PROPERTY_ATTRIBUTES_NONE);
     total += propertyNames.length;
 
     // Get names for named interceptor properties if any.
@@ -957,7 +958,7 @@ FunctionMirror.prototype.scopeCount = function() {
 
 FunctionMirror.prototype.scope = function(index) {
   if (this.resolved()) {
-    return new ScopeMirror(void 0, this, index);
+    return new ScopeMirror(UNDEFINED, this, index);
   }
 };
 
@@ -1509,6 +1510,11 @@ FrameDetails.prototype.scopeCount = function() {
 };
 
 
+FrameDetails.prototype.stepInPositionsImpl = function() {
+  return %GetStepInPositions(this.break_id_, this.frameId());
+};
+
+
 /**
  * Mirror object for stack frames.
  * @param {number} break_id The break id in the VM for which this frame is
@@ -1665,19 +1671,41 @@ FrameMirror.prototype.scopeCount = function() {
 
 
 FrameMirror.prototype.scope = function(index) {
-  return new ScopeMirror(this, void 0, index);
+  return new ScopeMirror(this, UNDEFINED, index);
+};
+
+
+FrameMirror.prototype.stepInPositions = function() {
+  var script = this.func().script();
+  var funcOffset = this.func().sourcePosition_();
+
+  var stepInRaw = this.details_.stepInPositionsImpl();
+  var result = [];
+  if (stepInRaw) {
+    for (var i = 0; i < stepInRaw.length; i++) {
+      var posStruct = {};
+      var offset = script.locationFromPosition(funcOffset + stepInRaw[i],
+                                               true);
+      serializeLocationFields(offset, posStruct);
+      var item = {
+        position: posStruct
+      };
+      result.push(item);
+    }
+  }
+
+  return result;
 };
 
 
 FrameMirror.prototype.evaluate = function(source, disable_break,
                                           opt_context_object) {
-  var result = %DebugEvaluate(this.break_id_,
-                              this.details_.frameId(),
-                              this.details_.inlinedFrameIndex(),
-                              source,
-                              Boolean(disable_break),
-                              opt_context_object);
-  return MakeMirror(result);
+  return MakeMirror(%DebugEvaluate(this.break_id_,
+                                   this.details_.frameId(),
+                                   this.details_.inlinedFrameIndex(),
+                                   source,
+                                   Boolean(disable_break),
+                                   opt_context_object));
 };
 
 

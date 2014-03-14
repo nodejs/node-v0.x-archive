@@ -35,13 +35,22 @@ namespace internal {
 
 class GCExtension : public v8::Extension {
  public:
-  GCExtension() : v8::Extension("v8/gc", kSource) {}
-  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunction(
+  explicit GCExtension(const char* fun_name)
+      : v8::Extension("v8/gc",
+                      BuildSource(buffer_, sizeof(buffer_), fun_name)) {}
+  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunctionTemplate(
+      v8::Isolate* isolate,
       v8::Handle<v8::String> name);
-  static v8::Handle<v8::Value> GC(const v8::Arguments& args);
-  static void Register();
+  static void GC(const v8::FunctionCallbackInfo<v8::Value>& args);
+
  private:
-  static const char* const kSource;
+  static const char* BuildSource(char* buf, size_t size, const char* fun_name) {
+    OS::SNPrintF(Vector<char>(buf, static_cast<int>(size)),
+                 "native function %s();", fun_name);
+    return buf;
+  }
+
+  char buffer_[50];
 };
 
 } }  // namespace v8::internal

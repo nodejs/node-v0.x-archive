@@ -28,6 +28,7 @@
 #ifndef V8_SPACES_INL_H_
 #define V8_SPACES_INL_H_
 
+#include "heap-profiler.h"
 #include "isolate.h"
 #include "spaces.h"
 #include "v8memory.h"
@@ -164,7 +165,7 @@ Page* Page::Initialize(Heap* heap,
                        Executability executable,
                        PagedSpace* owner) {
   Page* page = reinterpret_cast<Page*>(chunk);
-  ASSERT(chunk->size() <= static_cast<size_t>(kPageSize));
+  ASSERT(page->area_size() <= kMaxRegularHeapObjectSize);
   ASSERT(chunk->owner() == owner);
   owner->IncreaseCapacity(page->area_size());
   owner->Free(page->area_start(), page->area_size());
@@ -194,11 +195,11 @@ void MemoryChunk::set_scan_on_scavenge(bool scan) {
 }
 
 
-MemoryChunk* MemoryChunk::FromAnyPointerAddress(Address addr) {
+MemoryChunk* MemoryChunk::FromAnyPointerAddress(Heap* heap, Address addr) {
   MemoryChunk* maybe = reinterpret_cast<MemoryChunk*>(
       OffsetFrom(addr) & ~Page::kPageAlignmentMask);
   if (maybe->owner() != NULL) return maybe;
-  LargeObjectIterator iterator(HEAP->lo_space());
+  LargeObjectIterator iterator(heap->lo_space());
   for (HeapObject* o = iterator.Next(); o != NULL; o = iterator.Next()) {
     // Fixed arrays are the only pointer-containing objects in large object
     // space.
@@ -211,6 +212,19 @@ MemoryChunk* MemoryChunk::FromAnyPointerAddress(Address addr) {
   }
   UNREACHABLE();
   return NULL;
+}
+
+
+void MemoryChunk::UpdateHighWaterMark(Address mark) {
+  if (mark == NULL) return;
+  // Need to subtract one from the mark because when a chunk is full the
+  // top points to the next address after the chunk, which effectively belongs
+  // to another chunk. See the comment to Page::FromAllocationTop.
+  MemoryChunk* chunk = MemoryChunk::FromAddress(mark - 1);
+  int new_mark = static_cast<int>(mark - chunk->address());
+  if (new_mark > chunk->high_water_mark_) {
+    chunk->high_water_mark_ = new_mark;
+  }
 }
 
 
@@ -250,11 +264,11 @@ void Page::set_prev_page(Page* page) {
 // allocation) so it can be used by all the allocation functions and for all
 // the paged spaces.
 HeapObject* PagedSpace::AllocateLinearly(int size_in_bytes) {
-  Address current_top = allocation_info_.top;
+  Address current_top = allocation_info_.top();
   Address new_top = current_top + size_in_bytes;
-  if (new_top > allocation_info_.limit) return NULL;
+  if (new_top > allocation_info_.limit()) return NULL;
 
-  allocation_info_.top = new_top;
+  allocation_info_.set_top(new_top);
   return HeapObject::FromAddress(current_top);
 }
 
@@ -298,29 +312,29 @@ MaybeObject* PagedSpace::AllocateRaw(int size_in_bytes) {
 
 
 MaybeObject* NewSpace::AllocateRaw(int size_in_bytes) {
-  Address old_top = allocation_info_.top;
+  Address old_top = allocation_info_.top();
 #ifdef DEBUG
   // If we are stressing compaction we waste some memory in new space
   // in order to get more frequent GCs.
-  if (FLAG_stress_compaction && !HEAP->linear_allocation()) {
-    if (allocation_info_.limit - old_top >= size_in_bytes * 4) {
+  if (FLAG_stress_compaction && !heap()->linear_allocation()) {
+    if (allocation_info_.limit() - old_top >= size_in_bytes * 4) {
       int filler_size = size_in_bytes * 4;
       for (int i = 0; i < filler_size; i += kPointerSize) {
         *(reinterpret_cast<Object**>(old_top + i)) =
-            HEAP->one_pointer_filler_map();
+            heap()->one_pointer_filler_map();
       }
       old_top += filler_size;
-      allocation_info_.top += filler_size;
+      allocation_info_.set_top(allocation_info_.top() + filler_size);
     }
   }
 #endif
 
-  if (allocation_info_.limit - old_top < size_in_bytes) {
+  if (allocation_info_.limit() - old_top < size_in_bytes) {
     return SlowAllocateRaw(size_in_bytes);
   }
 
-  Object* obj = HeapObject::FromAddress(old_top);
-  allocation_info_.top += size_in_bytes;
+  HeapObject* obj = HeapObject::FromAddress(old_top);
+  allocation_info_.set_top(allocation_info_.top() + size_in_bytes);
   ASSERT_SEMISPACE_ALLOCATION_INFO(allocation_info_, to_space_);
 
   return obj;
@@ -335,23 +349,6 @@ LargePage* LargePage::Initialize(Heap* heap, MemoryChunk* chunk) {
 
 intptr_t LargeObjectSpace::Available() {
   return ObjectSizeFor(heap()->isolate()->memory_allocator()->Available());
-}
-
-
-template <typename StringType>
-void NewSpace::ShrinkStringAtAllocationBoundary(String* string, int length) {
-  ASSERT(length <= string->length());
-  ASSERT(string->IsSeqString());
-  ASSERT(string->address() + StringType::SizeFor(string->length()) ==
-         allocation_info_.top);
-  Address old_top = allocation_info_.top;
-  allocation_info_.top =
-      string->address() + StringType::SizeFor(length);
-  string->set_length(length);
-  if (Marking::IsBlack(Marking::MarkBitFrom(string))) {
-    int delta = static_cast<int>(old_top - allocation_info_.top);
-    MemoryChunk::IncrementLiveBytesFromMutator(string->address(), -delta);
-  }
 }
 
 

@@ -1,40 +1,37 @@
 # libuv
 
-libuv is a new platform layer for Node. Its purpose is to abstract IOCP on
-Windows and epoll/kqueue/event ports/etc. on Unix systems. We intend to
-eventually contain all platform differences in this library.
+libuv is a multi-platform support library with a focus on asynchronous I/O. It
+was primarily developed for use by [Node.js](http://nodejs.org), but it's also
+used by Mozilla's [Rust language](http://www.rust-lang.org/),
+[Luvit](http://luvit.io/), [Julia](http://julialang.org/),
+[pyuv](https://crate.io/packages/pyuv/), and [others](https://github.com/joyent/libuv/wiki/Projects-that-use-libuv).
 
-http://nodejs.org/
+## Feature highlights
 
-## Features
+ * Full-featured event loop backed by epoll, kqueue, IOCP, event ports.
 
- * Non-blocking TCP sockets
+ * Asynchronous TCP and UDP sockets
 
- * Non-blocking named pipes
+ * Asynchronous DNS resolution
 
- * UDP
+ * Asynchronous file and file system operations
 
- * Timers
+ * File system events
 
- * Child process spawning
+ * ANSI escape code controlled TTY
 
- * Asynchronous DNS via `uv_getaddrinfo`.
+ * IPC with socket sharing, using Unix domain sockets or named pipes (Windows)
 
- * Asynchronous file system APIs `uv_fs_*`
+ * Child processes
 
- * High resolution time `uv_hrtime`
+ * Thread pool
 
- * Current executable path look up `uv_exepath`
+ * Signal handling
 
- * Thread pool scheduling `uv_queue_work`
+ * High resolution clock
 
- * ANSI escape code controlled TTY `uv_tty_t`
+ * Threading and synchronization primitives
 
- * File system events Currently supports inotify, `ReadDirectoryChangesW`
-   and kqueue. Event ports in the near future.
-   `uv_fs_event_t`
-
- * IPC and socket sharing between processes `uv_write2`
 
 ## Community
 
@@ -44,75 +41,103 @@ http://nodejs.org/
 
  * [include/uv.h](https://github.com/joyent/libuv/blob/master/include/uv.h)
    &mdash; API documentation in the form of detailed header comments.
- * [An Introduction to libuv](http://nikhilm.github.com/uvbook/) &mdash; An
-   overview of libuv with tutorials.
- * [LXJS 2012 talk](http://www.youtube.com/watch?v=nGn60vDSxQ4) - High-level
-   introductory talk about libuv.
- * [Tests and benchmarks](https://github.com/joyent/libuv/tree/master/test) -
-   API specification and usage examples.
+ * [An Introduction to libuv](http://nikhilm.github.com/uvbook/)
+   &mdash; An overview of libuv with tutorials.
+ * [LXJS 2012 talk](http://www.youtube.com/watch?v=nGn60vDSxQ4)
+   &mdash; High-level introductory talk about libuv.
+ * [Tests and benchmarks](https://github.com/joyent/libuv/tree/master/test)
+   &mdash; API specification and usage examples.
+ * [libuv-dox](https://github.com/thlorenz/libuv-dox)
+   &mdash; Documenting types and methods of libuv, mostly by reading uv.h.
 
 ## Build Instructions
 
-For GCC (including MinGW) there are two methods building: via normal
-makefiles or via GYP. GYP is a meta-build system which can generate MSVS,
-Makefile, and XCode backends. It is best used for integration into other
-projects.  The old system is using plain GNU Makefiles.
+For GCC there are two methods building: via autotools or via [GYP][].
+GYP is a meta-build system which can generate MSVS, Makefile, and XCode
+backends. It is best used for integration into other projects.
 
-To build via Makefile simply execute:
+To build with autotools:
 
-    make
+    $ sh autogen.sh
+    $ ./configure
+    $ make
+    $ make check
+    $ make install
 
-MinGW users should run this instead:
+### Windows
 
-    make PLATFORM=mingw
+First, Python 2.6 or 2.7 must be installed as it is required by [GYP][].
 
-Out-of-tree builds are supported:
+Also, the directory for the preferred Python executable must be specified
+by the `PYTHON` or `Path` environment variables.
 
-    make builddir_name=/path/to/builddir
+To build with Visual Studio, launch a git shell (e.g. Cmd or PowerShell)
+and run vcbuild.bat which will checkout the GYP code into build/gyp and
+generate uv.sln as well as related project files.
 
-To build with Visual Studio run the vcbuild.bat file which will
-checkout the GYP code into build/gyp and generate the uv.sln and
-related files.
-
-Windows users can also build from cmd-line using msbuild.  This is
-done by running vcbuild.bat from Visual Studio command prompt.
-
-To have GYP generate build script for another system, make sure that
-you have Python 2.6 or 2.7 installed, then checkout GYP into the
+To have GYP generate build script for another system, checkout GYP into the
 project tree manually:
 
-    mkdir -p build
-    svn co http://gyp.googlecode.com/svn/trunk build/gyp
+    $ mkdir -p build
+    $ git clone https://git.chromium.org/external/gyp.git build/gyp
 
-Or:
+### Unix
 
-    mkdir -p build
-    git clone https://git.chromium.org/external/gyp.git build/gyp
+Run:
 
-Unix users run
+    $ ./gyp_uv.py -f make
+    $ make -C out
 
-    ./gyp_uv.py -f make
-    make -C out
+### OS X
 
-Macintosh users run
+Run:
 
-    ./gyp_uv.py -f xcode
-    xcodebuild -project uv.xcodeproj -configuration Release -target All
+    $ ./gyp_uv.py -f xcode
+    $ xcodebuild -ARCHS="x86_64" -project uv.xcodeproj \
+         -configuration Release -target All
+
+Note to OS X users:
+
+Make sure that you specify the architecture you wish to build for in the
+"ARCHS" flag. You can specify more than one by delimiting with a space
+(e.g. "x86_64 i386").
+
+### Android
+
+Run:
+
+    $ source ./android-configure NDK_PATH gyp
+    $ make -C out
 
 Note for UNIX users: compile your project with `-D_LARGEFILE_SOURCE` and
 `-D_FILE_OFFSET_BITS=64`. GYP builds take care of that automatically.
 
-Note for Linux users: compile your project with `-D_GNU_SOURCE` when you
-include `uv.h`. GYP builds take care of that automatically. If you use
-autotools, add a `AC_GNU_SOURCE` declaration to your `configure.ac`.
+### Running tests
+
+Run:
+
+    $ ./gyp_uv.py -f make
+    $ make -C out
+    $ ./out/Debug/run-tests
 
 ## Supported Platforms
 
 Microsoft Windows operating systems since Windows XP SP2. It can be built
-with either Visual Studio or MinGW.
+with either Visual Studio or MinGW. Consider using
+[Visual Studio Express 2010][] or later if you do not have a full Visual
+Studio license.
 
-Linux 2.6 using the GCC toolchain.
+Linux using the GCC toolchain.
 
-MacOS using the GCC or XCode toolchain.
+OS X using the GCC or XCode toolchain.
 
 Solaris 121 and later using GCC toolchain.
+
+## Patches
+
+See the [guidelines for contributing][].
+
+[node.js]: http://nodejs.org/
+[GYP]: http://code.google.com/p/gyp/
+[Visual Studio Express 2010]: http://www.microsoft.com/visualstudio/eng/products/visual-studio-2010-express
+[guidelines for contributing]: https://github.com/joyent/libuv/blob/master/CONTRIBUTING.md

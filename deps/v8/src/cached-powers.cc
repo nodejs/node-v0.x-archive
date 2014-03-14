@@ -26,8 +26,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdarg.h>
-#include <math.h>
 #include <limits.h>
+#include <cmath>
 
 #include "../include/v8stdint.h"
 #include "globals.h"
@@ -133,7 +133,10 @@ static const CachedPower kCachedPowers[] = {
   {V8_2PART_UINT64_C(0xaf87023b, 9bf0ee6b), 1066, 340},
 };
 
+#ifdef DEBUG
 static const int kCachedPowersLength = ARRAY_SIZE(kCachedPowers);
+#endif
+
 static const int kCachedPowersOffset = 348;  // -1 * the first decimal_exponent.
 static const double kD_1_LOG2_10 = 0.30102999566398114;  //  1 / lg(10)
 // Difference between the decimal exponents in the table above.
@@ -149,7 +152,7 @@ void PowersOfTenCache::GetCachedPowerForBinaryExponentRange(
   int kQ = DiyFp::kSignificandSize;
   // Some platforms return incorrect sign on 0 result. We can ignore that here,
   // which means we can avoid depending on platform.h.
-  double k = ceil((min_exponent + kQ - 1) * kD_1_LOG2_10);
+  double k = std::ceil((min_exponent + kQ - 1) * kD_1_LOG2_10);
   int foo = kCachedPowersOffset;
   int index =
       (foo + static_cast<int>(k) - 1) / kDecimalExponentDistance + 1;

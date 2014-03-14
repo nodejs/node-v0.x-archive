@@ -1,4 +1,596 @@
-2014.01.23, Version 0.10.25 (Stable)
+2014.03.11, Version 0.11.12 (Unstable)
+
+* uv: Upgrade to v0.11.22 (Timothy J Fontaine)
+
+* buffer: allow toString to accept Infinity for end (Brian White)
+
+* child_process: add spawnSync/execSync (Bert Belder, Timothy J Fontaine)
+
+* cluster: handle bind errors on Windows (Alexis Campailla)
+
+* contextify: handle infinite recursion errors (Fedor Indutny)
+
+* crypto: allow custom generator for DiffieHellman (Brian White)
+
+* crypto: allow setting add'l authenticated data (Brian White)
+
+* crypto: fix CipherFinal return value check (Brian White)
+
+* crypto: make NewSessionDoneCb public (Fedor Indutny)
+
+* dgram: pass the bytes sent to the send callback (Timothy J Fontaine)
+
+* dns: validate arguments in resolver (Kenan Sulayman)
+
+* dns: verify argument is valid function in resolve (Kenan Sulayman)
+
+* http: avoid duplicate keys in writeHead (David Björklund)
+
+* net: add localPort to connect options (Timothy J Fontaine)
+
+* node: do not print SyntaxError hints to stderr (Fedor Indutny)
+
+* node: invoke `beforeExit` again if loop was active (Fedor Indutny)
+
+* node: make AsyncListenerInst field more explicit (Trevor Norris)
+
+* os: networkInterfaces include scopeid for ipv6 (Xidorn Quan)
+
+* process: allow changing `exitCode` in `on('exit')` (Fedor Indutny)
+
+* readline: fix `line` event, if input emit 'end' (Yazhong Liu)
+
+* src: add tracing.v8.on('gc') statistics hooks (Ben Noordhuis)
+
+* src: add v8.getHeapStatistics() function (Ben Noordhuis)
+
+* src: emit 'beforeExit' event on process object (Ben Noordhuis)
+
+* src: move AsyncListener from process to tracing (Trevor Norris)
+
+* tls: fix crash in SNICallback (Fedor Indutny)
+
+* tls: introduce asynchronous `newSession` (Fedor Indutny)
+
+* util: show meaningful values for boxed primitives (Nathan Rajlich)
+
+* vm: don't copy Proxy object from parent context (Ben Noordhuis)
+
+* windows: make stdout/sterr pipes blocking (Alexis Campailla)
+
+* zlib: add sync versions for convenience methods (Nikolai Vavilov)
+
+
+2014.01.29, Version 0.11.11 (Unstable), b46e77421581ea358e221a8a843d057c747f7e90
+
+* v8: Upgrade to 3.22.24.19
+
+* http_parser: Upgrade to 2.2.1
+
+* openssl: Upgrade to 1.0.1f
+
+* uv: Upgrade to 0.11.18
+
+* async-listener: revamp of subsystem (Trevor Norris)
+
+* node: do not ever close stdio (Fedor Indutny)
+
+* http: use writev on chunked encoding (Trevor Norris)
+
+* async_wrap/timers: remove Add/RemoveAsyncListener (Trevor Norris)
+
+* child_process: better error reporting for exec (Fedor Indutny)
+
+* crypto: add newline to cert and key if not present (Fedor Indutny)
+
+* crypto: clear error in GetPeerCertificate (Fedor Indutny)
+
+* crypto: honor default ciphers in client mode (Jacob Hoffman-Andrews)
+
+* crypto: introduce .setEngine(engine, [flags]) (Fedor Indutny)
+
+* crypto: support custom pbkdf2 digest methods (Ben Noordhuis)
+
+* domain: fix off-by-one in Domain.exit() (Ryan Graham)
+
+* http: concatenate duplicate headers by default (Alex Kocharin)
+
+* http: do not emit EOF non-readable socket (Fedor Indutny)
+
+* node: fix argument parsing with -p arg (Alexis Campailla)
+
+* path: improve POSIX path.join() performance (Jo Liss)
+
+* tls: emit `clientError` on early socket close (Fedor Indutny)
+
+* tls: introduce `.setMaxSendFragment(size)` (Fedor Indutny)
+
+* tls: make cert/pfx optional in tls.createServer() (Ben Noordhuis)
+
+* tls: process accumulated input (Fedor Indutny)
+
+* tls: show human-readable error messages (Ben Noordhuis)
+
+* util: handle escaped forward slashes correctly (Tom Gallacher)
+
+
+2013.12.31, Version 0.11.10 (Unstable), 66931791f06207d1cdfea5ec1529edf3c94026d3
+
+* http_parser: update to 2.2
+
+* uv: Upgrade to v0.11.17
+
+* v8: Upgrade to 3.22.24.10
+
+* buffer: optimize writeInt* methods (Paul Loyd)
+
+* child_process: better error handling (Alexis Campailla)
+
+* cluster: do not synchronously emit 'setup' event (Sam Roberts)
+
+* cluster: restore backwards compatibility and various fixes (Sam Roberts)
+
+* crypto: remove unnecessary OpenSSL_add_all_digests (Yorkie)
+
+* crypto: support GCM authenticated encryption mode. (Ingmar Runge)
+
+* dns: add resolveSoa and 'SOA' rrtype (Tuğrul Topuz)
+
+* events: move EE c'tor guts to EventEmitter.init (Bert Belder)
+
+* http: DELETE shouldn't default to chunked encoding (Lalit Kapoor)
+
+* http: parse the status message in a http response. (Cam Swords)
+
+* node: fix removing AsyncListener in callback (Vladimir Kurchatkin)
+
+* node: follow specification, zero-fill ArrayBuffers (Trevor Norris)
+
+* openssl: use ASM optimized routines (Fedor Indutny)
+
+* process: allow nextTick infinite recursion (Trevor Norris)
+
+* querystring: remove `name` from `stringify()` (Yorkie)
+
+* timers: setImmediate v8 optimization fix (pflannery)
+
+* tls: add serialNumber to getPeerCertificate() (Ben Noordhuis)
+
+* tls: reintroduce socket.encrypted (Fedor Indutny)
+
+* tls: fix handling of asterisk in SNI context (Fedor Indutny)
+
+* util: Format negative zero as '-0' (David Chan)
+
+* vm: fix race condition in timeout (Alexis Campailla)
+
+* windows: fix dns lookup of localhost with ipv6 (Alexis Campailla)
+
+
+2013.11.20, Version 0.11.9 (Unstable), dcfd032bdd69dfb38c120e18438d6316ae522edc
+
+* uv: upgrade to v0.11.15 (Timothy J Fontaine)
+
+* v8: upgrade to 3.22.24.5 (Timothy J Fontaine)
+
+* buffer: remove warning when no encoding is passed (Trevor Norris)
+
+* build: make v8 use random seed for hash tables (Ben Noordhuis)
+
+* crypto: build with shared openssl without NPN (Ben Noordhuis)
+
+* crypto: update root certificates (Ben Noordhuis)
+
+* debugger: pass on v8 debug switches (Ben Noordhuis)
+
+* domain: use AsyncListener API (Trevor Norris)
+
+* fs: add recursive subdirectory support to fs.watch (Nick Simmons)
+
+* fs: make fs.watch() non-recursive by default (Ben Noordhuis)
+
+* http: cleanup freeSockets when socket destroyed (fengmk2)
+
+* http: force socket encoding to be null (isaacs)
+
+* http: make DELETE requests set `req.method` (Nathan Rajlich)
+
+* node: add AsyncListener support (Trevor Norris)
+
+* src: remove global HandleScope that hid memory leaks (Ben Noordhuis)
+
+* tls: add ECDH ciphers support (Erik Dubbelboer)
+
+* tls: do not default to 'localhost' servername (Fedor Indutny)
+
+* tls: more accurate wrapping of connecting socket (Fedor Indutny)
+
+
+2013.10.30, Version 0.11.8 (Unstable), f8d86e24f3463c36f7f3f4c3b3ec779e5b6201e1
+
+* uv: Upgrade to v0.11.14
+
+* v8: upgrade 3.21.18.3
+
+* assert: indicate if exception message is generated (Glen Mailer)
+
+* buffer: add buf.toArrayBuffer() API (Trevor Norris)
+
+* cluster: fix premature 'disconnect' event (Ben Noordhuis)
+
+* crypto: add SPKAC support (Jason Gerfen)
+
+* debugger: count space for line numbers correctly (Alex Kocharin)
+
+* debugger: make busy loops SIGUSR1-interruptible (Ben Noordhuis)
+
+* debugger: repeat last command (Alex Kocharin)
+
+* debugger: show current line, fix for #6150 (Alex Kocharin)
+
+* dgram: send() can accept strings (Trevor Norris)
+
+* dns: rename domain to hostname (Ben Noordhuis)
+
+* dns: set hostname property on error object (Ben Noordhuis)
+
+* dtrace, mdb_v8: support more string, frame types (Dave Pacheco)
+
+* http: add statusMessage (Patrik Stutz)
+
+* http: expose supported methods (Ben Noordhuis)
+
+* http: provide backpressure for pipeline flood (isaacs)
+
+* process: Add exitCode property (isaacs)
+
+* tls: socket.renegotiate(options, callback) (Fedor Indutny)
+
+* util: format as Error if instanceof Error (Rod Vagg)
+
+
+2013.08.21, Version 0.11.7 (Unstable), be52549bfa5311208b5fcdb3ba09210460fa9ceb
+
+* uv: upgrade to v0.11.13
+
+* v8: upgrade to 3.20.17
+
+* buffer: adhere to INSPECT_MAX_BYTES (Timothy J Fontaine)
+
+* buffer: fix regression for large buffer creation (Trevor Norris)
+
+* buffer: don't throw if slice length too long (Trevor Norris)
+
+* buffer: Buffer(buf) constructor copies into the proper buffer (Ben Noordhuis)
+
+* cli: remove --max-stack-size (Ben Noordhuis)
+
+* cli: unknown command line options are errors (Ben Noordhuis)
+
+* child_process: exec accept buffer as an encoding (Seth Fitzsimmons)
+
+* crypto: make randomBytes/pbkdf2 callbacks domain aware (Ben Noordhuis)
+
+* domain: deprecate domain.dispose(). (Forrest L Norvell)
+
+* fs: Expose birthtime on stat objects (isaacs)
+
+* http: Only send connection:keep-alive if necessary (isaacs)
+
+* repl: Catch syntax errors better (isaacs, Nathan Rajlich)
+
+* stream: change default highWaterMark for objectMode to 16 (Mathias Buus)
+
+* stream: make setEncoding/pause/resume chainable (Julian Gruber, isaacs)
+
+* util: pass opts to custom inspect functions (Timothy J Fontaine)
+
+* vm: rewritten to behave like Contextify (Domenic Denicola)
+
+
+2013.08.21, Version 0.11.6 (Unstable), 04018d4b3938fd30ba14822e79195e4af2be36f6
+
+* uv: Upgrade to v0.11.8
+
+* v8: upgrade v8 to 3.20.14.1
+
+* build: disable SSLv2 by default (Ben Noordhuis)
+
+* build: don't auto-destroy existing configuration (Ben Noordhuis)
+
+* crypto: add TLS 1.1 and 1.2 to secureProtocol list (Matthias Bartelmeß)
+
+* crypto: fix memory leak in randomBytes() error path (Ben Noordhuis)
+
+* dgram: don't call into js when send cb is omitted (Ben Noordhuis)
+
+* dgram: fix regression in string argument handling (Ben Noordhuis)
+
+* domains: performance improvements (Trevor Norris)
+
+* events: EventEmitter = require('events') (Jake Verbaten)
+
+* http: Add write()/end() callbacks (isaacs)
+
+* http: Consistent 'finish' event semantics (isaacs)
+
+* http: Prefer 'binary' over 'ascii' (isaacs)
+
+* http: Support legacy agent.addRequest API (isaacs)
+
+* http: Write hex/base64 chunks properly (isaacs)
+
+* http: add agent.maxFreeSockets option (isaacs)
+
+* http: provide access to raw headers/trailers (isaacs)
+
+* http: removed headers stay removed (James Halliday)
+
+* http,timers: improve callback performance (Ben Noordhuis)
+
+* net: family option in net.connect (Vsevolod Strukchinsky)
+
+* readline: pause stdin before turning off terminal raw mode (Daniel Chatfield)
+
+* smalloc: allow different external array types (Trevor Norris)
+
+* smalloc: expose ExternalArraySize (Trevor Norris)
+
+* stream: Short-circuit buffer pushes when flowing (isaacs)
+
+* tls: handle errors on socket before releasing it (Fedor Indutny)
+
+* util: fix isPrimitive check (Trevor Norris)
+
+* util: isObject should always return boolean (Trevor Norris)
+
+
+2013.08.06, Version 0.11.5 (Unstable), 6f92da2dd106b0c63fde563284f83e08e2a521b5
+
+* v8: upgrade to 3.20.11
+
+* uv: upgrade to v0.11.7
+
+* buffer: return offset for end of last write (Trevor Norris)
+
+* build: embed the mdb_v8.so into the binary (Timothy J Fontaine)
+
+* build: fix --without-ssl build (Ben Noordhuis)
+
+* child_process: add 'shell' option to .exec() (Ben Noordhuis)
+
+* dgram: report send errors to cb, don't pass bytes (Ben Noordhuis)
+
+* fs: write strings directly to disk (Trevor Norris)
+
+* https: fix default port (Koichi Kobayashi)
+
+* openssl: use asm for sha, md5, rmd (Fedor Indutny)
+
+* os: add mac address to networkInterfaces() output (Brian White)
+
+* smalloc: introduce smalloc module (Trevor Norris)
+
+* stream: Simplify flowing, passive data listening (streams3) (isaacs)
+
+* tls: asynchronous SNICallback (Fedor Indutny)
+
+* tls: share tls tickets key between cluster workers (Fedor Indutny)
+
+* util: don't throw on circular %j input to format() (Ben Noordhuis)
+
+
+2013.07.12, Version 0.11.4 (Unstable), b5b84197ed037918fd1a26e5cb87cce7c812ca55
+
+* npm: Upgrade to 1.3.4
+
+* v8: Upgrade to v3.20.2
+
+* c-ares: Upgrade to piscisaureus/cares@805d153
+
+* timers: setImmediate process full queue each turn (Ben Noordhuis)
+
+* http: Add agent.get/request methods (isaacs)
+
+* http: Proper KeepAlive behavior (isaacs)
+
+* configure: fix the --without-ssl option (Nathan Rajlich)
+
+* buffer: propagate originating parent (Trevor Norris)
+
+* tls_wrap: return Error not throw for missing cert (Timothy J Fontaine)
+
+* src: enable native v8 typed arrays (Ben Noordhuis)
+
+* stream: objectMode transform should allow falsey values (Jeff Barczewski)
+
+* slab_allocator: remove SlabAllocator (Trevor Norris)
+
+* crypto: fix memory leak in LoadPKCS12 (Fedor Indutny)
+
+* tls: export TLSSocket (Fedor Indutny)
+
+* zlib: allow changing of level and strategy (Brian White)
+
+* zlib: allow custom flush type for flush() (Brian White)
+
+
+2013.06.26, Version 0.11.3 (Unstable), 38c0c47bbe280ddc42054418091571e532d82a1e
+
+* uv: Upgrade to v0.11.5
+
+* c-ares: upgrade to 1.10.0
+
+* v8: upgrade to v3.19.13
+
+* punycode: update to v1.2.3 (Mathias Bynens)
+
+* debugger: break on uncaught exception (Miroslav Bajtos)
+
+* child_process: emit 'disconnect' asynchronously (Ben Noordhuis)
+
+* dtrace: enable uv's probes if enabled (Timothy J Fontaine)
+
+* dtrace: unify dtrace and systemtap interfaces (Timothy J Fontaine)
+
+* buffer: New API for backing data store (Trevor Norris)
+
+* buffer: return `this` in fill() for chainability (Brian White)
+
+* build: fix include order for building on windows (Timothy J Fontaine)
+
+* build: add android support (Linus Mårtensson)
+
+* readline: strip ctrl chars for prompt width calc (Krzysztof Chrapka)
+
+* tls: introduce TLSSocket based on tls_wrap binding (Fedor Indutny)
+
+* tls: add localAddress and localPort properties (Ben Noordhuis)
+
+* crypto: free excessive memory in NodeBIO (Fedor Indutny)
+
+* process: remove maxTickDepth (Trevor Norris)
+
+* timers: use uv_now instead of Date.now (Timothy J Fontaine)
+
+* util: Add debuglog, deprecate console lookalikes (isaacs)
+
+* module: use path.sep instead of a custom solution (Robert Kowalski)
+
+* http: don't escape request path, reject bad chars (Ben Noordhuis)
+
+* net: emit dns 'lookup' event before connect (Ben Noordhuis)
+
+* dns: add getServers and setServers (Timothy J Fontaine)
+
+
+2013.05.13, Version 0.11.2 (Unstable), 5d3dc0e4c3369dfb00b7b13e08936c2e652fa696
+
+* uv: Upgrade to 0.11.2
+
+* V8: Upgrade to 3.19.0
+
+* npm: Upgrade to 1.2.21
+
+* build: Makefile should respect configure --prefix (Timothy J Fontaine)
+
+* cluster: use round-robin load balancing (Ben Noordhuis)
+
+* debugger, cluster: each worker has new debug port (Miroslav Bajtoš)
+
+* debugger: `restart` with custom debug port (Miroslav Bajtoš)
+
+* debugger: breakpoints in scripts not loaded yet (Miroslav Bajtoš)
+
+* event: EventEmitter#setMaxListeners() returns this (Sam Roberts)
+
+* events: add EventEmitter.defaultMaxListeners (Ben Noordhuis)
+
+* install: Support $(PREFIX) install target directory prefix (Olof Johansson)
+
+* os: Include netmask in os.networkInterfaces() (Ben Kelly)
+
+* path: add path.isAbsolute(path) (Ryan Doenges)
+
+* stream: Guarantee ordering of 'finish' event (isaacs)
+
+* streams: introduce .cork/.uncork/._writev (Fedor Indutny)
+
+* vm: add support for timeout argument (Andrew Paprocki)
+
+
+2013.04.19, Version 0.11.1 (Unstable), 4babd2b46ebf9fbea2c9946af5cfae25a33b2b22
+
+* V8: upgrade to 3.18.0
+
+* uv: Upgrade to v0.11.1
+
+* http: split into multiple separate modules (Timothy J Fontaine)
+
+* http: escape unsafe characters in request path (Ben Noordhuis)
+
+* url: Escape all unwise characters (isaacs)
+
+* build: depend on v8 postmortem-metadata if enabled (Paddy Byers)
+
+* etw: update prototypes to match dtrace provider (Timothy J Fontaine)
+
+* buffer: change output of Buffer.prototype.toJSON() (David Braun)
+
+* dtrace: actually use the _handle.fd value (Timothy J Fontaine)
+
+* dtrace: pass more arguments to probes (Dave Pacheco)
+
+* build: allow building with dtrace on osx (Dave Pacheco)
+
+* zlib: allow passing options to convenience methods (Kyle Robinson Young)
+
+
+2013.03.28, Version 0.11.0 (Unstable), bce38b3d74e64fcb7d04a2dd551151da6168cdc5
+
+* V8: update to 3.17.13
+
+* os: use %SystemRoot% or %windir% in os.tmpdir() (Suwon Chae)
+
+* util: fix util.inspect() line width calculation (Marcin Kostrzewa)
+
+* buffer: remove _charsWritten (Trevor Norris)
+
+* fs: uv_[fl]stat now reports subsecond resolution (Timothy J Fontaine)
+
+* fs: Throw if error raised and missing callback (bnoordhuis)
+
+* tls: expose SSL_CTX_set_timeout via tls.createServer (Manav Rathi)
+
+* tls: remove harmful unnecessary bounds checking (Marcel Laverdet)
+
+* buffer: write ascii strings using WriteOneByte (Trevor Norris)
+
+* dtrace: fix generation of v8 constants on freebsd (Fedor Indutny)
+
+* dtrace: x64 ustack helper (Fedor Indutny)
+
+* readline: handle wide characters properly (Nao Iizuka)
+
+* repl: Use a domain to catch async errors safely (isaacs)
+
+* repl: emit 'reset' event when context is reset (Sami Samhuri)
+
+* util: custom `inspect()` method may return an Object (Nathan Rajlich)
+
+* console: `console.dir()` bypasses inspect() methods (Nathan Rajlich)
+
+
+2014.02.18, Version 0.10.26 (Stable), cc56c62ed879ad4f93b1fdab3235c43e60f48b7e
+
+* uv: Upgrade to v0.10.25 (Timothy J Fontaine)
+
+* npm: upgrade to 1.4.3 (isaacs)
+
+* v8: support compiling with VS2013 (Fedor Indutny)
+
+* cares: backport TXT parsing fix (Fedor Indutny)
+
+* crypto: throw on SignFinal failure (Fedor Indutny)
+
+* crypto: update root certificates (Ben Noordhuis)
+
+* debugger: Fix breakpoint not showing after restart (Farid Neshat)
+
+* fs: make unwatchFile() insensitive to path (iamdoron)
+
+* net: do not re-emit stream errors (Fedor Indutny)
+
+* net: make Socket destroy() re-entrance safe (Jun Ma)
+
+* net: reset `endEmitted` on reconnect (Fedor Indutny)
+
+* node: do not close stdio implicitly (Fedor Indutny)
+
+* zlib: avoid assertion in close (Fedor Indutny)
+
+
+2014.01.23, Version 0.10.25 (Stable), b0e5f195dfce3e2b99f5091373d49f6616682596
 
 * uv: Upgrade to v0.10.23
 
@@ -167,7 +759,7 @@
 * stream: Fix double pipe error emit (Eran Hammer)
 
 
-2013.07.25, Version 0.10.15 (Stable)
+2013.07.25, Version 0.10.15 (Stable), 2426d65af860bda7be9f0832a99601cc43c6cf63
 
 * src: fix process.getuid() return value (Ben Noordhuis)
 
@@ -246,7 +838,6 @@
 * crypto: fix utf8/utf-8 encoding check (Ben Noordhuis)
 
 * net: Fix busy loop on POLLERR|POLLHUP on older linux kernels (Ben Noordhuis, isaacs)
-
 
 
 2013.06.04, Version 0.10.10 (Stable), 25e51c396aa23018603baae2b1d9390f5d9db496
@@ -345,6 +936,8 @@
 * stream: Fix unshift() race conditions (isaacs)
 
 
+
+
 2013.04.11, Version 0.10.4 (Stable), 9712aa9f76073c30850b20a188b1ed12ffb74d17
 
 * uv: Upgrade to 0.10.4
@@ -403,7 +996,7 @@
 * src: tie process.versions.uv to uv_version_string() (Ben Noordhuis)
 
 
-2013.03.28, Version 0.10.2 (Stable)
+2013.03.28, Version 0.10.2 (Stable), 1e0de9c426e07a260bbec2d2196c2d2db8eb8886
 
 * npm: Upgrade to 1.2.15
 

@@ -470,6 +470,16 @@ dtrace:helper:ustack:
 	stringof(this->buf);
 }
 
+dtrace:helper:ustack:
+/!this->done && IS_SMI(this->marker) &&
+ SMI_VALUE(this->marker) == V8_FT_STUB/
+{
+	this->done = 1;
+	APPEND_CHR8('<','<',' ','s','t','u','b',' ');
+	APPEND_CHR4('>','>','\0','\0');
+	stringof(this->buf);
+}
+
 /*
  * Now check for internal frames that we can only identify by seeing that
  * there's a Code object where there would be a JSFunction object for a

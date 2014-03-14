@@ -5,6 +5,7 @@ PYTHON ?= python
 NINJA ?= ninja
 DESTDIR ?=
 SIGN ?=
+PREFIX ?= /usr/local
 
 NODE ?= ./node
 
@@ -12,6 +13,12 @@ NODE ?= ./node
 # To do quiet/pretty builds, run `make V=` to set V to an empty string,
 # or set the V environment variable to an empty string.
 V ?= 1
+
+ifeq ($(USE_NINJA),1)
+ifneq ($(V),)
+NINJA := $(NINJA) -v
+endif
+endif
 
 # BUILDTYPE=Debug builds both release and debug builds. If you want to compile
 # just the debug build, run `make -C out BUILDTYPE=Debug` instead.
@@ -43,7 +50,7 @@ node_g: config.gypi out/Makefile
 	ln -fs out/Debug/node $@
 endif
 
-out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/common.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
+out/Makefile: common.gypi deps/uv/uv.gyp deps/http_parser/http_parser.gyp deps/zlib/zlib.gyp deps/v8/build/toolchain.gypi deps/v8/build/features.gypi deps/v8/tools/gyp/v8.gyp node.gyp config.gypi
 ifeq ($(USE_NINJA),1)
 	touch out/Makefile
 	$(PYTHON) tools/gyp_node.py -f ninja
@@ -52,13 +59,17 @@ else
 endif
 
 config.gypi: configure
-	$(PYTHON) ./configure
+	if [ -f $@ ]; then
+		$(error Stale $@, please re-run ./configure)
+	else
+		$(error No $@, please run ./configure first)
+	fi
 
 install: all
-	$(PYTHON) tools/install.py $@ $(DESTDIR)
+	$(PYTHON) tools/install.py $@ '$(DESTDIR)' '$(PREFIX)'
 
 uninstall:
-	$(PYTHON) tools/install.py $@ $(DESTDIR)
+	$(PYTHON) tools/install.py $@ '$(DESTDIR)' '$(PREFIX)'
 
 clean:
 	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
@@ -75,6 +86,7 @@ distclean:
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
 	$(MAKE) jslint
+	$(MAKE) cpplint
 
 test-http1: all
 	$(PYTHON) tools/test.py --mode=release --use-http1 simple message
@@ -88,42 +100,60 @@ test/gc/node_modules/weak/build/Release/weakref.node:
 		--directory="$(shell pwd)/test/gc/node_modules/weak" \
 		--nodedir="$(shell pwd)"
 
+build-addons:
+	@if [ ! -f node ]; then make all; fi
+	rm -rf test/addons/doc-*/
+	./node tools/doc/addon-verify.js
+	$(foreach dir, \
+			$(sort $(dir $(wildcard test/addons/*/*.gyp))), \
+			./node deps/npm/node_modules/node-gyp/bin/node-gyp rebuild \
+					--directory="$(shell pwd)/$(dir)" \
+					--nodedir="$(shell pwd)" && ) echo "build done"
+
 test-gc: all test/gc/node_modules/weak/build/Release/weakref.node
 	$(PYTHON) tools/test.py --mode=release gc
 
-test-all: all test/gc/node_modules/weak/build/Release/weakref.node
+test-build: all build-addons
+
+test-all: test-build test/gc/node_modules/weak/build/Release/weakref.node
 	$(PYTHON) tools/test.py --mode=debug,release
 	make test-npm
 
-test-all-http1: all
+test-all-http1: test-build
 	$(PYTHON) tools/test.py --mode=debug,release --use-http1
 
-test-all-valgrind: all
+test-all-valgrind: test-build
 	$(PYTHON) tools/test.py --mode=debug,release --valgrind
 
-test-release: all
+test-release: test-build
 	$(PYTHON) tools/test.py --mode=release
 
-test-debug: all
+test-debug: test-build
 	$(PYTHON) tools/test.py --mode=debug
 
-test-message: all
+test-message: test-build
 	$(PYTHON) tools/test.py message
 
 test-simple: all
 	$(PYTHON) tools/test.py simple
 
-test-pummel: all
+test-pummel: all wrk
 	$(PYTHON) tools/test.py pummel
 
 test-internet: all
 	$(PYTHON) tools/test.py internet
+
+test-debugger: all
+	$(PYTHON) tools/test.py debugger
 
 test-npm: node
 	./node deps/npm/test/run.js
 
 test-npm-publish: node
 	npm_package_config_publishtest=true ./node deps/npm/test/run.js
+
+test-addons: test-build
+	$(PYTHON) tools/test.py --mode=release addons
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
@@ -360,9 +390,20 @@ jslintfix:
 jslint:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
+CPPLINT_EXCLUDE ?=
+CPPLINT_EXCLUDE += src/node_dtrace.cc
+CPPLINT_EXCLUDE += src/node_dtrace.cc
+CPPLINT_EXCLUDE += src/node_root_certs.h
+CPPLINT_EXCLUDE += src/node_win32_perfctr_provider.cc
+CPPLINT_EXCLUDE += src/queue.h
+CPPLINT_EXCLUDE += src/tree.h
+CPPLINT_EXCLUDE += src/v8abbr.h
+
+CPPLINT_FILES = $(filter-out $(CPPLINT_EXCLUDE), $(wildcard src/*.cc src/*.h src/*.c))
+
 cpplint:
-	@$(PYTHON) tools/cpplint.py $(wildcard src/*.cc src/*.h src/*.c)
+	@$(PYTHON) tools/cpplint.py $(CPPLINT_FILES)
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all website-upload pkg blog blogclean tar binary release-only bench-http-simple bench-idle bench-all bench bench-misc bench-array bench-buffer bench-net bench-http bench-fs bench-tls
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all test-addons build-addons website-upload pkg blog blogclean tar binary release-only bench-http-simple bench-idle bench-all bench bench-misc bench-array bench-buffer bench-net bench-http bench-fs bench-tls

@@ -43,7 +43,7 @@ Address IC::address() const {
   Address result = Assembler::target_address_from_return_address(pc());
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  Debug* debug = Isolate::Current()->debug();
+  Debug* debug = isolate()->debug();
   // First check if any break points are active if not just return the address
   // of the call.
   if (!debug->has_break_points()) return result;
@@ -86,8 +86,8 @@ void IC::SetTargetAtAddress(Address address, Code* target) {
   // ICs as strict mode. The strict-ness of the IC must be preserved.
   if (old_target->kind() == Code::STORE_IC ||
       old_target->kind() == Code::KEYED_STORE_IC) {
-    ASSERT(Code::GetStrictMode(old_target->extra_ic_state()) ==
-           Code::GetStrictMode(target->extra_ic_state()));
+    ASSERT(StoreIC::GetStrictMode(old_target->extra_ic_state()) ==
+           StoreIC::GetStrictMode(target->extra_ic_state()));
   }
 #endif
   Assembler::set_target_address_at(address, target->instruction_start());
@@ -100,38 +100,56 @@ void IC::SetTargetAtAddress(Address address, Code* target) {
 }
 
 
-InlineCacheHolderFlag IC::GetCodeCacheForObject(Object* object,
-                                                JSObject* holder) {
-  if (object->IsJSObject()) {
-    return GetCodeCacheForObject(JSObject::cast(object), holder);
-  }
+InlineCacheHolderFlag IC::GetCodeCacheForObject(Object* object) {
+  if (object->IsJSObject()) return OWN_MAP;
+
   // If the object is a value, we use the prototype map for the cache.
-  ASSERT(object->IsString() || object->IsNumber() || object->IsBoolean());
+  ASSERT(object->IsString() || object->IsSymbol() ||
+         object->IsNumber() || object->IsBoolean());
   return PROTOTYPE_MAP;
 }
 
 
-InlineCacheHolderFlag IC::GetCodeCacheForObject(JSObject* object,
-                                                JSObject* holder) {
-  // Fast-properties and global objects store stubs in their own maps.
-  // Slow properties objects use prototype's map (unless the property is its own
-  // when holder == object). It works because slow properties objects having
-  // the same prototype (or a prototype with the same map) and not having
-  // the property are interchangeable for such a stub.
-  if (holder != object &&
-      !object->HasFastProperties() &&
-      !object->IsJSGlobalProxy() &&
-      !object->IsJSGlobalObject()) {
+HeapObject* IC::GetCodeCacheHolder(Isolate* isolate,
+                                   Object* object,
+                                   InlineCacheHolderFlag holder) {
+  if (object->IsSmi()) holder = PROTOTYPE_MAP;
+  Object* map_owner = holder == OWN_MAP
+      ? object : object->GetPrototype(isolate);
+  return HeapObject::cast(map_owner);
+}
+
+
+InlineCacheHolderFlag IC::GetCodeCacheFlag(HeapType* type) {
+  if (type->Is(HeapType::Boolean()) ||
+      type->Is(HeapType::Number()) ||
+      type->Is(HeapType::String()) ||
+      type->Is(HeapType::Symbol())) {
     return PROTOTYPE_MAP;
   }
   return OWN_MAP;
 }
 
 
-JSObject* IC::GetCodeCacheHolder(Object* object, InlineCacheHolderFlag holder) {
-  Object* map_owner = (holder == OWN_MAP ? object : object->GetPrototype());
-  ASSERT(map_owner->IsJSObject());
-  return JSObject::cast(map_owner);
+Handle<Map> IC::GetCodeCacheHolder(InlineCacheHolderFlag flag,
+                                   HeapType* type,
+                                   Isolate* isolate) {
+  if (flag == PROTOTYPE_MAP) {
+    Context* context = isolate->context()->native_context();
+    JSFunction* constructor;
+    if (type->Is(HeapType::Boolean())) {
+      constructor = context->boolean_function();
+    } else if (type->Is(HeapType::Number())) {
+      constructor = context->number_function();
+    } else if (type->Is(HeapType::String())) {
+      constructor = context->string_function();
+    } else {
+      ASSERT(type->Is(HeapType::Symbol()));
+      constructor = context->symbol_function();
+    }
+    return handle(JSObject::cast(constructor->instance_prototype())->map());
+  }
+  return TypeToMap(type, isolate);
 }
 
 

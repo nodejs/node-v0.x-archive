@@ -33,20 +33,59 @@
 namespace v8 {
 namespace internal {
 
-
-void* SamplingCircularQueue::Enqueue() {
-  WrapPositionIfNeeded(&producer_pos_->enqueue_pos);
-  void* result = producer_pos_->enqueue_pos;
-  producer_pos_->enqueue_pos += record_size_;
-  return result;
+template<typename T, unsigned L>
+SamplingCircularQueue<T, L>::SamplingCircularQueue()
+    : enqueue_pos_(buffer_),
+      dequeue_pos_(buffer_) {
 }
 
 
-void SamplingCircularQueue::WrapPositionIfNeeded(
-    SamplingCircularQueue::Cell** pos) {
-  if (**pos == kEnd) *pos = buffer_;
+template<typename T, unsigned L>
+SamplingCircularQueue<T, L>::~SamplingCircularQueue() {
 }
 
+
+template<typename T, unsigned L>
+T* SamplingCircularQueue<T, L>::Peek() {
+  MemoryBarrier();
+  if (Acquire_Load(&dequeue_pos_->marker) == kFull) {
+    return &dequeue_pos_->record;
+  }
+  return NULL;
+}
+
+
+template<typename T, unsigned L>
+void SamplingCircularQueue<T, L>::Remove() {
+  Release_Store(&dequeue_pos_->marker, kEmpty);
+  dequeue_pos_ = Next(dequeue_pos_);
+}
+
+
+template<typename T, unsigned L>
+T* SamplingCircularQueue<T, L>::StartEnqueue() {
+  MemoryBarrier();
+  if (Acquire_Load(&enqueue_pos_->marker) == kEmpty) {
+    return &enqueue_pos_->record;
+  }
+  return NULL;
+}
+
+
+template<typename T, unsigned L>
+void SamplingCircularQueue<T, L>::FinishEnqueue() {
+  Release_Store(&enqueue_pos_->marker, kFull);
+  enqueue_pos_ = Next(enqueue_pos_);
+}
+
+
+template<typename T, unsigned L>
+typename SamplingCircularQueue<T, L>::Entry* SamplingCircularQueue<T, L>::Next(
+    Entry* entry) {
+  Entry* next = entry + 1;
+  if (next == &buffer_[L]) return buffer_;
+  return next;
+}
 
 } }  // namespace v8::internal
 

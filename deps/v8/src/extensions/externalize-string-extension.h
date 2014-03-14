@@ -36,11 +36,12 @@ namespace internal {
 class ExternalizeStringExtension : public v8::Extension {
  public:
   ExternalizeStringExtension() : v8::Extension("v8/externalize", kSource) {}
-  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunction(
+  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunctionTemplate(
+      v8::Isolate* isolate,
       v8::Handle<v8::String> name);
-  static v8::Handle<v8::Value> Externalize(const v8::Arguments& args);
-  static v8::Handle<v8::Value> IsAscii(const v8::Arguments& args);
-  static void Register();
+  static void Externalize(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void IsAscii(const v8::FunctionCallbackInfo<v8::Value>& args);
+
  private:
   static const char* const kSource;
 };

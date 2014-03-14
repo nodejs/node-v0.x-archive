@@ -37,7 +37,13 @@ namespace internal {
 
 
 ObjectGroup::~ObjectGroup() {
-  if (info_ != NULL) info_->Dispose();
+  if (info != NULL) info->Dispose();
+  delete[] objects;
+}
+
+
+ImplicitRefGroup::~ImplicitRefGroup() {
+  delete[] children;
 }
 
 
@@ -46,7 +52,7 @@ class GlobalHandles::Node {
   // State transition diagram:
   // FREE -> NORMAL <-> WEAK -> PENDING -> NEAR_DEATH -> { NORMAL, WEAK, FREE }
   enum State {
-    FREE,
+    FREE = 0,
     NORMAL,     // Normal global handle.
     WEAK,       // Flagged as weak but not yet finalized.
     PENDING,    // Has been recognized as only reachable by weak handles.
@@ -59,54 +65,66 @@ class GlobalHandles::Node {
     return reinterpret_cast<Node*>(location);
   }
 
-  Node() {}
+  Node() {
+    ASSERT(OFFSET_OF(Node, class_id_) == Internals::kNodeClassIdOffset);
+    ASSERT(OFFSET_OF(Node, flags_) == Internals::kNodeFlagsOffset);
+    STATIC_ASSERT(static_cast<int>(NodeState::kMask) ==
+                  Internals::kNodeStateMask);
+    STATIC_ASSERT(WEAK == Internals::kNodeStateIsWeakValue);
+    STATIC_ASSERT(PENDING == Internals::kNodeStateIsPendingValue);
+    STATIC_ASSERT(NEAR_DEATH == Internals::kNodeStateIsNearDeathValue);
+    STATIC_ASSERT(static_cast<int>(IsIndependent::kShift) ==
+                  Internals::kNodeIsIndependentShift);
+    STATIC_ASSERT(static_cast<int>(IsPartiallyDependent::kShift) ==
+                  Internals::kNodeIsPartiallyDependentShift);
+  }
 
-#ifdef DEBUG
+#ifdef ENABLE_HANDLE_ZAPPING
   ~Node() {
     // TODO(1428): if it's a weak handle we should have invoked its callback.
     // Zap the values for eager trapping.
-    object_ = NULL;
+    object_ = reinterpret_cast<Object*>(kGlobalHandleZapValue);
     class_id_ = v8::HeapProfiler::kPersistentHandleNoClassId;
     index_ = 0;
-    independent_ = false;
-    in_new_space_list_ = false;
+    set_independent(false);
+    set_partially_dependent(false);
+    set_in_new_space_list(false);
     parameter_or_next_free_.next_free = NULL;
-    callback_ = NULL;
+    weak_callback_ = NULL;
   }
 #endif
 
   void Initialize(int index, Node** first_free) {
     index_ = static_cast<uint8_t>(index);
     ASSERT(static_cast<int>(index_) == index);
-    state_ = FREE;
-    in_new_space_list_ = false;
+    set_state(FREE);
+    set_in_new_space_list(false);
     parameter_or_next_free_.next_free = *first_free;
     *first_free = this;
   }
 
-  void Acquire(Object* object, GlobalHandles* global_handles) {
-    ASSERT(state_ == FREE);
+  void Acquire(Object* object) {
+    ASSERT(state() == FREE);
     object_ = object;
     class_id_ = v8::HeapProfiler::kPersistentHandleNoClassId;
-    independent_ = false;
-    state_  = NORMAL;
+    set_independent(false);
+    set_partially_dependent(false);
+    set_state(NORMAL);
     parameter_or_next_free_.parameter = NULL;
-    callback_ = NULL;
-    IncreaseBlockUses(global_handles);
+    weak_callback_ = NULL;
+    IncreaseBlockUses();
   }
 
-  void Release(GlobalHandles* global_handles) {
-    ASSERT(state_ != FREE);
-    if (IsWeakRetainer()) {
-      global_handles->number_of_weak_handles_--;
-      if (object_->IsJSGlobalObject()) {
-        global_handles->number_of_global_object_weak_handles_--;
-      }
-    }
-    state_ = FREE;
-    parameter_or_next_free_.next_free = global_handles->first_free_;
-    global_handles->first_free_ = this;
-    DecreaseBlockUses(global_handles);
+  void Release() {
+    ASSERT(state() != FREE);
+    set_state(FREE);
+    // Zap the values for eager trapping.
+    object_ = reinterpret_cast<Object*>(kGlobalHandleZapValue);
+    class_id_ = v8::HeapProfiler::kPersistentHandleNoClassId;
+    set_independent(false);
+    set_partially_dependent(false);
+    weak_callback_ = NULL;
+    DecreaseBlockUses();
   }
 
   // Object slot accessors.
@@ -118,109 +136,122 @@ class GlobalHandles::Node {
   bool has_wrapper_class_id() const {
     return class_id_ != v8::HeapProfiler::kPersistentHandleNoClassId;
   }
+
   uint16_t wrapper_class_id() const { return class_id_; }
-  void set_wrapper_class_id(uint16_t class_id) {
-    class_id_ = class_id;
+
+  // State and flag accessors.
+
+  State state() const {
+    return NodeState::decode(flags_);
+  }
+  void set_state(State state) {
+    flags_ = NodeState::update(flags_, state);
   }
 
-  // State accessors.
+  bool is_independent() {
+    return IsIndependent::decode(flags_);
+  }
+  void set_independent(bool v) {
+    flags_ = IsIndependent::update(flags_, v);
+  }
 
-  State state() const { return state_; }
+  bool is_partially_dependent() {
+    return IsPartiallyDependent::decode(flags_);
+  }
+  void set_partially_dependent(bool v) {
+    flags_ = IsPartiallyDependent::update(flags_, v);
+  }
+
+  bool is_in_new_space_list() {
+    return IsInNewSpaceList::decode(flags_);
+  }
+  void set_in_new_space_list(bool v) {
+    flags_ = IsInNewSpaceList::update(flags_, v);
+  }
 
   bool IsNearDeath() const {
     // Check for PENDING to ensure correct answer when processing callbacks.
-    return state_ == PENDING || state_ == NEAR_DEATH;
+    return state() == PENDING || state() == NEAR_DEATH;
   }
 
-  bool IsWeak() const { return state_ == WEAK; }
+  bool IsWeak() const { return state() == WEAK; }
 
-  bool IsRetainer() const { return state_ != FREE; }
+  bool IsRetainer() const { return state() != FREE; }
 
-  bool IsStrongRetainer() const { return state_ == NORMAL; }
+  bool IsStrongRetainer() const { return state() == NORMAL; }
 
   bool IsWeakRetainer() const {
-    return state_ == WEAK || state_ == PENDING || state_ == NEAR_DEATH;
+    return state() == WEAK || state() == PENDING || state() == NEAR_DEATH;
   }
 
   void MarkPending() {
-    ASSERT(state_ == WEAK);
-    state_ = PENDING;
+    ASSERT(state() == WEAK);
+    set_state(PENDING);
   }
 
   // Independent flag accessors.
   void MarkIndependent() {
-    ASSERT(state_ != FREE);
-    independent_ = true;
+    ASSERT(state() != FREE);
+    set_independent(true);
   }
-  bool is_independent() const { return independent_; }
 
-  // In-new-space-list flag accessors.
-  void set_in_new_space_list(bool v) { in_new_space_list_ = v; }
-  bool is_in_new_space_list() const { return in_new_space_list_; }
+  void MarkPartiallyDependent() {
+    ASSERT(state() != FREE);
+    if (GetGlobalHandles()->isolate()->heap()->InNewSpace(object_)) {
+      set_partially_dependent(true);
+    }
+  }
+  void clear_partially_dependent() { set_partially_dependent(false); }
 
   // Callback accessor.
-  WeakReferenceCallback callback() { return callback_; }
+  // TODO(svenpanne) Re-enable or nuke later.
+  // WeakReferenceCallback callback() { return callback_; }
 
   // Callback parameter accessors.
   void set_parameter(void* parameter) {
-    ASSERT(state_ != FREE);
+    ASSERT(state() != FREE);
     parameter_or_next_free_.parameter = parameter;
   }
   void* parameter() const {
-    ASSERT(state_ != FREE);
+    ASSERT(state() != FREE);
     return parameter_or_next_free_.parameter;
   }
 
   // Accessors for next free node in the free list.
   Node* next_free() {
-    ASSERT(state_ == FREE);
+    ASSERT(state() == FREE);
     return parameter_or_next_free_.next_free;
   }
   void set_next_free(Node* value) {
-    ASSERT(state_ == FREE);
+    ASSERT(state() == FREE);
     parameter_or_next_free_.next_free = value;
   }
 
-  void MakeWeak(GlobalHandles* global_handles,
-                void* parameter,
-                WeakReferenceCallback callback) {
-    ASSERT(state_ != FREE);
-    if (!IsWeakRetainer()) {
-      global_handles->number_of_weak_handles_++;
-      if (object_->IsJSGlobalObject()) {
-        global_handles->number_of_global_object_weak_handles_++;
-      }
-    }
-    state_ = WEAK;
+  void MakeWeak(void* parameter, WeakCallback weak_callback) {
+    ASSERT(weak_callback != NULL);
+    ASSERT(state() != FREE);
+    set_state(WEAK);
     set_parameter(parameter);
-    callback_ = callback;
+    weak_callback_ = weak_callback;
   }
 
-  void ClearWeakness(GlobalHandles* global_handles) {
-    ASSERT(state_ != FREE);
-    if (IsWeakRetainer()) {
-      global_handles->number_of_weak_handles_--;
-      if (object_->IsJSGlobalObject()) {
-        global_handles->number_of_global_object_weak_handles_--;
-      }
-    }
-    state_ = NORMAL;
+  void ClearWeakness() {
+    ASSERT(state() != FREE);
+    set_state(NORMAL);
     set_parameter(NULL);
   }
 
-  bool PostGarbageCollectionProcessing(Isolate* isolate,
-                                       GlobalHandles* global_handles) {
-    if (state_ != Node::PENDING) return false;
-    WeakReferenceCallback func = callback();
-    if (func == NULL) {
-      Release(global_handles);
+  bool PostGarbageCollectionProcessing(Isolate* isolate) {
+    if (state() != Node::PENDING) return false;
+    if (weak_callback_ == NULL) {
+      Release();
       return false;
     }
     void* par = parameter();
-    state_ = NEAR_DEATH;
+    set_state(NEAR_DEATH);
     set_parameter(NULL);
 
-    v8::Persistent<v8::Object> object = ToApi<v8::Object>(handle());
+    Object** object = location();
     {
       // Check that we are not passing a finalized external string to
       // the callback.
@@ -229,19 +260,27 @@ class GlobalHandles::Node {
       ASSERT(!object_->IsExternalTwoByteString() ||
              ExternalTwoByteString::cast(object_)->resource() != NULL);
       // Leaving V8.
-      VMState state(isolate, EXTERNAL);
-      func(object, par);
+      VMState<EXTERNAL> state(isolate);
+      HandleScope handle_scope(isolate);
+      Handle<Object> handle(*object, isolate);
+      v8::WeakCallbackData<v8::Value, void> data(
+          reinterpret_cast<v8::Isolate*>(isolate),
+          v8::Utils::ToLocal(handle),
+          par);
+      weak_callback_(data);
     }
     // Absence of explicit cleanup or revival of weak handle
     // in most of the cases would lead to memory leak.
-    ASSERT(state_ != NEAR_DEATH);
+    ASSERT(state() != NEAR_DEATH);
     return true;
   }
 
+  inline GlobalHandles* GetGlobalHandles();
+
  private:
   inline NodeBlock* FindBlock();
-  inline void IncreaseBlockUses(GlobalHandles* global_handles);
-  inline void DecreaseBlockUses(GlobalHandles* global_handles);
+  inline void IncreaseBlockUses();
+  inline void DecreaseBlockUses();
 
   // Storage for object pointer.
   // Placed first to avoid offset computation.
@@ -256,14 +295,17 @@ class GlobalHandles::Node {
   // Index in the containing handle block.
   uint8_t index_;
 
-  // Need one more bit for MSVC as it treats enums as signed.
-  State state_ : 4;
+  // This stores three flags (independent, partially_dependent and
+  // in_new_space_list) and a State.
+  class NodeState:            public BitField<State, 0, 4> {};
+  class IsIndependent:        public BitField<bool,  4, 1> {};
+  class IsPartiallyDependent: public BitField<bool,  5, 1> {};
+  class IsInNewSpaceList:     public BitField<bool,  6, 1> {};
 
-  bool independent_ : 1;
-  bool in_new_space_list_ : 1;
+  uint8_t flags_;
 
-  // Handle specific callback.
-  WeakReferenceCallback callback_;
+  // Handle specific callback - might be a weak reference in disguise.
+  WeakCallback weak_callback_;
 
   // Provided data for callback.  In FREE state, this is used for
   // the free list link.
@@ -280,8 +322,12 @@ class GlobalHandles::NodeBlock {
  public:
   static const int kSize = 256;
 
-  explicit NodeBlock(NodeBlock* next)
-      : next_(next), used_nodes_(0), next_used_(NULL), prev_used_(NULL) {}
+  explicit NodeBlock(GlobalHandles* global_handles, NodeBlock* next)
+      : next_(next),
+        used_nodes_(0),
+        next_used_(NULL),
+        prev_used_(NULL),
+        global_handles_(global_handles) {}
 
   void PutNodesOnFreeList(Node** first_free) {
     for (int i = kSize - 1; i >= 0; --i) {
@@ -294,11 +340,11 @@ class GlobalHandles::NodeBlock {
     return &nodes_[index];
   }
 
-  void IncreaseUses(GlobalHandles* global_handles) {
+  void IncreaseUses() {
     ASSERT(used_nodes_ < kSize);
     if (used_nodes_++ == 0) {
-      NodeBlock* old_first = global_handles->first_used_block_;
-      global_handles->first_used_block_ = this;
+      NodeBlock* old_first = global_handles_->first_used_block_;
+      global_handles_->first_used_block_ = this;
       next_used_ = old_first;
       prev_used_ = NULL;
       if (old_first == NULL) return;
@@ -306,16 +352,18 @@ class GlobalHandles::NodeBlock {
     }
   }
 
-  void DecreaseUses(GlobalHandles* global_handles) {
+  void DecreaseUses() {
     ASSERT(used_nodes_ > 0);
     if (--used_nodes_ == 0) {
       if (next_used_ != NULL) next_used_->prev_used_ = prev_used_;
       if (prev_used_ != NULL) prev_used_->next_used_ = next_used_;
-      if (this == global_handles->first_used_block_) {
-        global_handles->first_used_block_ = next_used_;
+      if (this == global_handles_->first_used_block_) {
+        global_handles_->first_used_block_ = next_used_;
       }
     }
   }
+
+  GlobalHandles* global_handles() { return global_handles_; }
 
   // Next block in the list of all blocks.
   NodeBlock* next() const { return next_; }
@@ -330,7 +378,13 @@ class GlobalHandles::NodeBlock {
   int used_nodes_;
   NodeBlock* next_used_;
   NodeBlock* prev_used_;
+  GlobalHandles* global_handles_;
 };
+
+
+GlobalHandles* GlobalHandles::Node::GetGlobalHandles() {
+  return FindBlock()->global_handles();
+}
 
 
 GlobalHandles::NodeBlock* GlobalHandles::Node::FindBlock() {
@@ -342,13 +396,23 @@ GlobalHandles::NodeBlock* GlobalHandles::Node::FindBlock() {
 }
 
 
-void GlobalHandles::Node::IncreaseBlockUses(GlobalHandles* global_handles) {
-  FindBlock()->IncreaseUses(global_handles);
+void GlobalHandles::Node::IncreaseBlockUses() {
+  NodeBlock* node_block = FindBlock();
+  node_block->IncreaseUses();
+  GlobalHandles* global_handles = node_block->global_handles();
+  global_handles->isolate()->counters()->global_handles()->Increment();
+  global_handles->number_of_global_handles_++;
 }
 
 
-void GlobalHandles::Node::DecreaseBlockUses(GlobalHandles* global_handles) {
-  FindBlock()->DecreaseUses(global_handles);
+void GlobalHandles::Node::DecreaseBlockUses() {
+  NodeBlock* node_block = FindBlock();
+  GlobalHandles* global_handles = node_block->global_handles();
+  parameter_or_next_free_.next_free = global_handles->first_free_;
+  global_handles->first_free_ = this;
+  node_block->DecreaseUses();
+  global_handles->isolate()->counters()->global_handles()->Decrement();
+  global_handles->number_of_global_handles_--;
 }
 
 
@@ -382,13 +446,12 @@ class GlobalHandles::NodeIterator {
 
 GlobalHandles::GlobalHandles(Isolate* isolate)
     : isolate_(isolate),
-      number_of_weak_handles_(0),
-      number_of_global_object_weak_handles_(0),
       number_of_global_handles_(0),
       first_block_(NULL),
       first_used_block_(NULL),
       first_free_(NULL),
-      post_gc_processing_count_(0) {}
+      post_gc_processing_count_(0),
+      object_group_connections_(kObjectGroupConnectionsCapacity) {}
 
 
 GlobalHandles::~GlobalHandles() {
@@ -403,17 +466,15 @@ GlobalHandles::~GlobalHandles() {
 
 
 Handle<Object> GlobalHandles::Create(Object* value) {
-  isolate_->counters()->global_handles()->Increment();
-  number_of_global_handles_++;
   if (first_free_ == NULL) {
-    first_block_ = new NodeBlock(first_block_);
+    first_block_ = new NodeBlock(this, first_block_);
     first_block_->PutNodesOnFreeList(&first_free_);
   }
   ASSERT(first_free_ != NULL);
   // Take the first node in the free list.
   Node* result = first_free_;
   first_free_ = result->next_free();
-  result->Acquire(value, this);
+  result->Acquire(value);
   if (isolate_->heap()->InNewSpace(value) &&
       !result->is_in_new_space_list()) {
     new_space_nodes_.Add(result);
@@ -423,28 +484,36 @@ Handle<Object> GlobalHandles::Create(Object* value) {
 }
 
 
-void GlobalHandles::Destroy(Object** location) {
-  isolate_->counters()->global_handles()->Decrement();
-  number_of_global_handles_--;
-  if (location == NULL) return;
-  Node::FromLocation(location)->Release(this);
+Handle<Object> GlobalHandles::CopyGlobal(Object** location) {
+  ASSERT(location != NULL);
+  return Node::FromLocation(location)->GetGlobalHandles()->Create(*location);
 }
 
 
-void GlobalHandles::MakeWeak(Object** location, void* parameter,
-                             WeakReferenceCallback callback) {
-  ASSERT(callback != NULL);
-  Node::FromLocation(location)->MakeWeak(this, parameter, callback);
+void GlobalHandles::Destroy(Object** location) {
+  if (location != NULL) Node::FromLocation(location)->Release();
+}
+
+
+void GlobalHandles::MakeWeak(Object** location,
+                             void* parameter,
+                             WeakCallback weak_callback) {
+  Node::FromLocation(location)->MakeWeak(parameter, weak_callback);
 }
 
 
 void GlobalHandles::ClearWeakness(Object** location) {
-  Node::FromLocation(location)->ClearWeakness(this);
+  Node::FromLocation(location)->ClearWeakness();
 }
 
 
 void GlobalHandles::MarkIndependent(Object** location) {
   Node::FromLocation(location)->MarkIndependent();
+}
+
+
+void GlobalHandles::MarkPartiallyDependent(Object** location) {
+  Node::FromLocation(location)->MarkPartiallyDependent();
 }
 
 
@@ -463,27 +532,9 @@ bool GlobalHandles::IsWeak(Object** location) {
 }
 
 
-void GlobalHandles::SetWrapperClassId(Object** location, uint16_t class_id) {
-  Node::FromLocation(location)->set_wrapper_class_id(class_id);
-}
-
-uint16_t GlobalHandles::GetWrapperClassId(Object** location) {
-  return Node::FromLocation(location)->wrapper_class_id();
-}
-
 void GlobalHandles::IterateWeakRoots(ObjectVisitor* v) {
   for (NodeIterator it(this); !it.done(); it.Advance()) {
     if (it.node()->IsWeakRetainer()) v->VisitPointer(it.node()->location());
-  }
-}
-
-
-void GlobalHandles::IterateWeakRoots(WeakReferenceGuest f,
-                                     WeakReferenceCallback callback) {
-  for (NodeIterator it(this); !it.done(); it.Advance()) {
-    if (it.node()->IsWeak() && it.node()->callback() == callback) {
-      f(it.node()->object(), it.node()->parameter());
-    }
   }
 }
 
@@ -501,8 +552,9 @@ void GlobalHandles::IterateNewSpaceStrongAndDependentRoots(ObjectVisitor* v) {
   for (int i = 0; i < new_space_nodes_.length(); ++i) {
     Node* node = new_space_nodes_[i];
     if (node->IsStrongRetainer() ||
-        (node->IsWeakRetainer() && !node->is_independent())) {
-      v->VisitPointer(node->location());
+        (node->IsWeakRetainer() && !node->is_independent() &&
+         !node->is_partially_dependent())) {
+        v->VisitPointer(node->location());
     }
   }
 }
@@ -513,8 +565,8 @@ void GlobalHandles::IdentifyNewSpaceWeakIndependentHandles(
   for (int i = 0; i < new_space_nodes_.length(); ++i) {
     Node* node = new_space_nodes_[i];
     ASSERT(node->is_in_new_space_list());
-    if (node->is_independent() && node->IsWeak() &&
-        f(isolate_->heap(), node->location())) {
+    if ((node->is_independent() || node->is_partially_dependent()) &&
+        node->IsWeak() && f(isolate_->heap(), node->location())) {
       node->MarkPending();
     }
   }
@@ -525,15 +577,62 @@ void GlobalHandles::IterateNewSpaceWeakIndependentRoots(ObjectVisitor* v) {
   for (int i = 0; i < new_space_nodes_.length(); ++i) {
     Node* node = new_space_nodes_[i];
     ASSERT(node->is_in_new_space_list());
-    if (node->is_independent() && node->IsWeakRetainer()) {
+    if ((node->is_independent() || node->is_partially_dependent()) &&
+        node->IsWeakRetainer()) {
       v->VisitPointer(node->location());
     }
   }
 }
 
 
+bool GlobalHandles::IterateObjectGroups(ObjectVisitor* v,
+                                        WeakSlotCallbackWithHeap can_skip) {
+  ComputeObjectGroupsAndImplicitReferences();
+  int last = 0;
+  bool any_group_was_visited = false;
+  for (int i = 0; i < object_groups_.length(); i++) {
+    ObjectGroup* entry = object_groups_.at(i);
+    ASSERT(entry != NULL);
+
+    Object*** objects = entry->objects;
+    bool group_should_be_visited = false;
+    for (size_t j = 0; j < entry->length; j++) {
+      Object* object = *objects[j];
+      if (object->IsHeapObject()) {
+        if (!can_skip(isolate_->heap(), &object)) {
+          group_should_be_visited = true;
+          break;
+        }
+      }
+    }
+
+    if (!group_should_be_visited) {
+      object_groups_[last++] = entry;
+      continue;
+    }
+
+    // An object in the group requires visiting, so iterate over all
+    // objects in the group.
+    for (size_t j = 0; j < entry->length; ++j) {
+      Object* object = *objects[j];
+      if (object->IsHeapObject()) {
+        v->VisitPointer(&object);
+        any_group_was_visited = true;
+      }
+    }
+
+    // Once the entire group has been iterated over, set the object
+    // group to NULL so it won't be processed again.
+    delete entry;
+    object_groups_.at(i) = NULL;
+  }
+  object_groups_.Rewind(last);
+  return any_group_was_visited;
+}
+
+
 bool GlobalHandles::PostGarbageCollectionProcessing(
-    GarbageCollector collector) {
+    GarbageCollector collector, GCTracer* tracer) {
   // Process weak global handle callbacks. This must be done after the
   // GC is completely done, because the callbacks may invoke arbitrary
   // API functions.
@@ -544,11 +643,19 @@ bool GlobalHandles::PostGarbageCollectionProcessing(
     for (int i = 0; i < new_space_nodes_.length(); ++i) {
       Node* node = new_space_nodes_[i];
       ASSERT(node->is_in_new_space_list());
+      if (!node->IsRetainer()) {
+        // Free nodes do not have weak callbacks. Do not use them to compute
+        // the next_gc_likely_to_collect_more.
+        continue;
+      }
       // Skip dependent handles. Their weak callbacks might expect to be
       // called between two global garbage collection callbacks which
       // are not called for minor collections.
-      if (!node->is_independent()) continue;
-      if (node->PostGarbageCollectionProcessing(isolate_, this)) {
+      if (!node->is_independent() && !node->is_partially_dependent()) {
+        continue;
+      }
+      node->clear_partially_dependent();
+      if (node->PostGarbageCollectionProcessing(isolate_)) {
         if (initial_post_gc_processing_count != post_gc_processing_count_) {
           // Weak callback triggered another GC and another round of
           // PostGarbageCollection processing.  The current node might
@@ -563,7 +670,13 @@ bool GlobalHandles::PostGarbageCollectionProcessing(
     }
   } else {
     for (NodeIterator it(this); !it.done(); it.Advance()) {
-      if (it.node()->PostGarbageCollectionProcessing(isolate_, this)) {
+      if (!it.node()->IsRetainer()) {
+        // Free nodes do not have weak callbacks. Do not use them to compute
+        // the next_gc_likely_to_collect_more.
+        continue;
+      }
+      it.node()->clear_partially_dependent();
+      if (it.node()->PostGarbageCollectionProcessing(isolate_)) {
         if (initial_post_gc_processing_count != post_gc_processing_count_) {
           // See the comment above.
           return next_gc_likely_to_collect_more;
@@ -579,10 +692,17 @@ bool GlobalHandles::PostGarbageCollectionProcessing(
   for (int i = 0; i < new_space_nodes_.length(); ++i) {
     Node* node = new_space_nodes_[i];
     ASSERT(node->is_in_new_space_list());
-    if (node->IsRetainer() && isolate_->heap()->InNewSpace(node->object())) {
-      new_space_nodes_[last++] = node;
+    if (node->IsRetainer()) {
+      if (isolate_->heap()->InNewSpace(node->object())) {
+        new_space_nodes_[last++] = node;
+        tracer->increment_nodes_copied_in_new_space();
+      } else {
+        node->set_in_new_space_list(false);
+        tracer->increment_nodes_promoted();
+      }
     } else {
       node->set_in_new_space_list(false);
+      tracer->increment_nodes_died_in_new_space();
     }
   }
   new_space_nodes_.Rewind(last);
@@ -610,11 +730,45 @@ void GlobalHandles::IterateAllRoots(ObjectVisitor* v) {
 
 void GlobalHandles::IterateAllRootsWithClassIds(ObjectVisitor* v) {
   for (NodeIterator it(this); !it.done(); it.Advance()) {
-    if (it.node()->has_wrapper_class_id() && it.node()->IsRetainer()) {
+    if (it.node()->IsRetainer() && it.node()->has_wrapper_class_id()) {
       v->VisitEmbedderReference(it.node()->location(),
                                 it.node()->wrapper_class_id());
     }
   }
+}
+
+
+void GlobalHandles::IterateAllRootsInNewSpaceWithClassIds(ObjectVisitor* v) {
+  for (int i = 0; i < new_space_nodes_.length(); ++i) {
+    Node* node = new_space_nodes_[i];
+    if (node->IsRetainer() && node->has_wrapper_class_id()) {
+      v->VisitEmbedderReference(node->location(),
+                                node->wrapper_class_id());
+    }
+  }
+}
+
+
+int GlobalHandles::NumberOfWeakHandles() {
+  int count = 0;
+  for (NodeIterator it(this); !it.done(); it.Advance()) {
+    if (it.node()->IsWeakRetainer()) {
+      count++;
+    }
+  }
+  return count;
+}
+
+
+int GlobalHandles::NumberOfGlobalObjectWeakHandles() {
+  int count = 0;
+  for (NodeIterator it(this); !it.done(); it.Advance()) {
+    if (it.node()->IsWeakRetainer() &&
+        it.node()->object()->IsJSGlobalObject()) {
+      count++;
+    }
+  }
+  return count;
 }
 
 
@@ -664,6 +818,7 @@ void GlobalHandles::PrintStats() {
   PrintF("  # total      = %d\n", total);
 }
 
+
 void GlobalHandles::Print() {
   PrintF("Global handles:\n");
   for (NodeIterator it(this); !it.done(); it.Advance()) {
@@ -690,7 +845,23 @@ void GlobalHandles::AddObjectGroup(Object*** handles,
     if (info != NULL) info->Dispose();
     return;
   }
-  object_groups_.Add(ObjectGroup::New(handles, length, info));
+  ObjectGroup* group = new ObjectGroup(length);
+  for (size_t i = 0; i < length; ++i)
+    group->objects[i] = handles[i];
+  group->info = info;
+  object_groups_.Add(group);
+}
+
+
+void GlobalHandles::SetObjectGroupId(Object** handle,
+                                     UniqueId id) {
+  object_group_connections_.Add(ObjectGroupConnection(id, handle));
+}
+
+
+void GlobalHandles::SetRetainedObjectInfo(UniqueId id,
+                                          RetainedObjectInfo* info) {
+  retainer_infos_.Add(ObjectGroupRetainerInfo(id, info));
 }
 
 
@@ -704,28 +875,218 @@ void GlobalHandles::AddImplicitReferences(HeapObject** parent,
   }
 #endif
   if (length == 0) return;
-  implicit_ref_groups_.Add(ImplicitRefGroup::New(parent, children, length));
+  ImplicitRefGroup* group = new ImplicitRefGroup(parent, length);
+  for (size_t i = 0; i < length; ++i)
+    group->children[i] = children[i];
+  implicit_ref_groups_.Add(group);
+}
+
+
+void GlobalHandles::SetReferenceFromGroup(UniqueId id, Object** child) {
+  ASSERT(!Node::FromLocation(child)->is_independent());
+  implicit_ref_connections_.Add(ObjectGroupConnection(id, child));
+}
+
+
+void GlobalHandles::SetReference(HeapObject** parent, Object** child) {
+  ASSERT(!Node::FromLocation(child)->is_independent());
+  ImplicitRefGroup* group = new ImplicitRefGroup(parent, 1);
+  group->children[0] = child;
+  implicit_ref_groups_.Add(group);
 }
 
 
 void GlobalHandles::RemoveObjectGroups() {
-  for (int i = 0; i < object_groups_.length(); i++) {
-    object_groups_.at(i)->Dispose();
-  }
+  for (int i = 0; i < object_groups_.length(); i++)
+    delete object_groups_.at(i);
   object_groups_.Clear();
+  for (int i = 0; i < retainer_infos_.length(); ++i)
+    retainer_infos_[i].info->Dispose();
+  retainer_infos_.Clear();
+  object_group_connections_.Clear();
+  object_group_connections_.Initialize(kObjectGroupConnectionsCapacity);
 }
 
 
 void GlobalHandles::RemoveImplicitRefGroups() {
   for (int i = 0; i < implicit_ref_groups_.length(); i++) {
-    implicit_ref_groups_.at(i)->Dispose();
+    delete implicit_ref_groups_.at(i);
   }
   implicit_ref_groups_.Clear();
+  implicit_ref_connections_.Clear();
 }
 
 
 void GlobalHandles::TearDown() {
   // TODO(1428): invoke weak callbacks.
+}
+
+
+void GlobalHandles::ComputeObjectGroupsAndImplicitReferences() {
+  if (object_group_connections_.length() == 0) {
+    for (int i = 0; i < retainer_infos_.length(); ++i)
+      retainer_infos_[i].info->Dispose();
+    retainer_infos_.Clear();
+    implicit_ref_connections_.Clear();
+    return;
+  }
+
+  object_group_connections_.Sort();
+  retainer_infos_.Sort();
+  implicit_ref_connections_.Sort();
+
+  int info_index = 0;  // For iterating retainer_infos_.
+  UniqueId current_group_id(0);
+  int current_group_start = 0;
+
+  int current_implicit_refs_start = 0;
+  int current_implicit_refs_end = 0;
+  for (int i = 0; i <= object_group_connections_.length(); ++i) {
+    if (i == 0)
+      current_group_id = object_group_connections_[i].id;
+    if (i == object_group_connections_.length() ||
+        current_group_id != object_group_connections_[i].id) {
+      // Group detected: objects in indices [current_group_start, i[.
+
+      // Find out which implicit references are related to this group. (We want
+      // to ignore object groups which only have 1 object, but that object is
+      // needed as a representative object for the implicit refrerence group.)
+      while (current_implicit_refs_start < implicit_ref_connections_.length() &&
+             implicit_ref_connections_[current_implicit_refs_start].id <
+                 current_group_id)
+        ++current_implicit_refs_start;
+      current_implicit_refs_end = current_implicit_refs_start;
+      while (current_implicit_refs_end < implicit_ref_connections_.length() &&
+             implicit_ref_connections_[current_implicit_refs_end].id ==
+                 current_group_id)
+        ++current_implicit_refs_end;
+
+      if (current_implicit_refs_end > current_implicit_refs_start) {
+        // Find a representative object for the implicit references.
+        HeapObject** representative = NULL;
+        for (int j = current_group_start; j < i; ++j) {
+          Object** object = object_group_connections_[j].object;
+          if ((*object)->IsHeapObject()) {
+            representative = reinterpret_cast<HeapObject**>(object);
+            break;
+          }
+        }
+        if (representative) {
+          ImplicitRefGroup* group = new ImplicitRefGroup(
+              representative,
+              current_implicit_refs_end - current_implicit_refs_start);
+          for (int j = current_implicit_refs_start;
+               j < current_implicit_refs_end;
+               ++j) {
+            group->children[j - current_implicit_refs_start] =
+                implicit_ref_connections_[j].object;
+          }
+          implicit_ref_groups_.Add(group);
+        }
+        current_implicit_refs_start = current_implicit_refs_end;
+      }
+
+      // Find a RetainedObjectInfo for the group.
+      RetainedObjectInfo* info = NULL;
+      while (info_index < retainer_infos_.length() &&
+             retainer_infos_[info_index].id < current_group_id) {
+        retainer_infos_[info_index].info->Dispose();
+        ++info_index;
+      }
+      if (info_index < retainer_infos_.length() &&
+          retainer_infos_[info_index].id == current_group_id) {
+        // This object group has an associated ObjectGroupRetainerInfo.
+        info = retainer_infos_[info_index].info;
+        ++info_index;
+      }
+
+      // Ignore groups which only contain one object.
+      if (i > current_group_start + 1) {
+        ObjectGroup* group = new ObjectGroup(i - current_group_start);
+        for (int j = current_group_start; j < i; ++j) {
+          group->objects[j - current_group_start] =
+              object_group_connections_[j].object;
+        }
+        group->info = info;
+        object_groups_.Add(group);
+      } else if (info) {
+        info->Dispose();
+      }
+
+      if (i < object_group_connections_.length()) {
+        current_group_id = object_group_connections_[i].id;
+        current_group_start = i;
+      }
+    }
+  }
+  object_group_connections_.Clear();
+  object_group_connections_.Initialize(kObjectGroupConnectionsCapacity);
+  retainer_infos_.Clear();
+  implicit_ref_connections_.Clear();
+}
+
+
+EternalHandles::EternalHandles() : size_(0) {
+  for (unsigned i = 0; i < ARRAY_SIZE(singleton_handles_); i++) {
+    singleton_handles_[i] = kInvalidIndex;
+  }
+}
+
+
+EternalHandles::~EternalHandles() {
+  for (int i = 0; i < blocks_.length(); i++) delete[] blocks_[i];
+}
+
+
+void EternalHandles::IterateAllRoots(ObjectVisitor* visitor) {
+  int limit = size_;
+  for (int i = 0; i < blocks_.length(); i++) {
+    ASSERT(limit > 0);
+    Object** block = blocks_[i];
+    visitor->VisitPointers(block, block + Min(limit, kSize));
+    limit -= kSize;
+  }
+}
+
+
+void EternalHandles::IterateNewSpaceRoots(ObjectVisitor* visitor) {
+  for (int i = 0; i < new_space_indices_.length(); i++) {
+    visitor->VisitPointer(GetLocation(new_space_indices_[i]));
+  }
+}
+
+
+void EternalHandles::PostGarbageCollectionProcessing(Heap* heap) {
+  int last = 0;
+  for (int i = 0; i < new_space_indices_.length(); i++) {
+    int index = new_space_indices_[i];
+    if (heap->InNewSpace(*GetLocation(index))) {
+      new_space_indices_[last++] = index;
+    }
+  }
+  new_space_indices_.Rewind(last);
+}
+
+
+void EternalHandles::Create(Isolate* isolate, Object* object, int* index) {
+  ASSERT_EQ(kInvalidIndex, *index);
+  if (object == NULL) return;
+  ASSERT_NE(isolate->heap()->the_hole_value(), object);
+  int block = size_ >> kShift;
+  int offset = size_ & kMask;
+  // need to resize
+  if (offset == 0) {
+    Object** next_block = new Object*[kSize];
+    Object* the_hole = isolate->heap()->the_hole_value();
+    MemsetPointer(next_block, the_hole, kSize);
+    blocks_.Add(next_block);
+  }
+  ASSERT_EQ(isolate->heap()->the_hole_value(), blocks_[block][offset]);
+  blocks_[block][offset] = object;
+  if (isolate->heap()->InNewSpace(object)) {
+    new_space_indices_.Add(size_);
+  }
+  *index = size_++;
 }
 
 

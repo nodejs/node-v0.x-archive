@@ -35,6 +35,7 @@ void LookupResult::Iterate(ObjectVisitor* visitor) {
   LookupResult* current = this;  // Could be NULL.
   while (current != NULL) {
     visitor->VisitPointer(BitCast<Object**>(&current->holder_));
+    visitor->VisitPointer(BitCast<Object**>(&current->transition_));
     current = current->next_;
   }
 }
@@ -55,15 +56,15 @@ void LookupResult::Print(FILE* out) {
       PrintF(out, " -type = normal\n");
       PrintF(out, " -entry = %d", GetDictionaryEntry());
       break;
-    case CONSTANT_FUNCTION:
-      PrintF(out, " -type = constant function\n");
-      PrintF(out, " -function:\n");
-      GetConstantFunction()->Print(out);
+    case CONSTANT:
+      PrintF(out, " -type = constant\n");
+      PrintF(out, " -value:\n");
+      GetConstant()->Print(out);
       PrintF(out, "\n");
       break;
     case FIELD:
       PrintF(out, " -type = field\n");
-      PrintF(out, " -index = %d", GetFieldIndex());
+      PrintF(out, " -index = %d", GetFieldIndex().field_index());
       PrintF(out, "\n");
       break;
     case CALLBACKS:
@@ -82,13 +83,13 @@ void LookupResult::Print(FILE* out) {
         case FIELD:
           PrintF(out, " -type = map transition\n");
           PrintF(out, " -map:\n");
-          GetTransitionMap()->Print(out);
+          GetTransitionTarget()->Print(out);
           PrintF(out, "\n");
           return;
-        case CONSTANT_FUNCTION:
+        case CONSTANT:
           PrintF(out, " -type = constant property transition\n");
           PrintF(out, " -map:\n");
-          GetTransitionMap()->Print(out);
+          GetTransitionTarget()->Print(out);
           PrintF(out, "\n");
           return;
         case CALLBACKS:
@@ -112,7 +113,6 @@ void Descriptor::Print(FILE* out) {
   GetKey()->ShortPrint(out);
   PrintF(out, " @ ");
   GetValue()->ShortPrint(out);
-  PrintF(out, " %d\n", GetDetails().descriptor_index());
 }
 
 

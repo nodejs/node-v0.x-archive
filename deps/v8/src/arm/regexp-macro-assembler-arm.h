@@ -30,6 +30,7 @@
 
 #include "arm/assembler-arm.h"
 #include "arm/assembler-arm-inl.h"
+#include "macro-assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -52,10 +53,6 @@ class RegExpMacroAssemblerARM: public NativeRegExpMacroAssembler {
                                       Label* on_equal);
   virtual void CheckCharacterGT(uc16 limit, Label* on_greater);
   virtual void CheckCharacterLT(uc16 limit, Label* on_less);
-  virtual void CheckCharacters(Vector<const uc16> str,
-                               int cp_offset,
-                               Label* on_failure,
-                               bool check_end_of_string);
   // A "greedy loop" is a loop that is both greedy and with a simple
   // body. It has a particularly simple implementation.
   virtual void CheckGreedyLoop(Label* on_tos_equals_current_position);
@@ -163,9 +160,6 @@ class RegExpMacroAssemblerARM: public NativeRegExpMacroAssembler {
   // Check whether we are exceeding the stack limit on the backtrack stack.
   void CheckStackLimit();
 
-  void EmitBacktrackConstantPool();
-  int GetBacktrackConstantPoolEntry();
-
 
   // Generate a call to CheckStackGuardState.
   void CallCheckStackGuardState(Register scratch);
@@ -215,14 +209,7 @@ class RegExpMacroAssemblerARM: public NativeRegExpMacroAssembler {
   // and increments it by a word size.
   inline void Pop(Register target);
 
-  // Calls a C function and cleans up the frame alignment done by
-  // by FrameAlign. The called function *is* allowed to trigger a garbage
-  // collection, but may not take more than four arguments (no arguments
-  // passed on the stack), and the first argument will be a pointer to the
-  // return address.
-  inline void CallCFunctionUsingStub(ExternalReference function,
-                                     int num_arguments);
-
+  Isolate* isolate() const { return masm_->isolate(); }
 
   MacroAssembler* masm_;
 
@@ -235,11 +222,6 @@ class RegExpMacroAssemblerARM: public NativeRegExpMacroAssembler {
   // Number of registers to output at the end (the saved registers
   // are always 0..num_saved_registers_-1)
   int num_saved_registers_;
-
-  // Manage a small pre-allocated pool for writing label targets
-  // to for pushing backtrack addresses.
-  int backtrack_constant_pool_offset_;
-  int backtrack_constant_pool_capacity_;
 
   // Labels used internally.
   Label entry_label_;

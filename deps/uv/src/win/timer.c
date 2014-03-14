@@ -29,19 +29,38 @@
 
 
 void uv_update_time(uv_loop_t* loop) {
-  DWORD ticks = GetTickCount();
+  DWORD ticks;
+  ULARGE_INTEGER time;
 
-  /* The assumption is made that LARGE_INTEGER.QuadPart has the same type */
-  /* loop->time, which happens to be. Is there any way to assert this? */
-  LARGE_INTEGER* time = (LARGE_INTEGER*) &loop->time;
+  ticks = GetTickCount();
 
-  /* If the timer has wrapped, add 1 to it's high-order dword. */
+  time.QuadPart = loop->time;
+
+  /* GetTickCount() can conceivably wrap around, so when the current tick */
+  /* count is lower than the last tick count, we'll assume it has wrapped. */
   /* uv_poll must make sure that the timer can never overflow more than */
   /* once between two subsequent uv_update_time calls. */
-  if (ticks < time->LowPart) {
-    time->HighPart += 1;
-  }
-  time->LowPart = ticks;
+  time.LowPart = ticks;
+  if (ticks < loop->last_tick_count)
+    time.HighPart++;
+
+  /* Remember the last tick count. */
+  loop->last_tick_count = ticks;
+
+  /* The GetTickCount() resolution isn't too good. Sometimes it'll happen */
+  /* that GetQueuedCompletionStatus() or GetQueuedCompletionStatusEx() has */
+  /* waited for a couple of ms but this is not reflected in the GetTickCount */
+  /* result yet. Therefore whenever GetQueuedCompletionStatus times out */
+  /* we'll add the number of ms that it has waited to the current loop time. */
+  /* When that happened the loop time might be a little ms farther than what */
+  /* we've just computed, and we shouldn't update the loop time. */
+  if (loop->time < time.QuadPart)
+    loop->time = time.QuadPart;
+}
+
+
+void uv__time_forward(uv_loop_t* loop, uint64_t msecs) {
+  loop->time += msecs;
 }
 
 
@@ -138,8 +157,7 @@ int uv_timer_again(uv_timer_t* handle) {
 
   /* If timer_cb is NULL that means that the timer was never started. */
   if (!handle->timer_cb) {
-    uv__set_sys_error(loop, ERROR_INVALID_DATA);
-    return -1;
+    return UV_EINVAL;
   }
 
   if (handle->flags & UV_HANDLE_ACTIVE) {

@@ -60,18 +60,6 @@ const int kAlignmentZapValue = 0x12345678;  // Not heap object tagged.
 // ----------------------------------------------------
 
 
-class StackHandlerConstants : public AllStatic {
- public:
-  static const int kNextOffset     = 0 * kPointerSize;
-  static const int kCodeOffset     = 1 * kPointerSize;
-  static const int kStateOffset    = 2 * kPointerSize;
-  static const int kContextOffset  = 3 * kPointerSize;
-  static const int kFPOffset       = 4 * kPointerSize;
-
-  static const int kSize = kFPOffset + kPointerSize;
-};
-
-
 class EntryFrameConstants : public AllStatic {
  public:
   static const int kCallerFPOffset      = -6 * kPointerSize;
@@ -85,6 +73,8 @@ class EntryFrameConstants : public AllStatic {
 
 class ExitFrameConstants : public AllStatic {
  public:
+  static const int kFrameSize      = 2 * kPointerSize;
+
   static const int kCodeOffset     = -2 * kPointerSize;
   static const int kSPOffset       = -1 * kPointerSize;
 
@@ -94,22 +84,6 @@ class ExitFrameConstants : public AllStatic {
   // FP-relative displacement of the caller's SP.  It points just
   // below the saved PC.
   static const int kCallerSPDisplacement = +2 * kPointerSize;
-};
-
-
-class StandardFrameConstants : public AllStatic {
- public:
-  // Fixed part of the frame consists of return address, caller fp,
-  // context and function.
-  // StandardFrame::IterateExpressions assumes that kContextOffset is the last
-  // object pointer.
-  static const int kFixedFrameSize    =  4 * kPointerSize;
-  static const int kExpressionsOffset = -3 * kPointerSize;
-  static const int kMarkerOffset      = -2 * kPointerSize;
-  static const int kContextOffset     = -1 * kPointerSize;
-  static const int kCallerFPOffset    =  0 * kPointerSize;
-  static const int kCallerPCOffset    = +1 * kPointerSize;
-  static const int kCallerSPOffset    = +2 * kPointerSize;
 };
 
 
@@ -130,14 +104,30 @@ class JavaScriptFrameConstants : public AllStatic {
 
 class ArgumentsAdaptorFrameConstants : public AllStatic {
  public:
+  // FP-relative.
   static const int kLengthOffset = StandardFrameConstants::kExpressionsOffset;
+
   static const int kFrameSize =
       StandardFrameConstants::kFixedFrameSize + kPointerSize;
 };
 
 
+class ConstructFrameConstants : public AllStatic {
+ public:
+  // FP-relative.
+  static const int kImplicitReceiverOffset = -5 * kPointerSize;
+  static const int kConstructorOffset      = kMinInt;
+  static const int kLengthOffset           = -4 * kPointerSize;
+  static const int kCodeOffset = StandardFrameConstants::kExpressionsOffset;
+
+  static const int kFrameSize =
+      StandardFrameConstants::kFixedFrameSize + 3 * kPointerSize;
+};
+
+
 class InternalFrameConstants : public AllStatic {
  public:
+  // FP-relative.
   static const int kCodeOffset = StandardFrameConstants::kExpressionsOffset;
 };
 
@@ -145,6 +135,11 @@ class InternalFrameConstants : public AllStatic {
 inline Object* JavaScriptFrame::function_slot_object() const {
   const int offset = JavaScriptFrameConstants::kFunctionOffset;
   return Memory::Object_at(fp() + offset);
+}
+
+
+inline void StackHandler::SetFp(Address slot, Address fp) {
+  Memory::Address_at(slot) = fp;
 }
 
 

@@ -90,7 +90,7 @@ const char* fmt(double d) {
 }
 
 
-int run_tests(int timeout, int benchmark_output) {
+int run_tests(int benchmark_output) {
   int total;
   int passed;
   int failed;
@@ -130,7 +130,7 @@ int run_tests(int timeout, int benchmark_output) {
       log_progress(total, passed, failed, todos, skipped, task->task_name);
     }
 
-    test_result = run_test(task->task_name, timeout, benchmark_output, current);
+    test_result = run_test(task->task_name, benchmark_output, current);
     switch (test_result) {
     case TEST_OK: passed++; break;
     case TEST_TODO: todos++; break;
@@ -189,7 +189,6 @@ void log_tap_result(int test_count,
 
 
 int run_test(const char* test,
-             int timeout,
              int benchmark_output,
              int test_count) {
   char errmsg[1024] = "no error";
@@ -279,7 +278,7 @@ int run_test(const char* test,
     goto out;
   }
 
-  result = process_wait(main_proc, 1, timeout);
+  result = process_wait(main_proc, 1, task->timeout);
   if (result == -1) {
     FATAL("process_wait failed");
   } else if (result == -2) {
@@ -410,7 +409,8 @@ static int compare_task(const void* va, const void* vb) {
 }
 
 
-static int find_helpers(const task_entry_t* task, const task_entry_t** helpers) {
+static int find_helpers(const task_entry_t* task,
+                        const task_entry_t** helpers) {
   const task_entry_t* helper;
   int n_helpers;
 

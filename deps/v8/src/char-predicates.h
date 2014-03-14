@@ -40,6 +40,8 @@ inline bool IsCarriageReturn(uc32 c);
 inline bool IsLineFeed(uc32 c);
 inline bool IsDecimalDigit(uc32 c);
 inline bool IsHexDigit(uc32 c);
+inline bool IsOctalDigit(uc32 c);
+inline bool IsBinaryDigit(uc32 c);
 inline bool IsRegExpWord(uc32 c);
 inline bool IsRegExpNewline(uc32 c);
 
@@ -61,6 +63,27 @@ struct IdentifierPart {
         || c == 0x200D  // U+200D is Zero-Width Joiner.
         || unibrow::CombiningMark::Is(c)
         || unibrow::ConnectorPunctuation::Is(c);
+  }
+};
+
+
+// WhiteSpace according to ECMA-262 5.1, 7.2.
+struct WhiteSpace {
+  static inline bool Is(uc32 c) {
+    return c == 0x0009 ||  // <TAB>
+           c == 0x000B ||  // <VT>
+           c == 0x000C ||  // <FF>
+           c == 0xFEFF ||  // <BOM>
+           // \u0020 and \u00A0 are included in unibrow::WhiteSpace.
+           unibrow::WhiteSpace::Is(c);
+  }
+};
+
+
+// WhiteSpace and LineTerminator according to ECMA-262 5.1, 7.2 and 7.3.
+struct WhiteSpaceOrLineTerminator {
+  static inline bool Is(uc32 c) {
+    return WhiteSpace::Is(c) || unibrow::LineTerminator::Is(c);
   }
 };
 

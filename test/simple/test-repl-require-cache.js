@@ -28,6 +28,6 @@ var common = require('../common'),
 require.cache.something = 1;
 assert.equal(require.cache.something, 1);
 
-repl.start({ useGlobal: false }).rli.close();
+repl.start({ useGlobal: false }).close();
 
 assert.equal(require.cache.something, 1);

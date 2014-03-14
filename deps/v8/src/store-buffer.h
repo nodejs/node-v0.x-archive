@@ -37,12 +37,16 @@
 namespace v8 {
 namespace internal {
 
+class Page;
+class PagedSpace;
 class StoreBuffer;
 
 typedef void (*ObjectSlotCallback)(HeapObject** from, HeapObject* to);
 
-typedef void (StoreBuffer::*RegionCallback)(
-    Address start, Address end, ObjectSlotCallback slot_callback);
+typedef void (StoreBuffer::*RegionCallback)(Address start,
+                                            Address end,
+                                            ObjectSlotCallback slot_callback,
+                                            bool clear_maps);
 
 // Used to implement the write barrier by collecting addresses of pointers
 // between spaces.
@@ -80,6 +84,10 @@ class StoreBuffer {
   // delete the store buffer as it starts so the callback should reenter
   // surviving old-to-new pointers into the store buffer to rebuild it.
   void IteratePointersToNewSpace(ObjectSlotCallback callback);
+
+  // Same as IteratePointersToNewSpace but additonally clears maps in objects
+  // referenced from the store buffer that do not contain a forwarding pointer.
+  void IteratePointersToNewSpaceAndClearMaps(ObjectSlotCallback callback);
 
   static const int kStoreBufferOverflowBit = 1 << (14 + kPointerSizeLog2);
   static const int kStoreBufferSize = kStoreBufferOverflowBit;
@@ -158,13 +166,19 @@ class StoreBuffer {
 
   void ClearFilteringHashSets();
 
-  void CheckForFullBuffer();
+  bool SpaceAvailable(intptr_t space_needed);
   void Uniq();
   void ExemptPopularPages(int prime_sample_step, int threshold);
 
+  // Set the map field of the object to NULL if contains a map.
+  inline void ClearDeadObject(HeapObject *object);
+
+  void IteratePointersToNewSpace(ObjectSlotCallback callback, bool clear_maps);
+
   void FindPointersToNewSpaceInRegion(Address start,
                                       Address end,
-                                      ObjectSlotCallback slot_callback);
+                                      ObjectSlotCallback slot_callback,
+                                      bool clear_maps);
 
   // For each region of pointers on a page in use from an old space call
   // visit_pointer_region callback.
@@ -180,20 +194,24 @@ class StoreBuffer {
   void FindPointersToNewSpaceInMaps(
     Address start,
     Address end,
-    ObjectSlotCallback slot_callback);
+    ObjectSlotCallback slot_callback,
+    bool clear_maps);
 
   void FindPointersToNewSpaceInMapsRegion(
     Address start,
     Address end,
-    ObjectSlotCallback slot_callback);
+    ObjectSlotCallback slot_callback,
+    bool clear_maps);
 
   void FindPointersToNewSpaceOnPage(
     PagedSpace* space,
     Page* page,
     RegionCallback region_callback,
-    ObjectSlotCallback slot_callback);
+    ObjectSlotCallback slot_callback,
+    bool clear_maps);
 
-  void IteratePointersInStoreBuffer(ObjectSlotCallback slot_callback);
+  void IteratePointersInStoreBuffer(ObjectSlotCallback slot_callback,
+                                    bool clear_maps);
 
 #ifdef VERIFY_HEAP
   void VerifyPointers(PagedSpace* space, RegionCallback region_callback);
@@ -210,8 +228,7 @@ class StoreBufferRebuildScope {
   explicit StoreBufferRebuildScope(Heap* heap,
                                    StoreBuffer* store_buffer,
                                    StoreBufferCallback callback)
-      : heap_(heap),
-        store_buffer_(store_buffer),
+      : store_buffer_(store_buffer),
         stored_state_(store_buffer->store_buffer_rebuilding_enabled_),
         stored_callback_(store_buffer->callback_) {
     store_buffer_->store_buffer_rebuilding_enabled_ = true;
@@ -222,11 +239,9 @@ class StoreBufferRebuildScope {
   ~StoreBufferRebuildScope() {
     store_buffer_->callback_ = stored_callback_;
     store_buffer_->store_buffer_rebuilding_enabled_ = stored_state_;
-    store_buffer_->CheckForFullBuffer();
   }
 
  private:
-  Heap* heap_;
   StoreBuffer* store_buffer_;
   bool stored_state_;
   StoreBufferCallback stored_callback_;

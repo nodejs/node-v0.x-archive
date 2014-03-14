@@ -84,12 +84,16 @@ class List {
   // backing store (e.g. Add).
   inline T& operator[](int i) const {
     ASSERT(0 <= i);
-    ASSERT(i < length_);
+    SLOW_ASSERT(i < length_);
     return data_[i];
   }
   inline T& at(int i) const { return operator[](i); }
   inline T& last() const { return at(length_ - 1); }
   inline T& first() const { return at(0); }
+
+  typedef T* iterator;
+  inline iterator begin() const { return &data_[0]; }
+  inline iterator end() const { return &data_[length_]; }
 
   INLINE(bool is_empty() const) { return length_ == 0; }
   INLINE(int length() const) { return length_; }
@@ -114,6 +118,9 @@ class List {
   // Inserts the element at the specific index.
   void InsertAt(int index, const T& element,
                 AllocationPolicy allocator = AllocationPolicy());
+
+  // Overwrites the element at the specific index.
+  void Set(int index, const T& element);
 
   // Added 'count' elements with the value 'value' and returns a
   // vector that allows access to the elements.  The vector is valid
@@ -148,6 +155,9 @@ class List {
 
   // Drop the last 'count' elements from the list.
   INLINE(void RewindBy(int count)) { Rewind(length_ - count); }
+
+  // Halve the capacity if fill level is less than a quarter.
+  INLINE(void Trim(AllocationPolicy allocator = AllocationPolicy()));
 
   bool Contains(const T& elm) const;
   int CountOccurrences(const T& elm, int start, int end) const;
@@ -190,12 +200,23 @@ class List {
   DISALLOW_COPY_AND_ASSIGN(List);
 };
 
+
+template<typename T, class P>
+size_t GetMemoryUsedByList(const List<T, P>& list) {
+  return list.length() * sizeof(T) + sizeof(list);
+}
+
+
 class Map;
+template<class> class TypeImpl;
+struct HeapTypeConfig;
+typedef TypeImpl<HeapTypeConfig> HeapType;
 class Code;
 template<typename T> class Handle;
 typedef List<Map*> MapList;
 typedef List<Code*> CodeList;
 typedef List<Handle<Map> > MapHandleList;
+typedef List<Handle<HeapType> > TypeHandleList;
 typedef List<Handle<Code> > CodeHandleList;
 
 // Perform binary search for an element in an already sorted

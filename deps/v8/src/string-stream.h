@@ -137,12 +137,18 @@ class StringStream {
            FmtElm arg1,
            FmtElm arg2,
            FmtElm arg3);
+  void Add(const char* format,
+           FmtElm arg0,
+           FmtElm arg1,
+           FmtElm arg2,
+           FmtElm arg3,
+           FmtElm arg4);
 
   // Getting the message out.
   void OutputToFile(FILE* out);
   void OutputToStdOut() { OutputToFile(stdout); }
-  void Log();
-  Handle<String> ToString();
+  void Log(Isolate* isolate);
+  Handle<String> ToString(Isolate* isolate);
   SmartArrayPointer<const char> ToCString() const;
   int length() const { return length_; }
 
@@ -163,10 +169,10 @@ class StringStream {
   }
 
   // Mentioned object cache support.
-  void PrintMentionedObjectCache();
-  static void ClearMentionedObjectCache();
+  void PrintMentionedObjectCache(Isolate* isolate);
+  static void ClearMentionedObjectCache(Isolate* isolate);
 #ifdef DEBUG
-  static bool IsMentionedObjectCacheClear();
+  static bool IsMentionedObjectCacheClear(Isolate* isolate);
 #endif
 
 
@@ -184,6 +190,31 @@ class StringStream {
   int space() const { return capacity_ - length_; }
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(StringStream);
+};
+
+
+// Utility class to print a list of items to a stream, divided by a separator.
+class SimpleListPrinter {
+ public:
+  explicit SimpleListPrinter(StringStream* stream, char separator = ',') {
+    separator_ = separator;
+    stream_ = stream;
+    first_ = true;
+  }
+
+  void Add(const char* str) {
+    if (first_) {
+      first_ = false;
+    } else {
+      stream_->Put(separator_);
+    }
+    stream_->Add(str);
+  }
+
+ private:
+  bool first_;
+  char separator_;
+  StringStream* stream_;
 };
 
 

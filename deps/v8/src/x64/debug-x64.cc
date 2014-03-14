@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_X64)
+#if V8_TARGET_ARCH_X64
 
 #include "assembler.h"
 #include "codegen.h"
@@ -48,11 +48,10 @@ bool BreakLocationIterator::IsDebugBreakAtReturn()  {
 // CodeGenerator::VisitReturnStatement and VirtualFrame::Exit in codegen-x64.cc
 // for the precise return instructions sequence.
 void BreakLocationIterator::SetDebugBreakAtReturn()  {
-  ASSERT(Assembler::kJSReturnSequenceLength >=
-         Assembler::kCallInstructionLength);
+  ASSERT(Assembler::kJSReturnSequenceLength >= Assembler::kCallSequenceLength);
   rinfo()->PatchCodeWithCall(
-      Isolate::Current()->debug()->debug_break_return()->entry(),
-      Assembler::kJSReturnSequenceLength - Assembler::kCallInstructionLength);
+      debug_info_->GetIsolate()->debug()->debug_break_return()->entry(),
+      Assembler::kJSReturnSequenceLength - Assembler::kCallSequenceLength);
 }
 
 
@@ -81,8 +80,8 @@ bool BreakLocationIterator::IsDebugBreakAtSlot() {
 void BreakLocationIterator::SetDebugBreakAtSlot() {
   ASSERT(IsDebugBreakSlot());
   rinfo()->PatchCodeWithCall(
-      Isolate::Current()->debug()->debug_break_slot()->entry(),
-      Assembler::kDebugBreakSlotLength - Assembler::kCallInstructionLength);
+      debug_info_->GetIsolate()->debug()->debug_break_slot()->entry(),
+      Assembler::kDebugBreakSlotLength - Assembler::kCallSequenceLength);
 }
 
 
@@ -124,14 +123,8 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
       if ((object_regs & (1 << r)) != 0) {
         __ push(reg);
       }
-      // Store the 64-bit value as two smis.
       if ((non_object_regs & (1 << r)) != 0) {
-        __ movq(kScratchRegister, reg);
-        __ Integer32ToSmi(reg, reg);
-        __ push(reg);
-        __ sar(kScratchRegister, Immediate(32));
-        __ Integer32ToSmi(kScratchRegister, kScratchRegister);
-        __ push(kScratchRegister);
+        __ PushInt64AsTwoSmis(reg);
       }
     }
 
@@ -139,7 +132,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
     __ RecordComment("// Calling from debug break to runtime - come in - over");
 #endif
     __ Set(rax, 0);  // No arguments (argc == 0).
-    __ movq(rbx, ExternalReference::debug_break(masm->isolate()));
+    __ Move(rbx, ExternalReference::debug_break(masm->isolate()));
 
     CEntryStub ceb(1);
     __ CallStub(&ceb);
@@ -156,12 +149,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
       }
       // Reconstruct the 64-bit value from two smis.
       if ((non_object_regs & (1 << r)) != 0) {
-        __ pop(kScratchRegister);
-        __ SmiToInteger32(kScratchRegister, kScratchRegister);
-        __ shl(kScratchRegister, Immediate(32));
-        __ pop(reg);
-        __ SmiToInteger32(reg, reg);
-        __ or_(reg, kScratchRegister);
+        __ PopInt64AsTwoSmis(reg);
       }
     }
 
@@ -176,7 +164,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // If this call did not replace a call but patched other code then there will
   // be an unwanted return address left on the stack. Here we get rid of that.
   if (convert_call_to_jmp) {
-    __ addq(rsp, Immediate(kPointerSize));
+    __ addq(rsp, Immediate(kPCOnStackSize));
   }
 
   // Now that the break point has been handled, resume normal execution by
@@ -184,8 +172,8 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // overwritten by the address of DebugBreakXXX.
   ExternalReference after_break_target =
       ExternalReference(Debug_Address::AfterBreakTarget(), masm->isolate());
-  __ movq(kScratchRegister, after_break_target);
-  __ jmp(Operand(kScratchRegister, 0));
+  __ Move(kScratchRegister, after_break_target);
+  __ Jump(Operand(kScratchRegister, 0));
 }
 
 
@@ -233,6 +221,15 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
 }
 
 
+void Debug::GenerateCompareNilICDebugBreak(MacroAssembler* masm) {
+  // Register state for CompareNil IC
+  // ----------- S t a t e -------------
+  //  -- rax    : value
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, rax.bit(), 0, false);
+}
+
+
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
   // Register state for IC call call (from ic-x64.cc)
   // ----------- S t a t e -------------
@@ -264,9 +261,11 @@ void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
   // Register state for CallFunctionStub (from code-stubs-x64.cc).
   // ----------- S t a t e -------------
   //  -- rdi : function
-  //  -- rbx: cache cell for call target
+  //  -- rbx: feedback array
+  //  -- rdx: slot in feedback array
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, rbx.bit() | rdi.bit(), 0, false);
+  Generate_DebugBreakCallHelper(masm, rbx.bit() | rdx.bit() | rdi.bit(),
+                                0, false);
 }
 
 
@@ -288,10 +287,12 @@ void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
   // above IC call.
   // ----------- S t a t e -------------
   //  -- rax: number of arguments
-  //  -- rbx: cache cell for call target
+  //  -- rbx: feedback array
+  //  -- rdx: feedback slot (smi)
   // -----------------------------------
   // The number of arguments in rax is not smi encoded.
-  Generate_DebugBreakCallHelper(masm, rbx.bit() | rdi.bit(), rax.bit(), false);
+  Generate_DebugBreakCallHelper(masm, rbx.bit() | rdx.bit() | rdi.bit(),
+                                rax.bit(), false);
 }
 
 
@@ -322,8 +323,8 @@ void Debug::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
   ExternalReference restarter_frame_function_slot =
       ExternalReference(Debug_Address::RestarterFrameFunctionPointer(),
                         masm->isolate());
-  __ movq(rax, restarter_frame_function_slot);
-  __ movq(Operand(rax, 0), Immediate(0));
+  __ Move(rax, restarter_frame_function_slot);
+  __ movp(Operand(rax, 0), Immediate(0));
 
   // We do not know our frame height, but set rsp based on rbp.
   __ lea(rsp, Operand(rbp, -1 * kPointerSize));
@@ -332,11 +333,11 @@ void Debug::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
   __ pop(rbp);
 
   // Load context from the function.
-  __ movq(rsi, FieldOperand(rdi, JSFunction::kContextOffset));
+  __ movp(rsi, FieldOperand(rdi, JSFunction::kContextOffset));
 
   // Get function code.
-  __ movq(rdx, FieldOperand(rdi, JSFunction::kSharedFunctionInfoOffset));
-  __ movq(rdx, FieldOperand(rdx, SharedFunctionInfo::kCodeOffset));
+  __ movp(rdx, FieldOperand(rdi, JSFunction::kSharedFunctionInfoOffset));
+  __ movp(rdx, FieldOperand(rdx, SharedFunctionInfo::kCodeOffset));
   __ lea(rdx, FieldOperand(rdx, Code::kHeaderSize));
 
   // Re-run JSFunction, rdi is function, rsi is context.

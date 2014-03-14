@@ -45,7 +45,7 @@
 #include <sys/proc.h>
 #include <sys/procfs.h>
 
-uint64_t uv__hrtime(void) {
+uint64_t uv__hrtime(uv_clocktype_t type) {
   uint64_t G = 1000000000;
   timebasestruct_t t;
   read_wall_time(&t, TIMEBASE_SZ);
@@ -85,7 +85,7 @@ int uv_exepath(char* buffer, size_t* size) {
     return fd;
 
   res = read(fd, &ps, sizeof(ps));
-  close(fd);
+  uv__close(fd);
   if (res < 0)
     return res;
 
@@ -128,14 +128,21 @@ void uv_loadavg(double avg[3]) {
 }
 
 
-int uv_fs_event_init(uv_loop_t* loop,
-                     uv_fs_event_t* handle,
-                     const char* filename,
-                     uv_fs_event_cb cb,
-                     int flags) {
-  loop->counters.fs_event_init++;
-  uv__set_sys_error(loop, ENOSYS);
-  return -1;
+int uv_fs_event_init(uv_loop_t* loop, uv_fs_event_t* handle) {
+  return -ENOSYS;
+}
+
+
+int uv_fs_event_start(uv_fs_event_t* handle,
+                      uv_fs_event_cb cb,
+                      const char* filename,
+                      unsigned int flags) {
+  return -ENOSYS;
+}
+
+
+int uv_fs_event_stop(uv_fs_event_t* handle) {
+  return -ENOSYS;
 }
 
 
@@ -149,45 +156,44 @@ char** uv_setup_args(int argc, char** argv) {
 }
 
 
-uv_err_t uv_set_process_title(const char* title) {
-  return uv_ok_;
+int uv_set_process_title(const char* title) {
+  return 0;
 }
 
 
-uv_err_t uv_get_process_title(char* buffer, size_t size) {
+int uv_get_process_title(char* buffer, size_t size) {
   if (size > 0) {
     buffer[0] = '\0';
   }
-  return uv_ok_;
+  return 0;
 }
 
 
-uv_err_t uv_resident_set_memory(size_t* rss) {
+int uv_resident_set_memory(size_t* rss) {
   char pp[64];
   psinfo_t psinfo;
-  uv_err_t err;
+  int err;
   int fd;
 
   (void) snprintf(pp, sizeof(pp), "/proc/%lu/psinfo", (unsigned long) getpid());
 
   fd = open(pp, O_RDONLY);
   if (fd == -1)
-    return uv__new_sys_error(errno);
+    return -errno;
 
-  err = uv_ok_;
-
-  if (read(fd, &psinfo, sizeof(psinfo)) == sizeof(psinfo))
+  /* FIXME(bnoordhuis) Handle EINTR. */
+  err = -EINVAL;
+  if (read(fd, &psinfo, sizeof(psinfo)) == sizeof(psinfo)) {
     *rss = (size_t)psinfo.pr_rssize * 1024;
-  else
-    err = uv__new_sys_error(EINVAL);
-
-  close(fd);
+    err = 0;
+  }
+  uv__close(fd);
 
   return err;
 }
 
 
-uv_err_t uv_uptime(double* uptime) {
+int uv_uptime(double* uptime) {
   struct utmp *utmp_buf;
   size_t entries = 0;
   time_t boot_time;
@@ -206,14 +212,14 @@ uv_err_t uv_uptime(double* uptime) {
   endutent();
 
   if (boot_time == 0)
-    return uv__new_artificial_error(UV_ENOSYS);
+    return -ENOSYS;
 
   *uptime = time(NULL) - boot_time;
-  return uv_ok_;
+  return 0;
 }
 
 
-uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   uv_cpu_info_t* cpu_info;
   perfstat_cpu_total_t ps_total;
   perfstat_cpu_t* ps_cpus;
@@ -222,30 +228,30 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 
   result = perfstat_cpu_total(NULL, &ps_total, sizeof(ps_total), 1);
   if (result == -1) {
-    return uv__new_artificial_error(UV_ENOSYS);
+    return -ENOSYS;
   }
 
   ncpus = result = perfstat_cpu(NULL, NULL, sizeof(perfstat_cpu_t), 0);
   if (result == -1) {
-    return uv__new_artificial_error(UV_ENOSYS);
+    return -ENOSYS;
   }
 
   ps_cpus = (perfstat_cpu_t*) malloc(ncpus * sizeof(perfstat_cpu_t));
   if (!ps_cpus) {
-    return uv__new_artificial_error(UV_ENOMEM);
+    return -ENOMEM;
   }
 
   strcpy(cpu_id.name, FIRST_CPU);
   result = perfstat_cpu(&cpu_id, ps_cpus, sizeof(perfstat_cpu_t), ncpus);
   if (result == -1) {
     free(ps_cpus);
-    return uv__new_artificial_error(UV_ENOSYS);
+    return -ENOSYS;
   }
 
   *cpu_infos = (uv_cpu_info_t*) malloc(ncpus * sizeof(uv_cpu_info_t));
   if (!*cpu_infos) {
     free(ps_cpus);
-    return uv__new_artificial_error(UV_ENOMEM);
+    return -ENOMEM;
   }
 
   *count = ncpus;
@@ -264,7 +270,7 @@ uv_err_t uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   }
 
   free(ps_cpus);
-  return uv_ok_;
+  return 0;
 }
 
 
@@ -279,7 +285,7 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
 }
 
 
-uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
+int uv_interface_addresses(uv_interface_address_t** addresses,
   int* count) {
   uv_interface_address_t* address;
   int sockfd, size = 1;
@@ -289,19 +295,19 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
   *count = 0;
 
   if (0 > (sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP))) {
-    return uv__new_artificial_error(UV_ENOSYS);
+    return -ENOSYS;
   }
 
   if (ioctl(sockfd, SIOCGSIZIFCONF, &size) == -1) {
-    close(sockfd);
-    return uv__new_artificial_error(UV_ENOSYS);
+    uv__close(sockfd);
+    return -ENOSYS;
   }
 
   ifc.ifc_req = (struct ifreq*)malloc(size);
   ifc.ifc_len = size;
   if (ioctl(sockfd, SIOCGIFCONF, &ifc) == -1) {
-    close(sockfd);
-    return uv__new_artificial_error(UV_ENOSYS);
+    uv__close(sockfd);
+    return -ENOSYS;
   }
 
 #define ADDR_SIZE(p) MAX((p).sa_len, sizeof(p))
@@ -319,8 +325,8 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
 
     memcpy(flg.ifr_name, p->ifr_name, sizeof(flg.ifr_name));
     if (ioctl(sockfd, SIOCGIFFLAGS, &flg) == -1) {
-      close(sockfd);
-      return uv__new_artificial_error(UV_ENOSYS);
+      uv__close(sockfd);
+      return -ENOSYS;
     }
 
     if (!(flg.ifr_flags & IFF_UP && flg.ifr_flags & IFF_RUNNING))
@@ -333,8 +339,8 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
   *addresses = (uv_interface_address_t*)
     malloc(*count * sizeof(uv_interface_address_t));
   if (!(*addresses)) {
-    close(sockfd);
-    return uv__new_artificial_error(UV_ENOMEM);
+    uv__close(sockfd);
+    return -ENOMEM;
   }
   address = *addresses;
 
@@ -350,8 +356,8 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
 
     memcpy(flg.ifr_name, p->ifr_name, sizeof(flg.ifr_name));
     if (ioctl(sockfd, SIOCGIFFLAGS, &flg) == -1) {
-      close(sockfd);
-      return uv__new_artificial_error(UV_ENOSYS);
+      uv__close(sockfd);
+      return -ENOSYS;
     }
 
     if (!(flg.ifr_flags & IFF_UP && flg.ifr_flags & IFF_RUNNING))
@@ -362,10 +368,12 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
     address->name = strdup(p->ifr_name);
 
     if (p->ifr_addr.sa_family == AF_INET6) {
-      address->address.address6 = *((struct sockaddr_in6 *)&p->ifr_addr);
+      address->address.address6 = *((struct sockaddr_in6*) &p->ifr_addr);
     } else {
-      address->address.address4 = *((struct sockaddr_in *)&p->ifr_addr);
+      address->address.address4 = *((struct sockaddr_in*) &p->ifr_addr);
     }
+
+    /* TODO: Retrieve netmask using SIOCGIFNETMASK ioctl */
 
     address->is_internal = flg.ifr_flags & IFF_LOOPBACK ? 1 : 0;
 
@@ -374,8 +382,8 @@ uv_err_t uv_interface_addresses(uv_interface_address_t** addresses,
 
 #undef ADDR_SIZE
 
-  close(sockfd);
-  return uv_ok_;
+  uv__close(sockfd);
+  return 0;
 }
 
 

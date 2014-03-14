@@ -29,6 +29,30 @@
 #include "winapi.h"
 #include "winsock.h"
 
+#ifdef _MSC_VER
+# define INLINE __inline
+#else
+# define INLINE inline
+#endif
+
+
+#ifdef _DEBUG
+extern __declspec( thread ) int uv__crt_assert_enabled;
+
+#define UV_BEGIN_DISABLE_CRT_ASSERT()                           \
+  {                                                             \
+    int uv__saved_crt_assert_enabled = uv__crt_assert_enabled;  \
+    uv__crt_assert_enabled = FALSE;
+  
+
+#define UV_END_DISABLE_CRT_ASSERT()                             \
+    uv__crt_assert_enabled = uv__saved_crt_assert_enabled;      \
+  }
+
+#else
+#define UV_BEGIN_DISABLE_CRT_ASSERT()
+#define UV_END_DISABLE_CRT_ASSERT()
+#endif
 
 /*
  * Handles
@@ -58,6 +82,7 @@
 #define UV_HANDLE_SYNC_BYPASS_IOCP              0x00040000
 #define UV_HANDLE_ZERO_READ                     0x00080000
 #define UV_HANDLE_EMULATE_IOCP                  0x00100000
+#define UV_HANDLE_BLOCKING_WRITES               0x00200000
 
 /* Only used by uv_tcp_t handles. */
 #define UV_HANDLE_IPV6                          0x01000000
@@ -100,7 +125,7 @@ int uv_tcp_accept(uv_tcp_t* server, uv_tcp_t* client);
 int uv_tcp_read_start(uv_tcp_t* handle, uv_alloc_cb alloc_cb,
     uv_read_cb read_cb);
 int uv_tcp_write(uv_loop_t* loop, uv_write_t* req, uv_tcp_t* handle,
-    uv_buf_t bufs[], int bufcnt, uv_write_cb cb);
+    const uv_buf_t bufs[], unsigned int nbufs, uv_write_cb cb);
 
 void uv_process_tcp_read_req(uv_loop_t* loop, uv_tcp_t* handle, uv_req_t* req);
 void uv_process_tcp_write_req(uv_loop_t* loop, uv_tcp_t* handle,
@@ -134,19 +159,18 @@ void uv_udp_endgame(uv_loop_t* loop, uv_udp_t* handle);
 /*
  * Pipes
  */
-uv_err_t uv_stdio_pipe_server(uv_loop_t* loop, uv_pipe_t* handle, DWORD access,
+int uv_stdio_pipe_server(uv_loop_t* loop, uv_pipe_t* handle, DWORD access,
     char* name, size_t nameSize);
 
 int uv_pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb);
 int uv_pipe_accept(uv_pipe_t* server, uv_stream_t* client);
 int uv_pipe_read_start(uv_pipe_t* handle, uv_alloc_cb alloc_cb,
     uv_read_cb read_cb);
-int uv_pipe_read2_start(uv_pipe_t* handle, uv_alloc_cb alloc_cb,
-    uv_read2_cb read_cb);
 int uv_pipe_write(uv_loop_t* loop, uv_write_t* req, uv_pipe_t* handle,
-    uv_buf_t bufs[], int bufcnt, uv_write_cb cb);
+    const uv_buf_t bufs[], unsigned int nbufs, uv_write_cb cb);
 int uv_pipe_write2(uv_loop_t* loop, uv_write_t* req, uv_pipe_t* handle,
-    uv_buf_t bufs[], int bufcnt, uv_stream_t* send_handle, uv_write_cb cb);
+    const uv_buf_t bufs[], unsigned int nbufs, uv_stream_t* send_handle,
+    uv_write_cb cb);
 
 void uv_process_pipe_read_req(uv_loop_t* loop, uv_pipe_t* handle,
     uv_req_t* req);
@@ -173,7 +197,7 @@ int uv_tty_read_start(uv_tty_t* handle, uv_alloc_cb alloc_cb,
     uv_read_cb read_cb);
 int uv_tty_read_stop(uv_tty_t* handle);
 int uv_tty_write(uv_loop_t* loop, uv_write_t* req, uv_tty_t* handle,
-    uv_buf_t bufs[], int bufcnt, uv_write_cb cb);
+    const uv_buf_t bufs[], unsigned int nbufs, uv_write_cb cb);
 void uv_tty_close(uv_tty_t* handle);
 
 void uv_process_tty_read_req(uv_loop_t* loop, uv_tty_t* handle,
@@ -196,7 +220,7 @@ void uv_tty_endgame(uv_loop_t* loop, uv_tty_t* handle);
 void uv_process_poll_req(uv_loop_t* loop, uv_poll_t* handle,
     uv_req_t* req);
 
-void uv_poll_close(uv_loop_t* loop, uv_poll_t* handle);
+int uv_poll_close(uv_loop_t* loop, uv_poll_t* handle);
 void uv_poll_endgame(uv_loop_t* loop, uv_poll_t* handle);
 
 
@@ -206,6 +230,7 @@ void uv_poll_endgame(uv_loop_t* loop, uv_poll_t* handle);
 void uv_timer_endgame(uv_loop_t* loop, uv_timer_t* handle);
 
 DWORD uv_get_poll_timeout(uv_loop_t* loop);
+void uv__time_forward(uv_loop_t* loop, uint64_t msecs);
 void uv_process_timers(uv_loop_t* loop);
 
 
@@ -253,6 +278,12 @@ void uv_process_endgame(uv_loop_t* loop, uv_process_t* handle);
 
 
 /*
+ * Error
+ */
+int uv_translate_sys_error(int sys_errno);
+
+
+/*
  * Getaddrinfo
  */
 void uv_process_getaddrinfo_req(uv_loop_t* loop, uv_getaddrinfo_t* req);
@@ -292,15 +323,15 @@ void uv__fs_poll_endgame(uv_loop_t* loop, uv_fs_poll_t* handle);
 void uv__util_init();
 
 int uv_parent_pid();
-void uv_fatal_error(const int errorno, const char* syscall);
-uv_err_code uv_translate_sys_error(int sys_errno);
+__declspec(noreturn) void uv_fatal_error(const int errorno, const char* syscall);
 
 
 /*
  * Process stdio handles.
  */
-uv_err_t uv__stdio_create(uv_loop_t* loop, uv_process_options_t* options,
-    BYTE** buffer_ptr);
+int uv__stdio_create(uv_loop_t* loop,
+                     const uv_process_options_t* options,
+                     BYTE** buffer_ptr);
 void uv__stdio_destroy(BYTE* buffer);
 void uv__stdio_noinherit(BYTE* buffer);
 int uv__stdio_verify(BYTE* buffer, WORD size);

@@ -58,7 +58,7 @@ typedef int32_t Atomic32;
 #ifdef V8_HOST_ARCH_64_BIT
 // We need to be able to go between Atomic64 and AtomicWord implicitly.  This
 // means Atomic64 and AtomicWord should be the same type on 64-bit.
-#if defined(__APPLE__)
+#if defined(__ILP32__) || defined(__APPLE__)
 // MacOS is an exception to the implicit conversion rule above,
 // because it uses long for intptr_t.
 typedef int64_t Atomic64;
@@ -151,18 +151,19 @@ Atomic64 Release_Load(volatile const Atomic64* ptr);
 } }  // namespace v8::internal
 
 // Include our platform specific implementation.
-#if defined(_MSC_VER) && \
-  (defined(V8_HOST_ARCH_IA32) || defined(V8_HOST_ARCH_X64))
+#if defined(THREAD_SANITIZER)
+#include "atomicops_internals_tsan.h"
+#elif defined(_MSC_VER) && (V8_HOST_ARCH_IA32 || V8_HOST_ARCH_X64)
 #include "atomicops_internals_x86_msvc.h"
-#elif defined(__APPLE__) && \
-  (defined(V8_HOST_ARCH_IA32) || defined(V8_HOST_ARCH_X64))
+#elif defined(__APPLE__) && (V8_HOST_ARCH_IA32 || V8_HOST_ARCH_X64)
 #include "atomicops_internals_x86_macosx.h"
-#elif defined(__GNUC__) && \
-  (defined(V8_HOST_ARCH_IA32) || defined(V8_HOST_ARCH_X64))
+#elif defined(__GNUC__) && (V8_HOST_ARCH_IA32 || V8_HOST_ARCH_X64)
 #include "atomicops_internals_x86_gcc.h"
-#elif defined(__GNUC__) && defined(V8_HOST_ARCH_ARM)
+#elif defined(__GNUC__) && V8_HOST_ARCH_A64
+#include "atomicops_internals_a64_gcc.h"
+#elif defined(__GNUC__) && V8_HOST_ARCH_ARM
 #include "atomicops_internals_arm_gcc.h"
-#elif defined(__GNUC__) && defined(V8_HOST_ARCH_MIPS)
+#elif defined(__GNUC__) && V8_HOST_ARCH_MIPS
 #include "atomicops_internals_mips_gcc.h"
 #else
 #error "Atomic operations are not supported on your platform"

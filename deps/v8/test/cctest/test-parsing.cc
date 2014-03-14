@@ -83,7 +83,7 @@ TEST(ScanKeywords) {
     // Adding characters will make keyword matching fail.
     static const char chars_to_append[] = { 'z', '0', '_' };
     for (int j = 0; j < static_cast<int>(ARRAY_SIZE(chars_to_append)); ++j) {
-      memmove(buffer, keyword, length);
+      i::OS::MemMove(buffer, keyword, length);
       buffer[length] = chars_to_append[j];
       i::Utf8ToUtf16CharacterStream stream(buffer, length + 1);
       i::Scanner scanner(&unicode_cache);
@@ -93,7 +93,7 @@ TEST(ScanKeywords) {
     }
     // Replacing characters will make keyword matching fail.
     {
-      memmove(buffer, keyword, length);
+      i::OS::MemMove(buffer, keyword, length);
       buffer[length - 1] = '_';
       i::Utf8ToUtf16CharacterStream stream(buffer, length);
       i::Scanner scanner(&unicode_cache);
@@ -107,6 +107,8 @@ TEST(ScanKeywords) {
 
 TEST(ScanHTMLEndComments) {
   v8::V8::Initialize();
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope handles(isolate);
 
   // Regression test. See:
   //    http://code.google.com/p/chromium/issues/detail?id=53548
@@ -139,19 +141,24 @@ TEST(ScanHTMLEndComments) {
 
   // Parser/Scanner needs a stack limit.
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   for (int i = 0; tests[i]; i++) {
-    v8::ScriptData* data =
-        v8::ScriptData::PreCompile(tests[i], i::StrLength(tests[i]));
+    v8::Handle<v8::String> source = v8::String::NewFromUtf8(
+        isolate, tests[i], v8::String::kNormalString, i::StrLength(tests[i]));
+    v8::ScriptData* data = v8::ScriptData::PreCompile(source);
     CHECK(data != NULL && !data->HasError());
     delete data;
   }
 
   for (int i = 0; fail_tests[i]; i++) {
-    v8::ScriptData* data =
-        v8::ScriptData::PreCompile(fail_tests[i], i::StrLength(fail_tests[i]));
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate,
+                                fail_tests[i],
+                                v8::String::kNormalString,
+                                i::StrLength(fail_tests[i]));
+    v8::ScriptData* data = v8::ScriptData::PreCompile(source);
     CHECK(data == NULL || data->HasError());
     delete data;
   }
@@ -173,11 +180,12 @@ class ScriptResource : public v8::String::ExternalAsciiStringResource {
 
 
 TEST(Preparsing) {
-  v8::HandleScope handles;
-  v8::Persistent<v8::Context> context = v8::Context::New();
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope handles(isolate);
+  v8::Local<v8::Context> context = v8::Context::New(isolate);
   v8::Context::Scope context_scope(context);
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   // Source containing functions that might be lazily compiled  and all types
@@ -197,14 +205,15 @@ TEST(Preparsing) {
   const char* error_source = "var x = y z;";
   int error_source_length = i::StrLength(error_source);
 
-  v8::ScriptData* preparse =
-      v8::ScriptData::PreCompile(source, source_length);
+  v8::ScriptData* preparse = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, source, v8::String::kNormalString, source_length));
   CHECK(!preparse->HasError());
   bool lazy_flag = i::FLAG_lazy;
   {
     i::FLAG_lazy = true;
     ScriptResource* resource = new ScriptResource(source, source_length);
-    v8::Local<v8::String> script_source = v8::String::NewExternal(resource);
+    v8::Local<v8::String> script_source =
+        v8::String::NewExternal(isolate, resource);
     v8::Script::Compile(script_source, NULL, preparse);
   }
 
@@ -212,15 +221,19 @@ TEST(Preparsing) {
     i::FLAG_lazy = false;
 
     ScriptResource* resource = new ScriptResource(source, source_length);
-    v8::Local<v8::String> script_source = v8::String::NewExternal(resource);
+    v8::Local<v8::String> script_source =
+        v8::String::NewExternal(isolate, resource);
     v8::Script::New(script_source, NULL, preparse, v8::Local<v8::String>());
   }
   delete preparse;
   i::FLAG_lazy = lazy_flag;
 
   // Syntax error.
-  v8::ScriptData* error_preparse =
-      v8::ScriptData::PreCompile(error_source, error_source_length);
+  v8::ScriptData* error_preparse = v8::ScriptData::PreCompile(
+      v8::String::NewFromUtf8(isolate,
+                              error_source,
+                              v8::String::kNormalString,
+                              error_source_length));
   CHECK(error_preparse->HasError());
   i::ScriptDataImpl *pre_impl =
       reinterpret_cast<i::ScriptDataImpl*>(error_preparse);
@@ -231,8 +244,11 @@ TEST(Preparsing) {
   CHECK_EQ(11, error_location.end_pos);
   // Should not crash.
   const char* message = pre_impl->BuildMessage();
-  pre_impl->BuildArgs();
+  i::Vector<const char*> args = pre_impl->BuildArgs();
   CHECK_GT(strlen(message), 0);
+  args.Dispose();
+  i::DeleteArray(message);
+  delete error_preparse;
 }
 
 
@@ -240,7 +256,7 @@ TEST(StandAlonePreParser) {
   v8::V8::Initialize();
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   const char* programs[] = {
@@ -252,23 +268,21 @@ TEST(StandAlonePreParser) {
       NULL
   };
 
-  uintptr_t stack_limit = i::Isolate::Current()->stack_guard()->real_climit();
+  uintptr_t stack_limit = CcTest::i_isolate()->stack_guard()->real_climit();
   for (int i = 0; programs[i]; i++) {
     const char* program = programs[i];
     i::Utf8ToUtf16CharacterStream stream(
         reinterpret_cast<const i::byte*>(program),
         static_cast<unsigned>(strlen(program)));
     i::CompleteParserRecorder log;
-    i::Scanner scanner(i::Isolate::Current()->unicode_cache());
+    i::Scanner scanner(CcTest::i_isolate()->unicode_cache());
     scanner.Initialize(&stream);
 
-    int flags = i::kAllowLazy | i::kAllowNativesSyntax;
-    v8::preparser::PreParser::PreParseResult result =
-        v8::preparser::PreParser::PreParseProgram(&scanner,
-                                                  &log,
-                                                  flags,
-                                                  stack_limit);
-    CHECK_EQ(v8::preparser::PreParser::kPreParseSuccess, result);
+    i::PreParser preparser(&scanner, &log, stack_limit);
+    preparser.set_allow_lazy(true);
+    preparser.set_allow_natives_syntax(true);
+    i::PreParser::PreParseResult result = preparser.PreParseProgram();
+    CHECK_EQ(i::PreParser::kPreParseSuccess, result);
     i::ScriptDataImpl data(log.ExtractData());
     CHECK(!data.has_error());
   }
@@ -279,7 +293,7 @@ TEST(StandAlonePreParserNoNatives) {
   v8::V8::Initialize();
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   const char* programs[] = {
@@ -288,23 +302,21 @@ TEST(StandAlonePreParserNoNatives) {
       NULL
   };
 
-  uintptr_t stack_limit = i::Isolate::Current()->stack_guard()->real_climit();
+  uintptr_t stack_limit = CcTest::i_isolate()->stack_guard()->real_climit();
   for (int i = 0; programs[i]; i++) {
     const char* program = programs[i];
     i::Utf8ToUtf16CharacterStream stream(
         reinterpret_cast<const i::byte*>(program),
         static_cast<unsigned>(strlen(program)));
     i::CompleteParserRecorder log;
-    i::Scanner scanner(i::Isolate::Current()->unicode_cache());
+    i::Scanner scanner(CcTest::i_isolate()->unicode_cache());
     scanner.Initialize(&stream);
 
-    // Flags don't allow natives syntax.
-    v8::preparser::PreParser::PreParseResult result =
-        v8::preparser::PreParser::PreParseProgram(&scanner,
-                                                  &log,
-                                                  i::kAllowLazy,
-                                                  stack_limit);
-    CHECK_EQ(v8::preparser::PreParser::kPreParseSuccess, result);
+    // Preparser defaults to disallowing natives syntax.
+    i::PreParser preparser(&scanner, &log, stack_limit);
+    preparser.set_allow_lazy(true);
+    i::PreParser::PreParseResult result = preparser.PreParseProgram();
+    CHECK_EQ(i::PreParser::kPreParseSuccess, result);
     i::ScriptDataImpl data(log.ExtractData());
     // Data contains syntax error.
     CHECK(data.has_error());
@@ -314,9 +326,10 @@ TEST(StandAlonePreParserNoNatives) {
 
 TEST(RegressChromium62639) {
   v8::V8::Initialize();
+  i::Isolate* isolate = CcTest::i_isolate();
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  isolate->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   const char* program = "var x = 'something';\n"
@@ -329,8 +342,7 @@ TEST(RegressChromium62639) {
   i::Utf8ToUtf16CharacterStream stream(
       reinterpret_cast<const i::byte*>(program),
       static_cast<unsigned>(strlen(program)));
-  i::ScriptDataImpl* data =
-      i::ParserApi::PreParse(&stream, NULL, false);
+  i::ScriptDataImpl* data = i::PreParserApi::PreParse(isolate, &stream);
   CHECK(data->HasError());
   delete data;
 }
@@ -338,24 +350,26 @@ TEST(RegressChromium62639) {
 
 TEST(Regress928) {
   v8::V8::Initialize();
+  i::Isolate* isolate = CcTest::i_isolate();
+  i::Factory* factory = isolate->factory();
 
   // Preparsing didn't consider the catch clause of a try statement
   // as with-content, which made it assume that a function inside
   // the block could be lazily compiled, and an extra, unexpected,
   // entry was added to the data.
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  isolate->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   const char* program =
       "try { } catch (e) { var foo = function () { /* first */ } }"
       "var bar = function () { /* second */ }";
 
-  v8::HandleScope handles;
+  v8::HandleScope handles(CcTest::isolate());
   i::Handle<i::String> source(
-      FACTORY->NewStringFromAscii(i::CStrVector(program)));
+      factory->NewStringFromAscii(i::CStrVector(program)));
   i::GenericStringUtf16CharacterStream stream(source, 0, source->length());
-  i::ScriptDataImpl* data = i::ParserApi::PreParse(&stream, NULL, false);
+  i::ScriptDataImpl* data = i::PreParserApi::PreParse(isolate, &stream);
   CHECK(!data->HasError());
 
   data->Initialize();
@@ -383,31 +397,27 @@ TEST(PreParseOverflow) {
   v8::V8::Initialize();
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   size_t kProgramSize = 1024 * 1024;
-  i::SmartArrayPointer<char> program(
-      reinterpret_cast<char*>(malloc(kProgramSize + 1)));
-  memset(*program, '(', kProgramSize);
+  i::SmartArrayPointer<char> program(i::NewArray<char>(kProgramSize + 1));
+  memset(program.get(), '(', kProgramSize);
   program[kProgramSize] = '\0';
 
-  uintptr_t stack_limit = i::Isolate::Current()->stack_guard()->real_climit();
+  uintptr_t stack_limit = CcTest::i_isolate()->stack_guard()->real_climit();
 
   i::Utf8ToUtf16CharacterStream stream(
-      reinterpret_cast<const i::byte*>(*program),
+      reinterpret_cast<const i::byte*>(program.get()),
       static_cast<unsigned>(kProgramSize));
   i::CompleteParserRecorder log;
-  i::Scanner scanner(i::Isolate::Current()->unicode_cache());
+  i::Scanner scanner(CcTest::i_isolate()->unicode_cache());
   scanner.Initialize(&stream);
 
-
-  v8::preparser::PreParser::PreParseResult result =
-      v8::preparser::PreParser::PreParseProgram(&scanner,
-                                                &log,
-                                                true,
-                                                stack_limit);
-  CHECK_EQ(v8::preparser::PreParser::kPreParseStackOverflow, result);
+  i::PreParser preparser(&scanner, &log, stack_limit);
+  preparser.set_allow_lazy(true);
+  i::PreParser::PreParseResult result = preparser.PreParseProgram();
+  CHECK_EQ(i::PreParser::kPreParseStackOverflow, result);
 }
 
 
@@ -439,17 +449,19 @@ void TestCharacterStream(const char* ascii_source,
                          unsigned end = 0) {
   if (end == 0) end = length;
   unsigned sub_length = end - start;
-  i::HandleScope test_scope;
+  i::Isolate* isolate = CcTest::i_isolate();
+  i::Factory* factory = isolate->factory();
+  i::HandleScope test_scope(isolate);
   i::SmartArrayPointer<i::uc16> uc16_buffer(new i::uc16[length]);
   for (unsigned i = 0; i < length; i++) {
     uc16_buffer[i] = static_cast<i::uc16>(ascii_source[i]);
   }
   i::Vector<const char> ascii_vector(ascii_source, static_cast<int>(length));
   i::Handle<i::String> ascii_string(
-      FACTORY->NewStringFromAscii(ascii_vector));
-  TestExternalResource resource(*uc16_buffer, length);
+      factory->NewStringFromAscii(ascii_vector));
+  TestExternalResource resource(uc16_buffer.get(), length);
   i::Handle<i::String> uc16_string(
-      FACTORY->NewExternalStringFromTwoByte(&resource));
+      factory->NewExternalStringFromTwoByte(&resource));
 
   i::ExternalTwoByteStringUtf16CharacterStream uc16_stream(
       i::Handle<i::ExternalTwoByteString>::cast(uc16_string), start, end);
@@ -544,8 +556,9 @@ void TestCharacterStream(const char* ascii_source,
 
 
 TEST(CharacterStreams) {
-  v8::HandleScope handles;
-  v8::Persistent<v8::Context> context = v8::Context::New();
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope handles(isolate);
+  v8::Local<v8::Context> context = v8::Context::New(isolate);
   v8::Context::Scope context_scope(context);
 
   TestCharacterStream("abc\0\n\r\x7f", 7);
@@ -618,7 +631,7 @@ void TestStreamScanner(i::Utf16CharacterStream* stream,
                        i::Token::Value* expected_tokens,
                        int skip_pos = 0,  // Zero means not skipping.
                        int skip_to = 0) {
-  i::Scanner scanner(i::Isolate::Current()->unicode_cache());
+  i::Scanner scanner(CcTest::i_isolate()->unicode_cache());
   scanner.Initialize(stream);
 
   int i = 0;
@@ -632,6 +645,7 @@ void TestStreamScanner(i::Utf16CharacterStream* stream,
     i++;
   } while (expected_tokens[i] != i::Token::ILLEGAL);
 }
+
 
 TEST(StreamScanner) {
   v8::V8::Initialize();
@@ -699,7 +713,7 @@ void TestScanRegExp(const char* re_source, const char* expected) {
   i::Utf8ToUtf16CharacterStream stream(
        reinterpret_cast<const i::byte*>(re_source),
        static_cast<unsigned>(strlen(re_source)));
-  i::Scanner scanner(i::Isolate::Current()->unicode_cache());
+  i::Scanner scanner(CcTest::i_isolate()->unicode_cache());
   scanner.Initialize(&stream);
 
   i::Token::Value start = scanner.peek();
@@ -988,14 +1002,16 @@ TEST(ScopePositions) {
     { NULL, NULL, NULL, i::EVAL_SCOPE, i::CLASSIC_MODE }
   };
 
-  v8::HandleScope handles;
-  v8::Persistent<v8::Context> context = v8::Context::New();
+  i::Isolate* isolate = CcTest::i_isolate();
+  i::Factory* factory = isolate->factory();
+
+  v8::HandleScope handles(CcTest::isolate());
+  v8::Handle<v8::Context> context = v8::Context::New(CcTest::isolate());
   v8::Context::Scope context_scope(context);
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  isolate->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
-  i::FLAG_harmony_scoping = true;
 
   for (int i = 0; source_data[i].outer_prefix; i++) {
     int kPrefixLen = Utf8LengthHelper(source_data[i].outer_prefix);
@@ -1006,7 +1022,7 @@ TEST(ScopePositions) {
     int kSuffixByteLen = i::StrLength(source_data[i].outer_suffix);
     int kProgramSize = kPrefixLen + kInnerLen + kSuffixLen;
     int kProgramByteSize = kPrefixByteLen + kInnerByteLen + kSuffixByteLen;
-    i::Vector<char> program = i::Vector<char>::New(kProgramByteSize + 1);
+    i::ScopedVector<char> program(kProgramByteSize + 1);
     i::OS::SNPrintF(program, "%s%s%s",
                              source_data[i].outer_prefix,
                              source_data[i].inner_source,
@@ -1014,25 +1030,27 @@ TEST(ScopePositions) {
 
     // Parse program source.
     i::Handle<i::String> source(
-        FACTORY->NewStringFromUtf8(i::CStrVector(program.start())));
+        factory->NewStringFromUtf8(i::CStrVector(program.start())));
     CHECK_EQ(source->length(), kProgramSize);
-    i::Handle<i::Script> script = FACTORY->NewScript(source);
+    i::Handle<i::Script> script = factory->NewScript(source);
     i::CompilationInfoWithZone info(script);
-    i::Parser parser(&info, i::kAllowLazy | i::EXTENDED_MODE, NULL, NULL);
+    i::Parser parser(&info);
+    parser.set_allow_lazy(true);
+    parser.set_allow_harmony_scoping(true);
     info.MarkAsGlobal();
     info.SetLanguageMode(source_data[i].language_mode);
-    i::FunctionLiteral* function = parser.ParseProgram();
-    CHECK(function != NULL);
+    parser.Parse();
+    CHECK(info.function() != NULL);
 
     // Check scope types and positions.
-    i::Scope* scope = function->scope();
+    i::Scope* scope = info.function()->scope();
     CHECK(scope->is_global_scope());
     CHECK_EQ(scope->start_position(), 0);
     CHECK_EQ(scope->end_position(), kProgramSize);
     CHECK_EQ(scope->inner_scopes()->length(), 1);
 
     i::Scope* inner_scope = scope->inner_scopes()->at(0);
-    CHECK_EQ(inner_scope->type(), source_data[i].scope_type);
+    CHECK_EQ(inner_scope->scope_type(), source_data[i].scope_type);
     CHECK_EQ(inner_scope->start_position(), kPrefixLen);
     // The end position of a token is one position after the last
     // character belonging to that token.
@@ -1041,96 +1059,180 @@ TEST(ScopePositions) {
 }
 
 
-void TestParserSync(i::Handle<i::String> source, int flags) {
-  uintptr_t stack_limit = i::Isolate::Current()->stack_guard()->real_climit();
-  bool harmony_scoping = ((i::kLanguageModeMask & flags) == i::EXTENDED_MODE);
+i::Handle<i::String> FormatMessage(i::ScriptDataImpl* data) {
+  i::Isolate* isolate = CcTest::i_isolate();
+  i::Factory* factory = isolate->factory();
+  const char* message = data->BuildMessage();
+  i::Handle<i::String> format = v8::Utils::OpenHandle(
+      *v8::String::NewFromUtf8(CcTest::isolate(), message));
+  i::Vector<const char*> args = data->BuildArgs();
+  i::Handle<i::JSArray> args_array = factory->NewJSArray(args.length());
+  for (int i = 0; i < args.length(); i++) {
+    i::JSArray::SetElement(
+        args_array, i, v8::Utils::OpenHandle(*v8::String::NewFromUtf8(
+                                                  CcTest::isolate(), args[i])),
+        NONE, i::kNonStrictMode);
+  }
+  i::Handle<i::JSObject> builtins(isolate->js_builtins_object());
+  i::Handle<i::Object> format_fun =
+      i::GetProperty(builtins, "FormatMessage");
+  i::Handle<i::Object> arg_handles[] = { format, args_array };
+  bool has_exception = false;
+  i::Handle<i::Object> result = i::Execution::Call(
+      isolate, format_fun, builtins, 2, arg_handles, &has_exception);
+  CHECK(!has_exception);
+  CHECK(result->IsString());
+  for (int i = 0; i < args.length(); i++) {
+    i::DeleteArray(args[i]);
+  }
+  i::DeleteArray(args.start());
+  i::DeleteArray(message);
+  return i::Handle<i::String>::cast(result);
+}
+
+
+enum ParserFlag {
+  kAllowLazy,
+  kAllowNativesSyntax,
+  kAllowHarmonyScoping,
+  kAllowModules,
+  kAllowGenerators,
+  kAllowForOf,
+  kAllowHarmonyNumericLiterals
+};
+
+
+enum ParserSyncTestResult {
+  kSuccessOrError,
+  kSuccess,
+  kError
+};
+
+template <typename Traits>
+void SetParserFlags(i::ParserBase<Traits>* parser,
+                    i::EnumSet<ParserFlag> flags) {
+  parser->set_allow_lazy(flags.Contains(kAllowLazy));
+  parser->set_allow_natives_syntax(flags.Contains(kAllowNativesSyntax));
+  parser->set_allow_harmony_scoping(flags.Contains(kAllowHarmonyScoping));
+  parser->set_allow_modules(flags.Contains(kAllowModules));
+  parser->set_allow_generators(flags.Contains(kAllowGenerators));
+  parser->set_allow_for_of(flags.Contains(kAllowForOf));
+  parser->set_allow_harmony_numeric_literals(
+      flags.Contains(kAllowHarmonyNumericLiterals));
+}
+
+
+void TestParserSyncWithFlags(i::Handle<i::String> source,
+                             i::EnumSet<ParserFlag> flags,
+                             ParserSyncTestResult result) {
+  i::Isolate* isolate = CcTest::i_isolate();
+  i::Factory* factory = isolate->factory();
+
+  uintptr_t stack_limit = isolate->stack_guard()->real_climit();
 
   // Preparse the data.
   i::CompleteParserRecorder log;
-  i::Scanner scanner(i::Isolate::Current()->unicode_cache());
-  i::GenericStringUtf16CharacterStream stream(source, 0, source->length());
-  scanner.SetHarmonyScoping(harmony_scoping);
-  scanner.Initialize(&stream);
-  v8::preparser::PreParser::PreParseResult result =
-      v8::preparser::PreParser::PreParseProgram(
-          &scanner, &log, flags, stack_limit);
-  CHECK_EQ(v8::preparser::PreParser::kPreParseSuccess, result);
+  {
+    i::Scanner scanner(isolate->unicode_cache());
+    i::GenericStringUtf16CharacterStream stream(source, 0, source->length());
+    i::PreParser preparser(&scanner, &log, stack_limit);
+    SetParserFlags(&preparser, flags);
+    scanner.Initialize(&stream);
+    i::PreParser::PreParseResult result = preparser.PreParseProgram();
+    CHECK_EQ(i::PreParser::kPreParseSuccess, result);
+  }
   i::ScriptDataImpl data(log.ExtractData());
 
   // Parse the data
-  i::Handle<i::Script> script = FACTORY->NewScript(source);
-  bool save_harmony_scoping = i::FLAG_harmony_scoping;
-  i::FLAG_harmony_scoping = harmony_scoping;
-  i::CompilationInfoWithZone info(script);
-  i::Parser parser(&info, flags, NULL, NULL);
-  info.MarkAsGlobal();
-  i::FunctionLiteral* function = parser.ParseProgram();
-  i::FLAG_harmony_scoping = save_harmony_scoping;
-
-  i::String* type_string = NULL;
-  if (function == NULL) {
-    // Extract exception from the parser.
-    i::Handle<i::String> type_symbol = FACTORY->LookupAsciiSymbol("type");
-    CHECK(i::Isolate::Current()->has_pending_exception());
-    i::MaybeObject* maybe_object = i::Isolate::Current()->pending_exception();
-    i::JSObject* exception = NULL;
-    CHECK(maybe_object->To(&exception));
-
-    // Get the type string.
-    maybe_object = exception->GetProperty(*type_symbol);
-    CHECK(maybe_object->To(&type_string));
+  i::FunctionLiteral* function;
+  {
+    i::Handle<i::Script> script = factory->NewScript(source);
+    i::CompilationInfoWithZone info(script);
+    i::Parser parser(&info);
+    SetParserFlags(&parser, flags);
+    info.MarkAsGlobal();
+    parser.Parse();
+    function = info.function();
   }
 
   // Check that preparsing fails iff parsing fails.
-  if (data.has_error() && function != NULL) {
-    i::OS::Print(
-        "Preparser failed on:\n"
-        "\t%s\n"
-        "with error:\n"
-        "\t%s\n"
-        "However, the parser succeeded",
-        *source->ToCString(), data.BuildMessage());
-    CHECK(false);
-  } else if (!data.has_error() && function == NULL) {
-    i::OS::Print(
-        "Parser failed on:\n"
-        "\t%s\n"
-        "with error:\n"
-        "\t%s\n"
-        "However, the preparser succeeded",
-        *source->ToCString(), *type_string->ToCString());
-    CHECK(false);
-  }
-
-  // Check that preparser and parser produce the same error.
   if (function == NULL) {
-    if (!type_string->IsEqualTo(i::CStrVector(data.BuildMessage()))) {
+    // Extract exception from the parser.
+    CHECK(isolate->has_pending_exception());
+    i::MaybeObject* maybe_object = isolate->pending_exception();
+    i::JSObject* exception = NULL;
+    CHECK(maybe_object->To(&exception));
+    i::Handle<i::JSObject> exception_handle(exception);
+    i::Handle<i::String> message_string =
+        i::Handle<i::String>::cast(i::GetProperty(exception_handle, "message"));
+
+    if (result == kSuccess) {
+      i::OS::Print(
+          "Parser failed on:\n"
+          "\t%s\n"
+          "with error:\n"
+          "\t%s\n"
+          "However, we expected no error.",
+          source->ToCString().get(), message_string->ToCString().get());
+      CHECK(false);
+    }
+
+    if (!data.has_error()) {
+      i::OS::Print(
+          "Parser failed on:\n"
+          "\t%s\n"
+          "with error:\n"
+          "\t%s\n"
+          "However, the preparser succeeded",
+          source->ToCString().get(), message_string->ToCString().get());
+      CHECK(false);
+    }
+    // Check that preparser and parser produce the same error.
+    i::Handle<i::String> preparser_message = FormatMessage(&data);
+    if (!message_string->Equals(*preparser_message)) {
       i::OS::Print(
           "Expected parser and preparser to produce the same error on:\n"
           "\t%s\n"
           "However, found the following error messages\n"
           "\tparser:    %s\n"
           "\tpreparser: %s\n",
-          *source->ToCString(), *type_string->ToCString(), data.BuildMessage());
+          source->ToCString().get(),
+          message_string->ToCString().get(),
+          preparser_message->ToCString().get());
       CHECK(false);
     }
+  } else if (data.has_error()) {
+    i::OS::Print(
+        "Preparser failed on:\n"
+        "\t%s\n"
+        "with error:\n"
+        "\t%s\n"
+        "However, the parser succeeded",
+        source->ToCString().get(), FormatMessage(&data)->ToCString().get());
+    CHECK(false);
+  } else if (result == kError) {
+    i::OS::Print(
+        "Expected error on:\n"
+        "\t%s\n"
+        "However, parser and preparser succeeded",
+        source->ToCString().get());
+    CHECK(false);
   }
 }
 
 
-void TestParserSyncWithFlags(i::Handle<i::String> source) {
-  static const int kFlagsCount = 6;
-  const int flags[kFlagsCount] = {
-    i::kNoParsingFlags | i::CLASSIC_MODE,
-    i::kNoParsingFlags | i::STRICT_MODE,
-    i::kNoParsingFlags | i::EXTENDED_MODE,
-    i::kAllowLazy | i::CLASSIC_MODE,
-    i::kAllowLazy | i::STRICT_MODE,
-    i::kAllowLazy | i::EXTENDED_MODE
-  };
-
-  for (int k = 0; k < kFlagsCount; ++k) {
-    TestParserSync(source, flags[k]);
+void TestParserSync(const char* source,
+                    const ParserFlag* flag_list,
+                    size_t flag_list_length,
+                    ParserSyncTestResult result = kSuccessOrError) {
+  i::Handle<i::String> str =
+      CcTest::i_isolate()->factory()->NewStringFromAscii(i::CStrVector(source));
+  for (int bits = 0; bits < (1 << flag_list_length); bits++) {
+    i::EnumSet<ParserFlag> flags;
+    for (size_t flag_index = 0; flag_index < flag_list_length; flag_index++) {
+      if ((bits & (1 << flag_index)) != 0) flags.Add(flag_list[flag_index]);
+    }
+    TestParserSyncWithFlags(str, flags, result);
   }
 }
 
@@ -1204,14 +1306,18 @@ TEST(ParserSync) {
     NULL
   };
 
-  v8::HandleScope handles;
-  v8::Persistent<v8::Context> context = v8::Context::New();
+  v8::HandleScope handles(CcTest::isolate());
+  v8::Handle<v8::Context> context = v8::Context::New(CcTest::isolate());
   v8::Context::Scope context_scope(context);
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
+  static const ParserFlag flags1[] = {
+    kAllowLazy, kAllowHarmonyScoping, kAllowModules, kAllowGenerators,
+    kAllowForOf
+  };
   for (int i = 0; context_data[i][0] != NULL; ++i) {
     for (int j = 0; statement_data[j] != NULL; ++j) {
       for (int k = 0; termination_data[k] != NULL; ++k) {
@@ -1223,7 +1329,7 @@ TEST(ParserSync) {
             + kSuffixLen + i::StrLength("label: for (;;) {  }");
 
         // Plug the source code pieces together.
-        i::Vector<char> program = i::Vector<char>::New(kProgramSize + 1);
+        i::ScopedVector<char> program(kProgramSize + 1);
         int length = i::OS::SNPrintF(program,
             "label: for (;;) { %s%s%s%s }",
             context_data[i][0],
@@ -1231,12 +1337,20 @@ TEST(ParserSync) {
             termination_data[k],
             context_data[i][1]);
         CHECK(length == kProgramSize);
-        i::Handle<i::String> source =
-            FACTORY->NewStringFromAscii(i::CStrVector(program.start()));
-        TestParserSyncWithFlags(source);
+        TestParserSync(program.start(), flags1, ARRAY_SIZE(flags1));
       }
     }
   }
+
+  // Neither Harmony numeric literals nor our natives syntax have any
+  // interaction with the flags above, so test these separately to reduce
+  // the combinatorial explosion.
+  static const ParserFlag flags2[] = { kAllowHarmonyNumericLiterals };
+  TestParserSync("0o1234", flags2, ARRAY_SIZE(flags2));
+  TestParserSync("0b1011", flags2, ARRAY_SIZE(flags2));
+
+  static const ParserFlag flags3[] = { kAllowNativesSyntax };
+  TestParserSync("%DebugPrint(123)", flags3, ARRAY_SIZE(flags3));
 }
 
 
@@ -1245,8 +1359,9 @@ TEST(PreparserStrictOctal) {
   // such (issue 2220).
   v8::internal::FLAG_min_preparse_length = 1;  // Force preparsing.
   v8::V8::Initialize();
-  v8::HandleScope scope;
-  v8::Context::Scope context_scope(v8::Context::New());
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Context::Scope context_scope(
+      v8::Context::New(CcTest::isolate()));
   v8::TryCatch try_catch;
   const char* script =
       "\"use strict\";       \n"
@@ -1255,9 +1370,754 @@ TEST(PreparserStrictOctal) {
       "    01;               \n"
       "  };                  \n"
       "};                    \n";
-  v8::Script::Compile(v8::String::New(script));
+  v8::Script::Compile(v8::String::NewFromUtf8(CcTest::isolate(), script));
   CHECK(try_catch.HasCaught());
   v8::String::Utf8Value exception(try_catch.Exception());
   CHECK_EQ("SyntaxError: Octal literals are not allowed in strict mode.",
            *exception);
+}
+
+
+void RunParserSyncTest(const char* context_data[][2],
+                       const char* statement_data[],
+                       ParserSyncTestResult result) {
+  v8::HandleScope handles(CcTest::isolate());
+  v8::Handle<v8::Context> context = v8::Context::New(CcTest::isolate());
+  v8::Context::Scope context_scope(context);
+
+  int marker;
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
+      reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
+
+  static const ParserFlag flags[] = {
+    kAllowLazy, kAllowHarmonyScoping, kAllowModules, kAllowGenerators,
+    kAllowForOf, kAllowNativesSyntax
+  };
+  for (int i = 0; context_data[i][0] != NULL; ++i) {
+    for (int j = 0; statement_data[j] != NULL; ++j) {
+      int kPrefixLen = i::StrLength(context_data[i][0]);
+      int kStatementLen = i::StrLength(statement_data[j]);
+      int kSuffixLen = i::StrLength(context_data[i][1]);
+      int kProgramSize = kPrefixLen + kStatementLen + kSuffixLen;
+
+      // Plug the source code pieces together.
+      i::ScopedVector<char> program(kProgramSize + 1);
+      int length = i::OS::SNPrintF(program,
+                                   "%s%s%s",
+                                   context_data[i][0],
+                                   statement_data[j],
+                                   context_data[i][1]);
+      CHECK(length == kProgramSize);
+      TestParserSync(program.start(),
+                     flags,
+                     ARRAY_SIZE(flags),
+                     result);
+    }
+  }
+}
+
+
+TEST(ErrorsEvalAndArguments) {
+  // Tests that both preparsing and parsing produce the right kind of errors for
+  // using "eval" and "arguments" as identifiers. Without the strict mode, it's
+  // ok to use "eval" or "arguments" as identifiers. With the strict mode, it
+  // isn't.
+  const char* context_data[][2] = {
+    { "\"use strict\";", "" },
+    { "var eval; function test_func() {\"use strict\"; ", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var eval;",
+    "var arguments",
+    "var foo, eval;",
+    "var foo, arguments;",
+    "try { } catch (eval) { }",
+    "try { } catch (arguments) { }",
+    "function eval() { }",
+    "function arguments() { }",
+    "function foo(eval) { }",
+    "function foo(arguments) { }",
+    "function foo(bar, eval) { }",
+    "function foo(bar, arguments) { }",
+    "eval = 1;",
+    "arguments = 1;",
+    "var foo = eval = 1;",
+    "var foo = arguments = 1;",
+    "++eval;",
+    "++arguments;",
+    "eval++;",
+    "arguments++;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsEvalAndArgumentsClassic) {
+  // Tests that both preparsing and parsing accept "eval" and "arguments" as
+  // identifiers when needed.
+  const char* context_data[][2] = {
+    { "", "" },
+    { "function test_func() {", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var eval;",
+    "var arguments",
+    "var foo, eval;",
+    "var foo, arguments;",
+    "try { } catch (eval) { }",
+    "try { } catch (arguments) { }",
+    "function eval() { }",
+    "function arguments() { }",
+    "function foo(eval) { }",
+    "function foo(arguments) { }",
+    "function foo(bar, eval) { }",
+    "function foo(bar, arguments) { }",
+    "eval = 1;",
+    "arguments = 1;",
+    "var foo = eval = 1;",
+    "var foo = arguments = 1;",
+    "++eval;",
+    "++arguments;",
+    "eval++;",
+    "arguments++;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(NoErrorsEvalAndArgumentsStrict) {
+  const char* context_data[][2] = {
+    { "\"use strict\";", "" },
+    { "function test_func() { \"use strict\";", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "eval;",
+    "arguments;",
+    "var foo = eval;",
+    "var foo = arguments;",
+    "var foo = { eval: 1 };",
+    "var foo = { arguments: 1 };",
+    "var foo = { }; foo.eval = {};",
+    "var foo = { }; foo.arguments = {};",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsFutureStrictReservedWords) {
+  // Tests that both preparsing and parsing produce the right kind of errors for
+  // using future strict reserved words as identifiers. Without the strict mode,
+  // it's ok to use future strict reserved words as identifiers. With the strict
+  // mode, it isn't.
+  const char* context_data[][2] = {
+    { "\"use strict\";", "" },
+    { "function test_func() {\"use strict\"; ", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var interface;",
+    "var foo, interface;",
+    "try { } catch (interface) { }",
+    "function interface() { }",
+    "function foo(interface) { }",
+    "function foo(bar, interface) { }",
+    "interface = 1;",
+    "var foo = interface = 1;",
+    "++interface;",
+    "interface++;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsFutureStrictReservedWords) {
+  const char* context_data[][2] = {
+    { "", "" },
+    { "function test_func() {", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var interface;",
+    "var foo, interface;",
+    "try { } catch (interface) { }",
+    "function interface() { }",
+    "function foo(interface) { }",
+    "function foo(bar, interface) { }",
+    "interface = 1;",
+    "var foo = interface = 1;",
+    "++interface;",
+    "interface++;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsReservedWords) {
+  // Tests that both preparsing and parsing produce the right kind of errors for
+  // using future reserved words as identifiers. These tests don't depend on the
+  // strict mode.
+  const char* context_data[][2] = {
+    { "", "" },
+    { "\"use strict\";", "" },
+    { "var eval; function test_func() {", "}"},
+    { "var eval; function test_func() {\"use strict\"; ", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var super;",
+    "var foo, super;",
+    "try { } catch (super) { }",
+    "function super() { }",
+    "function foo(super) { }",
+    "function foo(bar, super) { }",
+    "super = 1;",
+    "var foo = super = 1;",
+    "++super;",
+    "super++;",
+    "function foo super",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsYieldClassic) {
+  // In classic mode, it's okay to use "yield" as identifier, *except* inside a
+  // generator (see next test).
+  const char* context_data[][2] = {
+    { "", "" },
+    { "function is_not_gen() {", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var yield;",
+    "var foo, yield;",
+    "try { } catch (yield) { }",
+    "function yield() { }",
+    "function foo(yield) { }",
+    "function foo(bar, yield) { }",
+    "yield = 1;",
+    "var foo = yield = 1;",
+    "++yield;",
+    "yield++;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsYieldClassicGenerator) {
+  const char* context_data[][2] = {
+    { "function * is_gen() {", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var yield;",
+    "var foo, yield;",
+    "try { } catch (yield) { }",
+    "function yield() { }",
+    // BUG: These should not be allowed, but they are (if kAllowGenerators is
+    // set)
+    // "function foo(yield) { }",
+    // "function foo(bar, yield) { }",
+    "yield = 1;",
+    "var foo = yield = 1;",
+    "++yield;",
+    "yield++;",
+    NULL
+  };
+
+  // If generators are not allowed, the error will be produced at the '*' token,
+  // so this test works both with and without the kAllowGenerators flag.
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(ErrorsYieldStrict) {
+  const char* context_data[][2] = {
+    { "\"use strict\";", "" },
+    { "\"use strict\"; function is_not_gen() {", "}" },
+    { "function test_func() {\"use strict\"; ", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var yield;",
+    "var foo, yield;",
+    "try { } catch (yield) { }",
+    "function yield() { }",
+    "function foo(yield) { }",
+    "function foo(bar, yield) { }",
+    "yield = 1;",
+    "var foo = yield = 1;",
+    "++yield;",
+    "yield++;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(ErrorsYield) {
+  const char* context_data[][2] = {
+    { "function * is_gen() {", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "yield 2;",  // this is legal inside generator
+    "yield * 2;",  // this is legal inside generator
+    NULL
+  };
+
+  // Here we cannot assert that there is no error, since there will be without
+  // the kAllowGenerators flag. However, we test that Parser and PreParser
+  // produce the same errors.
+  RunParserSyncTest(context_data, statement_data, kSuccessOrError);
+}
+
+
+TEST(ErrorsNameOfStrictFunction) {
+  // Tests that illegal tokens as names of a strict function produce the correct
+  // errors.
+  const char* context_data[][2] = {
+    { "", ""},
+    { "\"use strict\";", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "function eval() {\"use strict\";}",
+    "function arguments() {\"use strict\";}",
+    "function interface() {\"use strict\";}",
+    "function yield() {\"use strict\";}",
+    // Future reserved words are always illegal
+    "function super() { }",
+    "function super() {\"use strict\";}",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsNameOfStrictFunction) {
+  const char* context_data[][2] = {
+    { "", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "function eval() { }",
+    "function arguments() { }",
+    "function interface() { }",
+    "function yield() { }",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+
+TEST(ErrorsIllegalWordsAsLabelsClassic) {
+  // Using future reserved words as labels is always an error.
+  const char* context_data[][2] = {
+    { "", ""},
+    { "function test_func() {", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "super: while(true) { break super; }",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(ErrorsIllegalWordsAsLabelsStrict) {
+  // Tests that illegal tokens as labels produce the correct errors.
+  const char* context_data[][2] = {
+    { "\"use strict\";", "" },
+    { "function test_func() {\"use strict\"; ", "}"},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "super: while(true) { break super; }",
+    "interface: while(true) { break interface; }",
+    "yield: while(true) { break yield; }",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsIllegalWordsAsLabels) {
+  // Using eval and arguments as labels is legal even in strict mode.
+  const char* context_data[][2] = {
+    { "", ""},
+    { "function test_func() {", "}" },
+    { "\"use strict\";", "" },
+    { "\"use strict\"; function test_func() {", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "mylabel: while(true) { break mylabel; }",
+    "eval: while(true) { break eval; }",
+    "arguments: while(true) { break arguments; }",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsParenthesizedLabels) {
+  // Parenthesized identifiers shouldn't be recognized as labels.
+  const char* context_data[][2] = {
+    { "", ""},
+    { "function test_func() {", "}" },
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "(mylabel): while(true) { break mylabel; }",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsParenthesizedDirectivePrologue) {
+  // Parenthesized directive prologue shouldn't be recognized.
+  const char* context_data[][2] = {
+    { "", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "(\"use strict\"); var eval;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsNotAnIdentifierName) {
+  const char* context_data[][2] = {
+    { "", ""},
+    { "\"use strict\";", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var foo = {}; foo.{;",
+    "var foo = {}; foo.};",
+    "var foo = {}; foo.=;",
+    "var foo = {}; foo.888;",
+    "var foo = {}; foo.-;",
+    "var foo = {}; foo.--;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsIdentifierNames) {
+  // Keywords etc. are valid as property names.
+  const char* context_data[][2] = {
+    { "", ""},
+    { "\"use strict\";", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "var foo = {}; foo.if;",
+    "var foo = {}; foo.yield;",
+    "var foo = {}; foo.super;",
+    "var foo = {}; foo.interface;",
+    "var foo = {}; foo.eval;",
+    "var foo = {}; foo.arguments;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(DontRegressPreParserDataSizes) {
+  // These tests make sure that PreParser doesn't start producing less data.
+
+  v8::V8::Initialize();
+
+  int marker;
+  CcTest::i_isolate()->stack_guard()->SetStackLimit(
+      reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
+
+  struct TestCase {
+    const char* program;
+    int symbols;
+    int functions;
+  } test_cases[] = {
+    // Labels, variables and functions are recorded as symbols.
+    {"{label: 42}", 1, 0}, {"{label: 42; label2: 43}", 2, 0},
+    {"var x = 42;", 1, 0}, {"var x = 42, y = 43;", 2, 0},
+    {"function foo() {}", 1, 1}, {"function foo() {} function bar() {}", 2, 2},
+    // Labels, variables and functions insize lazy functions are not recorded.
+    {"function lazy() { var a, b, c; }", 1, 1},
+    {"function lazy() { a: 1; b: 2; c: 3; }", 1, 1},
+    {"function lazy() { function a() {} function b() {} function c() {} }", 1,
+     1},
+    {NULL, 0, 0}
+  };
+  // Each function adds 5 elements to the preparse function data.
+  const int kDataPerFunction = 5;
+
+  uintptr_t stack_limit = CcTest::i_isolate()->stack_guard()->real_climit();
+  for (int i = 0; test_cases[i].program; i++) {
+    const char* program = test_cases[i].program;
+    i::Utf8ToUtf16CharacterStream stream(
+        reinterpret_cast<const i::byte*>(program),
+        static_cast<unsigned>(strlen(program)));
+    i::CompleteParserRecorder log;
+    i::Scanner scanner(CcTest::i_isolate()->unicode_cache());
+    scanner.Initialize(&stream);
+
+    i::PreParser preparser(&scanner, &log, stack_limit);
+    preparser.set_allow_lazy(true);
+    preparser.set_allow_natives_syntax(true);
+    i::PreParser::PreParseResult result = preparser.PreParseProgram();
+    CHECK_EQ(i::PreParser::kPreParseSuccess, result);
+    if (log.symbol_ids() != test_cases[i].symbols) {
+      i::OS::Print(
+          "Expected preparse data for program:\n"
+          "\t%s\n"
+          "to contain %d symbols, however, received %d symbols.\n",
+          program, test_cases[i].symbols, log.symbol_ids());
+      CHECK(false);
+    }
+    if (log.function_position() != test_cases[i].functions * kDataPerFunction) {
+      i::OS::Print(
+          "Expected preparse data for program:\n"
+          "\t%s\n"
+          "to contain %d functions, however, received %d functions.\n",
+          program, test_cases[i].functions,
+          log.function_position() / kDataPerFunction);
+      CHECK(false);
+    }
+    i::ScriptDataImpl data(log.ExtractData());
+    CHECK(!data.has_error());
+  }
+}
+
+
+TEST(FunctionDeclaresItselfStrict) {
+  // Tests that we produce the right kinds of errors when a function declares
+  // itself strict (we cannot produce there errors as soon as we see the
+  // offending identifiers, because we don't know at that point whether the
+  // function is strict or not).
+  const char* context_data[][2] = {
+    {"function eval() {", "}"},
+    {"function arguments() {", "}"},
+    {"function yield() {", "}"},
+    {"function interface() {", "}"},
+    {"function foo(eval) {", "}"},
+    {"function foo(arguments) {", "}"},
+    {"function foo(yield) {", "}"},
+    {"function foo(interface) {", "}"},
+    {"function foo(bar, eval) {", "}"},
+    {"function foo(bar, arguments) {", "}"},
+    {"function foo(bar, yield) {", "}"},
+    {"function foo(bar, interface) {", "}"},
+    {"function foo(bar, bar) {", "}"},
+    { NULL, NULL }
+  };
+
+  const char* strict_statement_data[] = {
+    "\"use strict\";",
+    NULL
+  };
+
+  const char* non_strict_statement_data[] = {
+    ";",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, strict_statement_data, kError);
+  RunParserSyncTest(context_data, non_strict_statement_data, kSuccess);
+}
+
+
+TEST(ErrorsTryWithoutCatchOrFinally) {
+  const char* context_data[][2] = {
+    {"", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "try { }",
+    "try { } foo();",
+    "try { } catch (e) foo();",
+    "try { } catch { }",
+    "try { } finally foo();",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsTryCatchFinally) {
+  const char* context_data[][2] = {
+    {"", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "try { } catch (e) { }",
+    "try { } catch (e) { } finally { }",
+    "try { } finally { }",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsRegexpLiteral) {
+  const char* context_data[][2] = {
+    {"var r = ", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "/unterminated",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
+}
+
+
+TEST(NoErrorsRegexpLiteral) {
+  const char* context_data[][2] = {
+    {"var r = ", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "/foo/",
+    "/foo/g",
+    "/foo/whatever",  // This is an error but not detected by the parser.
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(Intrinsics) {
+  const char* context_data[][2] = {
+    {"", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "%someintrinsic(arg)",
+    NULL
+  };
+
+  // Parsing will fail or succeed depending on whether we allow natives syntax
+  // or not.
+  RunParserSyncTest(context_data, statement_data, kSuccessOrError);
+}
+
+
+TEST(NoErrorsNewExpression) {
+  const char* context_data[][2] = {
+    {"", ""},
+    {"var f =", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "new foo",
+    "new foo();",
+    "new foo(1);",
+    "new foo(1, 2);",
+    // The first () will be processed as a part of the NewExpression and the
+    // second () will be processed as part of LeftHandSideExpression.
+    "new foo()();",
+    // The first () will be processed as a part of the inner NewExpression and
+    // the second () will be processed as a part of the outer NewExpression.
+    "new new foo()();",
+    "new foo.bar;",
+    "new foo.bar();",
+    "new foo.bar.baz;",
+    "new foo.bar().baz;",
+    "new foo[bar];",
+    "new foo[bar]();",
+    "new foo[bar][baz];",
+    "new foo[bar]()[baz];",
+    "new foo[bar].baz(baz)()[bar].baz;",
+    "new \"foo\"",  // Runtime error
+    "new 1",  // Runtime error
+    "new foo++",
+    // This even runs:
+    "(new new Function(\"this.x = 1\")).x;",
+    "new new Test_Two(String, 2).v(0123).length;",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kSuccess);
+}
+
+
+TEST(ErrorsNewExpression) {
+  const char* context_data[][2] = {
+    {"", ""},
+    {"var f =", ""},
+    { NULL, NULL }
+  };
+
+  const char* statement_data[] = {
+    "new foo bar",
+    "new ) foo",
+    "new ++foo",
+    NULL
+  };
+
+  RunParserSyncTest(context_data, statement_data, kError);
 }

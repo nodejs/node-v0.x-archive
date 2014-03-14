@@ -30,6 +30,7 @@ import imp
 import os
 
 from . import statusfile
+from . import utils
 
 class TestSuite(object):
 
@@ -65,13 +66,18 @@ class TestSuite(object):
 
   # Used in the status file and for stdout printing.
   def CommonTestName(self, testcase):
-    return testcase.path
+    if utils.IsWindows():
+      return testcase.path.replace("\\", "/")
+    else:
+      return testcase.path
 
   def ListTests(self, context):
     raise NotImplementedError
 
-  def VariantFlags(self):
-    return None
+  def VariantFlags(self, testcase, default_flags):
+    if testcase.outcomes and statusfile.OnlyStandardVariant(testcase.outcomes):
+      return [[]]
+    return default_flags
 
   def DownloadData(self):
     pass
@@ -83,30 +89,55 @@ class TestSuite(object):
   def ReadTestCases(self, context):
     self.tests = self.ListTests(context)
 
-  def FilterTestCasesByStatus(self, warn_unused_rules):
+  @staticmethod
+  def _FilterFlaky(flaky, mode):
+    return (mode == "run" and not flaky) or (mode == "skip" and flaky)
+
+  @staticmethod
+  def _FilterSlow(slow, mode):
+    return (mode == "run" and not slow) or (mode == "skip" and slow)
+
+  @staticmethod
+  def _FilterPassFail(pass_fail, mode):
+    return (mode == "run" and not pass_fail) or (mode == "skip" and pass_fail)
+
+  def FilterTestCasesByStatus(self, warn_unused_rules,
+                              flaky_tests="dontcare",
+                              slow_tests="dontcare",
+                              pass_fail_tests="dontcare"):
     filtered = []
     used_rules = set()
     for t in self.tests:
+      flaky = False
+      slow = False
+      pass_fail = False
       testname = self.CommonTestName(t)
       if testname in self.rules:
         used_rules.add(testname)
-        outcomes = self.rules[testname]
-        t.outcomes = outcomes  # Even for skipped tests, as the TestCase
-        # object stays around and PrintReport() uses it.
-        if statusfile.DoSkip(outcomes):
+        # Even for skipped tests, as the TestCase object stays around and
+        # PrintReport() uses it.
+        t.outcomes = self.rules[testname]
+        if statusfile.DoSkip(t.outcomes):
           continue  # Don't add skipped tests to |filtered|.
-      if len(self.wildcards) != 0:
-        skip = False
-        for rule in self.wildcards:
-          assert rule[-1] == '*'
-          if testname.startswith(rule[:-1]):
-            used_rules.add(rule)
-            outcomes = self.wildcards[rule]
-            t.outcomes = outcomes
-            if statusfile.DoSkip(outcomes):
-              skip = True
-              break  # "for rule in self.wildcards"
-        if skip: continue  # "for t in self.tests"
+        flaky = statusfile.IsFlaky(t.outcomes)
+        slow = statusfile.IsSlow(t.outcomes)
+        pass_fail = statusfile.IsPassOrFail(t.outcomes)
+      skip = False
+      for rule in self.wildcards:
+        assert rule[-1] == '*'
+        if testname.startswith(rule[:-1]):
+          used_rules.add(rule)
+          t.outcomes = self.wildcards[rule]
+          if statusfile.DoSkip(t.outcomes):
+            skip = True
+            break  # "for rule in self.wildcards"
+          flaky = flaky or statusfile.IsFlaky(t.outcomes)
+          slow = slow or statusfile.IsSlow(t.outcomes)
+          pass_fail = pass_fail or statusfile.IsPassOrFail(t.outcomes)
+      if (skip or self._FilterFlaky(flaky, flaky_tests)
+          or self._FilterSlow(slow, slow_tests)
+          or self._FilterPassFail(pass_fail, pass_fail_tests)):
+        continue  # "for t in self.tests"
       filtered.append(t)
     self.tests = filtered
 

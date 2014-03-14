@@ -49,12 +49,19 @@ void StaticNewSpaceVisitor<StaticVisitor>::Initialize() {
                   SlicedString::BodyDescriptor,
                   int>::Visit);
 
+  table_.Register(kVisitSymbol,
+                  &FixedBodyVisitor<StaticVisitor,
+                  Symbol::BodyDescriptor,
+                  int>::Visit);
+
   table_.Register(kVisitFixedArray,
                   &FlexibleBodyVisitor<StaticVisitor,
                   FixedArray::BodyDescriptor,
                   int>::Visit);
 
   table_.Register(kVisitFixedDoubleArray, &VisitFixedDoubleArray);
+  table_.Register(kVisitFixedTypedArray, &VisitFixedTypedArray);
+  table_.Register(kVisitFixedFloat64Array, &VisitFixedTypedArray);
 
   table_.Register(kVisitNativeContext,
                   &FixedBodyVisitor<StaticVisitor,
@@ -68,15 +75,23 @@ void StaticNewSpaceVisitor<StaticVisitor>::Initialize() {
                   SharedFunctionInfo::BodyDescriptor,
                   int>::Visit);
 
-  table_.Register(kVisitSeqAsciiString, &VisitSeqAsciiString);
+  table_.Register(kVisitSeqOneByteString, &VisitSeqOneByteString);
 
   table_.Register(kVisitSeqTwoByteString, &VisitSeqTwoByteString);
 
   table_.Register(kVisitJSFunction, &VisitJSFunction);
 
+  table_.Register(kVisitJSArrayBuffer, &VisitJSArrayBuffer);
+
+  table_.Register(kVisitJSTypedArray, &VisitJSTypedArray);
+
+  table_.Register(kVisitJSDataView, &VisitJSDataView);
+
   table_.Register(kVisitFreeSpace, &VisitFreeSpace);
 
   table_.Register(kVisitJSWeakMap, &JSObjectVisitor::Visit);
+
+  table_.Register(kVisitJSWeakSet, &JSObjectVisitor::Visit);
 
   table_.Register(kVisitJSRegExp, &JSObjectVisitor::Visit);
 
@@ -90,6 +105,59 @@ void StaticNewSpaceVisitor<StaticVisitor>::Initialize() {
   table_.template RegisterSpecializations<StructVisitor,
                                           kVisitStruct,
                                           kVisitStructGeneric>();
+}
+
+
+template<typename StaticVisitor>
+int StaticNewSpaceVisitor<StaticVisitor>::VisitJSArrayBuffer(
+    Map* map, HeapObject* object) {
+  Heap* heap = map->GetHeap();
+
+  STATIC_ASSERT(
+      JSArrayBuffer::kWeakFirstViewOffset ==
+      JSArrayBuffer::kWeakNextOffset + kPointerSize);
+  VisitPointers(
+      heap,
+      HeapObject::RawField(object, JSArrayBuffer::BodyDescriptor::kStartOffset),
+      HeapObject::RawField(object, JSArrayBuffer::kWeakNextOffset));
+  VisitPointers(
+      heap,
+      HeapObject::RawField(object,
+          JSArrayBuffer::kWeakNextOffset + 2 * kPointerSize),
+      HeapObject::RawField(object, JSArrayBuffer::kSizeWithInternalFields));
+  return JSArrayBuffer::kSizeWithInternalFields;
+}
+
+
+template<typename StaticVisitor>
+int StaticNewSpaceVisitor<StaticVisitor>::VisitJSTypedArray(
+    Map* map, HeapObject* object) {
+  VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object, JSTypedArray::BodyDescriptor::kStartOffset),
+      HeapObject::RawField(object, JSTypedArray::kWeakNextOffset));
+  VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object,
+          JSTypedArray::kWeakNextOffset + kPointerSize),
+      HeapObject::RawField(object, JSTypedArray::kSizeWithInternalFields));
+  return JSTypedArray::kSizeWithInternalFields;
+}
+
+
+template<typename StaticVisitor>
+int StaticNewSpaceVisitor<StaticVisitor>::VisitJSDataView(
+    Map* map, HeapObject* object) {
+  VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object, JSDataView::BodyDescriptor::kStartOffset),
+      HeapObject::RawField(object, JSDataView::kWeakNextOffset));
+  VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object,
+          JSDataView::kWeakNextOffset + kPointerSize),
+      HeapObject::RawField(object, JSDataView::kSizeWithInternalFields));
+  return JSDataView::kSizeWithInternalFields;
 }
 
 
@@ -110,24 +178,36 @@ void StaticMarkingVisitor<StaticVisitor>::Initialize() {
                   SlicedString::BodyDescriptor,
                   void>::Visit);
 
-  table_.Register(kVisitFixedArray,
-                  &FlexibleBodyVisitor<StaticVisitor,
-                  FixedArray::BodyDescriptor,
+  table_.Register(kVisitSymbol,
+                  &FixedBodyVisitor<StaticVisitor,
+                  Symbol::BodyDescriptor,
                   void>::Visit);
+
+  table_.Register(kVisitFixedArray, &FixedArrayVisitor::Visit);
 
   table_.Register(kVisitFixedDoubleArray, &DataObjectVisitor::Visit);
 
+  table_.Register(kVisitFixedTypedArray, &DataObjectVisitor::Visit);
+
+  table_.Register(kVisitFixedFloat64Array, &DataObjectVisitor::Visit);
+
+  table_.Register(kVisitConstantPoolArray, &VisitConstantPoolArray);
+
   table_.Register(kVisitNativeContext, &VisitNativeContext);
+
+  table_.Register(kVisitAllocationSite, &VisitAllocationSite);
 
   table_.Register(kVisitByteArray, &DataObjectVisitor::Visit);
 
   table_.Register(kVisitFreeSpace, &DataObjectVisitor::Visit);
 
-  table_.Register(kVisitSeqAsciiString, &DataObjectVisitor::Visit);
+  table_.Register(kVisitSeqOneByteString, &DataObjectVisitor::Visit);
 
   table_.Register(kVisitSeqTwoByteString, &DataObjectVisitor::Visit);
 
-  table_.Register(kVisitJSWeakMap, &StaticVisitor::VisitJSWeakMap);
+  table_.Register(kVisitJSWeakMap, &StaticVisitor::VisitWeakCollection);
+
+  table_.Register(kVisitJSWeakSet, &StaticVisitor::VisitWeakCollection);
 
   table_.Register(kVisitOddball,
                   &FixedBodyVisitor<StaticVisitor,
@@ -142,12 +222,20 @@ void StaticMarkingVisitor<StaticVisitor>::Initialize() {
 
   table_.Register(kVisitJSFunction, &VisitJSFunction);
 
+  table_.Register(kVisitJSArrayBuffer, &VisitJSArrayBuffer);
+
+  table_.Register(kVisitJSTypedArray, &VisitJSTypedArray);
+
+  table_.Register(kVisitJSDataView, &VisitJSDataView);
+
   // Registration for kVisitJSRegExp is done by StaticVisitor.
 
-  table_.Register(kVisitPropertyCell,
+  table_.Register(kVisitCell,
                   &FixedBodyVisitor<StaticVisitor,
-                  JSGlobalPropertyCell::BodyDescriptor,
+                  Cell::BodyDescriptor,
                   void>::Visit);
+
+  table_.Register(kVisitPropertyCell, &VisitPropertyCell);
 
   table_.template RegisterSpecializations<DataObjectVisitor,
                                           kVisitDataObject,
@@ -179,16 +267,24 @@ void StaticMarkingVisitor<StaticVisitor>::VisitEmbeddedPointer(
   ASSERT(!rinfo->target_object()->IsConsString());
   HeapObject* object = HeapObject::cast(rinfo->target_object());
   heap->mark_compact_collector()->RecordRelocSlot(rinfo, object);
-  StaticVisitor::MarkObject(heap, object);
+  // TODO(ulan): It could be better to record slots only for strongly embedded
+  // objects here and record slots for weakly embedded object during clearing
+  // of non-live references in mark-compact.
+  if (!Code::IsWeakEmbeddedObject(rinfo->host()->kind(), object)) {
+    StaticVisitor::MarkObject(heap, object);
+  }
 }
 
 
 template<typename StaticVisitor>
-void StaticMarkingVisitor<StaticVisitor>::VisitGlobalPropertyCell(
+void StaticMarkingVisitor<StaticVisitor>::VisitCell(
     Heap* heap, RelocInfo* rinfo) {
-  ASSERT(rinfo->rmode() == RelocInfo::GLOBAL_PROPERTY_CELL);
-  JSGlobalPropertyCell* cell = rinfo->target_cell();
-  StaticVisitor::MarkObject(heap, cell);
+  ASSERT(rinfo->rmode() == RelocInfo::CELL);
+  Cell* cell = rinfo->target_cell();
+  // No need to record slots because the cell space is not compacted during GC.
+  if (!Code::IsWeakEmbeddedObject(rinfo->host()->kind(), cell)) {
+    StaticVisitor::MarkObject(heap, cell);
+  }
 }
 
 
@@ -214,11 +310,23 @@ void StaticMarkingVisitor<StaticVisitor>::VisitCodeTarget(
   // when they might be keeping a Context alive, or when the heap is about
   // to be serialized.
   if (FLAG_cleanup_code_caches_at_gc && target->is_inline_cache_stub()
-      && (target->ic_state() == MEGAMORPHIC || heap->flush_monomorphic_ics() ||
+      && (target->ic_state() == MEGAMORPHIC || target->ic_state() == GENERIC ||
+          target->ic_state() == POLYMORPHIC || heap->flush_monomorphic_ics() ||
           Serializer::enabled() || target->ic_age() != heap->global_ic_age())) {
-    IC::Clear(rinfo->pc());
+    IC::Clear(target->GetIsolate(), rinfo->pc());
     target = Code::GetCodeFromTargetAddress(rinfo->target_address());
   }
+  heap->mark_compact_collector()->RecordRelocSlot(rinfo, target);
+  StaticVisitor::MarkObject(heap, target);
+}
+
+
+template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitCodeAgeSequence(
+    Heap* heap, RelocInfo* rinfo) {
+  ASSERT(RelocInfo::IsCodeAgeSequence(rinfo->rmode()));
+  Code* target = rinfo->code_age_stub();
+  ASSERT(target != NULL);
   heap->mark_compact_collector()->RecordRelocSlot(rinfo, target);
   StaticVisitor::MarkObject(heap, target);
 }
@@ -235,8 +343,7 @@ void StaticMarkingVisitor<StaticVisitor>::VisitNativeContext(
   for (int idx = Context::FIRST_WEAK_SLOT;
        idx < Context::NATIVE_CONTEXT_SLOTS;
        ++idx) {
-    Object** slot =
-        HeapObject::RawField(object, FixedArray::OffsetOfElementAt(idx));
+    Object** slot = Context::cast(object)->RawFieldOfElementAt(idx);
     collector->RecordSlot(slot, slot, *slot);
   }
 }
@@ -253,12 +360,9 @@ void StaticMarkingVisitor<StaticVisitor>::VisitMap(
     map_object->ClearCodeCache(heap);
   }
 
-  // When map collection is enabled we have to mark through map's
-  // transitions and back pointers in a special way to make these links
-  // weak.  Only maps for subclasses of JSReceiver can have transitions.
-  STATIC_ASSERT(LAST_TYPE == LAST_JS_RECEIVER_TYPE);
-  if (FLAG_collect_maps &&
-      map_object->instance_type() >= FIRST_JS_RECEIVER_TYPE) {
+  // When map collection is enabled we have to mark through map's transitions
+  // and back pointers in a special way to make these links weak.
+  if (FLAG_collect_maps && map_object->CanTransition()) {
     MarkMapContents(heap, map_object);
   } else {
     StaticVisitor::VisitPointers(heap,
@@ -269,12 +373,64 @@ void StaticMarkingVisitor<StaticVisitor>::VisitMap(
 
 
 template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitPropertyCell(
+    Map* map, HeapObject* object) {
+  Heap* heap = map->GetHeap();
+
+  Object** slot =
+      HeapObject::RawField(object, PropertyCell::kDependentCodeOffset);
+  if (FLAG_collect_maps) {
+    // Mark property cell dependent codes array but do not push it onto marking
+    // stack, this will make references from it weak. We will clean dead
+    // codes when we iterate over property cells in ClearNonLiveReferences.
+    HeapObject* obj = HeapObject::cast(*slot);
+    heap->mark_compact_collector()->RecordSlot(slot, slot, obj);
+    StaticVisitor::MarkObjectWithoutPush(heap, obj);
+  } else {
+    StaticVisitor::VisitPointer(heap, slot);
+  }
+
+  StaticVisitor::VisitPointers(heap,
+      HeapObject::RawField(object, PropertyCell::kPointerFieldsBeginOffset),
+      HeapObject::RawField(object, PropertyCell::kPointerFieldsEndOffset));
+}
+
+
+template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitAllocationSite(
+    Map* map, HeapObject* object) {
+  Heap* heap = map->GetHeap();
+
+  Object** slot =
+      HeapObject::RawField(object, AllocationSite::kDependentCodeOffset);
+  if (FLAG_collect_maps) {
+    // Mark allocation site dependent codes array but do not push it onto
+    // marking stack, this will make references from it weak. We will clean
+    // dead codes when we iterate over allocation sites in
+    // ClearNonLiveReferences.
+    HeapObject* obj = HeapObject::cast(*slot);
+    heap->mark_compact_collector()->RecordSlot(slot, slot, obj);
+    StaticVisitor::MarkObjectWithoutPush(heap, obj);
+  } else {
+    StaticVisitor::VisitPointer(heap, slot);
+  }
+
+  StaticVisitor::VisitPointers(heap,
+      HeapObject::RawField(object, AllocationSite::kPointerFieldsBeginOffset),
+      HeapObject::RawField(object, AllocationSite::kPointerFieldsEndOffset));
+}
+
+
+template<typename StaticVisitor>
 void StaticMarkingVisitor<StaticVisitor>::VisitCode(
     Map* map, HeapObject* object) {
   Heap* heap = map->GetHeap();
   Code* code = Code::cast(object);
   if (FLAG_cleanup_code_caches_at_gc) {
-    code->ClearTypeFeedbackCells(heap);
+    code->ClearTypeFeedbackInfo(heap);
+  }
+  if (FLAG_age_code && !Serializer::enabled()) {
+    code->MakeOlder(heap->mark_compact_collector()->marking_parity());
   }
   code->CodeIterateBody<StaticVisitor>(heap);
 }
@@ -288,8 +444,23 @@ void StaticMarkingVisitor<StaticVisitor>::VisitSharedFunctionInfo(
   if (shared->ic_age() != heap->global_ic_age()) {
     shared->ResetForNewContext(heap->global_ic_age());
   }
+  if (FLAG_cache_optimized_code &&
+      FLAG_flush_optimized_code_cache &&
+      !shared->optimized_code_map()->IsSmi()) {
+    // Always flush the optimized code map if requested by flag.
+    shared->ClearOptimizedCodeMap();
+  }
   MarkCompactCollector* collector = heap->mark_compact_collector();
   if (collector->is_code_flushing_enabled()) {
+    if (FLAG_cache_optimized_code && !shared->optimized_code_map()->IsSmi()) {
+      // Add the shared function info holding an optimized code map to
+      // the code flusher for processing of code maps after marking.
+      collector->code_flusher()->AddOptimizedCodeMap(shared);
+      // Treat all references within the code map weakly by marking the
+      // code map itself but not pushing it onto the marking deque.
+      FixedArray* code_map = FixedArray::cast(shared->optimized_code_map());
+      StaticVisitor::MarkObjectWithoutPush(heap, code_map);
+    }
     if (IsFlushable(heap, shared)) {
       // This function's code looks flushable. But we have to postpone
       // the decision until we see all functions that point to the same
@@ -302,8 +473,33 @@ void StaticMarkingVisitor<StaticVisitor>::VisitSharedFunctionInfo(
       VisitSharedFunctionInfoWeakCode(heap, object);
       return;
     }
+  } else {
+    if (FLAG_cache_optimized_code && !shared->optimized_code_map()->IsSmi()) {
+      // Flush optimized code map on major GCs without code flushing,
+      // needed because cached code doesn't contain breakpoints.
+      shared->ClearOptimizedCodeMap();
+    }
   }
   VisitSharedFunctionInfoStrongCode(heap, object);
+}
+
+
+template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitConstantPoolArray(
+    Map* map, HeapObject* object) {
+  Heap* heap = map->GetHeap();
+  ConstantPoolArray* constant_pool = ConstantPoolArray::cast(object);
+  if (constant_pool->count_of_ptr_entries() > 0) {
+    int first_ptr_offset = constant_pool->OffsetOfElementAt(
+        constant_pool->first_ptr_index());
+    int last_ptr_offset = constant_pool->OffsetOfElementAt(
+        constant_pool->first_ptr_index() +
+        constant_pool->count_of_ptr_entries() - 1);
+    StaticVisitor::VisitPointers(
+        heap,
+        HeapObject::RawField(object, first_ptr_offset),
+        HeapObject::RawField(object, last_ptr_offset));
+  }
 }
 
 
@@ -325,7 +521,7 @@ void StaticMarkingVisitor<StaticVisitor>::VisitJSFunction(
       // Visit shared function info immediately to avoid double checking
       // of its flushability later. This is just an optimization because
       // the shared function info would eventually be visited.
-      SharedFunctionInfo* shared = function->unchecked_shared();
+      SharedFunctionInfo* shared = function->shared();
       if (StaticVisitor::MarkObjectWithoutPush(heap, shared)) {
         StaticVisitor::MarkObject(heap, shared->map());
         VisitSharedFunctionInfoWeakCode(heap, shared);
@@ -357,6 +553,56 @@ void StaticMarkingVisitor<StaticVisitor>::VisitJSRegExp(
 
 
 template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitJSArrayBuffer(
+    Map* map, HeapObject* object) {
+  Heap* heap = map->GetHeap();
+
+  STATIC_ASSERT(
+      JSArrayBuffer::kWeakFirstViewOffset ==
+      JSArrayBuffer::kWeakNextOffset + kPointerSize);
+  StaticVisitor::VisitPointers(
+      heap,
+      HeapObject::RawField(object, JSArrayBuffer::BodyDescriptor::kStartOffset),
+      HeapObject::RawField(object, JSArrayBuffer::kWeakNextOffset));
+  StaticVisitor::VisitPointers(
+      heap,
+      HeapObject::RawField(object,
+          JSArrayBuffer::kWeakNextOffset + 2 * kPointerSize),
+      HeapObject::RawField(object, JSArrayBuffer::kSizeWithInternalFields));
+}
+
+
+template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitJSTypedArray(
+    Map* map, HeapObject* object) {
+  StaticVisitor::VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object, JSTypedArray::BodyDescriptor::kStartOffset),
+      HeapObject::RawField(object, JSTypedArray::kWeakNextOffset));
+  StaticVisitor::VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object,
+        JSTypedArray::kWeakNextOffset + kPointerSize),
+      HeapObject::RawField(object, JSTypedArray::kSizeWithInternalFields));
+}
+
+
+template<typename StaticVisitor>
+void StaticMarkingVisitor<StaticVisitor>::VisitJSDataView(
+    Map* map, HeapObject* object) {
+  StaticVisitor::VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object, JSDataView::BodyDescriptor::kStartOffset),
+      HeapObject::RawField(object, JSDataView::kWeakNextOffset));
+  StaticVisitor::VisitPointers(
+      map->GetHeap(),
+      HeapObject::RawField(object,
+        JSDataView::kWeakNextOffset + kPointerSize),
+      HeapObject::RawField(object, JSDataView::kSizeWithInternalFields));
+}
+
+
+template<typename StaticVisitor>
 void StaticMarkingVisitor<StaticVisitor>::MarkMapContents(
     Heap* heap, Map* map) {
   // Make sure that the back pointer stored either in the map itself or
@@ -375,6 +621,34 @@ void StaticMarkingVisitor<StaticVisitor>::MarkMapContents(
     // Already marked by marking map->GetBackPointer() above.
     ASSERT(transitions->IsMap() || transitions->IsUndefined());
   }
+
+  // Since descriptor arrays are potentially shared, ensure that only the
+  // descriptors that belong to this map are marked. The first time a
+  // non-empty descriptor array is marked, its header is also visited. The slot
+  // holding the descriptor array will be implicitly recorded when the pointer
+  // fields of this map are visited.
+  DescriptorArray* descriptors = map->instance_descriptors();
+  if (StaticVisitor::MarkObjectWithoutPush(heap, descriptors) &&
+      descriptors->length() > 0) {
+    StaticVisitor::VisitPointers(heap,
+        descriptors->GetFirstElementAddress(),
+        descriptors->GetDescriptorEndSlot(0));
+  }
+  int start = 0;
+  int end = map->NumberOfOwnDescriptors();
+  if (start < end) {
+    StaticVisitor::VisitPointers(heap,
+        descriptors->GetDescriptorStartSlot(start),
+        descriptors->GetDescriptorEndSlot(end));
+  }
+
+  // Mark prototype dependent codes array but do not push it onto marking
+  // stack, this will make references from it weak. We will clean dead
+  // codes when we iterate over maps in ClearNonLiveTransitions.
+  Object** slot = HeapObject::RawField(map, Map::kDependentCodeOffset);
+  HeapObject* obj = HeapObject::cast(*slot);
+  heap->mark_compact_collector()->RecordSlot(slot, slot, obj);
+  StaticVisitor::MarkObjectWithoutPush(heap, obj);
 
   // Mark the pointer fields of the Map. Since the transitions array has
   // been marked already, it is fine that one of these fields contains a
@@ -443,25 +717,27 @@ inline static bool HasSourceCode(Heap* heap, SharedFunctionInfo* info) {
 template<typename StaticVisitor>
 bool StaticMarkingVisitor<StaticVisitor>::IsFlushable(
     Heap* heap, JSFunction* function) {
-  SharedFunctionInfo* shared_info = function->unchecked_shared();
+  SharedFunctionInfo* shared_info = function->shared();
 
   // Code is either on stack, in compilation cache or referenced
   // by optimized version of function.
   MarkBit code_mark = Marking::MarkBitFrom(function->code());
   if (code_mark.Get()) {
-    if (!Marking::MarkBitFrom(shared_info).Get()) {
-      shared_info->set_code_age(0);
-    }
     return false;
   }
 
   // The function must have a valid context and not be a builtin.
-  if (!IsValidNonBuiltinContext(function->unchecked_context())) {
+  if (!IsValidNonBuiltinContext(function->context())) {
     return false;
   }
 
-  // We do not flush code for optimized functions.
+  // We do not (yet) flush code for optimized functions.
   if (function->code() != shared_info->code()) {
+    return false;
+  }
+
+  // Check age of optimized code.
+  if (FLAG_age_code && !function->code()->IsOld()) {
     return false;
   }
 
@@ -501,21 +777,25 @@ bool StaticMarkingVisitor<StaticVisitor>::IsFlushable(
     return false;
   }
 
-  // If this is a full script wrapped in a function we do no flush the code.
+  // We do not (yet?) flush code for generator functions, because we don't know
+  // if there are still live activations (generator objects) on the heap.
+  if (shared_info->is_generator()) {
+    return false;
+  }
+
+  // If this is a full script wrapped in a function we do not flush the code.
   if (shared_info->is_toplevel()) {
     return false;
   }
 
-  // TODO(mstarzinger): The following will soon be replaced by a new way of
-  // aging code, that is based on an aging stub in the function prologue.
+  // If this is a function initialized with %SetCode then the one-to-one
+  // relation between SharedFunctionInfo and Code is broken.
+  if (shared_info->dont_flush()) {
+    return false;
+  }
 
-  // How many collections newly compiled code object will survive before being
-  // flushed.
-  static const int kCodeAgeThreshold = 5;
-
-  // Age this shared function info.
-  if (shared_info->code_age() < kCodeAgeThreshold) {
-    shared_info->set_code_age(shared_info->code_age() + 1);
+  // Check age of code. If code aging is disabled we never flush.
+  if (!FLAG_age_code || !shared_info->code()->IsOld()) {
     return false;
   }
 
@@ -606,22 +886,24 @@ void StaticMarkingVisitor<StaticVisitor>::VisitJSFunctionWeakCode(
 void Code::CodeIterateBody(ObjectVisitor* v) {
   int mode_mask = RelocInfo::kCodeTargetMask |
                   RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT) |
-                  RelocInfo::ModeMask(RelocInfo::GLOBAL_PROPERTY_CELL) |
+                  RelocInfo::ModeMask(RelocInfo::CELL) |
                   RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
                   RelocInfo::ModeMask(RelocInfo::JS_RETURN) |
                   RelocInfo::ModeMask(RelocInfo::DEBUG_BREAK_SLOT) |
                   RelocInfo::ModeMask(RelocInfo::RUNTIME_ENTRY);
 
   // There are two places where we iterate code bodies: here and the
-  // templated CodeIterateBody (below).  They should be kept in sync.
+  // templated CodeIterateBody (below). They should be kept in sync.
   IteratePointer(v, kRelocationInfoOffset);
   IteratePointer(v, kHandlerTableOffset);
   IteratePointer(v, kDeoptimizationDataOffset);
   IteratePointer(v, kTypeFeedbackInfoOffset);
+  IteratePointer(v, kConstantPoolOffset);
 
   RelocIterator it(this, mode_mask);
+  Isolate* isolate = this->GetIsolate();
   for (; !it.done(); it.next()) {
-    it.rinfo()->Visit(v);
+    it.rinfo()->Visit(isolate, v);
   }
 }
 
@@ -630,14 +912,14 @@ template<typename StaticVisitor>
 void Code::CodeIterateBody(Heap* heap) {
   int mode_mask = RelocInfo::kCodeTargetMask |
                   RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT) |
-                  RelocInfo::ModeMask(RelocInfo::GLOBAL_PROPERTY_CELL) |
+                  RelocInfo::ModeMask(RelocInfo::CELL) |
                   RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
                   RelocInfo::ModeMask(RelocInfo::JS_RETURN) |
                   RelocInfo::ModeMask(RelocInfo::DEBUG_BREAK_SLOT) |
                   RelocInfo::ModeMask(RelocInfo::RUNTIME_ENTRY);
 
-  // There are two places where we iterate code bodies: here and the
-  // non-templated CodeIterateBody (above).  They should be kept in sync.
+  // There are two places where we iterate code bodies: here and the non-
+  // templated CodeIterateBody (above). They should be kept in sync.
   StaticVisitor::VisitPointer(
       heap,
       reinterpret_cast<Object**>(this->address() + kRelocationInfoOffset));
@@ -650,6 +932,10 @@ void Code::CodeIterateBody(Heap* heap) {
   StaticVisitor::VisitPointer(
       heap,
       reinterpret_cast<Object**>(this->address() + kTypeFeedbackInfoOffset));
+  StaticVisitor::VisitPointer(
+      heap,
+      reinterpret_cast<Object**>(this->address() + kConstantPoolOffset));
+
 
   RelocIterator it(this, mode_mask);
   for (; !it.done(); it.next()) {

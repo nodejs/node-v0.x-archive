@@ -33,7 +33,7 @@ if /i "%1"=="noprojgen"    set noprojgen=1&goto arg-ok
 if /i "%1"=="nobuild"      set nobuild=1&goto arg-ok
 if /i "%1"=="x86"          set target_arch=ia32&set platform=WIN32&set vs_toolset=x86&goto arg-ok
 if /i "%1"=="ia32"         set target_arch=ia32&set platform=WIN32&set vs_toolset=x86&goto arg-ok
-if /i "%1"=="x64"          set target_arch=x64&set platform=amd64&set vs_toolset=x64&goto arg-ok
+if /i "%1"=="x64"          set target_arch=x64&set platform=x64&set vs_toolset=x64&goto arg-ok
 if /i "%1"=="shared"       set library=shared_library&goto arg-ok
 if /i "%1"=="static"       set library=static_library&goto arg-ok
 :arg-ok
@@ -41,7 +41,18 @@ shift
 goto next-arg
 :args-done
 
+if defined WindowsSDKDir goto select-target
+if defined VCINSTALLDIR goto select-target
+
+@rem Look for Visual Studio 2013
+if not defined VS120COMNTOOLS goto vc-set-2012
+if not exist "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2012
+call "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat" %vs_toolset%
+set GYP_MSVS_VERSION=2013
+goto select-target
+
 @rem Look for Visual Studio 2012
+:vc-set-2012
 if not defined VS110COMNTOOLS goto vc-set-2010
 if not exist "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2010
 call "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat" %vs_toolset%
@@ -91,7 +102,7 @@ exit /b 1
 
 :have_gyp
 if not defined PYTHON set PYTHON="python"
-%PYTHON% gyp_uv.py -Dtarget_arch=%target_arch% -Dlibrary=%library%
+%PYTHON% gyp_uv.py -Dtarget_arch=%target_arch% -Duv_library=%library%
 if errorlevel 1 goto create-msvs-files-failed
 if not exist uv.sln goto create-msvs-files-failed
 echo Project files generated.
@@ -101,10 +112,8 @@ echo Project files generated.
 if defined nobuild goto run
 
 @rem Check if VS build env is available
-if not defined VCINSTALLDIR goto msbuild-not-found
-goto msbuild-found
-
-:msbuild-not-found
+if defined VCINSTALLDIR goto msbuild-found
+if defined WindowsSDKDir goto msbuild-found
 echo Build skipped. To build, this file needs to run from VS cmd prompt.
 goto run
 

@@ -67,7 +67,7 @@ CompilationCache::~CompilationCache() {}
 
 static Handle<CompilationCacheTable> AllocateTable(Isolate* isolate, int size) {
   CALL_HEAP_FUNCTION(isolate,
-                     CompilationCacheTable::Allocate(size),
+                     CompilationCacheTable::Allocate(isolate->heap(), size),
                      CompilationCacheTable);
 }
 
@@ -86,6 +86,7 @@ Handle<CompilationCacheTable> CompilationSubCache::GetTable(int generation) {
   return result;
 }
 
+
 void CompilationSubCache::Age() {
   // Age the generations implicitly killing off the oldest.
   for (int i = generations_ - 1; i > 0; i--) {
@@ -98,7 +99,7 @@ void CompilationSubCache::Age() {
 
 
 void CompilationSubCache::IterateFunctions(ObjectVisitor* v) {
-  Object* undefined = isolate()->heap()->raw_unchecked_undefined_value();
+  Object* undefined = isolate()->heap()->undefined_value();
   for (int i = 0; i < generations_; i++) {
     if (tables_[i] != undefined) {
       reinterpret_cast<CompilationCacheTable*>(tables_[i])->IterateElements(v);
@@ -143,7 +144,8 @@ bool CompilationCacheScript::HasOrigin(
     Handle<SharedFunctionInfo> function_info,
     Handle<Object> name,
     int line_offset,
-    int column_offset) {
+    int column_offset,
+    bool is_shared_cross_origin) {
   Handle<Script> script =
       Handle<Script>(Script::cast(function_info->script()), isolate());
   // If the script name isn't set, the boilerplate script should have
@@ -156,6 +158,8 @@ bool CompilationCacheScript::HasOrigin(
   if (column_offset != script->column_offset()->value()) return false;
   // Check that both names are strings. If not, no match.
   if (!name->IsString() || !script->name()->IsString()) return false;
+  // Were both scripts tagged by the embedder as being shared cross-origin?
+  if (is_shared_cross_origin != script->is_shared_cross_origin()) return false;
   // Compare the two name strings for equality.
   return String::cast(*name)->Equals(String::cast(script->name()));
 }
@@ -170,6 +174,7 @@ Handle<SharedFunctionInfo> CompilationCacheScript::Lookup(
     Handle<Object> name,
     int line_offset,
     int column_offset,
+    bool is_shared_cross_origin,
     Handle<Context> context) {
   Object* result = NULL;
   int generation;
@@ -185,7 +190,11 @@ Handle<SharedFunctionInfo> CompilationCacheScript::Lookup(
             Handle<SharedFunctionInfo>::cast(probe);
         // Break when we've found a suitable shared function info that
         // matches the origin.
-        if (HasOrigin(function_info, name, line_offset, column_offset)) {
+        if (HasOrigin(function_info,
+                      name,
+                      line_offset,
+                      column_offset,
+                      is_shared_cross_origin)) {
           result = *function_info;
           break;
         }
@@ -213,7 +222,11 @@ Handle<SharedFunctionInfo> CompilationCacheScript::Lookup(
   if (result != NULL) {
     Handle<SharedFunctionInfo> shared(SharedFunctionInfo::cast(result),
                                       isolate());
-    ASSERT(HasOrigin(shared, name, line_offset, column_offset));
+    ASSERT(HasOrigin(shared,
+                     name,
+                     line_offset,
+                     column_offset,
+                     is_shared_cross_origin));
     // If the script was found in a later generation, we promote it to
     // the first generation to let it survive longer in the cache.
     if (generation != 0) Put(source, context, shared);
@@ -390,19 +403,24 @@ Handle<SharedFunctionInfo> CompilationCache::LookupScript(
     Handle<Object> name,
     int line_offset,
     int column_offset,
+    bool is_shared_cross_origin,
     Handle<Context> context) {
   if (!IsEnabled()) {
     return Handle<SharedFunctionInfo>::null();
   }
 
-  return script_.Lookup(source, name, line_offset, column_offset, context);
+  return script_.Lookup(source,
+                        name,
+                        line_offset,
+                        column_offset,
+                        is_shared_cross_origin,
+                        context);
 }
 
 
 Handle<SharedFunctionInfo> CompilationCache::LookupEval(
     Handle<String> source,
     Handle<Context> context,
-    bool is_global,
     LanguageMode language_mode,
     int scope_position) {
   if (!IsEnabled()) {
@@ -410,7 +428,7 @@ Handle<SharedFunctionInfo> CompilationCache::LookupEval(
   }
 
   Handle<SharedFunctionInfo> result;
-  if (is_global) {
+  if (context->IsNativeContext()) {
     result = eval_global_.Lookup(
         source, context, language_mode, scope_position);
   } else {
@@ -435,9 +453,7 @@ Handle<FixedArray> CompilationCache::LookupRegExp(Handle<String> source,
 void CompilationCache::PutScript(Handle<String> source,
                                  Handle<Context> context,
                                  Handle<SharedFunctionInfo> function_info) {
-  if (!IsEnabled()) {
-    return;
-  }
+  if (!IsEnabled()) return;
 
   script_.Put(source, context, function_info);
 }
@@ -445,15 +461,12 @@ void CompilationCache::PutScript(Handle<String> source,
 
 void CompilationCache::PutEval(Handle<String> source,
                                Handle<Context> context,
-                               bool is_global,
                                Handle<SharedFunctionInfo> function_info,
                                int scope_position) {
-  if (!IsEnabled()) {
-    return;
-  }
+  if (!IsEnabled()) return;
 
   HandleScope scope(isolate());
-  if (is_global) {
+  if (context->IsNativeContext()) {
     eval_global_.Put(source, context, function_info, scope_position);
   } else {
     ASSERT(scope_position != RelocInfo::kNoPosition);

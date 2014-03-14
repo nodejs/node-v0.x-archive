@@ -53,6 +53,7 @@ class RegExpMacroAssembler {
   enum IrregexpImplementation {
     kIA32Implementation,
     kARMImplementation,
+    kA64Implementation,
     kMIPSImplementation,
     kX64Implementation,
     kBytecodeImplementation
@@ -87,17 +88,6 @@ class RegExpMacroAssembler {
                                       Label* on_equal) = 0;
   virtual void CheckCharacterGT(uc16 limit, Label* on_greater) = 0;
   virtual void CheckCharacterLT(uc16 limit, Label* on_less) = 0;
-  // Check the current character for a match with a literal string.  If we
-  // fail to match then goto the on_failure label.  If check_eos is set then
-  // the end of input always fails.  If check_eos is clear then it is the
-  // caller's responsibility to ensure that the end of string is not hit.
-  // If the label is NULL then we should pop a backtrack address off
-  // the stack and go to that.
-  virtual void CheckCharacters(
-      Vector<const uc16> str,
-      int cp_offset,
-      Label* on_failure,
-      bool check_eos) = 0;
   virtual void CheckGreedyLoop(Label* on_tos_equals_current_position) = 0;
   virtual void CheckNotAtStart(Label* on_not_at_start) = 0;
   virtual void CheckNotBackReference(int start_reg, Label* on_no_match) = 0;
@@ -244,10 +234,10 @@ class NativeRegExpMacroAssembler: public RegExpMacroAssembler {
 
   static const byte* StringCharacterPosition(String* subject, int start_index);
 
-  // Byte map of ASCII characters with a 0xff if the character is a word
+  // Byte map of one byte characters with a 0xff if the character is a word
   // character (digit, letter or underscore) and 0x00 otherwise.
   // Used by generated RegExp code.
-  static const byte word_character_map[128];
+  static const byte word_character_map[256];
 
   static Address word_character_map_address() {
     return const_cast<Address>(&word_character_map[0]);

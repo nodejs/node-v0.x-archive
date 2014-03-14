@@ -90,7 +90,7 @@ class Runner(object):
     self.indicator.Starting()
     self._RunInternal(jobs)
     self.indicator.Done()
-    if self.failed:
+    if self.failed or self.remaining:
       return 1
     return 0
 
@@ -138,14 +138,15 @@ class Runner(object):
         self.indicator.AboutToRun(test)
         test.output = result[1]
         test.duration = result[2]
-        if test.suite.HasUnexpectedOutput(test):
+        has_unexpected_output = test.suite.HasUnexpectedOutput(test)
+        if has_unexpected_output:
           self.failed.append(test)
           if test.output.HasCrashed():
             self.crashed += 1
         else:
           self.succeeded += 1
         self.remaining -= 1
-        self.indicator.HasRun(test)
+        self.indicator.HasRun(test, has_unexpected_output)
     except KeyboardInterrupt:
       pool.terminate()
       pool.join()
@@ -167,11 +168,11 @@ class Runner(object):
       d8testflag = ["--test"]
     if utils.IsWindows():
       shell += ".exe"
-    cmd = ([self.context.command_prefix] +
+    cmd = (self.context.command_prefix +
            [os.path.abspath(os.path.join(self.context.shell_dir, shell))] +
            d8testflag +
            test.suite.GetFlagsForTestCase(test, self.context) +
-           [self.context.extra_flags])
+           self.context.extra_flags)
     return cmd
 
 

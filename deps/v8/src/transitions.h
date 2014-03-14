@@ -41,10 +41,10 @@ namespace internal {
 // TransitionArrays are fixed arrays used to hold map transitions for property,
 // constant, and element changes. They can either be simple transition arrays
 // that store a single property transition, or a full transition array that has
-// space for elements transitions, prototype transitions and multiple property
-// transitons. The details related to property transitions are accessed in the
-// descriptor array of the target map. In the case of a simple transition, the
-// key is also read from the descriptor array of the target map.
+// prototype transitions and multiple property transitons. The details related
+// to property transitions are accessed in the descriptor array of the target
+// map. In the case of a simple transition, the key is also read from the
+// descriptor array of the target map.
 //
 // The simple format of the these objects is:
 // [0] Undefined or back pointer map
@@ -52,19 +52,18 @@ namespace internal {
 //
 // The full format is:
 // [0] Undefined or back pointer map
-// [1] Smi(0) or elements transition map
-// [2] Smi(0) or fixed array of prototype transitions
-// [3] First transition
+// [1] Smi(0) or fixed array of prototype transitions
+// [2] First transition
 // [length() - kTransitionSize] Last transition
 class TransitionArray: public FixedArray {
  public:
   // Accessors for fetching instance transition at transition number.
-  inline String* GetKey(int transition_number);
-  inline void SetKey(int transition_number, String* value);
+  inline Name* GetKey(int transition_number);
+  inline void SetKey(int transition_number, Name* value);
   inline Object** GetKeySlot(int transition_number);
   int GetSortedKeyIndex(int transition_number) { return transition_number; }
 
-  String* GetSortedKey(int transition_number) {
+  Name* GetSortedKey(int transition_number) {
     return GetKey(transition_number);
   }
 
@@ -73,12 +72,7 @@ class TransitionArray: public FixedArray {
 
   inline PropertyDetails GetTargetDetails(int transition_number);
 
-  inline Map* elements_transition();
-  inline void set_elements_transition(
-      Map* target,
-      WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
   inline bool HasElementsTransition();
-  inline void ClearElementsTransition();
 
   inline Object* back_pointer_storage();
   inline void set_back_pointer_storage(
@@ -105,7 +99,7 @@ class TransitionArray: public FixedArray {
   // Allocate a new transition array with a single entry.
   static MUST_USE_RESULT MaybeObject* NewWith(
       SimpleTransitionFlag flag,
-      String* key,
+      Name* key,
       Map* target,
       Object* back_pointer);
 
@@ -114,7 +108,7 @@ class TransitionArray: public FixedArray {
   // Copy the transition array, inserting a new transition.
   // TODO(verwaest): This should not cause an existing transition to be
   // overwritten.
-  MUST_USE_RESULT MaybeObject* CopyInsert(String* name, Map* target);
+  MUST_USE_RESULT MaybeObject* CopyInsert(Name* name, Map* target);
 
   // Copy a single transition from the origin array.
   inline void NoIncrementalWriteBarrierCopyFrom(TransitionArray* origin,
@@ -122,13 +116,27 @@ class TransitionArray: public FixedArray {
                                                 int target_transition);
 
   // Search a transition for a given property name.
-  inline int Search(String* name);
+  inline int Search(Name* name);
 
   // Allocates a TransitionArray.
-  MUST_USE_RESULT static MaybeObject* Allocate(int number_of_transitions);
+  MUST_USE_RESULT static MaybeObject* Allocate(
+      Isolate* isolate, int number_of_transitions);
 
-  bool IsSimpleTransition() { return length() == kSimpleTransitionSize; }
-  bool IsFullTransitionArray() { return length() >= kFirstIndex; }
+  bool IsSimpleTransition() {
+    return length() == kSimpleTransitionSize &&
+        get(kSimpleTransitionTarget)->IsHeapObject() &&
+        // The IntrusivePrototypeTransitionIterator may have set the map of the
+        // prototype transitions array to a smi. In that case, there are
+        // prototype transitions, hence this transition array is a full
+        // transition array.
+        HeapObject::cast(get(kSimpleTransitionTarget))->map()->IsMap() &&
+        get(kSimpleTransitionTarget)->IsMap();
+  }
+
+  bool IsFullTransitionArray() {
+    return length() > kFirstIndex ||
+        (length() == kFirstIndex && !IsSimpleTransition());
+  }
 
   // Casting.
   static inline TransitionArray* cast(Object* obj);
@@ -139,9 +147,8 @@ class TransitionArray: public FixedArray {
   static const int kBackPointerStorageIndex = 0;
 
   // Layout for full transition arrays.
-  static const int kElementsTransitionIndex = 1;
-  static const int kPrototypeTransitionsIndex = 2;
-  static const int kFirstIndex = 3;
+  static const int kPrototypeTransitionsIndex = 1;
+  static const int kFirstIndex = 2;
 
   // Layout for simple transition arrays.
   static const int kSimpleTransitionTarget = 1;
@@ -152,9 +159,7 @@ class TransitionArray: public FixedArray {
   static const int kBackPointerStorageOffset = FixedArray::kHeaderSize;
 
   // Layout for the full transition array header.
-  static const int kElementsTransitionOffset = kBackPointerStorageOffset +
-                                               kPointerSize;
-  static const int kPrototypeTransitionsOffset = kElementsTransitionOffset +
+  static const int kPrototypeTransitionsOffset = kBackPointerStorageOffset +
                                                  kPointerSize;
 
   // Layout of map transition entries in full transition arrays.
@@ -195,7 +200,7 @@ class TransitionArray: public FixedArray {
   }
 
   inline void NoIncrementalWriteBarrierSet(int transition_number,
-                                           String* key,
+                                           Name* key,
                                            Map* target);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(TransitionArray);

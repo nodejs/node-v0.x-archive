@@ -28,13 +28,14 @@
 #ifndef V8_UTILS_H_
 #define V8_UTILS_H_
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-#include <climits>
+#include <algorithm>
 
-#include "globals.h"
-#include "checks.h"
 #include "allocation.h"
+#include "checks.h"
+#include "globals.h"
 
 namespace v8 {
 namespace internal {
@@ -82,6 +83,25 @@ inline int WhichPowerOf2(uint32_t x) {
   ASSERT_EQ(1 << bits, original_x);
   return bits;
   return 0;
+}
+
+
+inline int MostSignificantBit(uint32_t x) {
+  static const int msb4[] = {0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4};
+  int nibble = 0;
+  if (x & 0xffff0000) {
+    nibble += 16;
+    x >>= 16;
+  }
+  if (x & 0xff00) {
+    nibble += 8;
+    x >>= 8;
+  }
+  if (x & 0xf0) {
+    nibble += 4;
+    x >>= 4;
+  }
+  return nibble + msb4[x];
 }
 
 
@@ -149,6 +169,17 @@ inline T RoundDown(T x, intptr_t m) {
 template <typename T>
 inline T RoundUp(T x, intptr_t m) {
   return RoundDown<T>(static_cast<T>(x + m - 1), m);
+}
+
+
+// Increment a pointer until it has the specified alignment.
+// This works like RoundUp, but it works correctly on pointer types where
+// sizeof(*pointer) might not be 1.
+template<class T>
+T AlignUp(T pointer, size_t alignment) {
+  ASSERT(sizeof(pointer) == sizeof(uintptr_t));
+  uintptr_t pointer_raw = reinterpret_cast<uintptr_t>(pointer);
+  return reinterpret_cast<T>(RoundUp(pointer_raw, alignment));
 }
 
 
@@ -231,6 +262,20 @@ T Min(T a, T b) {
 }
 
 
+// Returns the absolute value of its argument.
+template <typename T>
+T Abs(T a) {
+  return a < 0 ? -a : a;
+}
+
+
+// Returns the negative absolute value of its argument.
+template <typename T>
+T NegAbs(T a) {
+  return a < 0 ? a : -a;
+}
+
+
 inline int StrLength(const char* string) {
   size_t length = strlen(string);
   ASSERT(length == static_cast<size_t>(static_cast<int>(length)));
@@ -241,39 +286,50 @@ inline int StrLength(const char* string) {
 // ----------------------------------------------------------------------------
 // BitField is a help template for encoding and decode bitfield with
 // unsigned content.
-template<class T, int shift, int size>
-class BitField {
+
+template<class T, int shift, int size, class U>
+class BitFieldBase {
  public:
-  // A uint32_t mask of bit field.  To use all bits of a uint32 in a
-  // bitfield without compiler warnings we have to compute 2^32 without
-  // using a shift count of 32.
-  static const uint32_t kMask = ((1U << shift) << size) - (1U << shift);
-  static const uint32_t kShift = shift;
+  // A type U mask of bit field.  To use all bits of a type U of x bits
+  // in a bitfield without compiler warnings we have to compute 2^x
+  // without using a shift count of x in the computation.
+  static const U kOne = static_cast<U>(1U);
+  static const U kMask = ((kOne << shift) << size) - (kOne << shift);
+  static const U kShift = shift;
+  static const U kSize = size;
 
   // Value for the field with all bits set.
   static const T kMax = static_cast<T>((1U << size) - 1);
 
   // Tells whether the provided value fits into the bit field.
   static bool is_valid(T value) {
-    return (static_cast<uint32_t>(value) & ~static_cast<uint32_t>(kMax)) == 0;
+    return (static_cast<U>(value) & ~static_cast<U>(kMax)) == 0;
   }
 
-  // Returns a uint32_t with the bit field value encoded.
-  static uint32_t encode(T value) {
+  // Returns a type U with the bit field value encoded.
+  static U encode(T value) {
     ASSERT(is_valid(value));
-    return static_cast<uint32_t>(value) << shift;
+    return static_cast<U>(value) << shift;
   }
 
-  // Returns a uint32_t with the bit field value updated.
-  static uint32_t update(uint32_t previous, T value) {
+  // Returns a type U with the bit field value updated.
+  static U update(U previous, T value) {
     return (previous & ~kMask) | encode(value);
   }
 
   // Extracts the bit field from the value.
-  static T decode(uint32_t value) {
+  static T decode(U value) {
     return static_cast<T>((value & kMask) >> shift);
   }
 };
+
+
+template<class T, int shift, int size>
+class BitField : public BitFieldBase<T, shift, size, uint32_t> { };
+
+
+template<class T, int shift, int size>
+class BitField64 : public BitFieldBase<T, shift, size, uint64_t> { };
 
 
 // ----------------------------------------------------------------------------
@@ -304,7 +360,7 @@ inline uint32_t ComputeLongHash(uint64_t key) {
   hash = hash ^ (hash >> 11);
   hash = hash + (hash << 6);
   hash = hash ^ (hash >> 22);
-  return (uint32_t) hash;
+  return static_cast<uint32_t>(hash);
 }
 
 
@@ -374,8 +430,8 @@ class Vector {
   // Returns a vector using the same backing storage as this one,
   // spanning from and including 'from', to but not including 'to'.
   Vector<T> SubVector(int from, int to) {
-    ASSERT(to <= length_);
-    ASSERT(from < to);
+    SLOW_ASSERT(to <= length_);
+    SLOW_ASSERT(from < to);
     ASSERT(0 <= from);
     return Vector<T>(start() + from, to - from);
   }
@@ -409,15 +465,11 @@ class Vector {
   }
 
   void Sort(int (*cmp)(const T*, const T*)) {
-    typedef int (*RawComparer)(const void*, const void*);
-    qsort(start(),
-          length(),
-          sizeof(T),
-          reinterpret_cast<RawComparer>(cmp));
+    std::sort(start(), start() + length(), RawComparer(cmp));
   }
 
   void Sort() {
-    Sort(PointerValueCompare<T>);
+    std::sort(start(), start() + length());
   }
 
   void Truncate(int length) {
@@ -453,6 +505,17 @@ class Vector {
  private:
   T* start_;
   int length_;
+
+  class RawComparer {
+   public:
+    explicit RawComparer(int (*cmp)(const T*, const T*)) : cmp_(cmp) {}
+    bool operator()(const T& a, const T& b) {
+      return cmp_(&a, &b) < 0;
+    }
+
+   private:
+    int (*cmp_)(const T*, const T*);
+  };
 };
 
 
@@ -493,6 +556,7 @@ class EmbeddedVector : public Vector<T> {
   // When copying, make underlying Vector to reference our buffer.
   EmbeddedVector(const EmbeddedVector& rhs)
       : Vector<T>(rhs) {
+    // TODO(jkummerow): Refactor #includes and use OS::MemCopy() instead.
     memcpy(buffer_, rhs.buffer_, sizeof(T) * kSize);
     set_start(buffer_);
   }
@@ -500,6 +564,7 @@ class EmbeddedVector : public Vector<T> {
   EmbeddedVector& operator=(const EmbeddedVector& rhs) {
     if (this == &rhs) return *this;
     Vector<T>::operator=(rhs);
+    // TODO(jkummerow): Refactor #includes and use OS::MemCopy() instead.
     memcpy(buffer_, rhs.buffer_, sizeof(T) * kSize);
     this->set_start(buffer_);
     return *this;
@@ -522,9 +587,20 @@ class ScopedVector : public Vector<T> {
   DISALLOW_IMPLICIT_CONSTRUCTORS(ScopedVector);
 };
 
+#define STATIC_ASCII_VECTOR(x)                        \
+  v8::internal::Vector<const uint8_t>(reinterpret_cast<const uint8_t*>(x), \
+                                      ARRAY_SIZE(x)-1)
 
 inline Vector<const char> CStrVector(const char* data) {
   return Vector<const char>(data, StrLength(data));
+}
+
+inline Vector<const uint8_t> OneByteVector(const char* data, int length) {
+  return Vector<const uint8_t>(reinterpret_cast<const uint8_t*>(data), length);
+}
+
+inline Vector<const uint8_t> OneByteVector(const char* data) {
+  return OneByteVector(data, StrLength(data));
 }
 
 inline Vector<char> MutableCStrVector(char* data) {
@@ -765,7 +841,9 @@ class SequenceCollector : public Collector<T, growth_factor, max_growth> {
 
 // Compare ASCII/16bit chars to ASCII/16bit chars.
 template <typename lchar, typename rchar>
-inline int CompareChars(const lchar* lhs, const rchar* rhs, int chars) {
+inline int CompareCharsUnsigned(const lchar* lhs,
+                                const rchar* rhs,
+                                int chars) {
   const lchar* limit = lhs + chars;
 #ifdef V8_HOST_CAN_READ_UNALIGNED
   if (sizeof(*lhs) == sizeof(*rhs)) {
@@ -788,6 +866,33 @@ inline int CompareChars(const lchar* lhs, const rchar* rhs, int chars) {
     ++rhs;
   }
   return 0;
+}
+
+template<typename lchar, typename rchar>
+inline int CompareChars(const lchar* lhs, const rchar* rhs, int chars) {
+  ASSERT(sizeof(lchar) <= 2);
+  ASSERT(sizeof(rchar) <= 2);
+  if (sizeof(lchar) == 1) {
+    if (sizeof(rchar) == 1) {
+      return CompareCharsUnsigned(reinterpret_cast<const uint8_t*>(lhs),
+                                  reinterpret_cast<const uint8_t*>(rhs),
+                                  chars);
+    } else {
+      return CompareCharsUnsigned(reinterpret_cast<const uint8_t*>(lhs),
+                                  reinterpret_cast<const uint16_t*>(rhs),
+                                  chars);
+    }
+  } else {
+    if (sizeof(rchar) == 1) {
+      return CompareCharsUnsigned(reinterpret_cast<const uint16_t*>(lhs),
+                                  reinterpret_cast<const uint8_t*>(rhs),
+                                  chars);
+    } else {
+      return CompareCharsUnsigned(reinterpret_cast<const uint16_t*>(lhs),
+                                  reinterpret_cast<const uint16_t*>(rhs),
+                                  chars);
+    }
+  }
 }
 
 
@@ -835,6 +940,7 @@ struct BitCastHelper {
 
   INLINE(static Dest cast(const Source& source)) {
     Dest dest;
+    // TODO(jkummerow): Refactor #includes and use OS::MemCopy() instead.
     memcpy(&dest, &source, sizeof(dest));
     return dest;
   }
@@ -978,18 +1084,82 @@ class EnumSet {
   void Intersect(const EnumSet& set) { bits_ &= set.bits_; }
   T ToIntegral() const { return bits_; }
   bool operator==(const EnumSet& set) { return bits_ == set.bits_; }
+  bool operator!=(const EnumSet& set) { return bits_ != set.bits_; }
+  EnumSet<E, T> operator|(const EnumSet& set) const {
+    return EnumSet<E, T>(bits_ | set.bits_);
+  }
 
  private:
   T Mask(E element) const {
     // The strange typing in ASSERT is necessary to avoid stupid warnings, see:
     // http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43680
     ASSERT(static_cast<int>(element) < static_cast<int>(sizeof(T) * CHAR_BIT));
-    return 1 << element;
+    return static_cast<T>(1) << element;
   }
 
   T bits_;
 };
 
+// Bit field extraction.
+inline uint32_t unsigned_bitextract_32(int msb, int lsb, uint32_t x) {
+  return (x >> lsb) & ((1 << (1 + msb - lsb)) - 1);
+}
+
+inline uint64_t unsigned_bitextract_64(int msb, int lsb, uint64_t x) {
+  return (x >> lsb) & ((static_cast<uint64_t>(1) << (1 + msb - lsb)) - 1);
+}
+
+inline int32_t signed_bitextract_32(int msb, int lsb, int32_t x) {
+  return (x << (31 - msb)) >> (lsb + 31 - msb);
+}
+
+inline int signed_bitextract_64(int msb, int lsb, int x) {
+  // TODO(jbramley): This is broken for big bitfields.
+  return (x << (63 - msb)) >> (lsb + 63 - msb);
+}
+
+// Check number width.
+inline bool is_intn(int64_t x, unsigned n) {
+  ASSERT((0 < n) && (n < 64));
+  int64_t limit = static_cast<int64_t>(1) << (n - 1);
+  return (-limit <= x) && (x < limit);
+}
+
+inline bool is_uintn(int64_t x, unsigned n) {
+  ASSERT((0 < n) && (n < (sizeof(x) * kBitsPerByte)));
+  return !(x >> n);
+}
+
+template <class T>
+inline T truncate_to_intn(T x, unsigned n) {
+  ASSERT((0 < n) && (n < (sizeof(x) * kBitsPerByte)));
+  return (x & ((static_cast<T>(1) << n) - 1));
+}
+
+#define INT_1_TO_63_LIST(V)                                                    \
+V(1)  V(2)  V(3)  V(4)  V(5)  V(6)  V(7)  V(8)                                 \
+V(9)  V(10) V(11) V(12) V(13) V(14) V(15) V(16)                                \
+V(17) V(18) V(19) V(20) V(21) V(22) V(23) V(24)                                \
+V(25) V(26) V(27) V(28) V(29) V(30) V(31) V(32)                                \
+V(33) V(34) V(35) V(36) V(37) V(38) V(39) V(40)                                \
+V(41) V(42) V(43) V(44) V(45) V(46) V(47) V(48)                                \
+V(49) V(50) V(51) V(52) V(53) V(54) V(55) V(56)                                \
+V(57) V(58) V(59) V(60) V(61) V(62) V(63)
+
+#define DECLARE_IS_INT_N(N)                                                    \
+inline bool is_int##N(int64_t x) { return is_intn(x, N); }
+#define DECLARE_IS_UINT_N(N)                                                   \
+template <class T>                                                             \
+inline bool is_uint##N(T x) { return is_uintn(x, N); }
+#define DECLARE_TRUNCATE_TO_INT_N(N)                                           \
+template <class T>                                                             \
+inline T truncate_to_int##N(T x) { return truncate_to_intn(x, N); }
+INT_1_TO_63_LIST(DECLARE_IS_INT_N)
+INT_1_TO_63_LIST(DECLARE_IS_UINT_N)
+INT_1_TO_63_LIST(DECLARE_TRUNCATE_TO_INT_N)
+#undef DECLARE_IS_INT_N
+#undef DECLARE_IS_UINT_N
+#undef DECLARE_TRUNCATE_TO_INT_N
 
 class TypeFeedbackId {
  public:
@@ -1015,9 +1185,11 @@ class BailoutId {
   static BailoutId FunctionEntry() { return BailoutId(kFunctionEntryId); }
   static BailoutId Declarations() { return BailoutId(kDeclarationsId); }
   static BailoutId FirstUsable() { return BailoutId(kFirstUsableId); }
+  static BailoutId StubEntry() { return BailoutId(kStubEntryId); }
 
   bool IsNone() const { return id_ == kNoneId; }
   bool operator==(const BailoutId& other) const { return id_ == other.id_; }
+  bool operator!=(const BailoutId& other) const { return id_ != other.id_; }
 
  private:
   static const int kNoneId = -1;
@@ -1030,10 +1202,28 @@ class BailoutId {
   // code (function declarations).
   static const int kDeclarationsId = 3;
 
-  // Ever FunctionState starts with this id.
+  // Every FunctionState starts with this id.
   static const int kFirstUsableId = 4;
 
+  // Every compiled stub starts with this id.
+  static const int kStubEntryId = 5;
+
   int id_;
+};
+
+
+template <class C>
+class ContainerPointerWrapper {
+ public:
+  typedef typename C::iterator iterator;
+  typedef typename C::reverse_iterator reverse_iterator;
+  explicit ContainerPointerWrapper(C* container) : container_(container) {}
+  iterator begin() { return container_->begin(); }
+  iterator end() { return container_->end(); }
+  reverse_iterator rbegin() { return container_->rbegin(); }
+  reverse_iterator rend() { return container_->rend(); }
+ private:
+  C* container_;
 };
 
 } }  // namespace v8::internal

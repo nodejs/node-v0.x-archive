@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_ARM)
+#if V8_TARGET_ARCH_ARM
 
 #include "codegen.h"
 #include "debug.h"
@@ -48,24 +48,15 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   //   add sp, sp, #4
   //   bx lr
   // to a call to the debug break return code.
-  // #ifdef USE_BLX
   //   ldr ip, [pc, #0]
   //   blx ip
-  // #else
-  //   mov lr, pc
-  //   ldr pc, [pc, #-4]
-  // #endif
   //   <debug break return code entry point address>
   //   bktp 0
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
-#ifdef USE_BLX
   patcher.masm()->ldr(v8::internal::ip, MemOperand(v8::internal::pc, 0));
   patcher.masm()->blx(v8::internal::ip);
-#else
-  patcher.masm()->mov(v8::internal::lr, v8::internal::pc);
-  patcher.masm()->ldr(v8::internal::pc, MemOperand(v8::internal::pc, -4));
-#endif
-  patcher.Emit(Isolate::Current()->debug()->debug_break_return()->entry());
+  patcher.Emit(
+      debug_info_->GetIsolate()->debug()->debug_break_return()->entry());
   patcher.masm()->bkpt(0);
 }
 
@@ -99,23 +90,14 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   //   mov r2, r2
   //   mov r2, r2
   // to a call to the debug break slot code.
-  // #ifdef USE_BLX
   //   ldr ip, [pc, #0]
   //   blx ip
-  // #else
-  //   mov lr, pc
-  //   ldr pc, [pc, #-4]
-  // #endif
   //   <debug break slot code entry point address>
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
-#ifdef USE_BLX
   patcher.masm()->ldr(v8::internal::ip, MemOperand(v8::internal::pc, 0));
   patcher.masm()->blx(v8::internal::ip);
-#else
-  patcher.masm()->mov(v8::internal::lr, v8::internal::pc);
-  patcher.masm()->ldr(v8::internal::pc, MemOperand(v8::internal::pc, -4));
-#endif
-  patcher.Emit(Isolate::Current()->debug()->debug_break_slot()->entry());
+  patcher.Emit(
+      debug_info_->GetIsolate()->debug()->debug_break_slot()->entry());
 }
 
 
@@ -150,9 +132,9 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         if ((non_object_regs & (1 << r)) != 0) {
           if (FLAG_debug_code) {
             __ tst(reg, Operand(0xc0000000));
-            __ Assert(eq, "Unable to encode value as smi");
+            __ Assert(eq, kUnableToEncodeValueAsSmi);
           }
-          __ mov(reg, Operand(reg, LSL, kSmiTagSize));
+          __ SmiTag(reg);
         }
       }
       __ stm(db_w, sp, object_regs | non_object_regs);
@@ -161,7 +143,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
 #ifdef DEBUG
     __ RecordComment("// Calling from debug break to runtime - come in - over");
 #endif
-    __ mov(r0, Operand(0, RelocInfo::NONE));  // no arguments
+    __ mov(r0, Operand::Zero());  // no arguments
     __ mov(r1, Operand(ExternalReference::debug_break(masm->isolate())));
 
     CEntryStub ceb(1);
@@ -174,7 +156,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         int r = JSCallerSavedCode(i);
         Register reg = { r };
         if ((non_object_regs & (1 << r)) != 0) {
-          __ mov(reg, Operand(reg, LSR, kSmiTagSize));
+          __ SmiUntag(reg);
         }
         if (FLAG_debug_code &&
             (((object_regs |non_object_regs) & (1 << r)) == 0)) {
@@ -244,6 +226,15 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
 }
 
 
+void Debug::GenerateCompareNilICDebugBreak(MacroAssembler* masm) {
+  // Register state for CompareNil IC
+  // ----------- S t a t e -------------
+  //  -- r0    : value
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, r0.bit(), 0);
+}
+
+
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
   // Calling convention for IC call (from ic-arm.cc)
   // ----------- S t a t e -------------
@@ -274,9 +265,10 @@ void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
   // Register state for CallFunctionStub (from code-stubs-arm.cc).
   // ----------- S t a t e -------------
   //  -- r1 : function
-  //  -- r2 : cache cell for call target
+  //  -- r2 : feedback array
+  //  -- r3 : slot in feedback array
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, r1.bit() | r2.bit(), 0);
+  Generate_DebugBreakCallHelper(masm, r1.bit() | r2.bit() | r3.bit(), 0);
 }
 
 
@@ -295,9 +287,10 @@ void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
   // ----------- S t a t e -------------
   //  -- r0     : number of arguments (not smi)
   //  -- r1     : constructor function
-  //  -- r2     : cache cell for call target
+  //  -- r2     : feedback array
+  //  -- r3     : feedback slot (smi)
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, r1.bit() | r2.bit(), r0.bit());
+  Generate_DebugBreakCallHelper(masm, r1.bit() | r2.bit() | r3.bit(), r0.bit());
 }
 
 
@@ -324,12 +317,12 @@ void Debug::GenerateSlotDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GeneratePlainReturnLiveEdit(MacroAssembler* masm) {
-  masm->Abort("LiveEdit frame dropping is not supported on arm");
+  masm->Abort(kLiveEditFrameDroppingIsNotSupportedOnArm);
 }
 
 
 void Debug::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
-  masm->Abort("LiveEdit frame dropping is not supported on arm");
+  masm->Abort(kLiveEditFrameDroppingIsNotSupportedOnArm);
 }
 
 const bool Debug::kFrameDropperSupported = false;

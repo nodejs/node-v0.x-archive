@@ -44,19 +44,16 @@ namespace internal {
 
 class Descriptor BASE_EMBEDDED {
  public:
-  static int IndexFromValue(Object* value) {
-    return Smi::cast(value)->value();
-  }
-
-  MUST_USE_RESULT MaybeObject* KeyToSymbol() {
-    if (!StringShape(key_).IsSymbol()) {
-      MaybeObject* maybe_result = HEAP->LookupSymbol(key_);
+  MUST_USE_RESULT MaybeObject* KeyToUniqueName() {
+    if (!key_->IsUniqueName()) {
+      MaybeObject* maybe_result =
+          key_->GetIsolate()->heap()->InternalizeString(String::cast(key_));
       if (!maybe_result->To(&key_)) return maybe_result;
     }
     return key_;
   }
 
-  String* GetKey() { return key_; }
+  Name* GetKey() { return key_; }
   Object* GetValue() { return value_; }
   PropertyDetails GetDetails() { return details_; }
 
@@ -64,39 +61,36 @@ class Descriptor BASE_EMBEDDED {
   void Print(FILE* out);
 #endif
 
-  void SetEnumerationIndex(int index) {
-    details_ = PropertyDetails(details_.attributes(), details_.type(), index);
-  }
-
   void SetSortedKeyIndex(int index) { details_ = details_.set_pointer(index); }
 
  private:
-  String* key_;
+  Name* key_;
   Object* value_;
   PropertyDetails details_;
 
  protected:
   Descriptor() : details_(Smi::FromInt(0)) {}
 
-  void Init(String* key, Object* value, PropertyDetails details) {
+  void Init(Name* key, Object* value, PropertyDetails details) {
     key_ = key;
     value_ = value;
     details_ = details;
   }
 
-  Descriptor(String* key, Object* value, PropertyDetails details)
+  Descriptor(Name* key, Object* value, PropertyDetails details)
       : key_(key),
         value_(value),
         details_(details) { }
 
-  Descriptor(String* key,
+  Descriptor(Name* key,
              Object* value,
              PropertyAttributes attributes,
              PropertyType type,
-             int index)
+             Representation representation,
+             int field_index = 0)
       : key_(key),
         value_(value),
-        details_(attributes, type, index) { }
+        details_(attributes, type, representation, field_index) { }
 
   friend class DescriptorArray;
 };
@@ -104,31 +98,82 @@ class Descriptor BASE_EMBEDDED {
 
 class FieldDescriptor: public Descriptor {
  public:
-  FieldDescriptor(String* key,
+  FieldDescriptor(Name* key,
                   int field_index,
                   PropertyAttributes attributes,
-                  int index = 0)
-      : Descriptor(key, Smi::FromInt(field_index), attributes, FIELD, index) {}
+                  Representation representation)
+      : Descriptor(key, Smi::FromInt(0), attributes,
+                   FIELD, representation, field_index) {}
 };
 
 
-class ConstantFunctionDescriptor: public Descriptor {
+class ConstantDescriptor: public Descriptor {
  public:
-  ConstantFunctionDescriptor(String* key,
-                             JSFunction* function,
-                             PropertyAttributes attributes,
-                             int index)
-      : Descriptor(key, function, attributes, CONSTANT_FUNCTION, index) {}
+  ConstantDescriptor(Name* key,
+                     Object* value,
+                     PropertyAttributes attributes)
+      : Descriptor(key, value, attributes, CONSTANT,
+                   value->OptimalRepresentation()) {}
 };
 
 
 class CallbacksDescriptor:  public Descriptor {
  public:
-  CallbacksDescriptor(String* key,
+  CallbacksDescriptor(Name* key,
                       Object* foreign,
-                      PropertyAttributes attributes,
-                      int index = 0)
-      : Descriptor(key, foreign, attributes, CALLBACKS, index) {}
+                      PropertyAttributes attributes)
+      : Descriptor(key, foreign, attributes, CALLBACKS,
+                   Representation::Tagged()) {}
+};
+
+
+// Holds a property index value distinguishing if it is a field index or an
+// index inside the object header.
+class PropertyIndex {
+ public:
+  static PropertyIndex NewFieldIndex(int index) {
+    return PropertyIndex(index, false);
+  }
+  static PropertyIndex NewHeaderIndex(int index) {
+    return PropertyIndex(index, true);
+  }
+
+  bool is_field_index() { return (index_ & kHeaderIndexBit) == 0; }
+  bool is_header_index() { return (index_ & kHeaderIndexBit) != 0; }
+
+  int field_index() {
+    ASSERT(is_field_index());
+    return value();
+  }
+  int header_index() {
+    ASSERT(is_header_index());
+    return value();
+  }
+
+  bool is_inobject(Handle<JSObject> holder) {
+    if (is_header_index()) return true;
+    return field_index() < holder->map()->inobject_properties();
+  }
+
+  int translate(Handle<JSObject> holder) {
+    if (is_header_index()) return header_index();
+    int index = field_index() - holder->map()->inobject_properties();
+    if (index >= 0) return index;
+    return index + holder->map()->instance_size() / kPointerSize;
+  }
+
+ private:
+  static const int kHeaderIndexBit = 1 << 31;
+  static const int kIndexMask = ~kHeaderIndexBit;
+
+  int value() { return index_ & kIndexMask; }
+
+  PropertyIndex(int index, bool is_header_based)
+      : index_(index | (is_header_based ? kHeaderIndexBit : 0)) {
+    ASSERT(index <= kIndexMask);
+  }
+
+  int index_;
 };
 
 
@@ -139,43 +184,45 @@ class LookupResult BASE_EMBEDDED {
         next_(isolate->top_lookup_result()),
         lookup_type_(NOT_FOUND),
         holder_(NULL),
+        transition_(NULL),
         cacheable_(true),
-        details_(NONE, NONEXISTENT) {
-    isolate->SetTopLookupResult(this);
+        details_(NONE, NONEXISTENT, Representation::None()) {
+    isolate->set_top_lookup_result(this);
   }
 
   ~LookupResult() {
-    ASSERT(isolate_->top_lookup_result() == this);
-    isolate_->SetTopLookupResult(next_);
+    ASSERT(isolate()->top_lookup_result() == this);
+    isolate()->set_top_lookup_result(next_);
   }
+
+  Isolate* isolate() const { return isolate_; }
 
   void DescriptorResult(JSObject* holder, PropertyDetails details, int number) {
     lookup_type_ = DESCRIPTOR_TYPE;
     holder_ = holder;
+    transition_ = NULL;
     details_ = details;
     number_ = number;
   }
 
-  void TransitionResult(JSObject* holder, int number) {
-    lookup_type_ = TRANSITION_TYPE;
-    details_ = PropertyDetails(NONE, TRANSITION);
-    holder_ = holder;
-    number_ = number;
+  bool CanHoldValue(Handle<Object> value) {
+    if (IsNormal()) return true;
+    ASSERT(!IsTransition());
+    return value->FitsRepresentation(details_.representation());
   }
 
-  void ConstantResult(JSObject* holder) {
-    lookup_type_ = CONSTANT_TYPE;
+  void TransitionResult(JSObject* holder, Map* target) {
+    lookup_type_ = TRANSITION_TYPE;
+    details_ = PropertyDetails(NONE, TRANSITION, Representation::None());
     holder_ = holder;
-    details_ =
-        PropertyDetails(static_cast<PropertyAttributes>(DONT_ENUM |
-                                                        DONT_DELETE),
-                        CALLBACKS);
-    number_ = -1;
+    transition_ = target;
+    number_ = 0xAAAA;
   }
 
   void DictionaryResult(JSObject* holder, int entry) {
     lookup_type_ = DICTIONARY_TYPE;
     holder_ = holder;
+    transition_ = NULL;
     details_ = holder->property_dictionary()->DetailsAt(entry);
     number_ = entry;
   }
@@ -183,189 +230,213 @@ class LookupResult BASE_EMBEDDED {
   void HandlerResult(JSProxy* proxy) {
     lookup_type_ = HANDLER_TYPE;
     holder_ = proxy;
-    details_ = PropertyDetails(NONE, HANDLER);
+    transition_ = NULL;
+    details_ = PropertyDetails(NONE, HANDLER, Representation::Tagged());
     cacheable_ = false;
   }
 
   void InterceptorResult(JSObject* holder) {
     lookup_type_ = INTERCEPTOR_TYPE;
     holder_ = holder;
-    details_ = PropertyDetails(NONE, INTERCEPTOR);
+    transition_ = NULL;
+    details_ = PropertyDetails(NONE, INTERCEPTOR, Representation::Tagged());
   }
 
   void NotFound() {
     lookup_type_ = NOT_FOUND;
-    details_ = PropertyDetails(NONE, NONEXISTENT);
+    details_ = PropertyDetails(NONE, NONEXISTENT, Representation::None());
     holder_ = NULL;
+    transition_ = NULL;
   }
 
-  JSObject* holder() {
+  JSObject* holder() const {
     ASSERT(IsFound());
     return JSObject::cast(holder_);
   }
 
-  JSProxy* proxy() {
-    ASSERT(IsFound());
+  JSProxy* proxy() const {
+    ASSERT(IsHandler());
     return JSProxy::cast(holder_);
   }
 
-  PropertyType type() {
+  PropertyType type() const {
     ASSERT(IsFound());
     return details_.type();
   }
 
-  PropertyAttributes GetAttributes() {
+  Representation representation() const {
+    ASSERT(IsFound());
+    ASSERT(!IsTransition());
+    ASSERT(details_.type() != NONEXISTENT);
+    return details_.representation();
+  }
+
+  PropertyAttributes GetAttributes() const {
     ASSERT(!IsTransition());
     ASSERT(IsFound());
     ASSERT(details_.type() != NONEXISTENT);
     return details_.attributes();
   }
 
-  PropertyDetails GetPropertyDetails() {
+  PropertyDetails GetPropertyDetails() const {
     ASSERT(!IsTransition());
     return details_;
   }
 
-  bool IsFastPropertyType() {
+  bool IsFastPropertyType() const {
     ASSERT(IsFound());
     return IsTransition() || type() != NORMAL;
   }
 
   // Property callbacks does not include transitions to callbacks.
-  bool IsPropertyCallbacks() {
+  bool IsPropertyCallbacks() const {
     ASSERT(!(details_.type() == CALLBACKS && !IsFound()));
     return details_.type() == CALLBACKS;
   }
 
-  bool IsReadOnly() {
+  bool IsReadOnly() const {
     ASSERT(IsFound());
     ASSERT(!IsTransition());
     ASSERT(details_.type() != NONEXISTENT);
     return details_.IsReadOnly();
   }
 
-  bool IsField() {
+  bool IsField() const {
     ASSERT(!(details_.type() == FIELD && !IsFound()));
     return details_.type() == FIELD;
   }
 
-  bool IsNormal() {
+  bool IsNormal() const {
     ASSERT(!(details_.type() == NORMAL && !IsFound()));
     return details_.type() == NORMAL;
   }
 
-  bool IsConstantFunction() {
-    ASSERT(!(details_.type() == CONSTANT_FUNCTION && !IsFound()));
-    return details_.type() == CONSTANT_FUNCTION;
+  bool IsConstant() const {
+    ASSERT(!(details_.type() == CONSTANT && !IsFound()));
+    return details_.type() == CONSTANT;
   }
 
-  bool IsDontDelete() { return details_.IsDontDelete(); }
-  bool IsDontEnum() { return details_.IsDontEnum(); }
-  bool IsDeleted() { return details_.IsDeleted(); }
-  bool IsFound() { return lookup_type_ != NOT_FOUND; }
-  bool IsTransition() { return lookup_type_ == TRANSITION_TYPE; }
-  bool IsHandler() { return lookup_type_ == HANDLER_TYPE; }
-  bool IsInterceptor() { return lookup_type_ == INTERCEPTOR_TYPE; }
+  bool IsConstantFunction() const {
+    return IsConstant() && GetValue()->IsJSFunction();
+  }
+
+  bool IsDontDelete() const { return details_.IsDontDelete(); }
+  bool IsDontEnum() const { return details_.IsDontEnum(); }
+  bool IsFound() const { return lookup_type_ != NOT_FOUND; }
+  bool IsTransition() const { return lookup_type_ == TRANSITION_TYPE; }
+  bool IsHandler() const { return lookup_type_ == HANDLER_TYPE; }
+  bool IsInterceptor() const { return lookup_type_ == INTERCEPTOR_TYPE; }
 
   // Is the result is a property excluding transitions and the null descriptor?
-  bool IsProperty() {
+  bool IsProperty() const {
     return IsFound() && !IsTransition();
   }
 
-  bool IsCacheable() { return cacheable_; }
-  void DisallowCaching() { cacheable_ = false; }
-
-  Object* GetLazyValue() {
+  bool IsDataProperty() const {
     switch (type()) {
       case FIELD:
-        return holder()->FastPropertyAt(GetFieldIndex());
+      case NORMAL:
+      case CONSTANT:
+        return true;
+      case CALLBACKS: {
+        Object* callback = GetCallbackObject();
+        return callback->IsAccessorInfo() || callback->IsForeign();
+      }
+      case HANDLER:
+      case INTERCEPTOR:
+      case TRANSITION:
+      case NONEXISTENT:
+        return false;
+    }
+    UNREACHABLE();
+    return false;
+  }
+
+  bool IsCacheable() const { return cacheable_; }
+  void DisallowCaching() { cacheable_ = false; }
+
+  Object* GetLazyValue() const {
+    switch (type()) {
+      case FIELD:
+        return holder()->RawFastPropertyAt(GetFieldIndex().field_index());
       case NORMAL: {
         Object* value;
         value = holder()->property_dictionary()->ValueAt(GetDictionaryEntry());
         if (holder()->IsGlobalObject()) {
-          value = JSGlobalPropertyCell::cast(value)->value();
+          value = PropertyCell::cast(value)->value();
         }
         return value;
       }
-      case CONSTANT_FUNCTION:
-        return GetConstantFunction();
-      default:
-        return Smi::FromInt(0);
+      case CONSTANT:
+        return GetConstant();
+      case CALLBACKS:
+      case HANDLER:
+      case INTERCEPTOR:
+      case TRANSITION:
+      case NONEXISTENT:
+        return isolate()->heap()->the_hole_value();
     }
+    UNREACHABLE();
+    return NULL;
   }
 
-  Map* GetTransitionTarget() {
+  Map* GetTransitionTarget() const {
+    return transition_;
+  }
+
+  PropertyDetails GetTransitionDetails() const {
     ASSERT(IsTransition());
-    TransitionArray* transitions = holder()->map()->transitions();
-    return transitions->GetTarget(number_);
+    return transition_->GetLastDescriptorDetails();
   }
 
-  PropertyDetails GetTransitionDetails(Map* map) {
-    ASSERT(IsTransition());
-    TransitionArray* transitions = map->transitions();
-    return transitions->GetTargetDetails(number_);
+  bool IsTransitionToField() const {
+    return IsTransition() && GetTransitionDetails().type() == FIELD;
   }
 
-  PropertyDetails GetTransitionDetails() {
-    return GetTransitionDetails(holder()->map());
+  bool IsTransitionToConstant() const {
+    return IsTransition() && GetTransitionDetails().type() == CONSTANT;
   }
 
-  bool IsTransitionToField(Map* map) {
-    return IsTransition() && GetTransitionDetails(map).type() == FIELD;
-  }
-
-  Map* GetTransitionMap() {
-    ASSERT(IsTransition());
-    return Map::cast(GetValue());
-  }
-
-  Map* GetTransitionMapFromMap(Map* map) {
-    ASSERT(IsTransition());
-    return map->transitions()->GetTarget(number_);
-  }
-
-  int GetTransitionIndex() {
-    ASSERT(IsTransition());
-    return number_;
-  }
-
-  int GetDescriptorIndex() {
+  int GetDescriptorIndex() const {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
     return number_;
   }
 
-  int GetFieldIndex() {
+  PropertyIndex GetFieldIndex() const {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
-    ASSERT(IsField());
-    return Descriptor::IndexFromValue(GetValue());
+    return PropertyIndex::NewFieldIndex(GetFieldIndexFromMap(holder()->map()));
   }
 
-  int GetLocalFieldIndexFromMap(Map* map) {
-    ASSERT(IsField());
-    return Descriptor::IndexFromValue(GetValueFromMap(map)) -
-        map->inobject_properties();
+  int GetLocalFieldIndexFromMap(Map* map) const {
+    return GetFieldIndexFromMap(map) - map->inobject_properties();
   }
 
-  int GetDictionaryEntry() {
+  int GetDictionaryEntry() const {
     ASSERT(lookup_type_ == DICTIONARY_TYPE);
     return number_;
   }
 
-  JSFunction* GetConstantFunction() {
-    ASSERT(type() == CONSTANT_FUNCTION);
+  JSFunction* GetConstantFunction() const {
+    ASSERT(type() == CONSTANT);
     return JSFunction::cast(GetValue());
   }
 
-  JSFunction* GetConstantFunctionFromMap(Map* map) {
-    ASSERT(type() == CONSTANT_FUNCTION);
-    return JSFunction::cast(GetValueFromMap(map));
+  Object* GetConstantFromMap(Map* map) const {
+    ASSERT(type() == CONSTANT);
+    return GetValueFromMap(map);
   }
 
-  Object* GetCallbackObject() {
-    if (lookup_type_ == CONSTANT_TYPE) {
-      return HEAP->prototype_accessors();
-    }
-    ASSERT(!IsTransition());
+  JSFunction* GetConstantFunctionFromMap(Map* map) const {
+    return JSFunction::cast(GetConstantFromMap(map));
+  }
+
+  Object* GetConstant() const {
+    ASSERT(type() == CONSTANT);
+    return GetValue();
+  }
+
+  Object* GetCallbackObject() const {
+    ASSERT(type() == CALLBACKS && !IsTransition());
     return GetValue();
   }
 
@@ -373,7 +444,7 @@ class LookupResult BASE_EMBEDDED {
   void Print(FILE* out);
 #endif
 
-  Object* GetValue() {
+  Object* GetValue() const {
     if (lookup_type_ == DESCRIPTOR_TYPE) {
       return GetValueFromMap(holder()->map());
     }
@@ -386,6 +457,12 @@ class LookupResult BASE_EMBEDDED {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
     ASSERT(number_ < map->NumberOfOwnDescriptors());
     return map->instance_descriptors()->GetValue(number_);
+  }
+
+  int GetFieldIndexFromMap(Map* map) const {
+    ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
+    ASSERT(number_ < map->NumberOfOwnDescriptors());
+    return map->instance_descriptors()->GetFieldIndex(number_);
   }
 
   void Iterate(ObjectVisitor* visitor);
@@ -401,11 +478,11 @@ class LookupResult BASE_EMBEDDED {
     TRANSITION_TYPE,
     DICTIONARY_TYPE,
     HANDLER_TYPE,
-    INTERCEPTOR_TYPE,
-    CONSTANT_TYPE
+    INTERCEPTOR_TYPE
   } lookup_type_;
 
   JSReceiver* holder_;
+  Map* transition_;
   int number_;
   bool cacheable_;
   PropertyDetails details_;

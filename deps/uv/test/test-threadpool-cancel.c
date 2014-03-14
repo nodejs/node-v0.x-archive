@@ -86,7 +86,7 @@ static void saturate_threadpool(void) {
      * the thread pool is saturated. As with any timing dependent test,
      * this is obviously not ideal.
      */
-    if (uv_cond_timedwait(&signal_cond, &signal_mutex, 350 * 1e6)) {
+    if (uv_cond_timedwait(&signal_cond, &signal_mutex, (uint64_t)(350 * 1e6))) {
       ASSERT(0 == uv_cancel((uv_req_t*) req));
       break;
     }
@@ -111,7 +111,7 @@ static void cleanup_threadpool(void) {
 
 
 static void fs_cb(uv_fs_t* req) {
-  ASSERT(req->errorno == UV_ECANCELED);
+  ASSERT(req->result == UV_ECANCELED);
   uv_fs_req_cleanup(req);
   fs_cb_called++;
 }
@@ -120,8 +120,9 @@ static void fs_cb(uv_fs_t* req) {
 static void getaddrinfo_cb(uv_getaddrinfo_t* req,
                            int status,
                            struct addrinfo* res) {
-  ASSERT(UV_ECANCELED == uv_last_error(req->loop).code);
-  ASSERT(UV_ECANCELED == status);
+  ASSERT(status == UV_EAI_CANCELED);
+  ASSERT(res == NULL);
+  uv_freeaddrinfo(res);  /* Should not crash. */
   getaddrinfo_cb_called++;
 }
 
@@ -132,8 +133,7 @@ static void work2_cb(uv_work_t* req) {
 
 
 static void done2_cb(uv_work_t* req, int status) {
-  ASSERT(uv_last_error(req->loop).code == UV_ECANCELED);
-  ASSERT(status == -1);
+  ASSERT(status == UV_ECANCELED);
   done2_cb_called++;
 }
 

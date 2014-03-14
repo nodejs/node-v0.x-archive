@@ -65,7 +65,7 @@ def GuessOS():
   elif system == 'Windows' or system == 'Microsoft':
     # On Windows Vista platform.system() can return 'Microsoft' with some
     # versions of Python, see http://bugs.python.org/issue1082
-    return 'win32'
+    return 'windows'
   elif system == 'FreeBSD':
     return 'freebsd'
   elif system == 'OpenBSD':
@@ -76,6 +76,13 @@ def GuessOS():
     return 'netbsd'
   else:
     return None
+
+
+def UseSimulator(arch):
+  machine = platform.machine()
+  return (machine and
+      (arch == "mipsel" or arch == "arm" or arch == "a64") and
+      not arch.startswith(machine))
 
 
 # This will default to building the 32 bit VM even on machines that are
@@ -105,4 +112,4 @@ def GuessWordsize():
 
 
 def IsWindows():
-  return GuessOS() == 'win32'
+  return GuessOS() == 'windows'

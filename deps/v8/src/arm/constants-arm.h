@@ -33,67 +33,32 @@
 #error ARM EABI support is required.
 #endif
 
-// This means that interwork-compatible jump instructions are generated.  We
-// want to generate them on the simulator too so it makes snapshots that can
-// be used on real hardware.
-#if defined(__THUMB_INTERWORK__) || !defined(__arm__)
-# define USE_THUMB_INTERWORK 1
-#endif
-
-#if defined(__ARM_ARCH_7A__) || \
-    defined(__ARM_ARCH_7R__) || \
-    defined(__ARM_ARCH_7__)
-# define CAN_USE_ARMV7_INSTRUCTIONS 1
-#endif
-
-#if defined(__ARM_ARCH_6__) ||   \
-    defined(__ARM_ARCH_6J__) ||  \
-    defined(__ARM_ARCH_6K__) ||  \
-    defined(__ARM_ARCH_6Z__) ||  \
-    defined(__ARM_ARCH_6ZK__) || \
-    defined(__ARM_ARCH_6T2__) || \
-    defined(CAN_USE_ARMV7_INSTRUCTIONS)
-# define CAN_USE_ARMV6_INSTRUCTIONS 1
-#endif
-
-#if defined(__ARM_ARCH_5T__)             || \
-    defined(__ARM_ARCH_5TE__)            || \
-    defined(__ARM_ARCH_5TEJ__)           || \
-    defined(CAN_USE_ARMV6_INSTRUCTIONS)
-# define CAN_USE_ARMV5_INSTRUCTIONS 1
-# define CAN_USE_THUMB_INSTRUCTIONS 1
-#endif
-
-// Simulator should support ARM5 instructions and unaligned access by default.
-#if !defined(__arm__)
-# define CAN_USE_ARMV5_INSTRUCTIONS 1
-# define CAN_USE_THUMB_INSTRUCTIONS 1
-
-# ifndef CAN_USE_UNALIGNED_ACCESSES
-#  define CAN_USE_UNALIGNED_ACCESSES 1
-# endif
-
-#endif
-
-// Using blx may yield better code, so use it when required or when available
-#if defined(USE_THUMB_INTERWORK) || defined(CAN_USE_ARMV5_INSTRUCTIONS)
-#define USE_BLX 1
-#endif
-
 namespace v8 {
 namespace internal {
 
 // Constant pool marker.
-const int kConstantPoolMarkerMask = 0xffe00000;
-const int kConstantPoolMarker = 0x0c000000;
-const int kConstantPoolLengthMask = 0x001ffff;
+// Use UDF, the permanently undefined instruction.
+const int kConstantPoolMarkerMask = 0xfff000f0;
+const int kConstantPoolMarker = 0xe7f000f0;
+const int kConstantPoolLengthMaxMask = 0xffff;
+inline int EncodeConstantPoolLength(int length) {
+  ASSERT((length & kConstantPoolLengthMaxMask) == length);
+  return ((length & 0xfff0) << 4) | (length & 0xf);
+}
+inline int DecodeConstantPoolLength(int instr) {
+  ASSERT((instr & kConstantPoolMarkerMask) == kConstantPoolMarker);
+  return ((instr >> 4) & 0xfff0) | (instr & 0xf);
+}
+
+// Used in code age prologue - ldr(pc, MemOperand(pc, -4))
+const int kCodeAgeJumpInstruction = 0xe51ff004;
 
 // Number of registers in normal ARM mode.
 const int kNumRegisters = 16;
 
 // VFP support.
 const int kNumVFPSingleRegisters = 32;
-const int kNumVFPDoubleRegisters = 16;
+const int kNumVFPDoubleRegisters = 32;
 const int kNumVFPRegisters = kNumVFPSingleRegisters + kNumVFPDoubleRegisters;
 
 // PC is register 15.
@@ -258,7 +223,10 @@ enum {
   kCoprocessorMask = 15 << 8,
   kOpCodeMask = 15 << 21,  // In data-processing instructions.
   kImm24Mask  = (1 << 24) - 1,
-  kOff12Mask  = (1 << 12) - 1
+  kImm16Mask  = (1 << 16) - 1,
+  kImm8Mask  = (1 << 8) - 1,
+  kOff12Mask  = (1 << 12) - 1,
+  kOff8Mask  = (1 << 8) - 1
 };
 
 
@@ -352,6 +320,32 @@ enum LFlag {
 };
 
 
+// NEON data type
+enum NeonDataType {
+  NeonS8 = 0x1,   // U = 0, imm3 = 0b001
+  NeonS16 = 0x2,  // U = 0, imm3 = 0b010
+  NeonS32 = 0x4,  // U = 0, imm3 = 0b100
+  NeonU8 = 1 << 24 | 0x1,   // U = 1, imm3 = 0b001
+  NeonU16 = 1 << 24 | 0x2,  // U = 1, imm3 = 0b010
+  NeonU32 = 1 << 24 | 0x4,   // U = 1, imm3 = 0b100
+  NeonDataTypeSizeMask = 0x7,
+  NeonDataTypeUMask = 1 << 24
+};
+
+enum NeonListType {
+  nlt_1 = 0x7,
+  nlt_2 = 0xA,
+  nlt_3 = 0x6,
+  nlt_4 = 0x2
+};
+
+enum NeonSize {
+  Neon8 = 0x0,
+  Neon16 = 0x1,
+  Neon32 = 0x2,
+  Neon64 = 0x4
+};
+
 // -----------------------------------------------------------------------------
 // Supervisor Call (svc) specific support.
 
@@ -393,6 +387,7 @@ const uint32_t kVFPOverflowExceptionBit = 1 << 2;
 const uint32_t kVFPUnderflowExceptionBit = 1 << 3;
 const uint32_t kVFPInexactExceptionBit = 1 << 4;
 const uint32_t kVFPFlushToZeroMask = 1 << 24;
+const uint32_t kVFPDefaultNaNModeControlBit = 1 << 25;
 
 const uint32_t kVFPNConditionFlagBit = 1 << 31;
 const uint32_t kVFPZConditionFlagBit = 1 << 30;
@@ -455,6 +450,9 @@ extern const Instr kMovLrPc;
 // ldr rd, [pc, #offset]
 extern const Instr kLdrPCMask;
 extern const Instr kLdrPCPattern;
+// vldr dd, [pc, #offset]
+extern const Instr kVldrDPCMask;
+extern const Instr kVldrDPCPattern;
 // blxcc rm
 extern const Instr kBlxRegMask;
 
@@ -590,6 +588,7 @@ class Instruction {
   DECLARE_STATIC_TYPED_ACCESSOR(Condition, ConditionField);
 
   inline int TypeValue() const { return Bits(27, 25); }
+  inline int SpecialValue() const { return Bits(27, 23); }
 
   inline int RnValue() const { return Bits(19, 16); }
   DECLARE_STATIC_ACCESSOR(RnValue);

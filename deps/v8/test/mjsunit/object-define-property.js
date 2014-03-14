@@ -918,6 +918,11 @@ assertFalse(desc.writable);
 assertFalse(desc.enumerable);
 assertFalse(desc.configurable);
 
+// Define non-array property, check that .length is unaffected.
+assertEquals(16, arr.length);
+Object.defineProperty(arr, '0x20', descElement);
+assertEquals(16, arr.length);
+
 // See issue 968: http://code.google.com/p/v8/issues/detail?id=968
 var o = { x : 42 };
 Object.defineProperty(o, "x", { writable: false });
@@ -1190,3 +1195,12 @@ Assign(new C);
 %OptimizeFunctionOnNextCall(Assign);
 Object.defineProperty(C.prototype, "blubb", {get: function() { return -42; }});
 Assign(new C);
+
+// Test that changes to the prototype of a simple constructor are not ignored,
+// even after creating initial instances.
+function C() {
+  this.x = 23;
+}
+assertEquals(23, new C().x);
+C.prototype.__defineSetter__('x', function(value) { this.y = 23; });
+assertEquals(void 0, new C().x);

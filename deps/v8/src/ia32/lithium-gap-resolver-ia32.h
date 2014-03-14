@@ -38,7 +38,7 @@ namespace internal {
 class LCodeGen;
 class LGapResolver;
 
-class LGapResolver BASE_EMBEDDED {
+class LGapResolver V8_FINAL BASE_EMBEDDED {
  public:
   explicit LGapResolver(LCodeGen* owner);
 
@@ -97,8 +97,8 @@ class LGapResolver BASE_EMBEDDED {
   ZoneList<LMoveOperands> moves_;
 
   // Source and destination use counts for the general purpose registers.
-  int source_uses_[Register::kNumAllocatableRegisters];
-  int destination_uses_[Register::kNumAllocatableRegisters];
+  int source_uses_[Register::kMaxNumAllocatableRegisters];
+  int destination_uses_[Register::kMaxNumAllocatableRegisters];
 
   // If we had to spill on demand, the currently spilled register's
   // allocation index.
