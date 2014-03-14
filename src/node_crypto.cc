@@ -1813,7 +1813,7 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   if (args.Length() < 1 || !args[0]->IsObject()) {
-    env->ThrowError("First argument must be a tls module Context");
+    env->ThrowError("First argument must be a tls module SecureContext");
     return;
   }
 
