@@ -146,37 +146,36 @@ namespace node {
   void DTraceProbe::Fire(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(args.GetIsolate());
     DTraceProbe* pd = Unwrap<DTraceProbe>(args.This());
-    args.GetReturnValue().Set(pd->_fire(args[0]));
-  }
 
-  Handle<Value> DTraceProbe::_fire(v8::Local<v8::Value> probe_args) {
-    if (usdt_is_enabled(this->probedef->probe) == 0)
-      return Undefined(env()->isolate());
+    if (usdt_is_enabled(pd->probedef->probe) == 0)
+      return;
 
     // invoke fire callback
     TryCatch try_catch;
 
+    Local<Value> probe_args = args[0];
+
     // check return
     if (!probe_args->IsArray())
-      return Undefined(env()->isolate());
+      return;
 
     Local<Array> a = probe_args.As<Array>();
     void* argv[USDT_ARG_MAX];
 
     // convert each argument value
-    for (size_t i = 0; i < argc; i++) {
-      argv[i] = this->arguments[i]->ArgumentValue(a->Get(i));
+    for (size_t i = 0; i < pd->argc; i++) {
+      argv[i] = pd->arguments[i]->ArgumentValue(a->Get(i));
     }
 
     // finally fire the probe
-    usdt_fire_probe(this->probedef->probe, argc, argv);
+    usdt_fire_probe(pd->probedef->probe, pd->argc, argv);
 
     // free argument values
-    for (size_t i = 0; i < argc; i++) {
-      this->arguments[i]->FreeArgument(argv[i]);
+    for (size_t i = 0; i < pd->argc; i++) {
+      pd->arguments[i]->FreeArgument(argv[i]);
     }
 
-    return True(env()->isolate());
+    args.GetReturnValue().Set(True(args.GetIsolate()));
   }
 
 }  //  namespace node

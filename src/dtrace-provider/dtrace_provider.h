@@ -128,8 +128,6 @@ namespace node {
     static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void Fire(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-    v8::Handle<v8::Value> _fire(v8::Local<v8::Value>);
-
     DTraceProbe(Environment* env, v8::Local<v8::Object> obj);
     ~DTraceProbe();
   };
