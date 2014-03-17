@@ -49,8 +49,8 @@ namespace node {
 
   class DTraceArgument {
   public:
-    virtual const char *Type() = 0;
-    virtual void *ArgumentValue(v8::Handle<v8::Value>) = 0;
+    virtual const char* Type() = 0;
+    virtual void* ArgumentValue(v8::Handle<v8::Value>) = 0;
     virtual void FreeArgument(void* arg) = 0;
     virtual ~DTraceArgument() { }
     explicit DTraceArgument(Environment* env);
@@ -66,7 +66,7 @@ namespace node {
       DTraceArgument(env) {
     }
 
-    const char *Type() {
+    const char* Type() {
       switch (T) {
         case ARGUMENT_TYPE_INT64:
           return "int64_t";
@@ -92,7 +92,7 @@ namespace node {
       }
     }
 
-    void *ArgumentValue(v8::Handle<v8::Value> value) {
+    void* ArgumentValue(v8::Handle<v8::Value> value) {
       int64_t ret = value->IntegerValue();
       P r = static_cast<P>(ret);
       return reinterpret_cast<void*>(r);
@@ -104,40 +104,40 @@ namespace node {
 
   class DTraceStringArgument : public DTraceArgument {
   public:
-    const char *Type();
-    void *ArgumentValue(v8::Handle<v8::Value>);
+    const char* Type();
+    void* ArgumentValue(v8::Handle<v8::Value>);
     void FreeArgument(void* arg);
     explicit DTraceStringArgument(Environment* env);
   };
 
   class DTraceJsonArgument : public DTraceArgument {
   public:
-    const char *Type();
-    void *ArgumentValue(v8::Handle<v8::Value>);
+    const char* Type();
+    void* ArgumentValue(v8::Handle<v8::Value>);
     void FreeArgument(void* arg);
     explicit DTraceJsonArgument(Environment* env);
   };
 
   class DTraceProbe : public BaseObject {
   public:
-    static void Initialize(v8::Handle<v8::Object> target, Environment *env);
-    usdt_probedef_t *probedef;
+    static void Initialize(v8::Handle<v8::Object> target, Environment* env);
+    usdt_probedef_t* probedef;
     size_t argc;
-    DTraceArgument *arguments[USDT_ARG_MAX];
+    DTraceArgument* arguments[USDT_ARG_MAX];
 
     static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void Fire(const v8::FunctionCallbackInfo<v8::Value>& args);
 
     v8::Handle<v8::Value> _fire(v8::Local<v8::Value>);
 
-    DTraceProbe(Environment *env, v8::Local<v8::Object> obj);
+    DTraceProbe(Environment* env, v8::Local<v8::Object> obj);
     ~DTraceProbe();
   };
 
   class DTraceProvider : public BaseObject {
   public:
-    static void Initialize(v8::Handle<v8::Object> target, Environment *env);
-    usdt_provider_t *provider;
+    static void Initialize(v8::Handle<v8::Object> target, Environment* env);
+    usdt_provider_t* provider;
 
     static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void AddProbe(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -146,7 +146,7 @@ namespace node {
     static void Disable(const v8::FunctionCallbackInfo<v8::Value>& args);
     static void Fire(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-    DTraceProvider(Environment *env, v8::Local<v8::Object> obj);
+    DTraceProvider(Environment* env, v8::Local<v8::Object> obj);
     ~DTraceProvider();
   };
 

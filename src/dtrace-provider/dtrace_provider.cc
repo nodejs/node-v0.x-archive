@@ -80,8 +80,8 @@ namespace node {
 
   void DTraceProvider::New(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(args.GetIsolate());
-    Environment *env = Environment::GetCurrent(args.GetIsolate());
-    DTraceProvider *p = new DTraceProvider(env, args.This());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    DTraceProvider* p = new DTraceProvider(env, args.This());
     char module[128];
 
     if (args.Length() < 1 || !args[0]->IsString()) {
@@ -121,11 +121,11 @@ namespace node {
     HandleScope scope(isolate);
 
     Handle<Object> obj = args.This();
-    DTraceProvider *provider = Unwrap<DTraceProvider>(obj);
+    DTraceProvider* provider = Unwrap<DTraceProvider>(obj);
 
     Local<Object> dprobe = args[0].As<Object>();
 
-    DTraceProbe *probe = Unwrap<DTraceProbe>(dprobe);
+    DTraceProbe* probe = Unwrap<DTraceProbe>(dprobe);
 
     // store in provider object
     obj->Set(dprobe->ToString(), dprobe);
@@ -140,10 +140,10 @@ namespace node {
     HandleScope scope(isolate);
 
     Handle<Object> provider_obj = args.This();
-    DTraceProvider *provider = Unwrap<DTraceProvider>(provider_obj);
+    DTraceProvider* provider = Unwrap<DTraceProvider>(provider_obj);
 
     Handle<Object> probe_obj = Local<Object>::Cast(args[0]);
-    DTraceProbe *probe = Unwrap<DTraceProbe>(probe_obj);
+    DTraceProbe* probe = Unwrap<DTraceProbe>(probe_obj);
 
     Handle<String> name = String::NewFromUtf8(isolate,
         probe->probedef->name);
@@ -160,7 +160,7 @@ namespace node {
 
   void DTraceProvider::Enable(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(args.GetIsolate());
-    DTraceProvider *provider = Unwrap<DTraceProvider>(args.This());
+    DTraceProvider* provider = Unwrap<DTraceProvider>(args.This());
 
     if (usdt_provider_enable(provider->provider) != 0) {
       ThrowError(usdt_errstr(provider->provider));
@@ -170,7 +170,7 @@ namespace node {
 
   void DTraceProvider::Disable(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(args.GetIsolate());
-    DTraceProvider *provider = Unwrap<DTraceProvider>(args.Holder());
+    DTraceProvider* provider = Unwrap<DTraceProvider>(args.Holder());
 
     if (usdt_provider_disable(provider->provider) != 0) {
       ThrowError(usdt_errstr(provider->provider));
@@ -183,7 +183,7 @@ namespace node {
        Handle<Value> unused,
        Handle<Context> context,
        void* priv) {
-    Environment *env = Environment::GetCurrent(context);
+    Environment* env = Environment::GetCurrent(context);
     DTraceProvider::Initialize(target, env);
   }
 

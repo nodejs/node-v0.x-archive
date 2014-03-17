@@ -77,14 +77,14 @@ namespace node {
   }
 
   void DTraceProbe::New(const FunctionCallbackInfo<Value>& args) {
-    Environment *env = Environment::GetCurrent(args.GetIsolate());
-    DTraceProbe *probe = new DTraceProbe(env, args.This());
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    DTraceProbe* probe = new DTraceProbe(env, args.This());
     args.GetReturnValue().Set(args.This());
 
     AsciiValue name(args[0]->ToString());
     Local<Array> arr = args[1].As<Array>();
 
-    const char *types[USDT_ARG_MAX];
+    const char* types[USDT_ARG_MAX];
 
     fprintf(stderr, "trying to look at %u args\n", arr->Length());
     fflush(stderr);
@@ -145,7 +145,7 @@ namespace node {
 
   void DTraceProbe::Fire(const FunctionCallbackInfo<Value>& args) {
     HandleScope scope(args.GetIsolate());
-    DTraceProbe *pd = Unwrap<DTraceProbe>(args.This());
+    DTraceProbe* pd = Unwrap<DTraceProbe>(args.This());
     args.GetReturnValue().Set(pd->_fire(args[0]));
   }
 
@@ -161,7 +161,7 @@ namespace node {
       return Undefined(env()->isolate());
 
     Local<Array> a = probe_args.As<Array>();
-    void *argv[USDT_ARG_MAX];
+    void* argv[USDT_ARG_MAX];
 
     // convert each argument value
     for (size_t i = 0; i < argc; i++) {

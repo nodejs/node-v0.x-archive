@@ -54,7 +54,7 @@ namespace node {
     return reinterpret_cast<void*>(strdup(*str));
   }
 
-  void DTraceStringArgument::FreeArgument(void *arg) {
+  void DTraceStringArgument::FreeArgument(void* arg) {
     free(arg);
   }
 
@@ -84,7 +84,7 @@ namespace node {
     return reinterpret_cast<void*>(strdup(*json));
   }
 
-  void DTraceJsonArgument::FreeArgument(void *arg) {
+  void DTraceJsonArgument::FreeArgument(void* arg) {
     free(arg);
   }
 
