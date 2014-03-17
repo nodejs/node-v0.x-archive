@@ -46,7 +46,7 @@ namespace node {
     : DTraceArgument(env) {
   }
 
-  void * DTraceStringArgument::ArgumentValue(Handle<Value> value) {
+  void* DTraceStringArgument::ArgumentValue(Handle<Value> value) {
     if (value->IsUndefined())
       return reinterpret_cast<void*>(strdup("undefined"));
 
@@ -58,7 +58,7 @@ namespace node {
     free(arg);
   }
 
-  const char * DTraceStringArgument::Type() {
+  const char* DTraceStringArgument::Type() {
     return "char *";
   }
 
@@ -67,7 +67,7 @@ namespace node {
   }
 
 
-  void * DTraceJsonArgument::ArgumentValue(Handle<Value> value) {
+  void* DTraceJsonArgument::ArgumentValue(Handle<Value> value) {
     HandleScope scope(env()->isolate());
 
     if (value->IsUndefined())
@@ -88,7 +88,7 @@ namespace node {
     free(arg);
   }
 
-  const char * DTraceJsonArgument::Type() {
+  const char* DTraceJsonArgument::Type() {
     return "char *";
   }
 
