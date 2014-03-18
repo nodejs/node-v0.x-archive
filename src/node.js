@@ -250,7 +250,8 @@
 
       // if we handled an error, then make sure any ticks get processed
       } else {
-        var t = setImmediate(process._tickCallback);
+        var t =
+            NativeModule.require('timers').setImmediate(process._tickCallback);
         // Complete hack to make sure any errors thrown from async
         // listeners don't cause an infinite loop.
         if (t._asyncQueue)
