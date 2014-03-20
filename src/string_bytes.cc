@@ -48,12 +48,10 @@ using v8::Value;
 template <typename ResourceType, typename TypeName>
 class ExternString: public ResourceType {
   public:
-    explicit ExternString(Isolate* isolate) : isolate_(isolate) {
-    }
-
     ~ExternString() {
       delete[] data_;
-      isolate()->AdjustAmountOfExternalAllocatedMemory(-length_);
+      int64_t change_in_bytes = -static_cast<int64_t>(length_);
+      isolate()->AdjustAmountOfExternalAllocatedMemory(change_in_bytes);
     }
 
     const TypeName* data() const {
@@ -299,10 +297,11 @@ size_t StringBytes::Write(Isolate* isolate,
                           enum encoding encoding,
                           int* chars_written) {
   HandleScope scope(isolate);
-  const char* data;
+  const char* data = NULL;
   size_t len = 0;
   bool is_extern = GetExternalParts(isolate, val, &data, &len);
 
+  CHECK(val->IsString() == true);
   Local<String> str = val.As<String>();
   len = len < buflen ? len : buflen;
 
