@@ -30,10 +30,7 @@ namespace node {
 class TCPWrap : public StreamWrap {
  public:
   static v8::Local<v8::Object> Instantiate(Environment* env);
-  static void Initialize(v8::Handle<v8::Object> target,
-                         v8::Handle<v8::Value> unused,
-                         v8::Handle<v8::Context> context);
-
+  static void Initialize(Environment* env, v8::Local<v8::Object> target);
   uv_tcp_t* UVHandle();
 
  private:

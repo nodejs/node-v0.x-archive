@@ -41,11 +41,10 @@ using v8::HandleScope;
 using v8::Integer;
 using v8::Local;
 using v8::Object;
-using v8::String;
 using v8::Value;
 
 
-void StatWatcher::Initialize(Environment* env, Handle<Object> target) {
+void StatWatcher::Initialize(Environment* env, Local<Object> target) {
   HandleScope scope(env->isolate());
 
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(),

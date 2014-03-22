@@ -48,7 +48,6 @@ namespace node {
 namespace os {
 
 using v8::Array;
-using v8::Context;
 using v8::FunctionCallbackInfo;
 using v8::Handle;
 using v8::HandleScope;
@@ -300,9 +299,7 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Initialize(Handle<Object> target,
-                Handle<Value> unused,
-                Handle<Context> context) {
+extern "C" void node_builtin_os_init(Environment* env, Local<Object> target) {
   NODE_SET_METHOD(target, "getEndianness", GetEndianness);
   NODE_SET_METHOD(target, "getHostname", GetHostname);
   NODE_SET_METHOD(target, "getLoadAvg", GetLoadAvg);
@@ -317,5 +314,3 @@ void Initialize(Handle<Object> target,
 
 }  // namespace os
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(os, node::os::Initialize)

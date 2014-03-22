@@ -31,7 +31,6 @@
 namespace node {
 
 using v8::Array;
-using v8::Context;
 using v8::EscapableHandleScope;
 using v8::FunctionCallbackInfo;
 using v8::Handle;
@@ -350,13 +349,6 @@ void SyncProcessStdioPipe::CloseCallback(uv_handle_t* handle) {
   SyncProcessStdioPipe* self =
       reinterpret_cast<SyncProcessStdioPipe*>(handle->data);
   self->OnClose();
-}
-
-
-void SyncProcessRunner::Initialize(Handle<Object> target,
-                                   Handle<Value> unused,
-                                   Handle<Context> context) {
-  NODE_SET_METHOD(target, "spawn", Spawn);
 }
 
 
@@ -1051,7 +1043,11 @@ void SyncProcessRunner::KillTimerCloseCallback(uv_handle_t* handle) {
   // No-op.
 }
 
-}  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(spawn_sync,
-  node::SyncProcessRunner::Initialize)
+extern "C" void node_builtin_spawn_sync_init(Environment* env,
+                                             Local<Object> target) {
+  NODE_SET_METHOD(target, "spawn", SyncProcessRunner::Spawn);
+}
+
+
+}  // namespace node

@@ -150,9 +150,6 @@ class SyncProcessRunner {
   };
 
  public:
-  static void Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context);
   static void Spawn(const FunctionCallbackInfo<Value>& args);
 
  private:

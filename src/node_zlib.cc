@@ -64,9 +64,6 @@ enum node_zlib_mode {
 };
 
 
-void InitZlib(v8::Handle<v8::Object> target);
-
-
 /**
  * Deflate/Inflate
  */
@@ -608,11 +605,7 @@ class ZCtx : public AsyncWrap {
 };
 
 
-void InitZlib(Handle<Object> target,
-              Handle<Value> unused,
-              Handle<Context> context,
-              void* priv) {
-  Environment* env = Environment::GetCurrent(context);
+extern "C" void node_builtin_zlib_init(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> z = FunctionTemplate::New(env->isolate(), ZCtx::New);
 
   z->InstanceTemplate()->SetInternalFieldCount(1);
@@ -670,5 +663,3 @@ void InitZlib(Handle<Object> target,
 }
 
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(zlib, node::InitZlib)

@@ -207,9 +207,7 @@ void StopGarbageCollectionTracking(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void InitializeV8Bindings(Handle<Object> target,
-                          Handle<Value> unused,
-                          Handle<Context> context) {
+extern "C" void node_builtin_v8_init(Environment* env, Local<Object> target) {
   NODE_SET_METHOD(target,
                   "startGarbageCollectionTracking",
                   StartGarbageCollectionTracking);
@@ -220,5 +218,3 @@ void InitializeV8Bindings(Handle<Object> target,
 }
 
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(v8, node::InitializeV8Bindings)

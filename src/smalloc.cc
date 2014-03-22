@@ -36,7 +36,6 @@
 namespace node {
 namespace smalloc {
 
-using v8::Context;
 using v8::External;
 using v8::ExternalArrayType;
 using v8::FunctionCallbackInfo;
@@ -534,11 +533,8 @@ RetainedObjectInfo* WrapperInfo(uint16_t class_id, Handle<Value> wrapper) {
 }
 
 
-void Initialize(Handle<Object> exports,
-                Handle<Value> unused,
-                Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
-
+extern "C" void node_builtin_smalloc_init(Environment* env,
+                                          Local<Object> exports) {
   NODE_SET_METHOD(exports, "copyOnto", CopyOnto);
   NODE_SET_METHOD(exports, "sliceOnto", SliceOnto);
 
@@ -558,5 +554,3 @@ void Initialize(Handle<Object> exports,
 
 }  // namespace smalloc
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(smalloc, node::smalloc::Initialize)

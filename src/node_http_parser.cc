@@ -21,7 +21,7 @@
 
 #include "node.h"
 #include "node_buffer.h"
-#include "node_http_parser.h"
+#include "http_parser.h"
 
 #include "base-object.h"
 #include "base-object-inl.h"
@@ -55,7 +55,6 @@
 namespace node {
 
 using v8::Array;
-using v8::Context;
 using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -561,11 +560,8 @@ const struct http_parser_settings Parser::settings = {
 };
 
 
-void InitHttpParser(Handle<Object> target,
-                    Handle<Value> unused,
-                    Handle<Context> context,
-                    void* priv) {
-  Environment* env = Environment::GetCurrent(context);
+extern "C" void node_builtin_http_parser_init(Environment* env,
+                                              Local<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(),
                                                     Parser::New);
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -602,5 +598,3 @@ void InitHttpParser(Handle<Object> target,
 }
 
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(http_parser, node::InitHttpParser)

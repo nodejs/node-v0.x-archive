@@ -1197,11 +1197,8 @@ static void StrError(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-static void Initialize(Handle<Object> target,
-                       Handle<Value> unused,
-                       Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
-
+extern "C" void node_builtin_cares_wrap_init(Environment* env,
+                                             Local<Object> target) {
   int r = ares_library_init(ARES_LIB_INIT_ALL);
   assert(r == ARES_SUCCESS);
 
@@ -1250,5 +1247,3 @@ static void Initialize(Handle<Object> target,
 
 }  // namespace cares_wrap
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(cares_wrap, node::cares_wrap::Initialize)
