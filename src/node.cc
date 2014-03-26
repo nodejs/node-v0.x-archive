@@ -3400,6 +3400,8 @@ void Init(int* argc,
                 DispatchDebugMessagesAsyncCallback);
   uv_unref(reinterpret_cast<uv_handle_t*>(&dispatch_debug_messages_async));
 
+  SetCompileTimeV8Flags(argv);
+
   // Parse a few arguments which are specific to Node.
   int v8_argc;
   const char** v8_argv;
@@ -3426,8 +3428,6 @@ void Init(int* argc,
   }
   delete[] v8_argv;
   v8_argv = NULL;
-
-  SetCompileTimeV8Flags(argv);
 
   if (v8_argc > 1) {
     exit(9);
