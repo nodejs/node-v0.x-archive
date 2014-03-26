@@ -665,6 +665,8 @@ void InitZlib(Handle<Object> target,
   NODE_DEFINE_CONSTANT(target, INFLATERAW);
   NODE_DEFINE_CONSTANT(target, UNZIP);
 
+  AsyncWrap::AddMethods<ZCtx>(z);
+
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "ZLIB_VERSION"),
               FIXED_ONE_BYTE_STRING(env->isolate(), ZLIB_VERSION));
 }

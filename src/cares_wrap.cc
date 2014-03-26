@@ -229,7 +229,7 @@ static Local<Array> HostentToNames(Environment* env, struct hostent* host) {
 class QueryWrap : public AsyncWrap {
  public:
   QueryWrap(Environment* env, Local<Object> req_wrap_obj)
-      : AsyncWrap(env, req_wrap_obj, AsyncWrap::PROVIDER_CARES) {
+      : AsyncWrap(env, req_wrap_obj, AsyncWrap::PROVIDER_QUERYWRAP) {
   }
 
   virtual ~QueryWrap() {
