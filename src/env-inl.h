@@ -123,8 +123,20 @@ inline int Environment::AsyncListener::fields_count() const {
   return kFieldsCount;
 }
 
-inline bool Environment::AsyncListener::has_listener() const {
-  return fields_[kHasListener] > 0;
+inline bool Environment::AsyncListener::has_active_context() const {
+  return fields_[kActiveAsyncContextType] != 0;
+}
+
+inline bool Environment::AsyncListener::processing_async_callbacks() const {
+  return fields_[kProcessingAsync] != 0;
+}
+
+inline bool Environment::AsyncListener::has_async_queue() const {
+  return fields_[kHasAsyncQueue] > 0;
+}
+
+inline void Environment::AsyncListener::set_provider_type(int32_t provider) {
+  fields_[kActiveAsyncContextType] = provider;
 }
 
 inline uint32_t Environment::AsyncListener::watched_providers() const {
@@ -225,7 +237,8 @@ inline Environment* Environment::GetCurrentChecked(
 }
 
 inline Environment::Environment(v8::Local<v8::Context> context)
-    : isolate_(context->GetIsolate()),
+    : async_wrap_parent_(NULL),
+      isolate_(context->GetIsolate()),
       isolate_data_(IsolateData::GetOrCreate(context->GetIsolate())),
       using_smalloc_alloc_cb_(false),
       using_domains_(false),
@@ -258,9 +271,25 @@ inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
 
-inline bool Environment::has_async_listener() const {
+inline bool Environment::has_active_context() const {
   // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return const_cast<Environment*>(this)->async_listener()->has_listener();
+  return const_cast<Environment*>(this)->async_listener()->has_active_context();
+}
+
+inline bool Environment::processing_async_callbacks() const {
+  // The const_cast is okay, it doesn't violate conceptual const-ness.
+  return const_cast<Environment*>(this)->
+      async_listener()->processing_async_callbacks();
+}
+
+inline bool Environment::has_async_queue() const {
+  // The const_cast is okay, it doesn't violate conceptual const-ness.
+  return const_cast<Environment*>(this)->async_listener()->has_async_queue();
+}
+
+inline void Environment::set_provider_type(int32_t provider) {
+  // The const_cast is okay, it doesn't violate conceptual const-ness.
+  const_cast<Environment*>(this)->async_listener()->set_provider_type(provider);
 }
 
 inline uint32_t Environment::watched_providers() const {
@@ -309,7 +338,7 @@ inline uv_loop_t* Environment::event_loop() const {
 }
 
 inline Environment::AsyncListener* Environment::async_listener() {
-  return &async_listener_count_;
+  return &async_listener_;
 }
 
 inline Environment::DomainFlag* Environment::domain_flag() {
@@ -418,6 +447,19 @@ inline void Environment::ThrowUVException(int errorno,
                                           const char* path) {
   isolate()->ThrowException(
       UVException(isolate(), errorno, syscall, message, path));
+}
+
+template <class WrapType>
+inline void Environment::set_async_wrap_parent_class(WrapType* parent) {
+  async_wrap_parent_ = static_cast<AsyncWrap*>(parent);
+}
+
+inline AsyncWrap* Environment::async_wrap_parent_class() const {
+  return async_wrap_parent_;
+}
+
+inline void Environment::reset_async_wrap_parent_class() {
+  async_wrap_parent_ = NULL;
 }
 
 #define V(PropertyName, StringValue)                                          \

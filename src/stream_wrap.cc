@@ -60,7 +60,10 @@ StreamWrap::StreamWrap(Environment* env,
                        Local<Object> object,
                        uv_stream_t* stream,
                        AsyncWrap::ProviderType provider)
-    : HandleWrap(env, object, reinterpret_cast<uv_handle_t*>(stream), provider),
+    : HandleWrap(env,
+                 object,
+                 reinterpret_cast<uv_handle_t*>(stream),
+                 provider),
       stream_(stream),
       default_callbacks_(this),
       callbacks_(&default_callbacks_) {
@@ -126,7 +129,11 @@ static Local<Object> AcceptHandle(Environment* env, uv_stream_t* pipe) {
   Local<Object> wrap_obj;
   UVType* handle;
 
+  WrapType* parent = static_cast<WrapType*>(pipe->data);
+  env->set_async_wrap_parent_class<WrapType>(parent);
   wrap_obj = WrapType::Instantiate(env);
+  env->reset_async_wrap_parent_class();
+
   if (wrap_obj.IsEmpty())
     return Local<Object>();
 
@@ -219,7 +226,8 @@ void StreamWrap::WriteBuffer(const FunctionCallbackInfo<Value>& args) {
 
   // Allocate, or write rest
   storage = new char[sizeof(WriteWrap)];
-  req_wrap = new(storage) WriteWrap(env, req_wrap_obj, wrap);
+  req_wrap =
+      new(storage) WriteWrap(env, req_wrap_obj, wrap, wrap->provider_type());
 
   err = wrap->callbacks()->DoWrite(req_wrap,
                                    bufs,
@@ -307,7 +315,8 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
   }
 
   storage = new char[sizeof(WriteWrap) + storage_size + 15];
-  req_wrap = new(storage) WriteWrap(env, req_wrap_obj, wrap);
+  req_wrap =
+      new(storage) WriteWrap(env, req_wrap_obj, wrap, wrap->provider_type());
 
   data = reinterpret_cast<char*>(ROUND_UP(
       reinterpret_cast<uintptr_t>(storage) + sizeof(WriteWrap), 16));
@@ -422,7 +431,7 @@ void StreamWrap::Writev(const FunctionCallbackInfo<Value>& args) {
   storage_size += sizeof(WriteWrap);
   char* storage = new char[storage_size];
   WriteWrap* req_wrap =
-      new(storage) WriteWrap(env, req_wrap_obj, wrap);
+      new(storage) WriteWrap(env, req_wrap_obj, wrap, wrap->provider_type());
 
   uint32_t bytes = 0;
   size_t offset = sizeof(WriteWrap);

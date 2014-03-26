@@ -57,7 +57,6 @@
       'lib/string_decoder.js',
       'lib/sys.js',
       'lib/timers.js',
-      'lib/tracing.js',
       'lib/tls.js',
       'lib/_tls_common.js',
       'lib/_tls_legacy.js',
@@ -87,6 +86,7 @@
       ],
 
       'sources': [
+        'src/async_listener.cc',
         'src/fs_event_wrap.cc',
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
