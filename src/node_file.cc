@@ -1122,7 +1122,7 @@ void InitFs(Handle<Object> target,
   // Function which creates a new Stats object.
   target->Set(
       FIXED_ONE_BYTE_STRING(env->isolate(), "FSInitialize"),
-      FunctionTemplate::New(FSInitialize)->GetFunction());
+      FunctionTemplate::New(env->isolate(), FSInitialize)->GetFunction());
 
   NODE_SET_METHOD(target, "close", Close);
   NODE_SET_METHOD(target, "open", Open);
