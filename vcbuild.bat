@@ -137,6 +137,7 @@ if errorlevel 1 goto exit
 if defined nosign goto licensertf
 
 signtool sign /a /d "Node.js" /t http://timestamp.globalsign.com/scripts/timestamp.dll Release\node.exe
+if errorlevel 1 echo Failed to sign exe&goto exit
 
 :licensertf
 @rem Skip license.rtf generation if not requested.
@@ -160,6 +161,7 @@ if errorlevel 1 goto exit
 
 if defined nosign goto run
 signtool sign /a /d "Node.js" /t http://timestamp.globalsign.com/scripts/timestamp.dll Release\node-v%NODE_VERSION%-%msiplatform%.msi
+if errorlevel 1 echo Failed to sign msi&goto exit
 
 :run
 @rem Run tests if requested.
