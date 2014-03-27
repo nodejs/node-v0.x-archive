@@ -159,7 +159,7 @@
         'ARCH="<(target_arch)"',
         'PLATFORM="<(OS)"',
         'NODE_TAG="<(node_tag)"',
-        'NODE_V8_FLAGS="<(node_v8_flags)"',
+        'NODE_V8_FLAGS=<(node_v8_flags)',
       ],
 
       'conditions': [

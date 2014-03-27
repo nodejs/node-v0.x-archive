@@ -3065,44 +3065,19 @@ static void ParseArgs(int* argc,
 static void SetCompileTimeV8Flags(const char** argv) {
 #ifdef NODE_V8_FLAGS
   int v8_argc;
-  const char** v8_argv;
-
-  char* v8_flags = const_cast<char*>(NODE_V8_FLAGS);
-  if (*v8_flags == '\0')
+  static const char* v8_argv[] = { NULL, NODE_V8_FLAGS };
+  if (ARRAY_SIZE(v8_argv) == 1)
     return;
 
-  // Count flags
-  v8_argc = 2;
-  while ((v8_flags = strchr(v8_flags, ',')) != NULL) {
-    v8_argc++;
-    v8_flags++;
-  }
-
-  // Copy flags
-  v8_argv = new const char*[v8_argc];
-  v8_flags = strdup(NODE_V8_FLAGS);
-  CHECK_NE(v8_flags, NULL);
-
-  unsigned int i = 1;
-  char* v8_flag = v8_flags;
-  while (v8_flag != NULL) {
-    v8_argv[i++] = v8_flag;
-    v8_flag = strchr(v8_flag, ',');
-    if (v8_flag != NULL) {
-      *v8_flag = '\0';
-      v8_flag++;
-    }
-  }
-  CHECK_EQ(static_cast<int>(i), v8_argc);
-
-  // Pass arguments to v8
   v8_argv[0] = argv[0];
+  v8_argc = ARRAY_SIZE(v8_argv);
   V8::SetFlagsFromCommandLine(&v8_argc, const_cast<char**>(v8_argv), true);
 
-  free(v8_flags);
-  delete[] v8_argv;
-  v8_flags = NULL;
-  v8_argv = NULL;
+  // Anything that's still in v8_argv is not a V8 or a node option.
+  for (int i = 1; i < v8_argc; i++)
+    fprintf(stderr, "%s: bad option: %s\n", argv[0], v8_argv[i]);
+  if (v8_argc > 1)
+    exit(9);
 #endif  // NODE_V8_FLAGS
 }
 

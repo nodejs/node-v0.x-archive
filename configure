@@ -520,7 +520,8 @@ def configure_node(o):
     o['variables']['node_tag'] = ''
 
   if options.v8_flags:
-    o['variables']['node_v8_flags'] = options.v8_flags
+    flags = options.v8_flags.split(',')
+    o['variables']['node_v8_flags'] = '"' + '","'.join(flags) + '"'
   else:
     o['variables']['node_v8_flags'] = ''
 
