@@ -32,8 +32,9 @@ var actualAsync = 0;
 var expectAsync = 0;
 
 var callbacks = {
-  create: function onAsync() {
-    actualAsync++;
+  create: function onAsync(data, type) {
+    if (type !== 'NEXTTICK')
+      actualAsync++;
   }
 };
 
@@ -52,13 +53,13 @@ process.on('exit', function() {
 process.nextTick(function() {
   addListener(listener);
 
-  var b = setInterval(function() {
-    clearInterval(b);
+  setInterval(function() {
+    clearInterval(this);
   });
   expectAsync++;
 
-  var c = setInterval(function() {
-    clearInterval(c);
+  setInterval(function() {
+    clearInterval(this);
   });
   expectAsync++;
 
@@ -66,12 +67,6 @@ process.nextTick(function() {
   expectAsync++;
 
   setTimeout(function() { });
-  expectAsync++;
-
-  process.nextTick(function() { });
-  expectAsync++;
-
-  process.nextTick(function() { });
   expectAsync++;
 
   setImmediate(function() { });
@@ -98,9 +93,9 @@ process.nextTick(function() {
   process.nextTick(function() {
     setTimeout(function() {
       setImmediate(function() {
-        var i = setInterval(function() {
+        setInterval(function() {
           if (--interval <= 0)
-            clearInterval(i);
+            clearInterval(this);
         });
         expectAsync++;
       });
@@ -116,27 +111,9 @@ process.nextTick(function() {
     });
     expectAsync++;
   });
-  expectAsync++;
 
   removeListener(listener);
 });
-
-
-// Test triggers with two async listeners
-process.nextTick(function() {
-  addListener(listener);
-  addListener(listener);
-
-  setTimeout(function() {
-    process.nextTick(function() { });
-    expectAsync += 2;
-  });
-  expectAsync += 2;
-
-  removeListener(listener);
-  removeListener(listener);
-});
-
 
 // Test callbacks from fs I/O
 process.nextTick(function() {
@@ -145,10 +122,10 @@ process.nextTick(function() {
   fs.stat('something random', function(err, stat) { });
   expectAsync++;
 
-  setImmediate(function() {
+  setTimeout(function() {
     fs.stat('random again', function(err, stat) { });
     expectAsync++;
-  });
+  }, 10);
   expectAsync++;
 
   removeListener(listener);
@@ -159,11 +136,13 @@ process.nextTick(function() {
 process.nextTick(function() {
   addListener(listener);
 
-  var server = net.createServer(function(c) { });
-  expectAsync++;
+  var server = net.createServer();
 
   server.listen(common.PORT, function() {
-    server.close();
+    net.connect(common.PORT, function() {
+      this.destroy();
+      server.close();
+    });
     expectAsync++;
   });
   expectAsync++;
@@ -176,12 +155,7 @@ process.nextTick(function() {
 process.nextTick(function() {
   addListener(listener);
 
-  var server = dgram.createSocket('udp4');
-  expectAsync++;
-
-  server.bind(common.PORT);
-
-  server.close();
+  dgram.createSocket('udp4').close();
   expectAsync++;
 
   removeListener(listener);

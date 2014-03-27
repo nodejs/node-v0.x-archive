@@ -31,7 +31,7 @@ function onAsync1() {
   return 1;
 }
 
-function onError(stor) {
+function onError(ctx, stor) {
   results.push(stor);
 }
 

@@ -22,22 +22,62 @@
 var common = require('../common');
 var assert = require('assert');
 var tracing = require('tracing');
-var done = false;
-var callbacks = {
-  before: function() {
-    tracing.removeAsyncListener(listener);
-  },
-  after: function() {
-    done = true;
+
+var tests = [];
+var nor = 0;
+var activeContext;
+
+var callbacksObj = {
+  error: function(ctx) {
+    process._rawDebug('Checking activeContext');
+    assert.equal(ctx, activeContext);
+    setImmediate(next);
+    return true;
   }
 };
 
-var listener = tracing.addAsyncListener(callbacks);
+function next() {
+  if (tests.length > 0) {
+    nor--;
+    tests.pop()();
+  }
+}
+setImmediate(next);
 
-process.nextTick(function() {});
-
-process.on('exit', function(status) {
+process.on('exit', function(code) {
   tracing.removeAsyncListener(listener);
-  assert.equal(status, 0);
-  assert.ok(done);
+  if (code !== 0)
+    return;
+  assert.equal(nor, 0);
+  process._rawDebug('ok');
 });
+
+var listener = tracing.addAsyncListener(callbacksObj);
+
+
+tests.push(function() {
+  activeContext = setTimeout(function() {
+    throw new Error('error');
+  });
+});
+
+
+tests.push(function() {
+  activeContext = setTimeout(function() {
+    (function a() {
+      throw new Error('error');
+    }());
+  });
+});
+
+
+tests.push(function() {
+  setImmediate(function() {
+    activeContext = setInterval(function() {
+      throw new Error('error');
+    });
+  });
+});
+
+
+nor = tests.length;
