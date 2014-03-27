@@ -608,6 +608,56 @@ class ZCtx : public AsyncWrap {
 };
 
 
+void Adler32(const FunctionCallbackInfo<Value>& args) {
+  HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+
+  if (!Buffer::HasInstance(args[0])) {
+    return env->ThrowTypeError("Must give a Buffer as first argument");
+  }
+
+  uLong adler;
+
+  if (args.Length() == 1) {
+    // get initial value
+    adler = adler32(0L, Z_NULL, 0);
+  } else {
+    adler = args[1]->Uint32Value();
+  }
+
+  Local<Object> buf = args[0]->ToObject();
+
+  adler = adler32(adler, reinterpret_cast<Bytef *>(Buffer::Data(buf)), Buffer::Length(buf));
+
+  args.GetReturnValue().Set(Number::New(env->isolate(), adler));
+}
+
+
+void CRC32(const FunctionCallbackInfo<Value>& args) {
+  HandleScope handle_scope(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+
+  if (!Buffer::HasInstance(args[0])) {
+    return env->ThrowTypeError("Must give a Buffer as first argument");
+  }
+
+  uLong crc;
+
+  if (args.Length() == 1) {
+    // get initial value
+    crc = crc32(0L, Z_NULL, 0);
+  } else {
+    crc = args[1]->Uint32Value();
+  }
+
+  Local<Object> buf = args[0]->ToObject();
+
+  crc = crc32(crc, reinterpret_cast<Bytef *>(Buffer::Data(buf)), Buffer::Length(buf));
+
+  args.GetReturnValue().Set(Number::New(env->isolate(), crc));
+}
+
+
 void InitZlib(Handle<Object> target,
               Handle<Value> unused,
               Handle<Context> context,
@@ -626,6 +676,9 @@ void InitZlib(Handle<Object> target,
 
   z->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Zlib"));
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Zlib"), z->GetFunction());
+
+  NODE_SET_METHOD(target, "adler32", Adler32);
+  NODE_SET_METHOD(target, "crc32", CRC32);
 
   // valid flush values.
   NODE_DEFINE_CONSTANT(target, Z_NO_FLUSH);
