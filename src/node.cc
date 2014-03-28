@@ -3062,10 +3062,10 @@ static void ParseArgs(int* argc,
 }
 
 
-static void SetCompileTimeV8Flags(const char** argv) {
-#ifdef NODE_V8_FLAGS
+static void SetCompileTimeV8Options(const char** argv) {
+#ifdef NODE_V8_OPTIONS
   int v8_argc;
-  static const char* v8_argv[] = { NULL, NODE_V8_FLAGS };
+  static const char* v8_argv[] = { NULL, NODE_V8_OPTIONS };
   if (ARRAY_SIZE(v8_argv) == 1)
     return;
 
@@ -3078,7 +3078,7 @@ static void SetCompileTimeV8Flags(const char** argv) {
     fprintf(stderr, "%s: bad option: %s\n", argv[0], v8_argv[i]);
   if (v8_argc > 1)
     exit(9);
-#endif  // NODE_V8_FLAGS
+#endif  // NODE_V8_OPTIONS
 }
 
 
@@ -3375,7 +3375,7 @@ void Init(int* argc,
                 DispatchDebugMessagesAsyncCallback);
   uv_unref(reinterpret_cast<uv_handle_t*>(&dispatch_debug_messages_async));
 
-  SetCompileTimeV8Flags(argv);
+  SetCompileTimeV8Options(argv);
 
   // Parse a few arguments which are specific to Node.
   int v8_argc;
