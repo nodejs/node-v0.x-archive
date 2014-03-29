@@ -403,6 +403,10 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
  */
 NODE_EXTERN void AtExit(void (*cb)(void* arg), void* arg = 0);
 
+/* Accessor method for debug mode status
+ */
+NODE_EXTERN bool IsDebuggerRunning(v8::Isolate* isolate);
+
 }  // namespace node
 
 #endif  // SRC_NODE_H_

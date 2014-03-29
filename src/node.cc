@@ -141,6 +141,7 @@ bool no_deprecation = false;
 static double prog_start_time;
 static bool debugger_running;
 static uv_async_t dispatch_debug_messages_async;
+static uv_async_t debug_signal_handler_async;
 
 static Isolate* node_isolate = NULL;
 
@@ -3102,12 +3103,35 @@ static void EnableDebug(Isolate* isolate, bool wait_connect) {
 }
 
 
-// Called from the main thread.
-static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle, int status) {
-  if (debugger_running == false) {
+static void DisableDebug() {
+  Isolate::Scope isolate_scope(node_isolate);
+
+  v8::Debug::SetDebugMessageDispatchHandler(NULL, false);
+  v8::Debug::CancelDebugBreak(node_isolate);
+  v8::Debug::DisableAgent();
+
+  fprintf(stderr, "Debugger stopped listening on port %d\n", debug_port);
+  fflush(stderr);
+
+  debugger_running = false;
+}
+
+
+static void DebugSignalHandlerAsyncCallback(uv_async_t* handle, int status) {
+  if (debugger_running) {
+    fprintf(stderr, "Stopping debugger agent.\n");
+    DisableDebug();
+  } else {
+    v8::Debug::DebugBreak(node_isolate);
+
     fprintf(stderr, "Starting debugger agent.\n");
     EnableDebug(node_isolate, false);
   }
+}
+
+
+// Called from the main thread.
+static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle, int status) {
   Isolate::Scope isolate_scope(node_isolate);
   v8::Debug::ProcessDebugMessages();
 }
@@ -3130,10 +3154,9 @@ static void InstallEarlyDebugSignalHandler() {
 }
 
 
-static void EnableDebugSignalHandler(int signo) {
+static void DebugSignalHandler(int signo) {
   // Call only async signal-safe functions here!
-  v8::Debug::DebugBreak(*static_cast<Isolate* volatile*>(&node_isolate));
-  uv_async_send(&dispatch_debug_messages_async);
+  uv_async_send(&debug_signal_handler_async);
 }
 
 
@@ -3167,7 +3190,7 @@ void DebugProcess(const FunctionCallbackInfo<Value>& args) {
 
 static int RegisterDebugSignalHandler() {
   // FIXME(bnoordhuis) Should be per-isolate or per-context, not global.
-  RegisterSignalHandler(SIGUSR1, EnableDebugSignalHandler);
+  RegisterSignalHandler(SIGUSR1, DebugSignalHandler);
   // If we caught a SIGUSR1 during the bootstrap process, re-raise it
   // now that the debugger infrastructure is in place.
   if (caught_early_debug_signal)
@@ -3355,6 +3378,11 @@ void Init(int* argc,
                 DispatchDebugMessagesAsyncCallback);
   uv_unref(reinterpret_cast<uv_handle_t*>(&dispatch_debug_messages_async));
 
+  uv_async_init(uv_default_loop(),
+                &debug_signal_handler_async,
+                DebugSignalHandlerAsyncCallback);
+  uv_unref(reinterpret_cast<uv_handle_t*>(&debug_signal_handler_async));
+
   // Parse a few arguments which are specific to Node.
   int v8_argc;
   const char** v8_argv;
@@ -3502,6 +3530,12 @@ int EmitExit(Environment* env) {
 
   // Reload exit code, it may be changed by `emit('exit')`
   return process_object->Get(exitCode)->IntegerValue();
+}
+
+
+bool IsDebuggerRunning(Isolate* isolate) {
+  Isolate::Scope isolate_scope(isolate);
+  return debugger_running;
 }
 
 
