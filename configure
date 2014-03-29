@@ -44,6 +44,11 @@ parser.add_option('--gdb',
     dest='gdb',
     help='add gdb support')
 
+parser.add_option('--enable-shared',
+    action='store_true',
+    dest='enable_shared',
+    help='build a node shared library')
+
 parser.add_option('--ninja',
     action='store_true',
     dest='use_ninja',
@@ -512,6 +517,11 @@ def configure_node(o):
     o['variables']['node_tag'] = '-' + options.tag
   else:
     o['variables']['node_tag'] = ''
+
+  if options.enable_shared:
+    o['cflags'] += ['-fPIC']
+    o['variables']['node_target'] = 'libnode'
+    o['variables']['node_type'] = 'shared_library'
 
 
 def configure_libz(o):

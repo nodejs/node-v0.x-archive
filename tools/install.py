@@ -128,6 +128,8 @@ def subdir_files(path, dest, action):
 
 def files(action):
   action(['out/Release/node'], 'bin/node')
+  if os.path.exists('out/Release/lib.target/libnode.so'):
+    action(['out/Release/lib.target/libnode.so'], 'lib/libnode.so')
 
   if 'true' == variables.get('node_use_dtrace'):
     action(['out/Release/node.d'], 'lib/dtrace/node.d')
