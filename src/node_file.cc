@@ -381,7 +381,7 @@ Local<Value> BuildStatsObject(Environment* env, const uv_stat_t* s) {
   Local<Value> name##_msec =                                                \
     Number::New(env->isolate(),                                             \
         (static_cast<double>(s->st_##name.tv_sec) * 1000) +                 \
-        (static_cast<double>(s->st_##name.tv_nsec) * 1000000));             \
+        (static_cast<double>(s->st_##name.tv_nsec / 1000000)));             \
                                                                             \
   if (name##_msec.IsEmpty())                                                \
     return handle_scope.Escape(Local<Object>());                            \
