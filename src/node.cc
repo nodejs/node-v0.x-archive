@@ -2799,9 +2799,10 @@ static void AtExit() {
 }
 
 
-static void SignalExit(int signal) {
+static void SignalExit(int signo) {
   uv_tty_reset_mode();
-  _exit(128 + signal);
+  signal(signo, SIG_DFL);
+  kill(getpid(), signo);
 }
 
 
