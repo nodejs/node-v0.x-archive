@@ -33,6 +33,7 @@ var Types = smalloc.Types;
 // sliceOnto is volatile and cannot be exposed to users.
 var sliceOnto = process.binding('smalloc').sliceOnto;
 
+
 // verify allocation
 
 var b = alloc(5, {});
@@ -150,7 +151,7 @@ for (var i = 0; i < 6; i++) {
 
 var b = alloc(1, Types.Double);
 var c = alloc(2, Types.Uint32);
-if(os.endianness() == 'LE') {
+if (os.endianness() === 'LE') {
   c[0] = 2576980378;
   c[1] = 1069128089;
 } else {
