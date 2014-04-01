@@ -638,7 +638,7 @@ class ContextifyScript : public BaseObject {
     }
 
     ContextifyScript* wrapped_script =
-        Unwrap<ContextifyScript>(args.This());
+        Unwrap<ContextifyScript>(args.Holder());
     Local<Script> script = PersistentToLocal(env->isolate(),
                                              wrapped_script->script_);
 
