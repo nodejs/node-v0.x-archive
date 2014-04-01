@@ -21,6 +21,7 @@
 
 var common = require('../common');
 var assert = require('assert');
+var os = require('os');
 
 // first grab js api's
 var smalloc = require('smalloc');
@@ -31,12 +32,6 @@ var kMaxLength = smalloc.kMaxLength;
 var Types = smalloc.Types;
 // sliceOnto is volatile and cannot be exposed to users.
 var sliceOnto = process.binding('smalloc').sliceOnto;
-
-// Helper to determine endian - returns true on little endian platforms
-function isLittleEndian() {
-  return ((new Uint32Array((new Uint8Array([4,3,2,1])).buffer))[0])
-           == 0x01020304;
-}
 
 // verify allocation
 
@@ -155,7 +150,7 @@ for (var i = 0; i < 6; i++) {
 
 var b = alloc(1, Types.Double);
 var c = alloc(2, Types.Uint32);
-if(isLittleEndian()) {
+if(os.endianness() == 'LE') {
   c[0] = 2576980378;
   c[1] = 1069128089;
 } else {
