@@ -234,6 +234,12 @@ inline Environment::Environment(v8::Local<v8::Context> context)
   set_module_load_list_array(v8::Array::New(isolate()));
   RB_INIT(&cares_task_list_);
   QUEUE_INIT(&gc_tracker_queue_);
+
+  v8::Handle<v8::Object> json = context->Global()->Get(
+      FIXED_ONE_BYTE_STRING(isolate(), "JSON")).As<v8::Object>();
+  set_json_object(json);
+  set_json_stringify_function(json->Get(
+      FIXED_ONE_BYTE_STRING(isolate(), "stringify")).As<v8::Function>());
 }
 
 inline Environment::~Environment() {

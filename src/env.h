@@ -245,6 +245,8 @@ namespace node {
   V(domain_array, v8::Array)                                                  \
   V(fs_stats_constructor_function, v8::Function)                              \
   V(gc_info_callback_function, v8::Function)                                  \
+  V(json_object, v8::Object)                                                  \
+  V(json_stringify_function, v8::Function)                                    \
   V(module_load_list_array, v8::Array)                                        \
   V(pipe_constructor_template, v8::FunctionTemplate)                          \
   V(process_object, v8::Object)                                               \

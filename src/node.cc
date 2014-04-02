@@ -2859,14 +2859,6 @@ void Load(Environment* env) {
   // Add a reference to the global object
   Local<Object> global = env->context()->Global();
 
-#if defined HAVE_DTRACE || defined HAVE_ETW
-  InitDTrace(env, global);
-#endif
-
-#if defined HAVE_PERFCTR
-  InitPerfCounters(env, global);
-#endif
-
   // Enable handling of uncaught exceptions
   // (FatalException(), break on uncaught exception in debugger)
   //

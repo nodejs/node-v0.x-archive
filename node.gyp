@@ -62,6 +62,7 @@
       'lib/_tls_common.js',
       'lib/_tls_legacy.js',
       'lib/_tls_wrap.js',
+      'lib/tracing.js',
       'lib/tty.js',
       'lib/url.js',
       'lib/util.js',
@@ -94,6 +95,7 @@
         'src/node_buffer.cc',
         'src/node_constants.cc',
         'src/node_contextify.cc',
+        'src/node_dtrace.cc',
         'src/node_file.cc',
         'src/node_http_parser.cc',
         'src/node_javascript.cc',
@@ -213,12 +215,22 @@
           # below, and the GYP-generated Makefiles will properly build them when
           # needed.
           #
-          'sources': [ 'src/node_dtrace.cc' ],
           'conditions': [
             [ 'OS=="linux"', {
               'sources': [
                 '<(SHARED_INTERMEDIATE_DIR)/node_dtrace_provider.o',
                 '<(SHARED_INTERMEDIATE_DIR)/libuv_dtrace_provider.o',
+              ],
+            }, {
+              'sources': [
+                'src/dtrace-provider/dtrace_argument.cc',
+                'src/dtrace-provider/dtrace_probe.cc',
+                'src/dtrace-provider/dtrace_provider.cc',
+                'src/dtrace-provider/dtrace_provider.h',
+              ],
+              'include_dirs': [ 'deps/libusdt' ],
+              'dependencies': [
+                './deps/libusdt/libusdt.gyp:libusdt',
               ],
             }],
             [ 'OS!="mac" and OS!="linux"', {
@@ -243,7 +255,6 @@
             'src/node_win32_etw_provider.h',
             'src/node_win32_etw_provider-inl.h',
             'src/node_win32_etw_provider.cc',
-            'src/node_dtrace.cc',
             'tools/msvs/genfiles/node_etw_provider.h',
             'tools/msvs/genfiles/node_etw_provider.rc',
           ]

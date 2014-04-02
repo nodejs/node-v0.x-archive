@@ -19,28 +19,31 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "node.h"
+#include "v8.h"
+
+#include "env.h"
+#include "env-inl.h"
+
+#include "node_dtrace.h"
 
 #ifdef HAVE_DTRACE
-#include "node_dtrace.h"
 #include "node_provider.h"
-#include <string.h>
 #elif HAVE_ETW
-#include "node_dtrace.h"
-#include <string.h>
 #include "node_win32_etw_provider.h"
 #include "node_win32_etw_provider-inl.h"
 #else
-#define NODE_HTTP_SERVER_REQUEST(arg0, arg1)
+#define NODE_HTTP_SERVER_REQUEST(arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 #define NODE_HTTP_SERVER_REQUEST_ENABLED() (0)
-#define NODE_HTTP_SERVER_RESPONSE(arg0)
+#define NODE_HTTP_SERVER_RESPONSE(arg0, arg1, arg2, arg3)
 #define NODE_HTTP_SERVER_RESPONSE_ENABLED() (0)
-#define NODE_HTTP_CLIENT_REQUEST(arg0, arg1)
+#define NODE_HTTP_CLIENT_REQUEST(arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 #define NODE_HTTP_CLIENT_REQUEST_ENABLED() (0)
-#define NODE_HTTP_CLIENT_RESPONSE(arg0)
+#define NODE_HTTP_CLIENT_RESPONSE(arg0, arg1, arg2, arg3)
 #define NODE_HTTP_CLIENT_RESPONSE_ENABLED() (0)
-#define NODE_NET_SERVER_CONNECTION(arg0)
+#define NODE_NET_SERVER_CONNECTION(arg0, arg1, arg2, arg3)
 #define NODE_NET_SERVER_CONNECTION_ENABLED() (0)
-#define NODE_NET_STREAM_END(arg0)
+#define NODE_NET_STREAM_END(arg0, arg1, arg2, arg3)
 #define NODE_NET_STREAM_END_ENABLED() (0)
 #define NODE_NET_SOCKET_READ(arg0, arg1, arg2, arg3, arg4)
 #define NODE_NET_SOCKET_READ_ENABLED() (0)
@@ -50,11 +53,11 @@
 #define NODE_GC_DONE(arg0, arg1, arg2)
 #endif
 
-#include "env.h"
-#include "env-inl.h"
+#include <string.h>
 
 namespace node {
 
+using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::GCCallbackFlags;
@@ -65,89 +68,52 @@ using v8::Handle;
 using v8::HandleScope;
 using v8::Isolate;
 using v8::Local;
+using v8::Array;
 using v8::Object;
 using v8::String;
 using v8::Value;
+using v8::Null;
 
 #define SLURP_STRING(obj, member, valp) \
-  if (!(obj)->IsObject()) { \
+  if (!(obj)->IsArray()) { \
     return env->ThrowError( \
-        "expected object for " #obj " to contain string member " #member); \
+        "expected Array for " #obj " to contain index " #member); \
   } \
-  String::Utf8Value _##member(obj->Get(OneByteString(env->isolate(), \
-                                                     #member))); \
+  String::Utf8Value _##member(obj->Get(member)); \
   if ((*(const char **)valp = *_##member) == NULL) \
     *(const char **)valp = "<unknown>";
 
 #define SLURP_INT(obj, member, valp) \
-  if (!(obj)->IsObject()) { \
+  if (!(obj)->IsArray()) { \
     return env->ThrowError( \
-      "expected object for " #obj " to contain integer member " #member); \
+      "expected Array for " #obj " to contain integer index " #member); \
   } \
-  *valp = obj->Get(OneByteString(env->isolate(), #member)) \
-      ->ToInteger()->Value();
-
-#define SLURP_OBJECT(obj, member, valp) \
-  if (!(obj)->IsObject()) { \
-    return env->ThrowError( \
-      "expected object for " #obj " to contain object member " #member); \
-  } \
-  *valp = Local<Object>::Cast(obj->Get(OneByteString(env->isolate(), #member)));
+  *valp = obj->Get(member)->ToInteger()->Value();
 
 #define SLURP_CONNECTION(arg, conn) \
-  if (!(arg)->IsObject()) { \
+  if (!(arg)->IsArray()) { \
     return env->ThrowError( \
-      "expected argument " #arg " to be a connection object"); \
+      "expected argument " #arg " to be an Array"); \
   } \
   node_dtrace_connection_t conn; \
-  Local<Object> _##conn = Local<Object>::Cast(arg); \
-  Local<Value> _handle = \
-      (_##conn)->Get(FIXED_ONE_BYTE_STRING(env->isolate(), "_handle")); \
-  if (_handle->IsObject()) { \
-    SLURP_INT(_handle.As<Object>(), fd, &conn.fd); \
-  } else { \
-    conn.fd = -1; \
-  } \
-  SLURP_STRING(_##conn, remoteAddress, &conn.remote); \
-  SLURP_INT(_##conn, remotePort, &conn.port); \
-  SLURP_INT(_##conn, bufferSize, &conn.buffered);
+  Local<Array> _##conn = Local<Array>::Cast(arg); \
+  SLURP_INT(_##conn, 0, &conn.fd); \
+  SLURP_STRING(_##conn, 1, &conn.remote); \
+  SLURP_INT(_##conn, 2, &conn.port); \
+  SLURP_INT(_##conn, 3, &conn.buffered);
 
-#define SLURP_CONNECTION_HTTP_CLIENT(arg, conn) \
-  if (!(arg)->IsObject()) { \
-    return env->ThrowError( \
-      "expected argument " #arg " to be a connection object"); \
-  } \
-  node_dtrace_connection_t conn; \
-  Local<Object> _##conn = Local<Object>::Cast(arg); \
-  SLURP_INT(_##conn, fd, &conn.fd); \
-  SLURP_STRING(_##conn, host, &conn.remote); \
-  SLURP_INT(_##conn, port, &conn.port); \
-  SLURP_INT(_##conn, bufferSize, &conn.buffered);
-
-#define SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(arg0, arg1, conn) \
-  if (!(arg0)->IsObject()) { \
-    return env->ThrowError( \
-      "expected argument " #arg0 " to be a connection object"); \
-  } \
-  if (!(arg1)->IsObject()) { \
-    return env->ThrowError( \
-      "expected argument " #arg1 " to be a connection object"); \
-  } \
-  node_dtrace_connection_t conn; \
-  Local<Object> _##conn = Local<Object>::Cast(arg0); \
-  SLURP_INT(_##conn, fd, &conn.fd); \
-  SLURP_INT(_##conn, bufferSize, &conn.buffered); \
-  _##conn = Local<Object>::Cast(arg1); \
-  SLURP_STRING(_##conn, host, &conn.remote); \
-  SLURP_INT(_##conn, port, &conn.port);
-
+#define GET_ARGS(arg, dest) \
+  if (!(arg)->IsArray()) \
+    return ThrowError("expected cb return value to be an Array"); \
+  Local<Array> dest = (arg).As<Array>();
 
 void DTRACE_NET_SERVER_CONNECTION(const FunctionCallbackInfo<Value>& args) {
   if (!NODE_NET_SERVER_CONNECTION_ENABLED())
     return;
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  SLURP_CONNECTION(args[0], conn);
+  GET_ARGS(args[0], ret);
+  SLURP_CONNECTION(ret, conn);
   NODE_NET_SERVER_CONNECTION(&conn, conn.remote, conn.port, conn.fd);
 }
 
@@ -157,7 +123,8 @@ void DTRACE_NET_STREAM_END(const FunctionCallbackInfo<Value>& args) {
     return;
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  SLURP_CONNECTION(args[0], conn);
+  GET_ARGS(args[0], ret);
+  SLURP_CONNECTION(ret, conn);
   NODE_NET_STREAM_END(&conn, conn.remote, conn.port, conn.fd);
 }
 
@@ -173,8 +140,11 @@ void DTRACE_NET_SOCKET_READ(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("expected argument 1 to be number of bytes");
   }
 
-  int nbytes = args[1]->Int32Value();
-  NODE_NET_SOCKET_READ(&conn, nbytes, conn.remote, conn.port, conn.fd);
+  NODE_NET_SOCKET_READ(&conn,
+                       args[1]->Int32Value(),
+                       conn.remote,
+                       conn.port,
+                       conn.fd);
 }
 
 
@@ -189,8 +159,11 @@ void DTRACE_NET_SOCKET_WRITE(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("expected argument 1 to be number of bytes");
   }
 
-  int nbytes = args[1]->Int32Value();
-  NODE_NET_SOCKET_WRITE(&conn, nbytes, conn.remote, conn.port, conn.fd);
+  NODE_NET_SOCKET_WRITE(&conn,
+                        args[1]->Int32Value(),
+                        conn.remote,
+                        conn.port,
+                        conn.fd);
 }
 
 
@@ -202,27 +175,16 @@ void DTRACE_HTTP_SERVER_REQUEST(const FunctionCallbackInfo<Value>& args) {
 
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  Local<Object> arg0 = Local<Object>::Cast(args[0]);
-  Local<Object> headers;
+
+  GET_ARGS(args[0], ret);
+  SLURP_CONNECTION(ret, conn);
 
   memset(&req, 0, sizeof(req));
   req._un.version = 1;
-  SLURP_STRING(arg0, url, &req.url);
-  SLURP_STRING(arg0, method, &req.method);
-  SLURP_OBJECT(arg0, headers, &headers);
+  SLURP_STRING(_conn, 4, &req.url);
+  SLURP_STRING(_conn, 5, &req.method);
+  SLURP_STRING(_conn, 6, &req.forwardedFor);
 
-  if (!(headers)->IsObject()) {
-    return env->ThrowError(
-      "expected object for request to contain string member headers");
-  }
-
-  Local<Value> strfwdfor = headers->Get(env->x_forwarded_string());
-  String::Utf8Value fwdfor(strfwdfor);
-
-  if (!strfwdfor->IsString() || (req.forwardedFor = *fwdfor) == NULL)
-    req.forwardedFor = const_cast<char*>("");
-
-  SLURP_CONNECTION(args[1], conn);
   NODE_HTTP_SERVER_REQUEST(&req, &conn, conn.remote, conn.port, req.method, \
                            req.url, conn.fd);
 }
@@ -233,14 +195,14 @@ void DTRACE_HTTP_SERVER_RESPONSE(const FunctionCallbackInfo<Value>& args) {
     return;
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  SLURP_CONNECTION(args[0], conn);
+  GET_ARGS(args[0], ret);
+  SLURP_CONNECTION(ret, conn);
   NODE_HTTP_SERVER_RESPONSE(&conn, conn.remote, conn.port, conn.fd);
 }
 
 
 void DTRACE_HTTP_CLIENT_REQUEST(const FunctionCallbackInfo<Value>& args) {
   node_dtrace_http_client_request_t req;
-  char *header;
 
   if (!NODE_HTTP_CLIENT_REQUEST_ENABLED())
     return;
@@ -254,25 +216,11 @@ void DTRACE_HTTP_CLIENT_REQUEST(const FunctionCallbackInfo<Value>& args) {
    * caller here to retain their method and URL until the time at which
    * DTRACE_HTTP_CLIENT_REQUEST can be called.
    */
-  Local<Object> arg0 = Local<Object>::Cast(args[0]);
-  SLURP_STRING(arg0, _header, &header);
+  GET_ARGS(args[0], ret);
+  SLURP_CONNECTION(ret, conn);
+  SLURP_STRING(_conn, 4, &req.method);
+  SLURP_STRING(_conn, 5, &req.url);
 
-  req.method = header;
-
-  while (*header != '\0' && *header != ' ')
-    header++;
-
-  if (*header != '\0')
-    *header++ = '\0';
-
-  req.url = header;
-
-  while (*header != '\0' && *header != ' ')
-    header++;
-
-  *header = '\0';
-
-  SLURP_CONNECTION_HTTP_CLIENT(args[1], conn);
   NODE_HTTP_CLIENT_REQUEST(&req, &conn, conn.remote, conn.port, req.method, \
                            req.url, conn.fd);
 }
@@ -283,7 +231,8 @@ void DTRACE_HTTP_CLIENT_RESPONSE(const FunctionCallbackInfo<Value>& args) {
     return;
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(args[0], args[1], conn);
+  GET_ARGS(args[0], ret);
+  SLURP_CONNECTION(ret, conn);
   NODE_HTTP_CLIENT_RESPONSE(&conn, conn.remote, conn.port, conn.fd);
 }
 
@@ -302,9 +251,14 @@ void dtrace_gc_done(Isolate* isolate, GCType type, GCCallbackFlags flags) {
 }
 
 
-void InitDTrace(Environment* env, Handle<Object> target) {
+void InitDTrace(Handle<Object> target,
+                Handle<Value> unused,
+                Handle<v8::Context> context,
+                void* priv) {
+  Environment* env = Environment::GetCurrent(context);
   HandleScope scope(env->isolate());
 
+#if defined HAVE_DTRACE || defined HAVE_ETW || defined HAVE_SYSTEMTAP
   static struct {
     const char *name;
     void (*func)(const FunctionCallbackInfo<Value>&);
@@ -321,21 +275,50 @@ void InitDTrace(Environment* env, Handle<Object> target) {
 #undef NODE_PROBE
   };
 
+  Local<Object> global = context->Global();
+
   for (unsigned int i = 0; i < ARRAY_SIZE(tab); i++) {
     Local<String> key = OneByteString(env->isolate(), tab[i].name);
-    Local<Value> val = FunctionTemplate::New(env->isolate(), tab[i].func)
+    Local<Function> val = FunctionTemplate::New(env->isolate(), tab[i].func)
         ->GetFunction();
-    target->Set(key, val);
+    val->SetName(key);
+    global->Set(key, val);
   }
 
 #ifdef HAVE_ETW
   init_etw();
 #endif
 
-#if defined HAVE_DTRACE || defined HAVE_ETW
   env->isolate()->AddGCPrologueCallback(dtrace_gc_start);
   env->isolate()->AddGCEpilogueCallback(dtrace_gc_done);
 #endif
+
+#if defined HAVE_PERFCTR
+  InitPerfCounters(context->Global());
+#endif
+
+  Local<Object> constants = Object::New(env->isolate());
+#define CONSTANT(type)                                                        \
+  do {                                                                        \
+    Local<String> str = OneByteString(env->isolate(), #type);                 \
+    constants->Set(str, v8::Integer::New(env->isolate(),                      \
+                   ARGUMENT_TYPE_ ## type));                                  \
+    constants->Set(ARGUMENT_TYPE_ ## type, str);                              \
+  } while(0);
+
+  CONSTANT(STRING);
+  CONSTANT(JSON);
+  CONSTANT(INT64);
+  CONSTANT(INT32);
+  CONSTANT(UINT32);
+  CONSTANT(INT16);
+  CONSTANT(UINT16);
+  CONSTANT(INT8);
+  CONSTANT(UINT8);
+#undef CONSTANT
+  target->Set(OneByteString(env->isolate(), "constants"), constants);
 }
 
-}  // namespace node
+}
+
+NODE_MODULE_CONTEXT_AWARE_BUILTIN(dtrace, node::InitDTrace)
