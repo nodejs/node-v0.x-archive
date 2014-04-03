@@ -32,6 +32,15 @@ var flatOne = Buffer.concat(one);
 var flatLong = Buffer.concat(long);
 var flatLongLen = Buffer.concat(long, 40);
 
+var buf1 = new Buffer('abcdefg');
+var buf2 = new Buffer('hijklmn');
+var buf3 = new Buffer('opq');
+
+var buf = Buffer.concat([buf1, buf2, buf3], buf1.length);
+assert(buf.length === buf1.length);
+buf = Buffer.concat([buf1, buf2, buf3], 10);
+assert(buf.length === 10);
+
 assert(flatZero.length === 0);
 assert(flatOne.toString() === 'asdf');
 assert(flatOne === one[0]);
