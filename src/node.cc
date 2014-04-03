@@ -2800,9 +2800,13 @@ static void AtExit() {
 
 
 static void SignalExit(int signo) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_flags = SA_RESETHAND;
+  sigaction(signo, &sa, NULL);
+
   uv_tty_reset_mode();
-  signal(signo, SIG_DFL);
-  kill(getpid(), signo);
+  raise(signo);
 }
 
 
