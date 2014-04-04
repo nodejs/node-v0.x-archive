@@ -146,13 +146,13 @@ static void init_process_options(char* test, uv_exit_cb exit_cb) {
 }
 
 
-static void timer_cb(uv_timer_t* handle, int status) {
+static void timer_cb(uv_timer_t* handle) {
   uv_process_kill(&process, /* SIGTERM */ 15);
   uv_close((uv_handle_t*)handle, close_cb);
 }
 
 
-static void timer_counter_cb(uv_timer_t* handle, int status) {
+static void timer_counter_cb(uv_timer_t* handle) {
   ++timer_counter;
 }
 
