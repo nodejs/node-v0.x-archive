@@ -2800,11 +2800,6 @@ static void AtExit() {
 
 
 static void SignalExit(int signo) {
-  struct sigaction sa;
-  memset(&sa, 0, sizeof(sa));
-  sa.sa_flags = SA_RESETHAND;
-  sigaction(signo, &sa, NULL);
-
   uv_tty_reset_mode();
   raise(signo);
 }
@@ -3162,6 +3157,16 @@ static void EnableDebugSignalHandler(int signo) {
 }
 
 
+static void RegisterSignalExitHandler(int signal) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = SignalExit;
+  sa.sa_flags = SA_RESETHAND;
+  sigfillset(&sa.sa_mask);
+  sigaction(signal, &sa, NULL);
+}
+
+
 static void RegisterSignalHandler(int signal, void (*handler)(int signal)) {
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
@@ -3449,8 +3454,8 @@ void Init(int* argc,
   }
   // Ignore SIGPIPE
   RegisterSignalHandler(SIGPIPE, SIG_IGN);
-  RegisterSignalHandler(SIGINT, SignalExit);
-  RegisterSignalHandler(SIGTERM, SignalExit);
+  RegisterSignalExitHandler(SIGINT);
+  RegisterSignalExitHandler(SIGTERM);
 #endif  // __POSIX__
 
   V8::SetFatalErrorHandler(node::OnFatalError);
