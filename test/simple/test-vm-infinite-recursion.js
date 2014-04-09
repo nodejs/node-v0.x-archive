@@ -19,12 +19,24 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Flags: --stack-size=128
+function parent() {
+  var spawn = require('child_process').spawn;
+  var assert = require('assert');
+  var child = spawn(process.execPath, ['--stack-size=128', __filename, 'child']);
+  child.on('exit', function(exitCode) {
+    assert(exitCode != 0);
+    console.log('ok');
+  });
+}
 
-var assert = require('assert');
-var vm = require('vm');
-var s = 'vm.runInNewContext(s, { vm: vm, s: s })';
-
-assert.throws(function() {
+function child() {
+  var vm = require('vm');
+  var s = 'vm.runInNewContext(s, { vm: vm, s: s })';
   eval(s);
-}, /Maximum call stack/);
+}
+
+if (!process.argv[2]) {
+  parent();
+} else {
+  child();
+}
