@@ -49,7 +49,7 @@ Okay, so you have decided on the proper branch.  Create a feature branch
 and start hacking:
 
 ```
-$ git checkout -b my-feature-branch -t origin/v0.10
+$ git checkout -b my-feature-branch -t origin/v0.10-release
 ```
 
 (Where v0.10 is the latest stable branch as of this writing.)
