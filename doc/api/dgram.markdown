@@ -43,6 +43,7 @@ to the "all interfaces" address on a random port (it does the right thing for
 both `udp4` and `udp6` sockets). You can then retrieve the address and port
 with `socket.address().address` and `socket.address().port`.
 
+
 ## Class: dgram.Socket
 
 The dgram Socket class encapsulates the datagram functionality.  It
