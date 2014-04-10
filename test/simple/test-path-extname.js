@@ -22,42 +22,21 @@
 // Regex to split a windows path into three parts: [*, device, slash,
 // tail] windows-only
 
-/* original:
-
-  var splitDeviceRe =
-    /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
-
-*/
-
-var splitDeviceRe =
-  /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
-
-// Regex to split the tail part of the above into [*, dir, basename, ext]
-var splitTailRe =
-  /^([\s\S]*?)((?:\.{1,2}|[^\\\/]+?|)(\.[^.\/\\]*|))(?:[\\\/]*)$/;
-
-var splitPath = function(filename) {
-// Separate device+slash from tail
-var result = splitDeviceRe.exec(filename),
-    device = (result[1] || '') + (result[2] || ''),
-    tail = result[3] || '';
-// Split the tail into dir, basename and extension
-var result2 = splitTailRe.exec(tail),
-    dir = result2[1],
-    basename = result2[2],
-    ext = result2[3];
-return [device, dir, basename, ext];
-};
-
 // Test
 
+if (process.platform !== 'win32') {
+  console.log('skipping test on unixes');
+  process.exit(0);
+}
+
+var path = require('../../lib/path');
 var assert = require('assert');
 
-assert.equal(splitPath('/path/index.html')[3], '.html');
-assert.equal(splitPath('////path/index.html')[3], '.html');
-assert.equal(splitPath('///path/index.html')[3], '.html');
-assert.equal(splitPath('//path/index.html')[3], '.html');
-assert.equal(splitPath('////path////index.html')[3], '.html');
-assert.equal(splitPath('//////path/////index.html')[3], '.html');
-assert.equal(splitPath('/path/dir/dir/dir/index.html')[3], '.html');
-assert.equal(splitPath('root/path/index.html')[3], '.html');
+assert.equal(path.extname('/path/index.html'), '.html');
+assert.equal(path.extname('////path/index.html'), '.html');
+assert.equal(path.extname('///path/index.html'), '.html');
+assert.equal(path.extname('//path/index.html'), '.html');
+assert.equal(path.extname('////path////index.html'), '.html');
+assert.equal(path.extname('//////path/////index.html'), '.html');
+assert.equal(path.extname('/path/dir/dir/dir/index.html'), '.html');
+assert.equal(path.extname('root/path/index.html'), '.html');
