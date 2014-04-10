@@ -16,6 +16,9 @@ It is important to note that your callback will probably not be called in exactl
 the callback will fire, nor of the ordering things will fire in. The callback will
 be called as close as possible to the time specified.
 
+A delay of zero will defer the execution of `callback` until the next tick of the
+event loop. However, this is inefficient. Use [process.nextTick(callback)](process.html#process_process_nexttick_callback) instead.
+
 ## clearTimeout(timeoutObject)
 
 Prevents a timeout from triggering.
