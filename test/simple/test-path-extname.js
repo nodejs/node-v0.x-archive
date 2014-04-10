@@ -30,7 +30,7 @@
 */
 
 var splitDeviceRe =
-  /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[\\\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
+  /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
 
 // Regex to split the tail part of the above into [*, dir, basename, ext]
 var splitTailRe =
