@@ -36,7 +36,6 @@ assert.equal(path.basename('/basename.ext'), 'basename.ext');
 assert.equal(path.basename('basename.ext'), 'basename.ext');
 assert.equal(path.basename('basename.ext/'), 'basename.ext');
 assert.equal(path.basename('basename.ext//'), 'basename.ext');
-assert.equal(path.basename('\\\\.\\pipe\\PipeName'), 'PipeName');
 
 if (isWindows) {
   // On Windows a backslash acts as a path separator.
@@ -45,6 +44,7 @@ if (isWindows) {
   assert.equal(path.basename('basename.ext'), 'basename.ext');
   assert.equal(path.basename('basename.ext\\'), 'basename.ext');
   assert.equal(path.basename('basename.ext\\\\'), 'basename.ext');
+  assert.equal(path.basename('\\\\.\\pipe\\PipeName'), 'PipeName');
 
 } else {
   // On unix a backslash is just treated as any other character.
