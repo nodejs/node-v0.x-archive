@@ -36,6 +36,7 @@ assert.equal(path.basename('/basename.ext'), 'basename.ext');
 assert.equal(path.basename('basename.ext'), 'basename.ext');
 assert.equal(path.basename('basename.ext/'), 'basename.ext');
 assert.equal(path.basename('basename.ext//'), 'basename.ext');
+assert.equal(path.basename('\\\\.\\pipe\\PipeName'), 'PipeName');
 
 if (isWindows) {
   // On Windows a backslash acts as a path separator.
@@ -101,6 +102,7 @@ if (isWindows) {
                '\\\\unc\\share\\foo');
   assert.equal(path.dirname('\\\\unc\\share\\foo\\bar\\baz'),
                '\\\\unc\\share\\foo\\bar');
+  assert.equal(path.dirname('\\\\.\\pipe\\PipeName'), '\\\\.\\pipe\\');  
 }
 
 
@@ -156,6 +158,8 @@ if (isWindows) {
   assert.equal(path.extname('file\\\\'), '');
   assert.equal(path.extname('file.\\'), '.');
   assert.equal(path.extname('file.\\\\'), '.');
+  assert.equal(path.extname('\\\\.\\pipe\\PipeName.ext'), '.ext'); 
+  assert.equal(path.extname('//path/index.html'), '.html'); 
 
 } else {
   // On unix, backspace is a valid name component like any other character.
