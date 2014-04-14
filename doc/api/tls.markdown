@@ -408,6 +408,10 @@ Construct a new TLSSocket object from existing TCP socket.
 
   - `session`: Optional, a `Buffer` instance, containing TLS session
 
+  - `requestOCSP`: Optional, if `true` - OCSP status request extension would
+    be added to client hello, and `OCSPResponse` event will be emitted on socket
+    before establishing secure communication
+
 ## tls.createSecurePair([context], [isServer], [requestCert], [rejectUnauthorized])
 
     Stability: 0 - Deprecated. Use tls.TLSSocket instead.
@@ -508,6 +512,29 @@ NOTE: adding this event listener will have an effect only on connections
 established after addition of event listener.
 
 
+### Event: 'OCSPRequest'
+
+`function (certificate, issuer, callback) { }`
+
+Emitted when the client sends a certificate status request. You could parse
+current certificate to obtain OCSP url and certificate id, and after obtaining
+OCSP response invoke `callback(null, resp)`, where `resp` is a `Buffer`
+instance. Both `certificate` and `issuer` are a `Buffer` DER-representations of
+the primary and issuer's certificates. They could be used to obtain OCSP
+certificate id and OCSP endpoint url.
+
+Alternatively, `callback(null, null)` could be called, meaning that there is no
+OCSP response.
+
+Calling `callback(err)` will result in a `socket.destroy(err)` call.
+
+NOTE: adding this event listener will have an effect only on connections
+established after addition of event listener.
+
+NOTE: you may want to use some npm module like [asn1.js] to parse the
+certificates.
+
+
 ### server.listen(port, [host], [callback])
 
 Begin accepting connections on the specified `port` and `host`.  If the
@@ -576,6 +603,13 @@ to see if the server certificate was signed by one of the specified CAs.
 If `tlsSocket.authorized === false` then the error can be found in
 `tlsSocket.authorizationError`. Also if NPN was used - you can check
 `tlsSocket.npnProtocol` for negotiated protocol.
+
+### Event: 'OCSPResponse'
+
+`function (response) { }`
+
+This event will be emitted if `requestOCSP` option was set. `response` is a
+buffer object, containing server's OCSP response.
 
 ### tlsSocket.encrypted
 
@@ -711,3 +745,4 @@ The numeric representation of the local port.
 [Forward secrecy]: http://en.wikipedia.org/wiki/Perfect_forward_secrecy
 [DHE]: https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
 [ECDHE]: https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman
+[asn1.js]: http://npmjs.org/package/asn1.js
