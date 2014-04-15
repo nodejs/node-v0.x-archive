@@ -1476,12 +1476,6 @@ bool Genesis::CompileNative(Isolate* isolate,
 #ifdef ENABLE_DEBUGGER_SUPPORT
   isolate->debugger()->set_compiling_natives(true);
 #endif
-  // During genesis, the boilerplate for stack overflow won't work until the
-  // environment has been at least partially initialized. Add a stack check
-  // before entering JS code to catch overflow early.
-  StackLimitCheck check(isolate);
-  if (check.HasOverflowed()) return false;
-
   bool result = CompileScriptCached(isolate,
                                     name,
                                     source,
@@ -2614,8 +2608,16 @@ Genesis::Genesis(Isolate* isolate,
   // During genesis, the boilerplate for stack overflow won't work until the
   // environment has been at least partially initialized. Add a stack check
   // before entering JS code to catch overflow early.
+  const uint32_t stack_to_get_through_genesis = 3500 * sizeof(intptr_t);
   StackLimitCheck check(isolate);
-  if (check.HasOverflowed()) return;
+  if (check.WillOverflow(stack_to_get_through_genesis)) {
+    // Only raise a StackOverflow if there is a valid current context
+    if (isolate->context() != NULL) {
+      isolate->StackOverflow();
+      isolate->OptionalRescheduleException(true);
+    }
+    return;
+  }
 
   // We can only de-serialize a context if the isolate was initialized from
   // a snapshot. Otherwise we have to build the context from scratch.
