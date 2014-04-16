@@ -546,11 +546,20 @@ class QueryTxtWrap: public QueryWrap {
     }
 
     Local<Array> txt_records = Array::New();
+    Local<Array> txt_record = Array::New();
 
     struct ares_txt_reply *current = txt_out;
-    for (int i = 0; current; ++i, current = current->next) {
+    for (int i = -1, j = 0; current; current = current->next, j++) {
       Local<String> txt = String::New(reinterpret_cast<char*>(current->txt));
-      txt_records->Set(Integer::New(i), txt);
+      if (current->record_start) {
+        i++;
+        j = 0;
+        if (i != 0)
+          txt_record = Array::New();
+        txt_records->Set(i, txt_record);
+      }
+
+      txt_record->Set(j, txt);
     }
 
     ares_free_data(txt_out);

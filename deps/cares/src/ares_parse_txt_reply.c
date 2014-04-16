@@ -134,8 +134,6 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
                   break;
                 }
 
-              ++strptr;
-
               /* Allocate storage for this TXT answer appending it to the list */
               txt_curr = ares_malloc_data(ARES_DATATYPE_TXT_REPLY);
               if (!txt_curr)
@@ -153,6 +151,7 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
                 }
               txt_last = txt_curr;
 
+              txt_curr->record_start = strptr == aptr;
               txt_curr->length = substr_len;
               txt_curr->txt = malloc (substr_len + 1/* Including null byte */);
               if (txt_curr->txt == NULL)
@@ -160,6 +159,8 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
                   status = ARES_ENOMEM;
                   break;
                 }
+
+              ++strptr;
               memcpy ((char *) txt_curr->txt, strptr, substr_len);
 
               /* Make sure we NULL-terminate */
