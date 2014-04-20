@@ -6,9 +6,9 @@ You can access this module with:
 
     var zlib = require('zlib');
 
-This provides bindings to Gzip/Gunzip, Deflate/Inflate, and
-DeflateRaw/InflateRaw classes.  Each class takes the same options, and
-is a readable/writable Stream.
+This provides bindings to Gzip/Gunzip, Deflate/Inflate, DeflateRaw/InflateRaw,
+as well as Adler32 and CRC32 classes. Each class is a readable/writable Stream,
+and each compressor/decompressor class takes the same options.
 
 ## Examples
 
@@ -240,7 +240,8 @@ Decompress a raw Buffer with Unzip.
 
 <!--type=misc-->
 
-Each class takes an options object.  All options are optional.
+Each compressor/decompressor class takes an options object.  All options
+are optional.
 
 Note that some options are only relevant when compressing, and are
 ignored by the decompression classes.
@@ -361,3 +362,39 @@ The deflate compression method (the only one supported in this version).
 For initializing zalloc, zfree, opaque.
 
 * `zlib.Z_NULL`
+
+
+## Checksum functions
+
+Adler-32 and CRC-32 are provided in two ways. The functions accept a string or
+buffer and return its checksum as an unsigned integer. The streams compute the
+checksum using the written data – once the writable side of the stream is
+ended, use the `read()` method to get the computed checksum as an unsigned
+integer.
+
+
+## zlib.createAdler32()
+
+Returns a new [Adler32](#zlib_class_zlib_adler32) object.
+
+## zlib.createCRC32()
+
+Returns a new [CRC32](#zlib_class_zlib_crc32) object.
+
+
+## Class: zlib.Adler32
+
+Calculate Adler-32 checksum.
+
+## Class: zlib.CRC32
+
+Calculate CRC-32 checksum.
+
+
+## zlib.adler32(buffer)
+
+Calculate Adler-32 checksum of `buffer`.
+
+## zlib.crc32(buffer)
+
+Calculate CRC-32 checksum of `buffer`.
