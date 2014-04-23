@@ -237,7 +237,8 @@ inline Environment* Environment::GetCurrentChecked(
 }
 
 inline Environment::Environment(v8::Local<v8::Context> context)
-    : isolate_(context->GetIsolate()),
+    : async_wrap_parent_(NULL),
+      isolate_(context->GetIsolate()),
       isolate_data_(IsolateData::GetOrCreate(context->GetIsolate())),
       using_smalloc_alloc_cb_(false),
       using_domains_(false),
