@@ -116,6 +116,8 @@ for (var i in TEST_CASES) {
     encrypt.update('blah', 'ascii');
     encrypt.final();
     assert.throws(function() { encrypt.getAuthTag(); }, / state/);
+    assert.throws(function() {
+      encrypt.setAAD(new Buffer('123', 'ascii')); }, / state/);
   })();
 
   (function() {
