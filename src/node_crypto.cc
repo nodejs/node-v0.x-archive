@@ -4516,7 +4516,7 @@ void Certificate::VerifySpkac(const FunctionCallbackInfo<Value>& args) {
   char* data = Buffer::Data(args[0]);
   assert(data != NULL);
 
-  i = certificate->VerifySpkac(data, length) > 0;
+  i = certificate->VerifySpkac(data, length);
 
   args.GetReturnValue().Set(i);
 }
