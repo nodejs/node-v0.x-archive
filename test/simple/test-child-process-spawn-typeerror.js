@@ -30,9 +30,9 @@ try {
   var child = spawn(cmd, 'this is not an array');
 
   child.on('error', function (err) {
-      errors++;
+    errors++;
   });
-    
+
 } catch (e) {
   assert.equal(e instanceof TypeError, true);
 }
