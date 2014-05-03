@@ -329,8 +329,13 @@
             'PLATFORM="sunos"',
           ],
         }],
-        [
-          'OS=="linux" and node_shared_v8=="false"', {
+        [ 'OS=="freebsd" or OS=="linux"', {
+          'ldflags': [ '-Wl,-z,noexecstack' ],
+        }],
+        [ 'OS=="sunos"', {
+          'ldflags': [ '-Wl,-M,/usr/lib/ld/map.noexstk' ],
+        }],
+        [ 'OS=="linux" and node_shared_v8=="false"', {
             'ldflags': [
               '-Wl,--whole-archive <(V8_BASE) -Wl,--no-whole-archive',
             ],
