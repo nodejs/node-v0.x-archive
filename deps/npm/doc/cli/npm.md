@@ -33,7 +33,7 @@ Use `npm ls` to show everything you've installed.
 
 ## DIRECTORIES
 
-See `npm-folders(1)` to learn about where npm puts stuff.
+See `npm-folders(5)` to learn about where npm puts stuff.
 
 In particular, npm has two modes of operation:
 
@@ -54,7 +54,7 @@ If you're using npm to develop and publish your code, check out the
 following help topics:
 
 * json:
-  Make a package.json file.  See `npm-json(1)`.
+  Make a package.json file.  See `package.json(5)`.
 * link:
   For linking your current working code into Node's path, so that you
   don't have to reinstall every time you make a change.  Use
@@ -95,14 +95,14 @@ npm is extremely configurable.  It reads its configuration options from
   npm's default configuration options are defined in
   lib/utils/config-defs.js.  These must not be changed.
 
-See `npm-config(1)` for much much more information.
+See `npm-config(7)` for much much more information.
 
 ## CONTRIBUTIONS
 
 Patches welcome!
 
 * code:
-  Read through `npm-coding-style(1)` if you plan to submit code.
+  Read through `npm-coding-style(7)` if you plan to submit code.
   You don't have to agree with it, but you do have to follow it.
 * docs:
   If you find an error in the documentation, edit the appropriate markdown
@@ -114,7 +114,7 @@ easily by doing `npm view npm contributors`.
 If you would like to contribute, but don't know what to work on, check
 the issues list or ask on the mailing list.
 
-* <http://github.com/isaacs/npm/issues>
+* <http://github.com/npm/npm/issues>
 * <npm-@googlegroups.com>
 
 ## BUGS
@@ -122,7 +122,7 @@ the issues list or ask on the mailing list.
 When you find issues, please report them:
 
 * web:
-  <http://github.com/isaacs/npm/issues>
+  <http://github.com/npm/npm/issues>
 * email:
   <npm-@googlegroups.com>
 
@@ -131,10 +131,6 @@ as expected.  The `npm-debug.log` file is also helpful to provide.
 
 You can also look for isaacs in #node.js on irc://irc.freenode.net.  He
 will no doubt tell you to put the output in a gist or email.
-
-## HISTORY
-
-See npm-changelog(1)
 
 ## AUTHOR
 
@@ -146,10 +142,12 @@ See npm-changelog(1)
 ## SEE ALSO
 
 * npm-help(1)
-* npm-faq(1)
+* npm-faq(7)
 * README
-* npm-json(1)
+* package.json(5)
 * npm-install(1)
 * npm-config(1)
-* npm-index(1)
+* npm-config(7)
+* npmrc(5)
+* npm-index(7)
 * npm(3)

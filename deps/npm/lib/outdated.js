@@ -9,6 +9,9 @@ Does the following:
 If no packages are specified, then run for all installed
 packages.
 
+--parseable creates output like this:
+<fullpath>:<name@wanted>:<name@installed>:<name@latest>
+
 */
 
 module.exports = outdated
@@ -24,48 +27,121 @@ var path = require("path")
   , cache = require("./cache.js")
   , asyncMap = require("slide").asyncMap
   , npm = require("./npm.js")
+  , url = require("url")
+  , isGitUrl = require("./utils/is-git-url.js")
+  , color = require("ansicolors")
+  , styles = require("ansistyles")
+  , table = require("text-table")
   , semver = require("semver")
+  , os = require("os")
 
 function outdated (args, silent, cb) {
   if (typeof cb !== "function") cb = silent, silent = false
   var dir = path.resolve(npm.dir, "..")
-  outdated_(args, dir, {}, function (er, list) {
+  outdated_(args, dir, {}, 0, function (er, list) {
     if (er || silent) return cb(er, list)
-    var outList = list.map(makePretty)
-    console.log(outList.join("\n"))
+    if (npm.config.get("json")) {
+      console.log(makeJSON(list))
+    } else if (npm.config.get("parseable")) {
+      console.log(makeParseable(list));
+    } else {
+      var outList = list.map(makePretty)
+      var outTable = [[ "Package"
+                      , "Current"
+                      , "Wanted"
+                      , "Latest"
+                      , "Location"
+                     ]].concat(outList)
+
+      if (npm.color) {
+        outTable[0] = outTable[0].map(function(heading) {
+          return styles.underline(heading)
+        })
+      }
+
+      var tableOpts = { align: ["l", "r", "r", "r", "l"]
+                      , stringLength: function(s) { return ansiTrim(s).length }
+                      }
+      console.log(table(outTable, tableOpts))
+    }
     cb(null, list)
   })
 }
 
-// [[ dir, dep, has, want ]]
+// [[ dir, dep, has, want, latest ]]
 function makePretty (p) {
   var parseable = npm.config.get("parseable")
-    , long = npm.config.get("long")
     , dep = p[1]
     , dir = path.resolve(p[0], "node_modules", dep)
     , has = p[2]
     , want = p[3]
-
-  // XXX add --json support
-  // Should match (more or less) the output of ls --json
-
-  if (parseable) {
-    var str = dir
-    if (npm.config.get("long")) {
-      str += ":" + dep + "@" + want
-           + ":" + (has ? (dep + "@" + has) : "MISSING")
-    }
-    return str
-  }
+    , latest = p[4]
 
   if (!npm.config.get("global")) {
     dir = path.relative(process.cwd(), dir)
   }
-  return dep + "@" + want + " " + dir
-       + " current=" + (has || "MISSING")
+
+  var columns = [ dep
+                , has || "MISSING"
+                , want
+                , latest
+                , dirToPrettyLocation(dir)
+                ]
+
+  if (npm.color) {
+    columns[0] = color[has === want ? "yellow" : "red"](columns[0]) // dep
+    columns[2] = color.green(columns[2]) // want
+    columns[3] = color.magenta(columns[3]) // latest
+    columns[4] = color.brightBlack(columns[4]) // dir
+  }
+
+  return columns
 }
 
-function outdated_ (args, dir, parentHas, cb) {
+function ansiTrim (str) {
+  var r = new RegExp("\x1b(?:\\[(?:\\d+[ABCDEFGJKSTm]|\\d+;\\d+[Hfm]|" +
+        "\\d+;\\d+;\\d+m|6n|s|u|\\?25[lh])|\\w)", "g");
+  return str.replace(r, "")
+}
+
+function dirToPrettyLocation (dir) {
+  return dir.replace(/^node_modules[/\\]/, "")
+            .replace(/[[/\\]node_modules[/\\]/g, " > ")
+}
+
+function makeParseable (list) {
+  return list.map(function (p) {
+    var dep = p[1]
+      , dir = path.resolve(p[0], "node_modules", dep)
+      , has = p[2]
+      , want = p[3]
+      , latest = p[4];
+
+    return [ dir
+           , dep + "@" + want
+           , (has ? (dep + "@" + has) : "MISSING")
+           , dep + "@" + latest
+           ].join(":")
+  }).join(os.EOL)
+}
+
+function makeJSON (list) {
+  var out = {}
+  list.forEach(function (p) {
+    var dir = path.resolve(p[0], "node_modules", p[1])
+    if (!npm.config.get("global")) {
+      dir = path.relative(process.cwd(), dir)
+    }
+    out[p[1]] = { current: p[2]
+                , wanted: p[3]
+                , latest: p[4]
+                , location: dir
+                }
+  })
+  return JSON.stringify(out, null, 2)
+}
+
+function outdated_ (args, dir, parentHas, depth, cb) {
   // get the deps from package.json, or {<dir/node_modules/*>:"*"}
   // asyncMap over deps:
   //   shouldHave = cache.add(dep, req).version
@@ -74,10 +150,24 @@ function outdated_ (args, dir, parentHas, cb) {
   //   else if dep in args or args is empty
   //     return [dir, dep, has, shouldHave]
 
+  if (depth > npm.config.get("depth")) {
+    return cb(null, [])
+  }
   var deps = null
   readJson(path.resolve(dir, "package.json"), function (er, d) {
     if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     deps = (er) ? true : (d.dependencies || {})
+    var doUpdate = npm.config.get("dev") ||
+                    (!npm.config.get("production") &&
+                    !Object.keys(parentHas).length &&
+                    !npm.config.get("global"))
+    if (!er && d && doUpdate) {
+      Object.keys(d.devDependencies || {}).forEach(function (k) {
+        if (!(k in parentHas)) {
+          deps[k] = d.devDependencies[k]
+        }
+      })
+    }
     return next()
   })
 
@@ -94,13 +184,16 @@ function outdated_ (args, dir, parentHas, cb) {
       var jsonFile = path.resolve(dir, "node_modules", pkg, "package.json")
       readJson(jsonFile, function (er, d) {
         if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
-        cb(null, er ? [] : [[d.name, d.version]])
+        cb(null, er ? [] : [[d.name, d.version, d._from]])
       })
     }, function (er, pvs) {
       if (er) return cb(er)
       has = Object.create(parentHas)
       pvs.forEach(function (pv) {
-        has[pv[0]] = pv[1]
+        has[pv[0]] = {
+          version: pv[1],
+          from: pv[2]
+        }
       })
 
       next()
@@ -120,35 +213,91 @@ function outdated_ (args, dir, parentHas, cb) {
     // if has[dep] !== shouldHave[dep], then cb with the data
     // otherwise dive into the folder
     asyncMap(Object.keys(deps), function (dep, cb) {
-      shouldUpdate(args, dir, dep, has, deps[dep], cb)
+      shouldUpdate(args, dir, dep, has, deps[dep], depth, cb)
     }, cb)
   }
 }
 
-function shouldUpdate (args, dir, dep, has, req, cb) {
+function shouldUpdate (args, dir, dep, has, req, depth, cb) {
   // look up the most recent version.
   // if that's what we already have, or if it's not on the args list,
   // then dive into it.  Otherwise, cb() with the data.
 
-  function skip () {
+  // { version: , from: }
+  var curr = has[dep]
+
+  function skip (er) {
+    // show user that no viable version can be found
+    if (er) return cb(er)
     outdated_( args
              , path.resolve(dir, "node_modules", dep)
              , has
+             , depth + 1
              , cb )
   }
 
-  function doIt (shouldHave) {
-    cb(null, [[ dir, dep, has[dep], shouldHave ]])
+  function doIt (wanted, latest) {
+    cb(null, [[ dir, dep, curr && curr.version, wanted, latest, req ]])
   }
 
   if (args.length && args.indexOf(dep) === -1) {
     return skip()
   }
 
-  // so, we can conceivably update this.  find out if we need to.
-  cache.add(dep, req, function (er, d) {
-    // if this fails, then it means we can't update this thing.
-    // it's probably a thing that isn't published.
-    return (er || d.version === has[dep]) ? skip() : doIt(d.version)
+  if (isGitUrl(url.parse(req)))
+    return doIt("git", "git")
+
+  var registry = npm.registry
+  // search for the latest package
+  registry.get(dep, function (er, d) {
+    if (er) return cb()
+    if (!d || !d['dist-tags'] || !d.versions) return cb()
+    var l = d.versions[d['dist-tags'].latest]
+    if (!l) return cb()
+
+    // set to true if found in doc
+    var found = false
+
+    var r = req
+    if (d['dist-tags'][req])
+      r = d['dist-tags'][req]
+
+    if (semver.validRange(r, true)) {
+      // some kind of semver range.
+      // see if it's in the doc.
+      var vers = Object.keys(d.versions)
+      var v = semver.maxSatisfying(vers, r, true)
+      if (v) {
+        return onCacheAdd(null, d.versions[v])
+      }
+    }
+
+    // We didn't find the version in the doc.  See if cache can find it.
+    cache.add(dep, req, onCacheAdd)
+
+    function onCacheAdd(er, d) {
+      // if this fails, then it means we can't update this thing.
+      // it's probably a thing that isn't published.
+      if (er) {
+        if (er.code && er.code === 'ETARGET') {
+          // no viable version found
+          return skip(er)
+        }
+        return skip()
+      }
+
+      // check that the url origin hasn't changed (#1727) and that
+      // there is no newer version available
+      var dFromUrl = d._from && url.parse(d._from).protocol
+      var cFromUrl = curr && curr.from && url.parse(curr.from).protocol
+
+      if (!curr || dFromUrl && cFromUrl && d._from !== curr.from
+          || d.version !== curr.version
+          || d.version !== l.version)
+        doIt(d.version, l.version)
+      else
+        skip()
+    }
+
   })
 }

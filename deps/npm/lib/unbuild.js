@@ -2,7 +2,7 @@ module.exports = unbuild
 unbuild.usage = "npm unbuild <folder>\n(this is plumbing)"
 
 var readJson = require("read-package-json")
-  , rm = require("rimraf")
+  , rm = require("./utils/gently-rm.js")
   , gentlyRm = require("./utils/gently-rm.js")
   , npm = require("./npm.js")
   , path = require("path")
@@ -15,9 +15,15 @@ var readJson = require("read-package-json")
 
 // args is a list of folders.
 // remove any bins/etc, and then delete the folder.
-function unbuild (args, cb) { asyncMap(args, unbuild_, cb) }
+function unbuild (args, silent, cb) {
+  if (typeof silent === 'function') cb = silent, silent = false
+  asyncMap(args, unbuild_(silent), cb)
+}
 
-function unbuild_ (folder, cb) {
+function unbuild_ (silent) { return function (folder, cb_) {
+  function cb (er) {
+    cb_(er, path.relative(npm.root, folder))
+  }
   folder = path.resolve(folder)
   delete build._didBuild[folder]
   log.info(folder, "unbuild")
@@ -28,12 +34,16 @@ function unbuild_ (folder, cb) {
     chain
       ( [ [lifecycle, pkg, "preuninstall", folder, false, true]
         , [lifecycle, pkg, "uninstall", folder, false, true]
+        , !silent && function(cb) {
+            console.log("unbuild " + pkg._id)
+            cb()
+          }
         , [rmStuff, pkg, folder]
         , [lifecycle, pkg, "postuninstall", folder, false, true]
         , [rm, folder] ]
       , cb )
   })
-}
+}}
 
 function rmStuff (pkg, folder, cb) {
   // if it's global, and folder is in {prefix}/node_modules,
@@ -45,7 +55,7 @@ function rmStuff (pkg, folder, cb) {
 
   readJson.cache.del(path.resolve(folder, "package.json"))
 
-  log.verbose([top, gnm, parent], "unbuild "+pkg._id)
+  log.verbose([top, gnm, parent], "unbuild " + pkg._id)
   asyncMap([rmBins, rmMans], function (fn, cb) {
     fn(pkg, folder, parent, top, cb)
   }, cb)
