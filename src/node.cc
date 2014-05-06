@@ -1920,7 +1920,7 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
 void Exit(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  exit(args[0]->IntegerValue());
+  exit(args[0]->Int32Value());
 }
 
 
@@ -1972,7 +1972,7 @@ void Kill(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Bad argument.");
   }
 
-  int pid = args[0]->IntegerValue();
+  int pid = args[0]->Int32Value();
   int sig = args[1]->Int32Value();
   int err = uv_kill(pid, sig);
   args.GetReturnValue().Set(err);
@@ -2005,7 +2005,8 @@ void Hrtime(const FunctionCallbackInfo<Value>& args) {
   }
 
   Local<Array> tuple = Array::New(env->isolate(), 2);
-  tuple->Set(0, Integer::NewFromUnsigned(env->isolate(), t / NANOS_PER_SEC));
+  tuple->Set(0, Integer::NewFromUnsigned(env->isolate(),
+      static_cast<uint32_t>(t / NANOS_PER_SEC)));
   tuple->Set(1, Integer::NewFromUnsigned(env->isolate(), t % NANOS_PER_SEC));
   args.GetReturnValue().Set(tuple);
 }
@@ -2476,7 +2477,7 @@ static void DebugPortSetter(Local<String> property,
                             const PropertyCallbackInfo<void>& info) {
   Environment* env = Environment::GetCurrent(info.GetIsolate());
   HandleScope scope(env->isolate());
-  debug_port = value->NumberValue();
+  debug_port = value->Uint32Value();
 }
 
 
@@ -3507,7 +3508,7 @@ int EmitExit(Environment* env) {
   process_object->Set(env->exiting_string(), True(env->isolate()));
 
   Handle<String> exitCode = env->exit_code_string();
-  int code = process_object->Get(exitCode)->IntegerValue();
+  int code = process_object->Get(exitCode)->Int32Value();
 
   Local<Value> args[] = {
     env->exit_string(),
@@ -3517,7 +3518,7 @@ int EmitExit(Environment* env) {
   MakeCallback(env, process_object, "emit", ARRAY_SIZE(args), args);
 
   // Reload exit code, it may be changed by `emit('exit')`
-  return process_object->Get(exitCode)->IntegerValue();
+  return static_cast<int>(process_object->Get(exitCode)->IntegerValue());
 }
 
 
