@@ -179,20 +179,31 @@ Returns `true` if the given "object" is an `Array`. `false` otherwise.
       // true
     util.isArray({})
       // false
+      
 
 
-## util.isRegExp(object)
+## util.isBoolean(object)
 
-Returns `true` if the given "object" is a `RegExp`. `false` otherwise.
+Returns `true` if the given "object" is a boolean primitive. `false` otherwise.
 
     var util = require('util');
+    
+    util.isBoolean(true)
+        // true
+    util.isBoolean({})
+        // false
 
-    util.isRegExp(/some regexp/)
-      // true
-    util.isRegExp(new RegExp('another regexp'))
-      // true
-    util.isRegExp({})
-      // false
+
+## util.isBuffer(object)
+
+Returns `true` if the given "object" is a Buffer. `false` otherwise.
+
+    var util = require('util');
+    
+    util.isBuffer(new Buffer(4))
+        // true
+    util.isBuffer({})
+        // false
 
 
 ## util.isDate(object)
@@ -221,6 +232,140 @@ Returns `true` if the given "object" is an `Error`. `false` otherwise.
       // true
     util.isError({ name: 'Error', message: 'an error occurred' })
       // false
+
+
+## util.isFunction(object)
+
+Returns `true` if the given "object" is a function. `false` otherwise.
+
+    var util = require('util');
+
+    util.isFunction(setTimeout)
+      // true
+    util.isFunction({})
+      // false
+
+
+## util.isNull(object)
+
+Returns `true` if the given "object" is `null`. `false` otherwise.
+    
+    var util = require('util');
+    
+    util.isNull(null)
+        // true
+    util.isNull({})
+        // false
+
+
+## util.isNullOrUndefined(object)
+
+Returns `true` if the given "object" is `null` or `undefined`. `false` otherwise.
+    
+    var util = require('util');
+    
+    util.isNullOrUndefined(null)
+        // true
+    util.isNullOrUndefined(void 0)
+        // true
+    util.isNullOrUndefined({})
+        // false
+
+
+## util.isNumber(object)
+
+Returns `true` if the given "object" is a number primitive. `false` otherwise.
+
+    var util = require('util');
+    
+    util.isNumber(3)
+        // true
+    util.isNumber({})
+        // false
+
+
+## util.isObject(object)
+
+Returns `true` if the given "object" is an `object`. `false` otherwise.
+Anything besides primitive values (see `util.isPrimitive`) and functions are considered to be objects.
+
+    var util = require('util');
+
+    util.isObject(new TypeError())
+        // true
+    util.isObject({})
+        // true
+    util.isObject(3)
+        // false
+
+
+## util.isPrimitive(object)
+
+Returns `true` if the given "object" is a primitive value. `false` otherwise.  
+`null`, `boolean`, `number`, `string`, `symbol` and `undefined` are considered to be primitives.  
+
+    var util = require('util');
+    
+    util.isPrimitive(3)
+        // true
+    util.isPrimitive("3")
+        // true
+    util.isPrimitive(true)
+        // true
+    util.isPrimitive({})
+        // false
+
+
+## util.isRegExp(object)
+
+Returns `true` if the given "object" is a `RegExp`. `false` otherwise.
+
+    var util = require('util');
+    
+    util.isRegExp(/some regexp/)
+      // true
+    util.isRegExp(new RegExp('another regexp'))
+      // true
+    util.isRegExp({})
+      // false
+
+
+## util.isString(object)
+
+Returns `true` if the given "object" is a string primitive. `false` otherwise.
+
+    var util = require('util');
+    
+    util.isString("")
+        // true
+    util.isString({})
+        // false
+
+
+## util.isSymbol(object)
+
+Returns `true` if the given "object" is a symbol primitive. `false` otherwise.
+
+    var util = require('util');
+    
+    var id = new Symbol("id");
+    
+    util.isSymbol(id) // this example is based on the current draft for ES6 symbols.
+        // true
+    util.isSymbol({})
+        // false
+
+
+## util.isUndefined(object)
+
+Returns `true` if the given "object" is `undefined`. `false` otherwise.
+    
+    var util = require('util');
+    
+    util.isUndefined(void 0)
+        // true
+    util.isUndefined({})
+        // false
 
 
 ## util.inherits(constructor, superConstructor)
