@@ -19,6 +19,10 @@ string will not be in the parsed object. Examples are shown for the URL
 
     Example: `'http:'`
 
+* `slashes`: Marks if use slashes after protocol for self-defined protocols.
+
+    Example: true or false
+
 * `host`: The full lowercased host portion of the URL, including port
   information.
 
@@ -83,6 +87,7 @@ Take a parsed URL object, and return a formatted URL string.
     postfixed with `://` (colon-slash-slash).
   * All other protocols `mailto`, `xmpp`, `aim`, `sftp`, `foo`, etc will
     be postfixed with `:` (colon)
+* `slashes` should be set to `true` if a protocol postfixed colon-slash-slash(://) is required, such as `mongodb://localhost:8000/`
 * `auth` will be used if present.
 * `hostname` will only be used if `host` is absent.
 * `port` will only be used if `host` is absent.
