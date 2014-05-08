@@ -3549,12 +3549,11 @@ bool PublicEncrypt(const char* key_pem,
                    const unsigned char* data,
                    int len,
                    unsigned char** out,
-                   unsigned int* out_len) {
+                   size_t* out_len) {
   EVP_PKEY* pkey = NULL;
   EVP_PKEY_CTX* ctx = NULL;
   BIO* bp = NULL;
   bool fatal = true;
-  int r = 0;
 
   bp = BIO_new(BIO_s_mem());
   if (bp == NULL)
@@ -3622,7 +3621,7 @@ void PublicEncrypt(const FunctionCallbackInfo<Value>& args) {
   ssize_t len = Buffer::Length(args[1]);
 
   unsigned char* out_value = NULL;
-  unsigned int out_len = -1;
+  size_t out_len = -1;
 
   bool r = PublicEncrypt(kbuf, klen, reinterpret_cast<const unsigned char*>(buf), len, &out_value, &out_len);
 
@@ -3648,12 +3647,11 @@ bool PrivateDecrypt(const char* key_pem,
                     const unsigned char* data,
                     int len,
                     unsigned char** out,
-                    unsigned int* out_len) {
+                    size_t* out_len) {
   EVP_PKEY* pkey = NULL;
   EVP_PKEY_CTX* ctx = NULL;
   BIO* bp = NULL;
   bool fatal = true;
-  int r = 0;
 
   bp = BIO_new(BIO_s_mem());
   if (bp == NULL)
@@ -3713,7 +3711,7 @@ void PrivateDecrypt(const FunctionCallbackInfo<Value>& args) {
   String::Utf8Value passphrase(args[2]);
 
   unsigned char* out_value = NULL;
-  unsigned int out_len = -1;
+  size_t out_len = -1;
 
   bool r = PrivateDecrypt(
       kbuf,
