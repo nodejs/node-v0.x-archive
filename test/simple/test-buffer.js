@@ -919,8 +919,6 @@ var buf = new Buffer([0xFF]);
 assert.equal(buf.readUInt8(0), 255);
 assert.equal(buf.readInt8(0), -1);
 
-
-
 [16, 32].forEach(function(bits) {
   var buf = new Buffer(bits / 8 - 1);
 
