@@ -21,14 +21,17 @@
 
 #include "node_watchdog.h"
 #include "util.h"
-#include <assert.h>
+#include "util-inl.h"
 
 namespace node {
 
+using v8::Isolate;
 using v8::V8;
 
 
-Watchdog::Watchdog(uint64_t ms) : destroyed_(false) {
+Watchdog::Watchdog(Isolate* isolate, uint64_t ms)
+    : isolate_(isolate),
+      destroyed_(false) {
   int rc;
   loop_ = new uv_loop_t;
   CHECK(loop_);
@@ -98,7 +101,8 @@ void Watchdog::Async(uv_async_t* async) {
 
 
 void Watchdog::Timer(uv_timer_t* timer) {
-  V8::TerminateExecution();
+  Watchdog* wd = ContainerOf(&Watchdog::timer_, timer);
+  V8::TerminateExecution(wd->isolate_);
 }
 
 
