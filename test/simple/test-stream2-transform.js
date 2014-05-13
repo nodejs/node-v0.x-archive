@@ -230,7 +230,7 @@ test('assymetric transform (expand)', function(t) {
   });
 });
 
-test('assymetric transform (compress)', function(t) {
+test('asymmetric transform (compress)', function(t) {
   var pt = new Transform;
 
   // each output is the first char of 3 consecutive chunks,
