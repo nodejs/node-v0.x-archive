@@ -258,6 +258,16 @@ function isWarned(emitter) {
   assert.equal(readline.getStringWidth('你好'), 4);
   assert.equal(readline.getStringWidth('안녕하세요'), 10);
   assert.equal(readline.getStringWidth('A\ud83c\ude00BC'), 5); // surrogate
+  
+  // check if vt control chars are stripped
+  assert.equal(readline.stripVTControlCharacters('\u001b[31m> \u001b[39m'), '> ');
+  assert.equal(readline.stripVTControlCharacters('\u001b[31m> \u001b[39m> '), '> > ');
+  assert.equal(readline.stripVTControlCharacters('\u001b[31m\u001b[39m'), '');
+  assert.equal(readline.stripVTControlCharacters('> '), '> ');
+  assert.equal(readline.getStringWidth('\u001b[31m> \u001b[39m'), 2);
+  assert.equal(readline.getStringWidth('\u001b[31m> \u001b[39m> '), 4);
+  assert.equal(readline.getStringWidth('\u001b[31m\u001b[39m'), 0);
+  assert.equal(readline.getStringWidth('> '), 2);
 
   // check if vt control chars are stripped
   assert.equal(readline.stripVTControlCharacters('\u001b[31m> \u001b[39m'), '> ');
