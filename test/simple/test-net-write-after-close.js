@@ -24,10 +24,12 @@ var assert = require('assert');
 var net = require('net');
 
 var gotError = false;
+var gotClose = false;
 var gotWriteCB = false;
 
 process.on('exit', function() {
   assert(gotError);
+  assert(gotClose);
   assert(gotWriteCB);
 });
 
@@ -35,9 +37,14 @@ var server = net.createServer(function(socket) {
   socket.resume();
 
   socket.on('error', function(error) {
-    console.error('got error, closing server', error);
-    server.close();
+    console.error('got error', error);
     gotError = true;
+
+    socket.on('close', function() {
+      console.error('got close, closing server');
+      gotClose = true;
+      server.close();
+    });
   });
 
   setTimeout(function() {
