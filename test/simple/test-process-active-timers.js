@@ -19,45 +19,19 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// verify that connect reqs are properly cleaned up
-
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
+var N = 42;
 
-var ROUNDS = 10;
-var ATTEMPTS_PER_ROUND = 100;
-var rounds = 1;
-var reqs = 0;
-
-pummel();
-
-function pummel() {
-  console.log('Round', rounds, '/', ROUNDS);
-
-  for (var pending = 0; pending < ATTEMPTS_PER_ROUND; pending++) {
-    net.createConnection(common.PORT).on('error', function(err) {
-      assert.equal(err.code, 'ECONNREFUSED');
-      if (--pending > 0) return;
-      if (rounds == ROUNDS) return check();
-      rounds++;
-      pummel();
-    });
-    reqs++;
-  }
+function expect(activeHandles) {
+  assert.equal(process._getActiveHandles().length, activeHandles);
 }
 
-function check() {
-  setTimeout(function() {
-    assert.equal(process._getActiveRequests().length, 0);
-    assert.equal(process._getActiveHandles().length, 0);
-    check_called = true;
-  }, 0);
+function ontimeout(n) {
+  assert(n < N);
+  return function() { expect(N - 1 - n, 0) };
 }
-var check_called = false;
 
-process.on('exit', function() {
-  assert.equal(rounds, ROUNDS);
-  assert.equal(reqs, ROUNDS * ATTEMPTS_PER_ROUND);
-  assert(check_called);
-});
+expect(0, 0);
+for (var i = 0; i < N; ++i) setTimeout(ontimeout(i), 5);
+expect(N, 0);

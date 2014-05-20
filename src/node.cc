@@ -1536,24 +1536,37 @@ static void GetActiveRequests(const FunctionCallbackInfo<Value>& args) {
 // Non-static, friend of HandleWrap. Could have been a HandleWrap method but
 // implemented here for consistency with GetActiveRequests().
 void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Isolate* isolate = args.GetIsolate();
+  HandleScope handle_scope(isolate);
 
-  Local<Array> ary = Array::New(env->isolate());
+  Local<Array> ary = Array::New(isolate);
+  Local<String> owner_sym = FIXED_ONE_BYTE_STRING(isolate, "owner");
+  Local<String> timer_sym = FIXED_ONE_BYTE_STRING(isolate, "Timer");
+  Local<String> idle_next_sym = FIXED_ONE_BYTE_STRING(isolate, "_idleNext");
+
   QUEUE* q = NULL;
   int i = 0;
-
-  Local<String> owner_sym = env->owner_string();
 
   QUEUE_FOREACH(q, &handle_wrap_queue) {
     HandleWrap* w = CONTAINER_OF(q, HandleWrap, handle_wrap_queue_);
     if (w->persistent().IsEmpty() || (w->flags_ & HandleWrap::kUnref))
       continue;
     Local<Object> object = w->object();
-    Local<Value> owner = object->Get(owner_sym);
-    if (owner->IsUndefined())
-      owner = object;
-    ary->Set(i++, owner);
+    if (object->GetConstructorName()->StrictEquals(timer_sym) &&
+        object->Has(idle_next_sym)) {
+      // Timer backing the timer queue in lib/timers.js.  Walk the queue and
+      // add each timer to the list.
+      for (Local<Value> timer = object->Get(idle_next_sym);
+           timer->IsObject() && !timer->StrictEquals(object);
+           timer = timer.As<Object>()->Get(idle_next_sym)) {
+        ary->Set(i++, timer);
+      }
+    } else {
+      Local<Value> owner = object->Get(owner_sym);
+      if (owner->IsUndefined())
+        owner = object;
+      ary->Set(i++, owner);
+    }
   }
 
   args.GetReturnValue().Set(ary);

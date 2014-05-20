@@ -160,7 +160,6 @@ namespace node {
   V(onstop_string, "onstop")                                                  \
   V(output_string, "output")                                                  \
   V(order_string, "order")                                                    \
-  V(owner_string, "owner")                                                    \
   V(parse_error_string, "Parse Error")                                        \
   V(path_string, "path")                                                      \
   V(pbkdf2_error_string, "PBKDF2 Error")                                      \
