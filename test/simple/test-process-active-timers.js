@@ -24,7 +24,9 @@ var assert = require('assert');
 var N = 42;
 
 function expect(activeHandles) {
-  assert.equal(process._getActiveHandles().length, activeHandles);
+  var handles = process._getActiveHandles();
+  assert.equal(handles.length, activeHandles);
+  handles.forEach(function(h) { assert.equal(h.constructor.name, 'Timeout') });
 }
 
 function ontimeout(n) {
