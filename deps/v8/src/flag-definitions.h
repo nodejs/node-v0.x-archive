@@ -350,9 +350,6 @@ DEFINE_bool(omit_map_checks_for_leaf_maps, true,
             "do not emit check maps for constant values that have a leaf map, "
             "deoptimize the optimized code if the layout of the maps changes.")
 
-DEFINE_int(typed_array_max_size_in_heap, 64,
-    "threshold for in-heap typed array")
-
 // Profiler flags.
 DEFINE_int(frame_count, 1, "number of stack frames inspected by the profiler")
            // 0x1800 fits in the immediate field of an ARM instruction.

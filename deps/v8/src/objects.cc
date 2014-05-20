@@ -3233,31 +3233,24 @@ Handle<Map> Map::FindTransitionedMap(MapHandleList* candidates) {
 
 static Map* FindClosestElementsTransition(Map* map, ElementsKind to_kind) {
   Map* current_map = map;
-  int target_kind =
-      IsFastElementsKind(to_kind) || IsExternalArrayElementsKind(to_kind)
-      ? to_kind
-      : TERMINAL_FAST_ELEMENTS_KIND;
+  int index = GetSequenceIndexFromFastElementsKind(map->elements_kind());
+  int to_index = IsFastElementsKind(to_kind)
+      ? GetSequenceIndexFromFastElementsKind(to_kind)
+      : GetSequenceIndexFromFastElementsKind(TERMINAL_FAST_ELEMENTS_KIND);
 
-  // Support for legacy API.
-  if (IsExternalArrayElementsKind(to_kind) &&
-      !IsFixedTypedArrayElementsKind(map->elements_kind())) {
-    return map;
-  }
+  ASSERT(index <= to_index);
 
-  ElementsKind kind = map->elements_kind();
-  while (kind != target_kind) {
-    kind = GetNextTransitionElementsKind(kind);
+  for (; index < to_index; ++index) {
     if (!current_map->HasElementsTransition()) return current_map;
     current_map = current_map->elements_transition_map();
   }
-
-  if (to_kind != kind && current_map->HasElementsTransition()) {
-    ASSERT(to_kind == DICTIONARY_ELEMENTS);
+  if (!IsFastElementsKind(to_kind) && current_map->HasElementsTransition()) {
     Map* next_map = current_map->elements_transition_map();
     if (next_map->elements_kind() == to_kind) return next_map;
   }
-
-  ASSERT(current_map->elements_kind() == target_kind);
+  ASSERT(IsFastElementsKind(to_kind)
+         ? current_map->elements_kind() == to_kind
+         : current_map->elements_kind() == TERMINAL_FAST_ELEMENTS_KIND);
   return current_map;
 }
 
@@ -3285,21 +3278,26 @@ bool Map::IsMapInArrayPrototypeChain() {
 
 static MaybeObject* AddMissingElementsTransitions(Map* map,
                                                   ElementsKind to_kind) {
-  ASSERT(IsTransitionElementsKind(map->elements_kind()));
+  ASSERT(IsFastElementsKind(map->elements_kind()));
+  int index = GetSequenceIndexFromFastElementsKind(map->elements_kind());
+  int to_index = IsFastElementsKind(to_kind)
+      ? GetSequenceIndexFromFastElementsKind(to_kind)
+      : GetSequenceIndexFromFastElementsKind(TERMINAL_FAST_ELEMENTS_KIND);
+
+  ASSERT(index <= to_index);
 
   Map* current_map = map;
 
-  ElementsKind kind = map->elements_kind();
-  while (kind != to_kind && !IsTerminalElementsKind(kind)) {
-    kind = GetNextTransitionElementsKind(kind);
+  for (; index < to_index; ++index) {
+    ElementsKind next_kind = GetFastElementsKindFromSequenceIndex(index + 1);
     MaybeObject* maybe_next_map =
-        current_map->CopyAsElementsKind(kind, INSERT_TRANSITION);
+        current_map->CopyAsElementsKind(next_kind, INSERT_TRANSITION);
     if (!maybe_next_map->To(&current_map)) return maybe_next_map;
   }
 
   // In case we are exiting the fast elements kind system, just add the map in
   // the end.
-  if (kind != to_kind) {
+  if (!IsFastElementsKind(to_kind)) {
     MaybeObject* maybe_next_map =
         current_map->CopyAsElementsKind(to_kind, INSERT_TRANSITION);
     if (!maybe_next_map->To(&current_map)) return maybe_next_map;
@@ -3331,7 +3329,7 @@ MaybeObject* JSObject::GetElementsTransitionMapSlow(ElementsKind to_kind) {
       // Only remember the map transition if there is not an already existing
       // non-matching element transition.
       !start_map->IsUndefined() && !start_map->is_shared() &&
-      IsTransitionElementsKind(from_kind);
+      IsFastElementsKind(from_kind);
 
   // Only store fast element maps in ascending generality.
   if (IsFastElementsKind(to_kind)) {
@@ -4703,8 +4701,7 @@ static Handle<SeededNumberDictionary> CopyFastElementsToDictionary(
 
 Handle<SeededNumberDictionary> JSObject::NormalizeElements(
     Handle<JSObject> object) {
-  ASSERT(!object->HasExternalArrayElements() &&
-         !object->HasFixedTypedArrayElements());
+  ASSERT(!object->HasExternalArrayElements());
   Isolate* isolate = object->GetIsolate();
   Factory* factory = isolate->factory();
 
@@ -5439,8 +5436,7 @@ Handle<Object> JSObject::PreventExtensions(Handle<JSObject> object) {
   }
 
   // It's not possible to seal objects with external array elements
-  if (object->HasExternalArrayElements() ||
-      object->HasFixedTypedArrayElements()) {
+  if (object->HasExternalArrayElements()) {
     Handle<Object> error  =
         isolate->factory()->NewTypeError(
             "cant_prevent_ext_external_array_elements",
@@ -5520,8 +5516,7 @@ Handle<Object> JSObject::Freeze(Handle<JSObject> object) {
   }
 
   // It's not possible to freeze objects with external array elements
-  if (object->HasExternalArrayElements() ||
-      object->HasFixedTypedArrayElements()) {
+  if (object->HasExternalArrayElements()) {
     Handle<Object> error  =
         isolate->factory()->NewTypeError(
             "cant_prevent_ext_external_array_elements",
@@ -12447,9 +12442,7 @@ Handle<Object> JSObject::SetElement(Handle<JSObject> object,
   }
 
   // Don't allow element properties to be redefined for external arrays.
-  if ((object->HasExternalArrayElements() ||
-          object->HasFixedTypedArrayElements()) &&
-      set_mode == DEFINE_PROPERTY) {
+  if (object->HasExternalArrayElements() && set_mode == DEFINE_PROPERTY) {
     Handle<Object> number = isolate->factory()->NewNumberFromUint(index);
     Handle<Object> args[] = { object, number };
     Handle<Object> error = isolate->factory()->NewTypeError(
@@ -14368,11 +14361,10 @@ Handle<Object> JSObject::PrepareElementsForSort(Handle<JSObject> object,
     object->ValidateElements();
 
     object->set_map_and_elements(*new_map, *fast_elements);
-  } else if (object->HasExternalArrayElements() ||
-             object->HasFixedTypedArrayElements()) {
-    // Typed arrays cannot have holes or undefined elements.
+  } else if (object->HasExternalArrayElements()) {
+    // External arrays cannot have holes or undefined elements.
     return handle(Smi::FromInt(
-        FixedArrayBase::cast(object->elements())->length()), isolate);
+        ExternalArray::cast(object->elements())->length()), isolate);
   } else if (!object->HasFastDoubleElements()) {
     EnsureWritableFastElements(object);
   }
@@ -14473,14 +14465,12 @@ ExternalArrayType JSTypedArray::type() {
   switch (elements()->map()->instance_type()) {
 #define INSTANCE_TYPE_TO_ARRAY_TYPE(Type, type, TYPE, ctype, size)            \
     case EXTERNAL_##TYPE##_ARRAY_TYPE:                                        \
-    case FIXED_##TYPE##_ARRAY_TYPE:                                           \
       return kExternal##Type##Array;
 
     TYPED_ARRAYS(INSTANCE_TYPE_TO_ARRAY_TYPE)
 #undef INSTANCE_TYPE_TO_ARRAY_TYPE
 
     default:
-      UNREACHABLE();
       return static_cast<ExternalArrayType>(-1);
   }
 }
@@ -16316,65 +16306,6 @@ void JSTypedArray::Neuter() {
   NeuterView();
   set_length(Smi::FromInt(0));
   set_elements(GetHeap()->EmptyExternalArrayForMap(map()));
-}
-
-
-static ElementsKind FixedToExternalElementsKind(ElementsKind elements_kind) {
-  switch (elements_kind) {
-#define TYPED_ARRAY_CASE(Type, type, TYPE, ctype, size)                       \
-    case TYPE##_ELEMENTS: return EXTERNAL_##TYPE##_ELEMENTS;
-
-    TYPED_ARRAYS(TYPED_ARRAY_CASE)
-#undef TYPED_ARRAY_CASE
-
-    default:
-      UNREACHABLE();
-      return FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND;
-  }
-}
-
-
-Handle<JSArrayBuffer> JSTypedArray::MaterializeArrayBuffer(
-    Handle<JSTypedArray> typed_array) {
-
-  Handle<Map> map(typed_array->map());
-  Isolate* isolate = typed_array->GetIsolate();
-
-  ASSERT(IsFixedTypedArrayElementsKind(map->elements_kind()));
-
-  Handle<JSArrayBuffer> buffer = isolate->factory()->NewJSArrayBuffer();
-  Handle<FixedTypedArrayBase> fixed_typed_array(
-      FixedTypedArrayBase::cast(typed_array->elements()));
-  Runtime::SetupArrayBufferAllocatingData(isolate, buffer,
-      fixed_typed_array->DataSize(), false);
-  memcpy(buffer->backing_store(),
-         fixed_typed_array->DataPtr(),
-         fixed_typed_array->DataSize());
-  Handle<ExternalArray> new_elements =
-      isolate->factory()->NewExternalArray(
-          fixed_typed_array->length(), typed_array->type(),
-          static_cast<uint8_t*>(buffer->backing_store()));
-  Handle<Map> new_map = JSObject::GetElementsTransitionMap(
-          typed_array,
-          FixedToExternalElementsKind(map->elements_kind()));
-
-  buffer->set_weak_first_view(*typed_array);
-  ASSERT(typed_array->weak_next() == isolate->heap()->undefined_value());
-  typed_array->set_buffer(*buffer);
-  typed_array->set_map_and_elements(*new_map, *new_elements);
-
-  return buffer;
-}
-
-
-Handle<JSArrayBuffer> JSTypedArray::GetBuffer() {
-  Handle<Object> result(buffer(), GetIsolate());
-  if (*result != Smi::FromInt(0)) {
-    ASSERT(IsExternalArrayElementsKind(map()->elements_kind()));
-    return Handle<JSArrayBuffer>::cast(result);
-  }
-  Handle<JSTypedArray> self(this);
-  return MaterializeArrayBuffer(self);
 }
 
 

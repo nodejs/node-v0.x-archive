@@ -6018,15 +6018,8 @@ Local<ArrayBuffer> v8::ArrayBuffer::New(Isolate* isolate, void* data,
 
 Local<ArrayBuffer> v8::ArrayBufferView::Buffer() {
   i::Handle<i::JSArrayBufferView> obj = Utils::OpenHandle(this);
-  i::Handle<i::JSArrayBuffer> buffer;
-  if (obj->IsJSDataView()) {
-    i::Handle<i::JSDataView> data_view(i::JSDataView::cast(*obj));
-    ASSERT(data_view->buffer()->IsJSArrayBuffer());
-    buffer = i::handle(i::JSArrayBuffer::cast(data_view->buffer()));
-  } else {
-    ASSERT(obj->IsJSTypedArray());
-    buffer = i::JSTypedArray::cast(*obj)->GetBuffer();
-  }
+  ASSERT(obj->buffer()->IsJSArrayBuffer());
+  i::Handle<i::JSArrayBuffer> buffer(i::JSArrayBuffer::cast(obj->buffer()));
   return Utils::ToLocal(buffer);
 }
 
@@ -6097,9 +6090,7 @@ i::Handle<i::JSTypedArray> NewTypedArray(
       isolate->factory()->NewExternalArray(
           static_cast<int>(length), array_type,
           static_cast<uint8_t*>(buffer->backing_store()) + byte_offset);
-  i::Handle<i::Map> map =
-      i::JSObject::GetElementsTransitionMap(obj, elements_kind);
-  obj->set_map_and_elements(*map, *elements);
+  obj->set_elements(*elements);
   return obj;
 }
 

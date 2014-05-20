@@ -1099,7 +1099,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 #define INSTALL_TYPED_ARRAY(Type, type, TYPE, ctype, size)                    \
     {                                                                         \
       Handle<JSFunction> fun = InstallTypedArray(#Type "Array",               \
-          TYPE##_ELEMENTS);                                                   \
+          EXTERNAL_##TYPE##_ELEMENTS);                                        \
       native_context()->set_##type##_array_fun(*fun);                         \
     }
     TYPED_ARRAYS(INSTALL_TYPED_ARRAY)

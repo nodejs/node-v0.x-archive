@@ -164,16 +164,6 @@ namespace internal {
   V(Map, fixed_float32_array_map, FixedFloat32ArrayMap)                        \
   V(Map, fixed_float64_array_map, FixedFloat64ArrayMap)                        \
   V(Map, fixed_uint8_clamped_array_map, FixedUint8ClampedArrayMap)             \
-  V(FixedTypedArrayBase, empty_fixed_uint8_array, EmptyFixedUint8Array)        \
-  V(FixedTypedArrayBase, empty_fixed_int8_array, EmptyFixedInt8Array)          \
-  V(FixedTypedArrayBase, empty_fixed_uint16_array, EmptyFixedUint16Array)      \
-  V(FixedTypedArrayBase, empty_fixed_int16_array, EmptyFixedInt16Array)        \
-  V(FixedTypedArrayBase, empty_fixed_uint32_array, EmptyFixedUint32Array)      \
-  V(FixedTypedArrayBase, empty_fixed_int32_array, EmptyFixedInt32Array)        \
-  V(FixedTypedArrayBase, empty_fixed_float32_array, EmptyFixedFloat32Array)    \
-  V(FixedTypedArrayBase, empty_fixed_float64_array, EmptyFixedFloat64Array)    \
-  V(FixedTypedArrayBase, empty_fixed_uint8_clamped_array,                      \
-      EmptyFixedUint8ClampedArray)                                             \
   V(Map, sloppy_arguments_elements_map, SloppyArgumentsElementsMap)            \
   V(Map, function_context_map, FunctionContextMap)                             \
   V(Map, catch_context_map, CatchContextMap)                                   \
@@ -1665,9 +1655,7 @@ class Heap {
       ExternalArrayType array_type);
 
   RootListIndex RootIndexForEmptyExternalArray(ElementsKind kind);
-  RootListIndex RootIndexForEmptyFixedTypedArray(ElementsKind kind);
   ExternalArray* EmptyExternalArrayForMap(Map* map);
-  FixedTypedArrayBase* EmptyFixedTypedArrayForMap(Map* map);
 
   void RecordStats(HeapStats* stats, bool take_snapshot = false);
 
@@ -2231,10 +2219,6 @@ class Heap {
 
   // Allocate empty external array of given type.
   MUST_USE_RESULT MaybeObject* AllocateEmptyExternalArray(
-      ExternalArrayType array_type);
-
-  // Allocate empty fixed typed array of given type.
-  MUST_USE_RESULT MaybeObject* AllocateEmptyFixedTypedArray(
       ExternalArrayType array_type);
 
   // Allocate empty fixed double array.

@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax --smi-only-arrays --expose-gc --nostress-opt --typed-array-max_size_in-heap=2048
+// Flags: --allow-natives-syntax --smi-only-arrays --expose-gc --nostress-opt
 
 // Test element kind of objects.
 // Since --smi-only-arrays affects builtins, its default setting at compile
@@ -43,28 +43,19 @@ if (support_smi_only_arrays) {
 }
 
 var elements_kind = {
-  fast_smi_only             :  'fast smi only elements',
-  fast                      :  'fast elements',
-  fast_double               :  'fast double elements',
-  dictionary                :  'dictionary elements',
-  external_int32            :  'external int8 elements',
-  external_uint8            :  'external uint8 elements',
-  external_int16            :  'external int16 elements',
-  external_uint16           :  'external uint16 elements',
-  external_int32            :  'external int32 elements',
-  external_uint32           :  'external uint32 elements',
-  external_float32          :  'external float32 elements',
-  external_float64          :  'external float64 elements',
-  external_uint8_clamped    :  'external uint8_clamped elements',
-  fixed_int32               :  'fixed int8 elements',
-  fixed_uint8               :  'fixed uint8 elements',
-  fixed_int16               :  'fixed int16 elements',
-  fixed_uint16              :  'fixed uint16 elements',
-  fixed_int32               :  'fixed int32 elements',
-  fixed_uint32              :  'fixed uint32 elements',
-  fixed_float32             :  'fixed float32 elements',
-  fixed_float64             :  'fixed float64 elements',
-  fixed_uint8_clamped       :  'fixed uint8_clamped elements'
+  fast_smi_only            :  'fast smi only elements',
+  fast                     :  'fast elements',
+  fast_double              :  'fast double elements',
+  dictionary               :  'dictionary elements',
+  external_byte            :  'external byte elements',
+  external_unsigned_byte   :  'external unsigned byte elements',
+  external_short           :  'external short elements',
+  external_unsigned_short  :  'external unsigned short elements',
+  external_int             :  'external int elements',
+  external_unsigned_int    :  'external unsigned int elements',
+  external_float           :  'external float elements',
+  external_double          :  'external double elements',
+  external_pixel           :  'external pixel elements'
 }
 
 function getKind(obj) {
@@ -72,61 +63,34 @@ function getKind(obj) {
   if (%HasFastObjectElements(obj)) return elements_kind.fast;
   if (%HasFastDoubleElements(obj)) return elements_kind.fast_double;
   if (%HasDictionaryElements(obj)) return elements_kind.dictionary;
-
   // Every external kind is also an external array.
+  assertTrue(%HasExternalArrayElements(obj));
   if (%HasExternalInt8Elements(obj)) {
-    return elements_kind.external_int8;
+    return elements_kind.external_byte;
   }
   if (%HasExternalUint8Elements(obj)) {
-    return elements_kind.external_uint8;
+    return elements_kind.external_unsigned_byte;
   }
   if (%HasExternalInt16Elements(obj)) {
-    return elements_kind.external_int16;
+    return elements_kind.external_short;
   }
   if (%HasExternalUint16Elements(obj)) {
-    return elements_kind.external_uint16;
+    return elements_kind.external_unsigned_short;
   }
   if (%HasExternalInt32Elements(obj)) {
-    return elements_kind.external_int32;
+    return elements_kind.external_int;
   }
   if (%HasExternalUint32Elements(obj)) {
-    return elements_kind.external_uint32;
+    return elements_kind.external_unsigned_int;
   }
   if (%HasExternalFloat32Elements(obj)) {
-    return elements_kind.external_float32;
+    return elements_kind.external_float;
   }
   if (%HasExternalFloat64Elements(obj)) {
-    return elements_kind.external_float64;
+    return elements_kind.external_double;
   }
   if (%HasExternalUint8ClampedElements(obj)) {
-    return elements_kind.external_uint8_clamped;
-  }
-  if (%HasFixedInt8Elements(obj)) {
-    return elements_kind.fixed_int8;
-  }
-  if (%HasFixedUint8Elements(obj)) {
-    return elements_kind.fixed_uint8;
-  }
-  if (%HasFixedInt16Elements(obj)) {
-    return elements_kind.fixed_int16;
-  }
-  if (%HasFixedUint16Elements(obj)) {
-    return elements_kind.fixed_uint16;
-  }
-  if (%HasFixedInt32Elements(obj)) {
-    return elements_kind.fixed_int32;
-  }
-  if (%HasFixedUint32Elements(obj)) {
-    return elements_kind.fixed_uint32;
-  }
-  if (%HasFixedFloat32Elements(obj)) {
-    return elements_kind.fixed_float32;
-  }
-  if (%HasFixedFloat64Elements(obj)) {
-    return elements_kind.fixed_float64;
-  }
-  if (%HasFixedUint8ClampedElements(obj)) {
-    return elements_kind.fixed_uint8_clamped;
+    return elements_kind.external_pixel;
   }
 }
 
@@ -172,26 +136,15 @@ function test_wrapper() {
   for (var i = 0; i < 0xDECAF; i++) fast_double_array[i] = i / 2;
   assertKind(elements_kind.fast_double, fast_double_array);
 
-  assertKind(elements_kind.fixed_int8,    new Int8Array(007));
-  assertKind(elements_kind.fixed_uint8,   new Uint8Array(007));
-  assertKind(elements_kind.fixed_int16,   new Int16Array(666));
-  assertKind(elements_kind.fixed_uint16,  new Uint16Array(42));
-  assertKind(elements_kind.fixed_int32,   new Int32Array(0xF));
-  assertKind(elements_kind.fixed_uint32,  new Uint32Array(23));
-  assertKind(elements_kind.fixed_float32, new Float32Array(7));
-  assertKind(elements_kind.fixed_float64, new Float64Array(0));
-  assertKind(elements_kind.fixed_uint8_clamped, new Uint8ClampedArray(512));
-
-  var ab = new ArrayBuffer(128);
-  assertKind(elements_kind.external_int8,    new Int8Array(ab));
-  assertKind(elements_kind.external_uint8,   new Uint8Array(ab));
-  assertKind(elements_kind.external_int16,   new Int16Array(ab));
-  assertKind(elements_kind.external_uint16,  new Uint16Array(ab));
-  assertKind(elements_kind.external_int32,   new Int32Array(ab));
-  assertKind(elements_kind.external_uint32,  new Uint32Array(ab));
-  assertKind(elements_kind.external_float32, new Float32Array(ab));
-  assertKind(elements_kind.external_float64, new Float64Array(ab));
-  assertKind(elements_kind.external_uint8_clamped, new Uint8ClampedArray(ab));
+  assertKind(elements_kind.external_byte,           new Int8Array(9001));
+  assertKind(elements_kind.external_unsigned_byte,  new Uint8Array(007));
+  assertKind(elements_kind.external_short,          new Int16Array(666));
+  assertKind(elements_kind.external_unsigned_short, new Uint16Array(42));
+  assertKind(elements_kind.external_int,            new Int32Array(0xF));
+  assertKind(elements_kind.external_unsigned_int,   new Uint32Array(23));
+  assertKind(elements_kind.external_float,          new Float32Array(7));
+  assertKind(elements_kind.external_double,         new Float64Array(0));
+  assertKind(elements_kind.external_pixel,          new Uint8ClampedArray(512));
 
   // Crankshaft support for smi-only array elements.
   function monomorphic(array) {

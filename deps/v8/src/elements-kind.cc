@@ -142,27 +142,14 @@ int GetSequenceIndexFromFastElementsKind(ElementsKind elements_kind) {
 }
 
 
-ElementsKind GetNextTransitionElementsKind(ElementsKind kind) {
-  switch (kind) {
-#define FIXED_TYPED_ARRAY_CASE(Type, type, TYPE, ctype, size) \
-    case TYPE##_ELEMENTS: return EXTERNAL_##TYPE##_ELEMENTS;
-
-    TYPED_ARRAYS(FIXED_TYPED_ARRAY_CASE)
-#undef FIXED_TYPED_ARRAY_CASE
-    default: {
-      int index = GetSequenceIndexFromFastElementsKind(kind);
-      return GetFastElementsKindFromSequenceIndex(index + 1);
-    }
-  }
-}
-
-
 ElementsKind GetNextMoreGeneralFastElementsKind(ElementsKind elements_kind,
                                                 bool allow_only_packed) {
   ASSERT(IsFastElementsKind(elements_kind));
   ASSERT(elements_kind != TERMINAL_FAST_ELEMENTS_KIND);
   while (true) {
-    elements_kind = GetNextTransitionElementsKind(elements_kind);
+    int index =
+        GetSequenceIndexFromFastElementsKind(elements_kind) + 1;
+    elements_kind = GetFastElementsKindFromSequenceIndex(index);
     if (!IsFastHoleyElementsKind(elements_kind) || !allow_only_packed) {
       return elements_kind;
     }

@@ -100,10 +100,10 @@ void PrintElementsKind(FILE* out, ElementsKind kind);
 
 ElementsKind GetInitialFastElementsKind();
 
-ElementsKind GetFastElementsKindFromSequenceIndex(int sequence_number);
+ElementsKind GetFastElementsKindFromSequenceIndex(int sequence_index);
+
 int GetSequenceIndexFromFastElementsKind(ElementsKind elements_kind);
 
-ElementsKind GetNextTransitionElementsKind(ElementsKind elements_kind);
 
 inline bool IsDictionaryElementsKind(ElementsKind kind) {
   return kind == DICTIONARY_ELEMENTS;
@@ -116,12 +116,6 @@ inline bool IsExternalArrayElementsKind(ElementsKind kind) {
 }
 
 
-inline bool IsTerminalElementsKind(ElementsKind kind) {
-  return kind == TERMINAL_FAST_ELEMENTS_KIND ||
-      IsExternalArrayElementsKind(kind);
-}
-
-
 inline bool IsFixedTypedArrayElementsKind(ElementsKind kind) {
   return kind >= FIRST_FIXED_TYPED_ARRAY_ELEMENTS_KIND &&
       kind <= LAST_FIXED_TYPED_ARRAY_ELEMENTS_KIND;
@@ -131,11 +125,6 @@ inline bool IsFixedTypedArrayElementsKind(ElementsKind kind) {
 inline bool IsFastElementsKind(ElementsKind kind) {
   ASSERT(FIRST_FAST_ELEMENTS_KIND == 0);
   return kind <= FAST_HOLEY_DOUBLE_ELEMENTS;
-}
-
-
-inline bool IsTransitionElementsKind(ElementsKind kind) {
-  return IsFastElementsKind(kind) || IsFixedTypedArrayElementsKind(kind);
 }
 
 

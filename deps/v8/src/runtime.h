@@ -408,15 +408,6 @@ namespace internal {
   F(HasExternalUint32Elements, 1, 1) \
   F(HasExternalFloat32Elements, 1, 1) \
   F(HasExternalFloat64Elements, 1, 1) \
-  F(HasFixedUint8ClampedElements, 1, 1) \
-  F(HasFixedInt8Elements, 1, 1) \
-  F(HasFixedUint8Elements, 1, 1) \
-  F(HasFixedInt16Elements, 1, 1) \
-  F(HasFixedUint16Elements, 1, 1) \
-  F(HasFixedInt32Elements, 1, 1) \
-  F(HasFixedUint32Elements, 1, 1) \
-  F(HasFixedFloat32Elements, 1, 1) \
-  F(HasFixedFloat64Elements, 1, 1) \
   F(HasFastProperties, 1, 1) \
   F(TransitionElementsKind, 2, 1) \
   F(HaveSameMap, 2, 1) \
@@ -695,8 +686,7 @@ namespace internal {
   F(ConstructDouble, 2, 1)                                                   \
   F(TypedArrayInitialize, 5, 1)                                              \
   F(DataViewInitialize, 4, 1)                                                \
-  F(MaxSmi, 0, 1)                                                            \
-  F(TypedArrayMaxSizeInHeap, 0, 1)
+  F(MaxSmi, 0, 1)
 
 
 //---------------------------------------------------------------------------
@@ -888,10 +878,7 @@ class Runtime : public AllStatic {
   };
 
   static void ArrayIdToTypeAndSize(int array_id,
-      ExternalArrayType *type,
-      ElementsKind* external_elements_kind,
-      ElementsKind* fixed_elements_kind,
-      size_t *element_size);
+      ExternalArrayType *type, size_t *element_size);
 
   // Helper functions used stubs.
   static void PerformGC(Object* result, Isolate* isolate);
