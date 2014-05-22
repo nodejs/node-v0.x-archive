@@ -1018,9 +1018,12 @@ static void GetAddrInfo(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value hostname(args[1]);
 
   int family;
+  int flags = 0;
+
   switch (args[2]->Int32Value()) {
   case 0:
     family = AF_UNSPEC;
+    flags = AI_ADDRCONFIG | AI_V4MAPPED;
     break;
   case 4:
     family = AF_INET;
@@ -1042,6 +1045,7 @@ static void GetAddrInfo(const FunctionCallbackInfo<Value>& args) {
   memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = family;
   hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = flags;
 
   int err = uv_getaddrinfo(env->event_loop(),
                            &req_wrap->req_,
