@@ -50,7 +50,7 @@ function pummel() {
 function check() {
   setTimeout(function() {
     assert.equal(process._getActiveRequests().length, 0);
-    assert.equal(process._getActiveHandles().length, 1); // the timer
+    assert.equal(process._getActiveHandles().length, 0);
     check_called = true;
   }, 0);
 }
