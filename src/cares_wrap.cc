@@ -1014,16 +1014,16 @@ static void GetAddrInfo(const FunctionCallbackInfo<Value>& args) {
   assert(args[0]->IsObject());
   assert(args[1]->IsString());
   assert(args[2]->IsInt32());
+  assert(args[3]->IsInt32());
   Local<Object> req_wrap_obj = args[0].As<Object>();
   node::Utf8Value hostname(args[1]);
 
   int family;
-  int flags = 0;
+  int flags = args[3]->Int32Value();
 
   switch (args[2]->Int32Value()) {
   case 0:
     family = AF_UNSPEC;
-    flags = AI_ADDRCONFIG | AI_V4MAPPED;
     break;
   case 4:
     family = AF_INET;
@@ -1250,6 +1250,10 @@ static void Initialize(Handle<Object> target,
               Integer::New(env->isolate(), AF_INET6));
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "AF_UNSPEC"),
               Integer::New(env->isolate(), AF_UNSPEC));
+  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "AI_ADDRCONFIG"),
+              Integer::New(env->isolate(), AI_ADDRCONFIG));
+  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "AI_V4MAPPED"),
+              Integer::New(env->isolate(), AI_V4MAPPED));
 }
 
 }  // namespace cares_wrap

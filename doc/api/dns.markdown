@@ -38,6 +38,12 @@ AAAA (IPv6) record.
 The `family` can be the integer `4` or `6`. Defaults to `null` that indicates
 both Ip v4 and v6 address family.
 
+Alternatively, `family` can be an object containing two properties, `family` 
+and `hints`. The `family` property can be the integer `4` or `6`, and 
+defaults to `null`, meaning that both Ip v4 and v6 addresses are accepted. 
+The `hints` field should be one or more of the supported `getaddrinfo` 
+flags.
+
 The callback has arguments `(err, address, family)`.  The `address` argument
 is a string representation of a IP v4 or v6 address. The `family` argument
 is either the integer 4 or 6 and denotes the family of `address` (not
@@ -201,3 +207,14 @@ Each DNS query can return one of the following error codes:
 - `dns.LOADIPHLPAPI`: Error loading iphlpapi.dll.
 - `dns.ADDRGETNETWORKPARAMS`: Could not find GetNetworkParams function.
 - `dns.CANCELLED`: DNS query cancelled.
+
+## Supported `getaddrinfo` flags
+
+The following flags can be passed as hints to `dns.lookup`.
+
+- `dns.ADDRCONFIG`: Returned address types are determined by the types
+of addresses supported by the current system. For example, IPv4 addresses 
+are only returned if the current system has at least one IPv4 address 
+configured. Loopback addresses are not considered.
+- `dns.V4MAPPED`: If the IPv6 family was specified, but no IPv6 addresses 
+were found, then return IPv4 mapped IPv6 addresses.
