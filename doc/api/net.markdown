@@ -371,6 +371,9 @@ buffer. Returns `false` if all or part of the data was queued in user memory.
 The optional `callback` parameter will be executed when the data is finally
 written out - this may not be immediately.
 
+In case the socket is already closed, throws or passes an error to the
+`callback`.
+
 ### socket.end([data], [encoding])
 
 Half-closes the socket. i.e., it sends a FIN packet. It is possible the
