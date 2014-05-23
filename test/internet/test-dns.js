@@ -337,6 +337,21 @@ TEST(function test_lookup_ipv4_implicit(done) {
 });
 
 
+TEST(function test_lookup_ipv4_explicit_object(done) {
+  var req = dns.lookup('www.google.com', {
+    family: 4
+  }, function(err, ip, family) {
+    if (err) throw err;
+    assert.ok(net.isIPv4(ip));
+    assert.strictEqual(family, 4);
+
+    done();
+  });
+
+  checkWrap(req);
+});
+
+
 TEST(function test_lookup_ipv6_explicit(done) {
   var req = dns.lookup('ipv6.google.com', 6, function(err, ip, family) {
     if (err) throw err;
@@ -363,6 +378,21 @@ TEST(function test_lookup_ipv6_implicit(done) {
   checkWrap(req);
 });
 */
+
+
+TEST(function test_lookup_ipv6_explicit_object(done) {
+  var req = dns.lookup('ipv6.google.com', {
+    family: 6
+  }, function(err, ip, family) {
+    if (err) throw err;
+    assert.ok(net.isIPv6(ip));
+    assert.strictEqual(family, 6);
+
+    done();
+  });
+
+  checkWrap(req);
+});
 
 
 TEST(function test_lookup_failure(done) {

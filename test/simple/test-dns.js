@@ -70,3 +70,55 @@ assert.throws(
   },
   "Unexpected error"
 );
+
+assert.throws(
+  function() {
+    dns.lookup('www.google.com', { hints: 1 }, new Function);
+  }
+);
+
+assert.doesNotThrow(
+  function() {
+    dns.lookup('www.google.com', 6, new Function);
+  }
+);
+
+assert.doesNotThrow(
+  function() {
+    dns.lookup('www.google.com', {}, new Function);
+  }
+);
+
+assert.doesNotThrow(
+  function() {
+    dns.lookup('www.google.com', {
+      family: 4,
+      hints: 0
+    }, new Function);
+  }
+);
+
+assert.doesNotThrow(
+  function() {
+    dns.lookup('www.google.com', {
+      family: 6,
+      hints: dns.ADDRCONFIG
+    }, new Function);
+  }
+);
+
+assert.doesNotThrow(
+  function() {
+    dns.lookup('www.google.com', {
+      hints: dns.V4MAPPED
+    }, new Function);
+  }
+);
+
+assert.doesNotThrow(
+  function() {
+    dns.lookup('www.google.com', {
+      hints: dns.ADDRCONFIG | dns.V4MAPPED
+    }, new Function);
+  }
+);

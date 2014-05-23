@@ -31,18 +31,27 @@ resolves the IP addresses which are returned.
       });
     });
 
-## dns.lookup(hostname, [family], callback)
+## dns.lookup(hostname, [options], callback)
 
 Resolves a hostname (e.g. `'google.com'`) into the first found A (IPv4) or
-AAAA (IPv6) record.
-The `family` can be the integer `4` or `6`. Defaults to `null` that indicates
-both Ip v4 and v6 address family.
+AAAA (IPv6) record. `options` can be an object or integer. If `options` is 
+not provided, then IP v4 and v6 addresses are both valid. If `options` is 
+an integer, then it must be `4` or `6`.
 
-Alternatively, `family` can be an object containing two properties, `family` 
-and `hints`. The `family` property can be the integer `4` or `6`, and 
-defaults to `null`, meaning that both Ip v4 and v6 addresses are accepted. 
-The `hints` field should be one or more of the supported `getaddrinfo` 
-flags.
+Alternatively, `options` can be an object containing two properties, 
+`family` and `hints`. Both properties are optional. If `family` is provided, 
+it must be the integer `4` or `6`. If `family` is not provided then IP v4 
+and v6 addresses are accepted. The `hints` field, if present, should be one 
+or more of the supported `getaddrinfo` flags. If `hints` is not provided, 
+then no flags are passed to `getaddrinfo`. Multiple flags can be passed 
+through `hints` by logically `OR`ing their values. An example usage of 
+`hints` (without `family`) is shown below.
+
+```
+{
+  hints: dns.ADDRCONFIG | dns.V4MAPPED
+}
+```
 
 The callback has arguments `(err, address, family)`.  The `address` argument
 is a string representation of a IP v4 or v6 address. The `family` argument
