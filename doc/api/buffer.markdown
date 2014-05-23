@@ -162,6 +162,37 @@ The method will not write partial characters.
     len = buf.write('\u00bd + \u00bc = \u00be', 0);
     console.log(len + " bytes: " + buf.toString('utf8', 0, len));
 
+### buf.writeUIntLE(value, offset, [byteLength], [noAssert])
+### buf.writeUIntBE(value, offset, [byteLength], [noAssert])
+### buf.writeIntLE(value, offset, [byteLength], [noAssert])
+### buf.writeIntBE(value, offset, [byteLength], [noAssert])
+
+* `value` Number - bytes to be written to buffer
+* `offset` Number, Optional
+* `byteLength` Number, Optional, Default: 1
+* `noAssert` Boolean, Optional, Default: false
+
+Writes `value` to the buffer at the specified offset and byteLength.
+
+Set `noAssert` to true to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness. Defaults to `false`.
+
+### buf.readUIntLE(offset, [byteLength], [noAssert])
+### buf.readUIntBE(offset, [byteLength], [noAssert])
+### buf.readIntLE(offset, [byteLength], [noAssert])
+### buf.readIntBE(offset, [byteLength], [noAssert])
+
+* `offset` Number
+* `byteLength` Number, Optional, Default: 1
+* `noAssert` Boolean, Optional, Default: false
+
+Reads an arbitrary bit that specified by `byteLength` integer from the 
+buffer at the specified offset.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer. Defaults to `false`.
 
 ### buf.toString([encoding], [start], [end])
 
@@ -358,38 +389,6 @@ Example:
     // 0x2342
     // 0x4223
 
-### buf.readUInt24LE(offset, [noAssert])
-### buf.readUInt24BE(offset, [noAssert])
-
-* `offset` Number
-* `noAssert` Boolean, Optional, Default: false
-* Return: Number
-
-Reads an unsigned 24 bit integer from the buffer at the specified offset with
-specified endian format.
-
-Set `noAssert` to true to skip validation of `offset`. This means that `offset`
-may be beyond the end of the buffer. Defaults to `false`.
-
-Example:
-
-    var buf = new Buffer(4);
-
-    buf[0] = 0x03;
-    buf[1] = 0x04;
-    buf[2] = 0x23;
-    buf[3] = 0x42;
-
-    console.log(buf.readUInt24BE(0));
-    console.log(buf.readUInt24LE(0));
-    console.log(buf.readUInt24BE(1));
-    console.log(buf.readUInt24LE(1));
-
-    // 0x030423
-    // 0x230403
-    // 0x042342
-    // 0x422304
-
 ### buf.readUInt32LE(offset, [noAssert])
 ### buf.readUInt32BE(offset, [noAssert])
 
@@ -446,22 +445,6 @@ Set `noAssert` to true to skip validation of `offset`. This means that `offset`
 may be beyond the end of the buffer. Defaults to `false`.
 
 Works as `buffer.readUInt16*`, except buffer contents are treated as two's
-complement signed values.
-
-### buf.readInt24LE(offset, [noAssert])
-### buf.readInt24BE(offset, [noAssert])
-
-* `offset` Number
-* `noAssert` Boolean, Optional, Default: false
-* Return: Number
-
-Reads an unsigned 24 bit integer from the buffer at the specified offset with
-specified endian format.
-
-Set `noAssert` to true to skip validation of `offset`. This means that `offset`
-may be beyond the end of the buffer. Defaults to `false`.
-
-Works as `buffer.readUInt24*`, except buffer contents are treated as two's
 complement signed values.
 
 ### buf.readInt32LE(offset, [noAssert])
@@ -593,33 +576,6 @@ Example:
     // <Buffer de ad be ef>
     // <Buffer ad de ef be>
 
-### buf.writeUInt24LE(value, offset, [noAssert])
-### buf.writeUInt24BE(value, offset, [noAssert])
-
-* `value` Number
-* `offset` Number
-* `noAssert` Boolean, Optional, Default: false
-
-Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid unsigned 24 bit integer.
-
-Set `noAssert` to true to skip validation of `value` and `offset`. This means
-that `value` may be too large for the specific function and `offset` may be
-beyond the end of the buffer leading to the values being silently dropped. This
-should not be used unless you are certain of correctness. Defaults to `false`.
-
-Example:
-
-    var buf = new Buffer(3);
-    buf.writeUInt24BE(0xdeadff, 0);
-    console.log(buf);
-    
-    buf.writeUInt24LE(0xdeadff, 0);
-    console.log(buf);
-
-    // <Buffer de ad ff>
-    // <Buffer ff ad de>
-
 ### buf.writeUInt32LE(value, offset, [noAssert])
 ### buf.writeUInt32BE(value, offset, [noAssert])
 
@@ -682,24 +638,6 @@ beyond the end of the buffer leading to the values being silently dropped. This
 should not be used unless you are certain of correctness. Defaults to `false`.
 
 Works as `buffer.writeUInt16*`, except value is written out as a two's
-complement signed integer into `buffer`.
-
-### buf.writeUInt24LE(value, offset, [noAssert])
-### buf.writeUInt24BE(value, offset, [noAssert])
-
-* `value` Number
-* `offset` Number
-* `noAssert` Boolean, Optional, Default: false
-
-Writes `value` to the buffer at the specified offset with specified endian
-format. Note, `value` must be a valid unsigned 24 bit integer.
-
-Set `noAssert` to true to skip validation of `value` and `offset`. This means
-that `value` may be too large for the specific function and `offset` may be
-beyond the end of the buffer leading to the values being silently dropped. This
-should not be used unless you are certain of correctness. Defaults to `false`.
-
-Works as `buffer.writeUInt24*`, except value is written out as a two's
 complement signed integer into `buffer`.
 
 ### buf.writeInt32LE(value, offset, [noAssert])
