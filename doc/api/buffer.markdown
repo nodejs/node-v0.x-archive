@@ -169,8 +169,9 @@ The method will not write partial characters.
 
 * `value` Number - bytes to be written to buffer
 * `offset` Number, Optional
-* `byteLength` Number, Optional, Default: 1
+* `byteLength` Number, Optional, should be `<= 4`, Default: 1
 * `noAssert` Boolean, Optional, Default: false
+* Return: `offset + byteLength`
 
 Writes `value` to the buffer at the specified offset and byteLength.
 
@@ -185,8 +186,9 @@ should not be used unless you are certain of correctness. Defaults to `false`.
 ### buf.readIntBE(offset, [byteLength], [noAssert])
 
 * `offset` Number
-* `byteLength` Number, Optional, Default: 1
+* `byteLength` Number, Optional, should be `<= 4`, Default: 1
 * `noAssert` Boolean, Optional, Default: false
+* Return: Number
 
 Reads an arbitrary bit that specified by `byteLength` integer from the 
 buffer at the specified offset.
