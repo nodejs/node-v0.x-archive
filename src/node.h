@@ -190,6 +190,14 @@ NODE_EXTERN int Start(int argc, char *argv[]);
   }                                                                           \
   while (0)
 
+static inline bool IsAscii(const char* string) {
+  while (char chr = *string++) {
+    if (static_cast<uint8_t>(chr) > 0x7F)
+      return false;
+  }
+  return true;
+}
+
 // Used to be a macro, hence the uppercase name.
 template <typename TypeName>
 inline void NODE_SET_METHOD(const TypeName& recv,
@@ -200,7 +208,11 @@ inline void NODE_SET_METHOD(const TypeName& recv,
   v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate,
                                                                 callback);
   v8::Local<v8::Function> fn = t->GetFunction();
-  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name);
+  // Use the V8 one byte API to avoid unnecessary checks.
+  assert(IsAscii(name));
+  v8::Local<v8::String> fn_name =
+      OneByteInternalizedString(isolate,
+                                reinterpret_cast<const uint8_t*>(name));
   fn->SetName(fn_name);
   recv->Set(fn_name, fn);
 }
@@ -216,8 +228,12 @@ inline void NODE_SET_PROTOTYPE_METHOD(v8::Handle<v8::FunctionTemplate> recv,
   v8::Handle<v8::Signature> s = v8::Signature::New(isolate, recv);
   v8::Local<v8::FunctionTemplate> t =
       v8::FunctionTemplate::New(isolate, callback, v8::Handle<v8::Value>(), s);
-  recv->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, name),
-                                 t->GetFunction());
+  // Use the V8 one byte API to avoid unnecessary checks.
+  assert(IsAscii(name));
+  v8::Local<v8::String> fn_name =
+      OneByteInternalizedString(isolate,
+                                reinterpret_cast<const uint8_t*>(name));
+  recv->PrototypeTemplate()->Set(fn_name, t->GetFunction());
 }
 #define NODE_SET_PROTOTYPE_METHOD node::NODE_SET_PROTOTYPE_METHOD
 

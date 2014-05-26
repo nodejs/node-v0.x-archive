@@ -666,7 +666,7 @@ void InitZlib(Handle<Object> target,
   NODE_DEFINE_CONSTANT(target, UNZIP);
 
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "ZLIB_VERSION"),
-              FIXED_ONE_BYTE_STRING(env->isolate(), ZLIB_VERSION));
+              FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), ZLIB_VERSION));
 }
 
 }  // namespace node

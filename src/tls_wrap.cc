@@ -419,8 +419,7 @@ Local<Value> TLSCallbacks::GetSSLError(int status, int* err, const char** msg) {
 
         const char* buf = PrintErrors();
 
-        Local<String> message =
-            OneByteString(env()->isolate(), buf, strlen(buf));
+        Local<String> message = OneByteString(env()->isolate(), buf);
         Local<Value> exception = Exception::Error(message);
 
         if (msg != NULL) {

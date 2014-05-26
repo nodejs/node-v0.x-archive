@@ -36,7 +36,28 @@ namespace node {
   reinterpret_cast<TypeName*>(                                                \
       reinterpret_cast<uintptr_t>(Pointer) - OFFSET_OF(TypeName, Field))
 
+// There are four choices of use of one byte string:
+//
+//   (1) FIXED_ONE_BYTE_STRING
+//   (2) FIXED_ONE_BYTE_NORMAL_STRING
+//   (3) OneByteInternalizedString
+//   (4) OneByteString
+//
+// which differ on whether the string is internalized and whether the length
+// is calculated at compile time. Use only the non-internalized version if
+// there's a good chance that the string's hash is not needed for the following
+// operation, so that the string can be GCed if not referenced (an internalized
+// string is refereced by V8's string table so it can't be GCed). Note: a string
+// is always internalized when added to the property table/list of a JS object.
+//
+// The hash of a string is needed for property lookup, which is the most common
+// use in the code base. Use env->XXX_string() or (1) for such case. The former
+// is preferred.
+
 #define FIXED_ONE_BYTE_STRING(isolate, string)                                \
+  (node::OneByteInternalizedString((isolate), (string), sizeof(string) - 1))
+
+#define FIXED_ONE_BYTE_NORMAL_STRING(isolate, string)                         \
   (node::OneByteString((isolate), (string), sizeof(string) - 1))
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName)                                    \
@@ -89,15 +110,25 @@ inline v8::Local<TypeName> WeakPersistentToLocal(
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                            const char* data,
                                            int length = -1);
+inline v8::Local<v8::String> OneByteInternalizedString(v8::Isolate* isolate,
+                                                       const char* data,
+                                                       int length = -1);
 
 // For the people that compile with -funsigned-char.
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                            const signed char* data,
                                            int length = -1);
+inline v8::Local<v8::String> OneByteInternalizedString(v8::Isolate* isolate,
+                                                       const signed char* data,
+                                                       int length = -1);
 
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                            const unsigned char* data,
                                            int length = -1);
+inline
+v8::Local<v8::String> OneByteInternalizedString(v8::Isolate* isolate,
+                                                const unsigned char* data,
+                                                int length = -1);
 
 inline void Wrap(v8::Local<v8::Object> object, void* pointer);
 

@@ -781,8 +781,9 @@ void SecureContext::SetSessionIdContext(
 
   bio = BIO_new(BIO_s_mem());
   if (bio == NULL) {
-    message = FIXED_ONE_BYTE_STRING(args.GetIsolate(),
-                                    "SSL_CTX_set_session_id_context error");
+    message =
+        FIXED_ONE_BYTE_NORMAL_STRING(args.GetIsolate(),
+                                     "SSL_CTX_set_session_id_context error");
   } else {
     ERR_print_errors(bio);
     BIO_get_mem_ptr(bio, &mem);

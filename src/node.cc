@@ -733,16 +733,19 @@ Local<Value> ErrnoException(Isolate* isolate,
   Local<String> message = OneByteString(env->isolate(), msg);
 
   Local<String> cons1 =
-      String::Concat(estring, FIXED_ONE_BYTE_STRING(env->isolate(), ", "));
+      String::Concat(estring,
+                     FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), ", "));
   Local<String> cons2 = String::Concat(cons1, message);
 
   if (path) {
     Local<String> cons3 =
-        String::Concat(cons2, FIXED_ONE_BYTE_STRING(env->isolate(), " '"));
+        String::Concat(cons2,
+                       FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), " '"));
     Local<String> cons4 =
         String::Concat(cons3, String::NewFromUtf8(env->isolate(), path));
     Local<String> cons5 =
-        String::Concat(cons4, FIXED_ONE_BYTE_STRING(env->isolate(), "'"));
+        String::Concat(cons4,
+                       FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), "'"));
     e = Exception::Error(cons5);
   } else {
     e = Exception::Error(cons2);
@@ -778,7 +781,8 @@ Local<Value> UVException(Isolate* isolate,
   Local<String> estring = OneByteString(env->isolate(), uv_err_name(errorno));
   Local<String> message = OneByteString(env->isolate(), msg);
   Local<String> cons1 =
-      String::Concat(estring, FIXED_ONE_BYTE_STRING(env->isolate(), ", "));
+      String::Concat(estring,
+                     FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), ", "));
   Local<String> cons2 = String::Concat(cons1, message);
 
   Local<Value> e;
@@ -788,8 +792,9 @@ Local<Value> UVException(Isolate* isolate,
   if (path) {
 #ifdef _WIN32
     if (strncmp(path, "\\\\?\\UNC\\", 8) == 0) {
-      path_str = String::Concat(FIXED_ONE_BYTE_STRING(env->isolate(), "\\\\"),
-                                String::NewFromUtf8(env->isolate(), path + 8));
+      path_str =
+        String::Concat(FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), "\\\\"),
+                       String::NewFromUtf8(env->isolate(), path + 8));
     } else if (strncmp(path, "\\\\?\\", 4) == 0) {
       path_str = String::NewFromUtf8(env->isolate(), path + 4);
     } else {
@@ -800,11 +805,13 @@ Local<Value> UVException(Isolate* isolate,
 #endif
 
     Local<String> cons3 =
-        String::Concat(cons2, FIXED_ONE_BYTE_STRING(env->isolate(), " '"));
+        String::Concat(cons2,
+                       FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), " '"));
     Local<String> cons4 =
         String::Concat(cons3, path_str);
     Local<String> cons5 =
-        String::Concat(cons4, FIXED_ONE_BYTE_STRING(env->isolate(), "'"));
+        String::Concat(cons4,
+                       FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), "'"));
     e = Exception::Error(cons5);
   } else {
     e = Exception::Error(cons2);
@@ -866,11 +873,14 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
 
   if (path) {
     Local<String> cons1 =
-        String::Concat(message, FIXED_ONE_BYTE_STRING(isolate, " '"));
+        String::Concat(message,
+                       FIXED_ONE_BYTE_NORMAL_STRING(isolate, " '"));
     Local<String> cons2 =
-        String::Concat(cons1, String::NewFromUtf8(isolate, path));
+        String::Concat(cons1,
+                       FIXED_ONE_BYTE_NORMAL_STRING(isolate, path));
     Local<String> cons3 =
-        String::Concat(cons2, FIXED_ONE_BYTE_STRING(isolate, "'"));
+        String::Concat(cons2,
+                       FIXED_ONE_BYTE_NORMAL_STRING(isolate, "'"));
     e = Exception::Error(cons3);
   } else {
     e = Exception::Error(message);
@@ -1182,7 +1192,8 @@ Handle<Value> MakeCallback(Environment* env,
                            const char* method,
                            int argc,
                            Handle<Value> argv[]) {
-  Local<String> method_string = OneByteString(env->isolate(), method);
+  Local<String> method_string = OneByteInternalizedString(env->isolate(),
+                                                          method);
   return MakeCallback(env, recv, method_string, argc, argv);
 }
 
@@ -2563,7 +2574,7 @@ void StopProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
 
 #define READONLY_PROPERTY(obj, str, var)                                      \
   do {                                                                        \
-    obj->Set(OneByteString(env->isolate(), str), var, v8::ReadOnly);          \
+    obj->Set(FIXED_ONE_BYTE_STRING(env->isolate(), str), var, v8::ReadOnly);  \
   } while (0)
 
 
@@ -2583,7 +2594,7 @@ void SetupProcessObject(Environment* env,
   // process.version
   READONLY_PROPERTY(process,
                     "version",
-                    FIXED_ONE_BYTE_STRING(env->isolate(), NODE_VERSION));
+                    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), NODE_VERSION));
 
   // process.moduleLoadList
   READONLY_PROPERTY(process,
@@ -2599,7 +2610,8 @@ void SetupProcessObject(Environment* env,
                                      NODE_STRINGIFY(HTTP_PARSER_VERSION_MINOR);
   READONLY_PROPERTY(versions,
                     "http_parser",
-                    FIXED_ONE_BYTE_STRING(env->isolate(), http_parser_version));
+                    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(),
+                                                 http_parser_version));
 
   // +1 to get rid of the leading 'v'
   READONLY_PROPERTY(versions,
@@ -2613,13 +2625,13 @@ void SetupProcessObject(Environment* env,
                     OneByteString(env->isolate(), uv_version_string()));
   READONLY_PROPERTY(versions,
                     "zlib",
-                    FIXED_ONE_BYTE_STRING(env->isolate(), ZLIB_VERSION));
+                    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), ZLIB_VERSION));
 
   const char node_modules_version[] = NODE_STRINGIFY(NODE_MODULE_VERSION);
   READONLY_PROPERTY(
       versions,
       "modules",
-      FIXED_ONE_BYTE_STRING(env->isolate(), node_modules_version));
+      FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), node_modules_version));
 
 #if HAVE_OPENSSL
   // Stupid code to slice out the version string.
@@ -2645,12 +2657,13 @@ void SetupProcessObject(Environment* env,
 #endif
 
   // process.arch
-  READONLY_PROPERTY(process, "arch", OneByteString(env->isolate(), ARCH));
+  READONLY_PROPERTY(process, "arch",
+                    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), ARCH));
 
   // process.platform
   READONLY_PROPERTY(process,
                     "platform",
-                    OneByteString(env->isolate(), PLATFORM));
+                    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), PLATFORM));
 
   // process.argv
   Local<Array> arguments = Array::New(env->isolate(), argc);
@@ -2834,7 +2847,8 @@ void Load(Environment* env) {
   // are not safe to ignore.
   try_catch.SetVerbose(false);
 
-  Local<String> script_name = FIXED_ONE_BYTE_STRING(env->isolate(), "node.js");
+  Local<String> script_name =
+      FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), "node.js");
   Local<Value> f_value = ExecuteString(env, MainSource(env), script_name);
   if (try_catch.HasCaught())  {
     ReportException(env, try_catch);
@@ -3093,9 +3107,10 @@ static void EnableDebug(Isolate* isolate, bool wait_connect) {
   Context::Scope context_scope(env->context());
   Local<Object> message = Object::New(env->isolate());
   message->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "cmd"),
-               FIXED_ONE_BYTE_STRING(env->isolate(), "NODE_DEBUG_ENABLED"));
+               FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(),
+                                            "NODE_DEBUG_ENABLED"));
   Local<Value> argv[] = {
-    FIXED_ONE_BYTE_STRING(env->isolate(), "internalMessage"),
+    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), "internalMessage"),
     message
   };
   MakeCallback(env, env->process_object(), "emit", ARRAY_SIZE(argv), argv);
@@ -3486,7 +3501,7 @@ void EmitBeforeExit(Environment* env) {
   Local<Object> process_object = env->process_object();
   Local<String> exit_code = FIXED_ONE_BYTE_STRING(env->isolate(), "exitCode");
   Local<Value> args[] = {
-    FIXED_ONE_BYTE_STRING(env->isolate(), "beforeExit"),
+    FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), "beforeExit"),
     process_object->Get(exit_code)->ToInteger()
   };
   MakeCallback(env, process_object, "emit", ARRAY_SIZE(args), args);
