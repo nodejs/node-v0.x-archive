@@ -62,6 +62,15 @@ inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                     length);
 }
 
+inline v8::Local<v8::String> OneByteInternalizedString(v8::Isolate* isolate,
+                                                       const char* data,
+                                                       int length) {
+  return v8::String::NewFromOneByte(isolate,
+                                    reinterpret_cast<const uint8_t*>(data),
+                                    v8::String::kInternalizedString,
+                                    length);
+}
+
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                            const signed char* data,
                                            int length) {
@@ -71,12 +80,31 @@ inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                     length);
 }
 
+inline v8::Local<v8::String> OneByteInternalizedString(v8::Isolate* isolate,
+                                                       const signed char* data,
+                                                       int length) {
+  return v8::String::NewFromOneByte(isolate,
+                                    reinterpret_cast<const uint8_t*>(data),
+                                    v8::String::kInternalizedString,
+                                    length);
+}
+
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
                                            const unsigned char* data,
                                            int length) {
   return v8::String::NewFromOneByte(isolate,
                                     reinterpret_cast<const uint8_t*>(data),
                                     v8::String::kNormalString,
+                                    length);
+}
+
+inline
+v8::Local<v8::String> OneByteInternalizedString(v8::Isolate* isolate,
+                                                const unsigned char* data,
+                                                int length) {
+  return v8::String::NewFromOneByte(isolate,
+                                    reinterpret_cast<const uint8_t*>(data),
+                                    v8::String::kInternalizedString,
                                     length);
 }
 

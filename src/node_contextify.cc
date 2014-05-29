@@ -166,7 +166,7 @@ class ContextifyContext {
         // which doesn't faithfully capture the full range of configurations
         // that can be done using Object.defineProperty.
         if (clone_property_method.IsEmpty()) {
-          Local<String> code = FIXED_ONE_BYTE_STRING(env()->isolate(),
+          Local<String> code = FIXED_ONE_BYTE_NORMAL_STRING(env()->isolate(),
               "(function cloneProperty(source, key, target) {\n"
               "  if (key === 'Proxy') return;\n"
               "  try {\n"
@@ -178,7 +178,7 @@ class ContextifyContext {
               "  }\n"
               "})");
 
-          Local<String> fname = FIXED_ONE_BYTE_STRING(env()->isolate(),
+          Local<String> fname = FIXED_ONE_BYTE_NORMAL_STRING(env()->isolate(),
               "binding:script");
           Local<Script> script = Script::Compile(code, fname);
           clone_property_method = Local<Function>::Cast(script->Run());
@@ -607,7 +607,8 @@ class ContextifyScript : public BaseObject {
   static Local<String> GetFilenameArg(const FunctionCallbackInfo<Value>& args,
                                       const int i) {
     Local<String> defaultFilename =
-        FIXED_ONE_BYTE_STRING(args.GetIsolate(), "evalmachine.<anonymous>");
+        FIXED_ONE_BYTE_NORMAL_STRING(args.GetIsolate(),
+                                     "evalmachine.<anonymous>");
 
     if (args[i]->IsUndefined()) {
       return defaultFilename;

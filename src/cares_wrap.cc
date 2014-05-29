@@ -304,7 +304,7 @@ class QueryWrap : public AsyncWrap {
     switch (status) {
 #define V(code)                                                               \
       case ARES_ ## code:                                                     \
-        arg = FIXED_ONE_BYTE_STRING(env()->isolate(), #code);                 \
+        arg = FIXED_ONE_BYTE_NORMAL_STRING(env()->isolate(), #code);          \
         break;
       V(ENODATA)
       V(EFORMERR)
@@ -332,7 +332,8 @@ class QueryWrap : public AsyncWrap {
       V(ECANCELLED)
 #undef V
       default:
-        arg = FIXED_ONE_BYTE_STRING(env()->isolate(), "UNKNOWN_ARES_ERROR");
+        arg = FIXED_ONE_BYTE_NORMAL_STRING(env()->isolate(),
+                                           "UNKNOWN_ARES_ERROR");
         break;
     }
     MakeCallback(env()->oncomplete_string(), 1, &arg);

@@ -115,7 +115,7 @@ void TTYWrap::GuessHandleType(const FunctionCallbackInfo<Value>& args) {
     abort();
   }
 
-  args.GetReturnValue().Set(OneByteString(env->isolate(), type));
+  args.GetReturnValue().Set(OneByteInternalizedString(env->isolate(), type));
 }
 
 

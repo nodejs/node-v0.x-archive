@@ -39,7 +39,7 @@ using v8::Object;
 using v8::String;
 
 Handle<String> MainSource(Environment* env) {
-  return OneByteString(env->isolate(), node_native, sizeof(node_native) - 1);
+  return FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), node_native);
 }
 
 void DefineJavaScript(Environment* env, Handle<Object> target) {

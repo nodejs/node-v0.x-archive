@@ -84,7 +84,7 @@ using v8::Value;
     return env->ThrowError( \
       "expected object for " #obj " to contain integer member " #member); \
   } \
-  *valp = obj->Get(OneByteString(env->isolate(), #member)) \
+  *valp = obj->Get(FIXED_ONE_BYTE_STRING(env->isolate(), #member)) \
       ->ToInteger()->Value();
 
 #define SLURP_OBJECT(obj, member, valp) \
@@ -92,7 +92,8 @@ using v8::Value;
     return env->ThrowError( \
       "expected object for " #obj " to contain object member " #member); \
   } \
-  *valp = Local<Object>::Cast(obj->Get(OneByteString(env->isolate(), #member)));
+  *valp = Local<Object>::Cast( \
+      obj->Get(FIXED_ONE_BYTE_STRING(env->isolate(), #member)));
 
 #define SLURP_CONNECTION(arg, conn) \
   if (!(arg)->IsObject()) { \

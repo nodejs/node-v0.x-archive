@@ -245,7 +245,7 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
   }
 
   for (i = 0; i < count; i++) {
-    name = OneByteString(env->isolate(), interfaces[i].name);
+    name = OneByteInternalizedString(env->isolate(), interfaces[i].name);
     if (ret->Has(name)) {
       ifarr = Local<Array>::Cast(ret->Get(name));
     } else {
@@ -280,7 +280,8 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
     o->Set(env->address_string(), OneByteString(env->isolate(), ip));
     o->Set(env->netmask_string(), OneByteString(env->isolate(), netmask));
     o->Set(env->family_string(), family);
-    o->Set(env->mac_string(), FIXED_ONE_BYTE_STRING(env->isolate(), mac));
+    o->Set(env->mac_string(),
+           FIXED_ONE_BYTE_NORMAL_STRING(env->isolate(), mac));
 
     if (interfaces[i].address.address4.sin_family == AF_INET6) {
       uint32_t scopeid = interfaces[i].address.address6.sin6_scope_id;
