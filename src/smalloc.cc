@@ -32,6 +32,14 @@
 #include <assert.h>
 
 #define ALLOC_ID (0xA10C)
+#define UINT8_SIZE (sizeof(uint8_t))
+#define INT8_SIZE (sizeof(int8_t))
+#define UINT16_SIZE (sizeof(uint16_t))
+#define INT16_SIZE (sizeof(int16_t))
+#define UINT32_SIZE (sizeof(uint32_t))
+#define INT32_SIZE (sizeof(int32_t))
+#define DOUBLE_SIZE (sizeof(double))
+#define FLOAT_SIZE (sizeof(float))
 
 namespace node {
 namespace smalloc {
@@ -148,23 +156,23 @@ void CallbackInfo::WeakCallback(Isolate* isolate, Local<Object> object) {
 size_t ExternalArraySize(enum ExternalArrayType type) {
   switch (type) {
     case v8::kExternalUnsignedByteArray:
-      return sizeof(uint8_t);
+      return UINT8_SIZE;
     case v8::kExternalByteArray:
-      return sizeof(int8_t);
+      return INT8_SIZE;
     case v8::kExternalShortArray:
-      return sizeof(int16_t);
+      return INT16_SIZE;
     case v8::kExternalUnsignedShortArray:
-      return sizeof(uint16_t);
+      return UINT16_SIZE;
     case v8::kExternalIntArray:
-      return sizeof(int32_t);
+      return INT32_SIZE;
     case v8::kExternalUnsignedIntArray:
-      return sizeof(uint32_t);
+      return UINT32_SIZE;
     case v8::kExternalFloatArray:
-      return sizeof(float);   // NOLINT(runtime/sizeof)
+      return FLOAT_SIZE;      // NOLINT(runtime/sizeof)
     case v8::kExternalDoubleArray:
-      return sizeof(double);  // NOLINT(runtime/sizeof)
+      return DOUBLE_SIZE;     // NOLINT(runtime/sizeof)
     case v8::kExternalPixelArray:
-      return sizeof(uint8_t);
+      return UINT8_SIZE;
   }
   return 0;
 }
