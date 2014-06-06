@@ -109,6 +109,8 @@
  *
  */
 
+#define OPENSSL_FIPSEVP
+
 #ifdef MD_RAND_DEBUG
 # ifndef NDEBUG
 #   define NDEBUG
@@ -121,10 +123,10 @@
 
 #include "e_os.h"
 
+#include <openssl/crypto.h>
 #include <openssl/rand.h>
 #include "rand_lcl.h"
 
-#include <openssl/crypto.h>
 #include <openssl/err.h>
 
 #ifdef BN_DEBUG
@@ -157,13 +159,14 @@ const char RAND_version[]="RAND" OPENSSL_VERSION_PTEXT;
 static void ssleay_rand_cleanup(void);
 static void ssleay_rand_seed(const void *buf, int num);
 static void ssleay_rand_add(const void *buf, int num, double add_entropy);
-static int ssleay_rand_bytes(unsigned char *buf, int num);
+static int ssleay_rand_bytes(unsigned char *buf, int num, int pseudo);
+static int ssleay_rand_nopseudo_bytes(unsigned char *buf, int num);
 static int ssleay_rand_pseudo_bytes(unsigned char *buf, int num);
 static int ssleay_rand_status(void);
 
 RAND_METHOD rand_ssleay_meth={
 	ssleay_rand_seed,
-	ssleay_rand_bytes,
+	ssleay_rand_nopseudo_bytes,
 	ssleay_rand_cleanup,
 	ssleay_rand_add,
 	ssleay_rand_pseudo_bytes,
@@ -194,6 +197,9 @@ static void ssleay_rand_add(const void *buf, int num, double add)
 	unsigned char local_md[MD_DIGEST_LENGTH];
 	EVP_MD_CTX m;
 	int do_not_lock;
+
+	if (!num)
+		return;
 
 	/*
 	 * (Based on the rand(3) manpage)
@@ -328,7 +334,7 @@ static void ssleay_rand_seed(const void *buf, int num)
 	ssleay_rand_add(buf, num, (double)num);
 	}
 
-static int ssleay_rand_bytes(unsigned char *buf, int num)
+static int ssleay_rand_bytes(unsigned char *buf, int num, int pseudo)
 	{
 	static volatile int stirred_pool = 0;
 	int i,j,k,st_num,st_idx;
@@ -377,8 +383,11 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 	 * are fed into the hash function and the results are kept in the
 	 * global 'md'.
 	 */
-
-	CRYPTO_w_lock(CRYPTO_LOCK_RAND);
+#ifdef OPENSSL_FIPS
+	/* NB: in FIPS mode we are already under a lock */
+	if (!FIPS_mode())
+#endif
+		CRYPTO_w_lock(CRYPTO_LOCK_RAND);
 
 	/* prevent ssleay_rand_bytes() from trying to obtain the lock again */
 	CRYPTO_w_lock(CRYPTO_LOCK_RAND2);
@@ -457,7 +466,10 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 
 	/* before unlocking, we must clear 'crypto_lock_rand' */
 	crypto_lock_rand = 0;
-	CRYPTO_w_unlock(CRYPTO_LOCK_RAND);
+#ifdef OPENSSL_FIPS
+	if (!FIPS_mode())
+#endif
+		CRYPTO_w_unlock(CRYPTO_LOCK_RAND);
 
 	while (num > 0)
 		{
@@ -509,15 +521,23 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 	MD_Init(&m);
 	MD_Update(&m,(unsigned char *)&(md_c[0]),sizeof(md_c));
 	MD_Update(&m,local_md,MD_DIGEST_LENGTH);
-	CRYPTO_w_lock(CRYPTO_LOCK_RAND);
+#ifdef OPENSSL_FIPS
+	if (!FIPS_mode())
+#endif
+		CRYPTO_w_lock(CRYPTO_LOCK_RAND);
 	MD_Update(&m,md,MD_DIGEST_LENGTH);
 	MD_Final(&m,md);
-	CRYPTO_w_unlock(CRYPTO_LOCK_RAND);
+#ifdef OPENSSL_FIPS
+	if (!FIPS_mode())
+#endif
+		CRYPTO_w_unlock(CRYPTO_LOCK_RAND);
 
 	EVP_MD_CTX_cleanup(&m);
 	if (ok)
 		return(1);
-	else
+	else if (pseudo)
+		return 0;
+	else 
 		{
 		RANDerr(RAND_F_SSLEAY_RAND_BYTES,RAND_R_PRNG_NOT_SEEDED);
 		ERR_add_error_data(1, "You need to read the OpenSSL FAQ, "
@@ -526,22 +546,16 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 		}
 	}
 
+static int ssleay_rand_nopseudo_bytes(unsigned char *buf, int num)
+	{
+	return ssleay_rand_bytes(buf, num, 0);
+	}
+
 /* pseudo-random bytes that are guaranteed to be unique but not
    unpredictable */
 static int ssleay_rand_pseudo_bytes(unsigned char *buf, int num) 
 	{
-	int ret;
-	unsigned long err;
-
-	ret = RAND_bytes(buf, num);
-	if (ret == 0)
-		{
-		err = ERR_peek_error();
-		if (ERR_GET_LIB(err) == ERR_LIB_RAND &&
-		    ERR_GET_REASON(err) == RAND_R_PRNG_NOT_SEEDED)
-			ERR_clear_error();
-		}
-	return (ret);
+	return ssleay_rand_bytes(buf, num, 1);
 	}
 
 static int ssleay_rand_status(void)

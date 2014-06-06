@@ -65,14 +65,13 @@
 /* CMS EnvelopedData Utilities */
 
 DECLARE_ASN1_ITEM(CMS_EnvelopedData)
-DECLARE_ASN1_ITEM(CMS_RecipientInfo)
 DECLARE_ASN1_ITEM(CMS_KeyTransRecipientInfo)
 DECLARE_ASN1_ITEM(CMS_KEKRecipientInfo)
 DECLARE_ASN1_ITEM(CMS_OtherKeyAttribute)
 
 DECLARE_STACK_OF(CMS_RecipientInfo)
 
-static CMS_EnvelopedData *cms_get0_enveloped(CMS_ContentInfo *cms)
+CMS_EnvelopedData *cms_get0_enveloped(CMS_ContentInfo *cms)
 	{
 	if (OBJ_obj2nid(cms->contentType) != NID_pkcs7_enveloped)
 		{
@@ -186,6 +185,8 @@ CMS_RecipientInfo *CMS_add1_recipient_cert(CMS_ContentInfo *cms,
 	if (flags & CMS_USE_KEYID)
 		{
 		ktri->version = 2;
+		if (env->version < 2)
+			env->version = 2;
 		type = CMS_RECIPINFO_KEYIDENTIFIER;
 		}
 	else
@@ -371,6 +372,8 @@ static int cms_RecipientInfo_ktri_decrypt(CMS_ContentInfo *cms,
 	unsigned char *ek = NULL;
 	size_t eklen;
 	int ret = 0;
+	CMS_EncryptedContentInfo *ec;
+	ec = cms->d.envelopedData->encryptedContentInfo;
 
 	if (ktri->pkey == NULL)
 		{
@@ -417,8 +420,14 @@ static int cms_RecipientInfo_ktri_decrypt(CMS_ContentInfo *cms,
 
 	ret = 1;
 
-	cms->d.envelopedData->encryptedContentInfo->key = ek;
-	cms->d.envelopedData->encryptedContentInfo->keylen = eklen;
+	if (ec->key)
+		{
+		OPENSSL_cleanse(ec->key, ec->keylen);
+		OPENSSL_free(ec->key);
+		}
+
+	ec->key = ek;
+	ec->keylen = eklen;
 
 	err:
 	if (pctx)
@@ -786,6 +795,9 @@ int CMS_RecipientInfo_decrypt(CMS_ContentInfo *cms, CMS_RecipientInfo *ri)
 		case CMS_RECIPINFO_KEK:
 		return cms_RecipientInfo_kekri_decrypt(cms, ri);
 
+		case CMS_RECIPINFO_PASS:
+		return cms_RecipientInfo_pwri_crypt(cms, ri, 0);
+
 		default:
 		CMSerr(CMS_F_CMS_RECIPIENTINFO_DECRYPT,
 			CMS_R_UNSUPPORTED_RECPIENTINFO_TYPE);
@@ -827,6 +839,10 @@ BIO *cms_EnvelopedData_init_bio(CMS_ContentInfo *cms)
 
 			case CMS_RECIPINFO_KEK:
 			r = cms_RecipientInfo_kekri_encrypt(cms, ri);
+			break;
+
+			case CMS_RECIPINFO_PASS:
+			r = cms_RecipientInfo_pwri_crypt(cms, ri, 1);
 			break;
 
 			default:

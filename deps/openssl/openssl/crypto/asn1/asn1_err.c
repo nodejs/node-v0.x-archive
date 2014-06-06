@@ -1,6 +1,6 @@
 /* crypto/asn1/asn1_err.c */
 /* ====================================================================
- * Copyright (c) 1999-2009 The OpenSSL Project.  All rights reserved.
+ * Copyright (c) 1999-2011 The OpenSSL Project.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -107,6 +107,7 @@ static ERR_STRING_DATA ASN1_str_functs[]=
 {ERR_FUNC(ASN1_F_ASN1_ITEM_I2D_FP),	"ASN1_item_i2d_fp"},
 {ERR_FUNC(ASN1_F_ASN1_ITEM_PACK),	"ASN1_item_pack"},
 {ERR_FUNC(ASN1_F_ASN1_ITEM_SIGN),	"ASN1_item_sign"},
+{ERR_FUNC(ASN1_F_ASN1_ITEM_SIGN_CTX),	"ASN1_item_sign_ctx"},
 {ERR_FUNC(ASN1_F_ASN1_ITEM_UNPACK),	"ASN1_item_unpack"},
 {ERR_FUNC(ASN1_F_ASN1_ITEM_VERIFY),	"ASN1_item_verify"},
 {ERR_FUNC(ASN1_F_ASN1_MBSTRING_NCOPY),	"ASN1_mbstring_ncopy"},
@@ -179,6 +180,7 @@ static ERR_STRING_DATA ASN1_str_functs[]=
 {ERR_FUNC(ASN1_F_PKCS5_PBE2_SET_IV),	"PKCS5_pbe2_set_iv"},
 {ERR_FUNC(ASN1_F_PKCS5_PBE_SET),	"PKCS5_pbe_set"},
 {ERR_FUNC(ASN1_F_PKCS5_PBE_SET0_ALGOR),	"PKCS5_pbe_set0_algor"},
+{ERR_FUNC(ASN1_F_PKCS5_PBKDF2_SET),	"PKCS5_pbkdf2_set"},
 {ERR_FUNC(ASN1_F_SMIME_READ_ASN1),	"SMIME_read_ASN1"},
 {ERR_FUNC(ASN1_F_SMIME_TEXT),	"SMIME_text"},
 {ERR_FUNC(ASN1_F_X509_CINF_NEW),	"X509_CINF_NEW"},
@@ -207,6 +209,7 @@ static ERR_STRING_DATA ASN1_str_reasons[]=
 {ERR_REASON(ASN1_R_BOOLEAN_IS_WRONG_LENGTH),"boolean is wrong length"},
 {ERR_REASON(ASN1_R_BUFFER_TOO_SMALL)     ,"buffer too small"},
 {ERR_REASON(ASN1_R_CIPHER_HAS_NO_OBJECT_IDENTIFIER),"cipher has no object identifier"},
+{ERR_REASON(ASN1_R_CONTEXT_NOT_INITIALISED),"context not initialised"},
 {ERR_REASON(ASN1_R_DATA_IS_WRONG)        ,"data is wrong"},
 {ERR_REASON(ASN1_R_DECODE_ERROR)         ,"decode error"},
 {ERR_REASON(ASN1_R_DECODING_ERROR)       ,"decoding error"},
@@ -302,7 +305,7 @@ static ERR_STRING_DATA ASN1_str_reasons[]=
 {ERR_REASON(ASN1_R_UNKNOWN_PUBLIC_KEY_TYPE),"unknown public key type"},
 {ERR_REASON(ASN1_R_UNKNOWN_SIGNATURE_ALGORITHM),"unknown signature algorithm"},
 {ERR_REASON(ASN1_R_UNKNOWN_TAG)          ,"unknown tag"},
-{ERR_REASON(ASN1_R_UNKOWN_FORMAT)        ,"unkown format"},
+{ERR_REASON(ASN1_R_UNKOWN_FORMAT)        ,"unknown format"},
 {ERR_REASON(ASN1_R_UNSUPPORTED_ANY_DEFINED_BY_TYPE),"unsupported any defined by type"},
 {ERR_REASON(ASN1_R_UNSUPPORTED_CIPHER)   ,"unsupported cipher"},
 {ERR_REASON(ASN1_R_UNSUPPORTED_ENCRYPTION_ALGORITHM),"unsupported encryption algorithm"},
