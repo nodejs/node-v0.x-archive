@@ -181,7 +181,7 @@ $code.=<<___;
 
 	mulq	$m1			# np[j]*m1
 	cmp	$num,$j
-	jne	.L1st
+	jl	.L1st
 
 	movq	%xmm0,$m0		# bp[1]
 
@@ -264,7 +264,7 @@ $code.=<<___;
 
 	mulq	$m1			# np[j]*m1
 	cmp	$num,$j
-	jne	.Linner
+	jl	.Linner
 
 	movq	%xmm0,$m0		# bp[i+1]
 

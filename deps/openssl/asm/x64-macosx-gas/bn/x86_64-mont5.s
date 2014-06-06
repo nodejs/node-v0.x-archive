@@ -116,7 +116,7 @@ L$1st_enter:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	L$1st
+	jl	L$1st
 
 .byte	102,72,15,126,195
 
@@ -199,7 +199,7 @@ L$inner_enter:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	L$inner
+	jl	L$inner
 
 .byte	102,72,15,126,195
 

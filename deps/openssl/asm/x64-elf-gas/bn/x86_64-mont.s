@@ -77,7 +77,7 @@ bn_mul_mont:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	.L1st
+	jl	.L1st
 
 	addq	%rax,%r13
 	movq	(%rsi),%rax
@@ -143,7 +143,7 @@ bn_mul_mont:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	.Linner
+	jl	.Linner
 
 	addq	%rax,%r13
 	movq	(%rsi),%rax

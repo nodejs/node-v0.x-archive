@@ -89,7 +89,7 @@ $L$1st_enter::
 
 	mul	rbp
 	cmp	r15,r9
-	jne	$L$1st
+	jl	$L$1st
 
 	add	r13,rax
 	mov	rax,QWORD PTR[rsi]
@@ -155,7 +155,7 @@ $L$inner_enter::
 
 	mul	rbp
 	cmp	r15,r9
-	jne	$L$inner
+	jl	$L$inner
 
 	add	r13,rax
 	mov	rax,QWORD PTR[rsi]
