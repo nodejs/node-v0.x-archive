@@ -2241,6 +2241,8 @@ $L014picked_te:
 	jb	$L015slow_way
 	test	ecx,15
 	jnz	$L015slow_way
+	bt	DWORD PTR [eax],28
+	jc	$L015slow_way
 	lea	esi,DWORD PTR [esp-324]
 	and	esi,-64
 	mov	eax,ebp
@@ -2975,14 +2977,14 @@ $L045exit:
 	ret
 __x86_AES_set_encrypt_key ENDP
 ALIGN	16
-_AES_set_encrypt_key	PROC PUBLIC
-$L_AES_set_encrypt_key_begin::
+_private_AES_set_encrypt_key	PROC PUBLIC
+$L_private_AES_set_encrypt_key_begin::
 	call	__x86_AES_set_encrypt_key
 	ret
-_AES_set_encrypt_key ENDP
+_private_AES_set_encrypt_key ENDP
 ALIGN	16
-_AES_set_decrypt_key	PROC PUBLIC
-$L_AES_set_decrypt_key_begin::
+_private_AES_set_decrypt_key	PROC PUBLIC
+$L_private_AES_set_decrypt_key_begin::
 	call	__x86_AES_set_encrypt_key
 	cmp	eax,0
 	je	$L054proceed
@@ -3211,12 +3213,12 @@ $L056permute:
 	pop	ebx
 	pop	ebp
 	ret
-_AES_set_decrypt_key ENDP
+_private_AES_set_decrypt_key ENDP
 DB	65,69,83,32,102,111,114,32,120,56,54,44,32,67,82,89
 DB	80,84,79,71,65,77,83,32,98,121,32,60,97,112,112,114
 DB	111,64,111,112,101,110,115,115,108,46,111,114,103,62,0
 .text$	ENDS
 .bss	SEGMENT 'BSS'
-COMM	_OPENSSL_ia32cap_P:DWORD
+COMM	_OPENSSL_ia32cap_P:QWORD
 .bss	ENDS
 END

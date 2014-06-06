@@ -88,7 +88,7 @@ static int eckey_param2type(int *pptype, void **ppval, EC_KEY *ec_key)
 		if (!pstr)
 			return 0;
 		pstr->length = i2d_ECParameters(ec_key, &pstr->data);
-		if (pstr->length < 0)
+		if (pstr->length <= 0)
 			{
 			ASN1_STRING_free(pstr);
 			ECerr(EC_F_ECKEY_PARAM2TYPE, ERR_R_EC_LIB);
@@ -352,6 +352,7 @@ static int eckey_priv_encode(PKCS8_PRIV_KEY_INFO *p8, const EVP_PKEY *pkey)
 		EC_KEY_set_enc_flags(ec_key, old_flags);
 		OPENSSL_free(ep);
 		ECerr(EC_F_ECKEY_PRIV_ENCODE, ERR_R_EC_LIB);
+		return 0;
 	}
 	/* restore old encoding flags */
 	EC_KEY_set_enc_flags(ec_key, old_flags);
@@ -651,6 +652,7 @@ const EVP_PKEY_ASN1_METHOD eckey_asn1_meth =
 	ec_copy_parameters,
 	ec_cmp_parameters,
 	eckey_param_print,
+	0,
 
 	int_ec_free,
 	ec_pkey_ctrl,

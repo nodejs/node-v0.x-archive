@@ -538,6 +538,8 @@ BIGNUM *BN_mod_inverse(BIGNUM *ret,
 BIGNUM *BN_mod_sqrt(BIGNUM *ret,
 	const BIGNUM *a, const BIGNUM *n,BN_CTX *ctx);
 
+void	BN_consttime_swap(BN_ULONG swap, BIGNUM *a, BIGNUM *b, int nwords);
+
 /* Deprecated versions */
 #ifndef OPENSSL_NO_DEPRECATED
 BIGNUM *BN_generate_prime(BIGNUM *ret,int bits,int safe,
@@ -557,6 +559,17 @@ int	BN_generate_prime_ex(BIGNUM *ret,int bits,int safe, const BIGNUM *add,
 int	BN_is_prime_ex(const BIGNUM *p,int nchecks, BN_CTX *ctx, BN_GENCB *cb);
 int	BN_is_prime_fasttest_ex(const BIGNUM *p,int nchecks, BN_CTX *ctx,
 		int do_trial_division, BN_GENCB *cb);
+
+int BN_X931_generate_Xpq(BIGNUM *Xp, BIGNUM *Xq, int nbits, BN_CTX *ctx);
+
+int BN_X931_derive_prime_ex(BIGNUM *p, BIGNUM *p1, BIGNUM *p2,
+			const BIGNUM *Xp, const BIGNUM *Xp1, const BIGNUM *Xp2,
+			const BIGNUM *e, BN_CTX *ctx, BN_GENCB *cb);
+int BN_X931_generate_prime_ex(BIGNUM *p, BIGNUM *p1, BIGNUM *p2,
+			BIGNUM *Xp1, BIGNUM *Xp2,
+			const BIGNUM *Xp,
+			const BIGNUM *e, BN_CTX *ctx,
+			BN_GENCB *cb);
 
 BN_MONT_CTX *BN_MONT_CTX_new(void );
 void BN_MONT_CTX_init(BN_MONT_CTX *ctx);
@@ -612,6 +625,8 @@ int	BN_mod_exp_recp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 int	BN_div_recp(BIGNUM *dv, BIGNUM *rem, const BIGNUM *m,
 	BN_RECP_CTX *recp, BN_CTX *ctx);
 
+#ifndef OPENSSL_NO_EC2M
+
 /* Functions for arithmetic over binary polynomials represented by BIGNUMs. 
  *
  * The BIGNUM::neg property of BIGNUMs representing binary polynomials is
@@ -662,6 +677,8 @@ int	BN_GF2m_mod_solve_quad_arr(BIGNUM *r, const BIGNUM *a,
 	const int p[], BN_CTX *ctx); /* r^2 + r = a mod p */
 int	BN_GF2m_poly2arr(const BIGNUM *a, int p[], int max);
 int	BN_GF2m_arr2poly(const int p[], BIGNUM *a);
+
+#endif
 
 /* faster mod functions for the 'NIST primes' 
  * 0 <= a < p^2 */
@@ -759,11 +776,20 @@ int RAND_pseudo_bytes(unsigned char *buf,int num);
 
 #define bn_fix_top(a)		bn_check_top(a)
 
+#define bn_check_size(bn, bits) bn_wcheck_size(bn, ((bits+BN_BITS2-1))/BN_BITS2)
+#define bn_wcheck_size(bn, words) \
+	do { \
+		const BIGNUM *_bnum2 = (bn); \
+		assert(words <= (_bnum2)->dmax && words >= (_bnum2)->top); \
+	} while(0)
+
 #else /* !BN_DEBUG */
 
 #define bn_pollute(a)
 #define bn_check_top(a)
 #define bn_fix_top(a)		bn_correct_top(a)
+#define bn_check_size(bn, bits)
+#define bn_wcheck_size(bn, words)
 
 #endif
 

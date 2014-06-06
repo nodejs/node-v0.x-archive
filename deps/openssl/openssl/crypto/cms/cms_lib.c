@@ -411,10 +411,7 @@ int cms_DigestAlgorithm_find_ctx(EVP_MD_CTX *mctx, BIO *chain,
 		 * algorithm  OID instead of digest.
 		 */
 			|| EVP_MD_pkey_type(EVP_MD_CTX_md(mtmp)) == nid)
-			{
-			EVP_MD_CTX_copy_ex(mctx, mtmp);
-			return 1;
-			}
+			return EVP_MD_CTX_copy_ex(mctx, mtmp);
 		chain = BIO_next(chain);
 		}
 	}
@@ -466,8 +463,6 @@ int CMS_add0_cert(CMS_ContentInfo *cms, X509 *cert)
 	STACK_OF(CMS_CertificateChoices) **pcerts;
 	int i;
 	pcerts = cms_get0_certificate_choices(cms);
-	if (!pcerts)
-		return 0;
 	if (!pcerts)
 		return 0;
 	for (i = 0; i < sk_CMS_CertificateChoices_num(*pcerts); i++)

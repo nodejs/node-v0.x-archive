@@ -3,12 +3,16 @@
 # found in the LICENSE file.
 
 {
+  'variables': {
+    'is_clang': 0,
+    'gcc_version': 0,
+  },
+
   'targets': [
     {
       'target_name': 'openssl',
       'type': '<(library)',
       'defines': [
-        'L_ENDIAN',
         'OPENSSL_THREADS',
         'PURIFY',
         '_REENTRANT',
@@ -19,6 +23,12 @@
         # Work around brain dead SunOS linker.
         'OPENSSL_NO_GOST',
         'OPENSSL_NO_HW_PADLOCK',
+
+        # Heartbeat is a TLS extension, that couldn't be turned off or
+        # asked to be not advertised. Unfortunately this is unacceptable for
+        # Microsoft's IIS, which seems to be ignoring whole ClientHello after
+        # seeing this extension.
+        'OPENSSL_NO_HEARTBEATS',
       ],
       'sources': [
         'openssl/ssl/bio_ssl.c',
@@ -28,6 +38,7 @@
         'openssl/ssl/d1_lib.c',
         'openssl/ssl/d1_meth.c',
         'openssl/ssl/d1_pkt.c',
+        'openssl/ssl/d1_srtp.c',
         'openssl/ssl/d1_srvr.c',
         'openssl/ssl/kssl.c',
         'openssl/ssl/s23_clnt.c',
@@ -48,6 +59,7 @@
         'openssl/ssl/s3_meth.c',
         'openssl/ssl/s3_pkt.c',
         'openssl/ssl/s3_srvr.c',
+        'openssl/ssl/s3_cbc.c',
         'openssl/ssl/ssl_algs.c',
         'openssl/ssl/ssl_asn1.c',
         'openssl/ssl/ssl_cert.c',
@@ -65,7 +77,7 @@
         'openssl/ssl/t1_meth.c',
         'openssl/ssl/t1_reneg.c',
         'openssl/ssl/t1_srvr.c',
-
+        'openssl/ssl/tls_srp.c',
         'openssl/crypto/aes/aes_cfb.c',
         'openssl/crypto/aes/aes_ctr.c',
         'openssl/crypto/aes/aes_ecb.c',
@@ -199,19 +211,22 @@
         'openssl/crypto/bn/bn_sqr.c',
         'openssl/crypto/bn/bn_sqrt.c',
         'openssl/crypto/bn/bn_word.c',
+        'openssl/crypto/bn/bn_x931p.c',
         'openssl/crypto/buffer/buf_err.c',
+        'openssl/crypto/buffer/buf_str.c',
         'openssl/crypto/buffer/buffer.c',
-        'openssl/crypto/camellia/camellia.c',
-        'openssl/crypto/camellia/cmll_cbc.c',
         'openssl/crypto/camellia/cmll_cfb.c',
         'openssl/crypto/camellia/cmll_ctr.c',
         'openssl/crypto/camellia/cmll_ecb.c',
-        'openssl/crypto/camellia/cmll_misc.c',
         'openssl/crypto/camellia/cmll_ofb.c',
+        'openssl/crypto/camellia/cmll_utl.c',
         'openssl/crypto/cast/c_cfb64.c',
         'openssl/crypto/cast/c_ecb.c',
         'openssl/crypto/cast/c_ofb64.c',
         'openssl/crypto/cast/c_skey.c',
+        'openssl/crypto/cmac/cm_ameth.c',
+        'openssl/crypto/cmac/cm_pmeth.c',
+        'openssl/crypto/cmac/cmac.c',
         'openssl/crypto/cms/cms_asn1.c',
         'openssl/crypto/cms/cms_att.c',
         'openssl/crypto/cms/cms_cd.c',
@@ -222,6 +237,7 @@
         'openssl/crypto/cms/cms_ess.c',
         'openssl/crypto/cms/cms_io.c',
         'openssl/crypto/cms/cms_lib.c',
+        'openssl/crypto/cms/cms_pwri.c',
         'openssl/crypto/cms/cms_sd.c',
         'openssl/crypto/cms/cms_smime.c',
         'openssl/crypto/comp/c_rle.c',
@@ -285,15 +301,20 @@
         'openssl/crypto/dsa/dsa_sign.c',
         'openssl/crypto/dsa/dsa_vrf.c',
         'openssl/crypto/dso/dso_beos.c',
+        'openssl/crypto/dso/dso_dl.c',
+        'openssl/crypto/dso/dso_dlfcn.c',
         'openssl/crypto/dso/dso_err.c',
         'openssl/crypto/dso/dso_lib.c',
         'openssl/crypto/dso/dso_null.c',
         'openssl/crypto/dso/dso_openssl.c',
+        'openssl/crypto/dso/dso_vms.c',
+        'openssl/crypto/dso/dso_win32.c',
         'openssl/crypto/ebcdic.c',
         'openssl/crypto/ec/ec2_mult.c',
+        'openssl/crypto/ec/ec2_oct.c',
         'openssl/crypto/ec/ec2_smpl.c',
-        'openssl/crypto/ec/ec_asn1.c',
         'openssl/crypto/ec/ec_ameth.c',
+        'openssl/crypto/ec/ec_asn1.c',
         'openssl/crypto/ec/ec_check.c',
         'openssl/crypto/ec/ec_curve.c',
         'openssl/crypto/ec/ec_cvt.c',
@@ -301,11 +322,17 @@
         'openssl/crypto/ec/ec_key.c',
         'openssl/crypto/ec/ec_lib.c',
         'openssl/crypto/ec/ec_mult.c',
+        'openssl/crypto/ec/ec_oct.c',
         'openssl/crypto/ec/ec_pmeth.c',
         'openssl/crypto/ec/ec_print.c',
         'openssl/crypto/ec/eck_prn.c',
         'openssl/crypto/ec/ecp_mont.c',
         'openssl/crypto/ec/ecp_nist.c',
+        'openssl/crypto/ec/ecp_nistp224.c',
+        'openssl/crypto/ec/ecp_nistp256.c',
+        'openssl/crypto/ec/ecp_nistp521.c',
+        'openssl/crypto/ec/ecp_nistputil.c',
+        'openssl/crypto/ec/ecp_oct.c',
         'openssl/crypto/ec/ecp_smpl.c',
         'openssl/crypto/ecdh/ech_err.c',
         'openssl/crypto/ecdh/ech_key.c',
@@ -329,6 +356,8 @@
         'openssl/crypto/engine/eng_list.c',
         'openssl/crypto/engine/eng_openssl.c',
         'openssl/crypto/engine/eng_pkey.c',
+        'openssl/crypto/engine/eng_rdrand.c',
+        'openssl/crypto/engine/eng_rsax.c',
         'openssl/crypto/engine/eng_table.c',
         'openssl/crypto/engine/tb_asnmth.c',
         'openssl/crypto/engine/tb_cipher.c',
@@ -353,22 +382,27 @@
         'openssl/crypto/evp/c_alld.c',
         'openssl/crypto/evp/digest.c',
         'openssl/crypto/evp/e_aes.c',
+        'openssl/crypto/evp/e_aes_cbc_hmac_sha1.c',
         'openssl/crypto/evp/e_bf.c',
         'openssl/crypto/evp/e_camellia.c',
         'openssl/crypto/evp/e_cast.c',
         'openssl/crypto/evp/e_des.c',
         'openssl/crypto/evp/e_des3.c',
+        'openssl/crypto/evp/e_idea.c',
         'openssl/crypto/evp/e_null.c',
         'openssl/crypto/evp/e_old.c',
         'openssl/crypto/evp/e_rc2.c',
         'openssl/crypto/evp/e_rc4.c',
+        'openssl/crypto/evp/e_rc4_hmac_md5.c',
         'openssl/crypto/evp/e_rc5.c',
         'openssl/crypto/evp/e_seed.c',
         'openssl/crypto/evp/e_xcbc_d.c',
         'openssl/crypto/evp/encode.c',
         'openssl/crypto/evp/evp_acnf.c',
+        'openssl/crypto/evp/evp_cnf.c',
         'openssl/crypto/evp/evp_enc.c',
         'openssl/crypto/evp/evp_err.c',
+        'openssl/crypto/evp/evp_fips.c',
         'openssl/crypto/evp/evp_key.c',
         'openssl/crypto/evp/evp_lib.c',
         'openssl/crypto/evp/evp_pbe.c',
@@ -400,9 +434,15 @@
         'openssl/crypto/evp/pmeth_gn.c',
         'openssl/crypto/evp/pmeth_lib.c',
         'openssl/crypto/ex_data.c',
+        'openssl/crypto/fips_ers.c',
         'openssl/crypto/hmac/hm_ameth.c',
         'openssl/crypto/hmac/hm_pmeth.c',
         'openssl/crypto/hmac/hmac.c',
+        'openssl/crypto/idea/i_cbc.c',
+        'openssl/crypto/idea/i_cfb64.c',
+        'openssl/crypto/idea/i_ecb.c',
+        'openssl/crypto/idea/i_ofb64.c',
+        'openssl/crypto/idea/i_skey.c',
         'openssl/crypto/krb5/krb5_asn.c',
         'openssl/crypto/lhash/lh_stats.c',
         'openssl/crypto/lhash/lhash.c',
@@ -412,16 +452,21 @@
         'openssl/crypto/md4/md4_one.c',
         'openssl/crypto/md5/md5_dgst.c',
         'openssl/crypto/md5/md5_one.c',
-        'openssl/crypto/mdc2/mdc2dgst.c',
         'openssl/crypto/mdc2/mdc2_one.c',
+        'openssl/crypto/mdc2/mdc2dgst.c',
         'openssl/crypto/mem.c',
         'openssl/crypto/mem_dbg.c',
         'openssl/crypto/modes/cbc128.c',
+        'openssl/crypto/modes/ccm128.c',
         'openssl/crypto/modes/cfb128.c',
         'openssl/crypto/modes/ctr128.c',
         'openssl/crypto/modes/cts128.c',
+        'openssl/crypto/modes/gcm128.c',
         'openssl/crypto/modes/ofb128.c',
+        'openssl/crypto/modes/xts128.c',
         'openssl/crypto/o_dir.c',
+        'openssl/crypto/o_fips.c',
+        'openssl/crypto/o_init.c',
         'openssl/crypto/o_str.c',
         'openssl/crypto/o_time.c',
         'openssl/crypto/objects/o_names.c',
@@ -488,11 +533,13 @@
         'openssl/crypto/rc2/rc2_skey.c',
         'openssl/crypto/rc2/rc2cfb64.c',
         'openssl/crypto/rc2/rc2ofb64.c',
+        'openssl/crypto/rc4/rc4_utl.c',
         'openssl/crypto/ripemd/rmd_dgst.c',
         'openssl/crypto/ripemd/rmd_one.c',
         'openssl/crypto/rsa/rsa_ameth.c',
         'openssl/crypto/rsa/rsa_asn1.c',
         'openssl/crypto/rsa/rsa_chk.c',
+        'openssl/crypto/rsa/rsa_crpt.c',
         'openssl/crypto/rsa/rsa_depr.c',
         'openssl/crypto/rsa/rsa_eay.c',
         'openssl/crypto/rsa/rsa_err.c',
@@ -509,12 +556,19 @@
         'openssl/crypto/rsa/rsa_sign.c',
         'openssl/crypto/rsa/rsa_ssl.c',
         'openssl/crypto/rsa/rsa_x931.c',
+        'openssl/crypto/seed/seed.c',
+        'openssl/crypto/seed/seed_cbc.c',
+        'openssl/crypto/seed/seed_cfb.c',
+        'openssl/crypto/seed/seed_ecb.c',
+        'openssl/crypto/seed/seed_ofb.c',
         'openssl/crypto/sha/sha1_one.c',
         'openssl/crypto/sha/sha1dgst.c',
         'openssl/crypto/sha/sha256.c',
         'openssl/crypto/sha/sha512.c',
         'openssl/crypto/sha/sha_dgst.c',
         'openssl/crypto/sha/sha_one.c',
+        'openssl/crypto/srp/srp_lib.c',
+        'openssl/crypto/srp/srp_vfy.c',
         'openssl/crypto/stack/stack.c',
         'openssl/crypto/store/str_err.c',
         'openssl/crypto/store/str_lib.c',
@@ -610,38 +664,53 @@
         'openssl/engines/e_sureware.c',
         'openssl/engines/e_ubsec.c'
       ],
+      'sources/': [
+        ['exclude', 'md2/.*$'],
+        ['exclude', 'store/.*$']
+      ],
       'conditions': [
         ['target_arch!="ia32" and target_arch!="x64"', {
           # Disable asm
           'defines': [
             'OPENSSL_NO_ASM'
-          ],
+           ],
           'sources': [
             'openssl/crypto/aes/aes_cbc.c',
             'openssl/crypto/aes/aes_core.c',
             'openssl/crypto/bf/bf_enc.c',
             'openssl/crypto/bn/bn_asm.c',
             'openssl/crypto/cast/c_enc.c',
+            'openssl/crypto/camellia/camellia.c',
+            'openssl/crypto/camellia/cmll_cbc.c',
+            'openssl/crypto/camellia/cmll_misc.c',
             'openssl/crypto/des/des_enc.c',
             'openssl/crypto/des/fcrypt_b.c',
             'openssl/crypto/mem_clr.c',
             'openssl/crypto/rc4/rc4_enc.c',
             'openssl/crypto/rc4/rc4_skey.c',
             'openssl/crypto/whrlpool/wp_block.c'
-          ]
+         ]
         }, {
           # Enable asm
           'defines': [
             'AES_ASM',
+            'VPAES_ASM',
             'BF_ASM',
             'BNCO_ASM',
             'BN_ASM',
             'CPUID_ASM',
             'DES_ASM',
             'LIB_BN_ASM',
+            'MD5_ASM',
             'OPENSSL_BN_ASM',
+            'OPENSSL_BN_ASM_MONT',
             'OPENSSL_CPUID_OBJ',
             'RIP_ASM',
+            'RMD160_ASM',
+            'SHA1_ASM',
+            'SHA256_ASM',
+            'SHA512_ASM',
+            'GHASH_ASM',
             'WHIRLPOOL_ASM',
             'WP_ASM'
           ],
@@ -649,6 +718,8 @@
             ['OS!="win" and OS!="mac" and target_arch=="ia32"', {
               'sources': [
                 'asm/x86-elf-gas/aes/aes-586.s',
+                'asm/x86-elf-gas/aes/aesni-x86.s',
+                'asm/x86-elf-gas/aes/vpaes-x86.s',
                 'asm/x86-elf-gas/bf/bf-686.s',
                 'asm/x86-elf-gas/bn/x86-mont.s',
                 'asm/x86-elf-gas/bn/x86.s',
@@ -664,33 +735,53 @@
                 'asm/x86-elf-gas/sha/sha256-586.s',
                 'asm/x86-elf-gas/sha/sha512-586.s',
                 'asm/x86-elf-gas/whrlpool/wp-mmx.s',
+                'asm/x86-elf-gas/modes/ghash-x86.s',
                 'asm/x86-elf-gas/x86cpuid.s',
                 'openssl/crypto/whrlpool/wp_block.c'
               ]
             }],
             ['OS!="win" and OS!="mac" and target_arch=="x64"', {
+              'defines': [
+                'OPENSSL_BN_ASM_MONT5',
+                'OPENSSL_BN_ASM_GF2m',
+                'OPENSSL_IA32_SSE2',
+                'BSAES_ASM',
+              ],
               'sources': [
                 'asm/x64-elf-gas/aes/aes-x86_64.s',
+                'asm/x64-elf-gas/aes/aesni-x86_64.s',
+                'asm/x64-elf-gas/aes/vpaes-x86_64.s',
+                'asm/x64-elf-gas/aes/bsaes-x86_64.s',
+                'asm/x64-elf-gas/aes/aesni-sha1-x86_64.s',
+                'asm/x64-elf-gas/bn/modexp512-x86_64.s',
                 'asm/x64-elf-gas/bn/x86_64-mont.s',
+                'asm/x64-elf-gas/bn/x86_64-mont5.s',
+                'asm/x64-elf-gas/bn/x86_64-gf2m.s',
                 'asm/x64-elf-gas/camellia/cmll-x86_64.s',
                 'asm/x64-elf-gas/md5/md5-x86_64.s',
                 'asm/x64-elf-gas/rc4/rc4-x86_64.s',
+                'asm/x64-elf-gas/rc4/rc4-md5-x86_64.s',
                 'asm/x64-elf-gas/sha/sha1-x86_64.s',
+                'asm/x64-elf-gas/sha/sha256-x86_64.s',
                 'asm/x64-elf-gas/sha/sha512-x86_64.s',
                 'asm/x64-elf-gas/whrlpool/wp-x86_64.s',
+                'asm/x64-elf-gas/modes/ghash-x86_64.s',
                 'asm/x64-elf-gas/x86_64cpuid.s',
                 # Non-generated asm
                 'openssl/crypto/bn/asm/x86_64-gcc.c',
                 # No asm available
-                'openssl/crypto/cast/c_enc.c',
-                'openssl/crypto/des/des_enc.c',
                 'openssl/crypto/bf/bf_enc.c',
+                'openssl/crypto/cast/c_enc.c',
+                'openssl/crypto/camellia/cmll_misc.c',
+                'openssl/crypto/des/des_enc.c',
                 'openssl/crypto/des/fcrypt_b.c'
               ]
             }],
             ['OS=="mac" and target_arch=="ia32"', {
               'sources': [
                 'asm/x86-macosx-gas/aes/aes-586.s',
+                'asm/x86-macosx-gas/aes/aesni-x86.s',
+                'asm/x86-macosx-gas/aes/vpaes-x86.s',
                 'asm/x86-macosx-gas/bf/bf-686.s',
                 'asm/x86-macosx-gas/bn/x86-mont.s',
                 'asm/x86-macosx-gas/bn/x86.s',
@@ -706,33 +797,53 @@
                 'asm/x86-macosx-gas/sha/sha256-586.s',
                 'asm/x86-macosx-gas/sha/sha512-586.s',
                 'asm/x86-macosx-gas/whrlpool/wp-mmx.s',
+                'asm/x86-macosx-gas/modes/ghash-x86.s',
                 'asm/x86-macosx-gas/x86cpuid.s',
                 'openssl/crypto/whrlpool/wp_block.c'
               ]
             }],
             ['OS=="mac" and target_arch=="x64"', {
+              'defines': [
+                'OPENSSL_BN_ASM_MONT5',
+                'OPENSSL_BN_ASM_GF2m',
+                'OPENSSL_IA32_SSE2',
+                'BSAES_ASM',
+              ],
               'sources': [
                 'asm/x64-macosx-gas/aes/aes-x86_64.s',
+                'asm/x64-macosx-gas/aes/aesni-x86_64.s',
+                'asm/x64-macosx-gas/aes/vpaes-x86_64.s',
+                'asm/x64-macosx-gas/aes/bsaes-x86_64.s',
+                'asm/x64-macosx-gas/aes/aesni-sha1-x86_64.s',
+                'asm/x64-macosx-gas/bn/modexp512-x86_64.s',
                 'asm/x64-macosx-gas/bn/x86_64-mont.s',
+                'asm/x64-macosx-gas/bn/x86_64-mont5.s',
+                'asm/x64-macosx-gas/bn/x86_64-gf2m.s',
                 'asm/x64-macosx-gas/camellia/cmll-x86_64.s',
                 'asm/x64-macosx-gas/md5/md5-x86_64.s',
                 'asm/x64-macosx-gas/rc4/rc4-x86_64.s',
+                'asm/x64-macosx-gas/rc4/rc4-md5-x86_64.s',
                 'asm/x64-macosx-gas/sha/sha1-x86_64.s',
+                'asm/x64-macosx-gas/sha/sha256-x86_64.s',
                 'asm/x64-macosx-gas/sha/sha512-x86_64.s',
                 'asm/x64-macosx-gas/whrlpool/wp-x86_64.s',
+                'asm/x64-macosx-gas/modes/ghash-x86_64.s',
                 'asm/x64-macosx-gas/x86_64cpuid.s',
                 # Non-generated asm
                 'openssl/crypto/bn/asm/x86_64-gcc.c',
                 # No asm available
-                'openssl/crypto/cast/c_enc.c',
-                'openssl/crypto/des/des_enc.c',
                 'openssl/crypto/bf/bf_enc.c',
+                'openssl/crypto/cast/c_enc.c',
+                'openssl/crypto/camellia/cmll_misc.c',
+                'openssl/crypto/des/des_enc.c',
                 'openssl/crypto/des/fcrypt_b.c'
               ]
             }],
             ['OS=="win" and target_arch=="ia32"', {
               'sources': [
                 'asm/x86-win32-masm/aes/aes-586.asm',
+                'asm/x86-win32-masm/aes/aesni-x86.asm',
+                'asm/x86-win32-masm/aes/vpaes-x86.asm',
                 'asm/x86-win32-masm/bf/bf-686.asm',
                 'asm/x86-win32-masm/bn/x86-mont.asm',
                 'asm/x86-win32-masm/bn/x86.asm',
@@ -748,6 +859,7 @@
                 'asm/x86-win32-masm/sha/sha256-586.asm',
                 'asm/x86-win32-masm/sha/sha512-586.asm',
                 'asm/x86-win32-masm/whrlpool/wp-mmx.asm',
+                'asm/x86-win32-masm/modes/ghash-x86.asm',
                 'asm/x86-win32-masm/x86cpuid.asm',
                 'openssl/crypto/whrlpool/wp_block.c'
               ],
@@ -772,22 +884,39 @@
               ]
             }],
             ['OS=="win" and target_arch=="x64"', {
+              'defines': [
+                'OPENSSL_BN_ASM_MONT5',
+                'OPENSSL_BN_ASM_GF2m',
+                'OPENSSL_IA32_SSE2',
+                'BSAES_ASM',
+              ],
               'sources': [
                 'asm/x64-win32-masm/aes/aes-x86_64.asm',
+                'asm/x64-win32-masm/aes/aesni-x86_64.asm',
+                'asm/x64-win32-masm/aes/vpaes-x86_64.asm',
+                'asm/x64-win32-masm/aes/bsaes-x86_64.asm',
+                'asm/x64-win32-masm/aes/aesni-sha1-x86_64.asm',
+                'asm/x64-win32-masm/bn/modexp512-x86_64.asm',
                 'asm/x64-win32-masm/bn/x86_64-mont.asm',
+                'asm/x64-win32-masm/bn/x86_64-mont5.asm',
+                'asm/x64-win32-masm/bn/x86_64-gf2m.asm',
                 'asm/x64-win32-masm/camellia/cmll-x86_64.asm',
                 'asm/x64-win32-masm/md5/md5-x86_64.asm',
                 'asm/x64-win32-masm/rc4/rc4-x86_64.asm',
+                'asm/x64-win32-masm/rc4/rc4-md5-x86_64.asm',
                 'asm/x64-win32-masm/sha/sha1-x86_64.asm',
+                'asm/x64-win32-masm/sha/sha256-x86_64.asm',
                 'asm/x64-win32-masm/sha/sha512-x86_64.asm',
                 'asm/x64-win32-masm/whrlpool/wp-x86_64.asm',
+                'asm/x64-win32-masm/modes/ghash-x86_64.asm',
                 'asm/x64-win32-masm/x86_64cpuid.asm',
                 # Non-generated asm
                 'openssl/crypto/bn/asm/x86_64-win32-masm.asm',
                 # No asm available
-                'openssl/crypto/cast/c_enc.c',
-                'openssl/crypto/des/des_enc.c',
                 'openssl/crypto/bf/bf_enc.c',
+                'openssl/crypto/cast/c_enc.c',
+                'openssl/crypto/camellia/cmll_misc.c',
+                'openssl/crypto/des/des_enc.c',
                 'openssl/crypto/des/fcrypt_b.c'
               ],
               'rules': [
@@ -814,8 +943,14 @@
         ['OS=="win"', {
           'defines': [
             'MK1MF_BUILD',
-            'WIN32_LEAN_AND_MEAN',
-          ]
+            'WIN32_LEAN_AND_MEAN'
+          ],
+          'link_settings': {
+            'libraries': [
+              '-lgdi32.lib',
+              '-luser32.lib',
+            ]
+          }
         }, {
           'defines': [
             # ENGINESDIR must be defined if OPENSSLDIR is.
@@ -825,24 +960,17 @@
             'OPENSSLDIR="/etc/ssl"',
             'TERMIOS',
           ],
+          'cflags': ['-Wno-missing-field-initializers'],
+        }],
+        ['is_clang==1 or gcc_version>=43', {
+          'cflags': ['-Wno-old-style-declaration'],
         }],
         ['OS=="solaris"', {
           'defines': ['__EXTENSIONS__'],
         }],
-        ['target_arch=="ia32"', {
-          'variables': {'openssl_config_path': 'config/piii'},
-        }],
-        ['target_arch=="x64"', {
-          'variables': {'openssl_config_path': 'config/k8'},
-        }],
         ['target_arch=="arm"', {
-          'variables': {'openssl_config_path': 'config/android'},
+          'sources': ['openssl/crypto/armcap.c'],
         }],
-      ],
-      'sources/': [
-        ['exclude', 'camellia/.*$'],
-        ['exclude', 'cms/.*$'],
-        ['exclude', 'mdc2/.*$'],
       ],
       'include_dirs': [
         '.',
@@ -850,15 +978,13 @@
         'openssl/crypto',
         'openssl/crypto/asn1',
         'openssl/crypto/evp',
+        'openssl/crypto/md2',
+        'openssl/crypto/modes',
         'openssl/crypto/store',
         'openssl/include',
-        '<@(openssl_config_path)',
       ],
       'direct_dependent_settings': {
-        'include_dirs': [
-          'openssl/include',
-          '<@(openssl_config_path)',
-        ],
+        'include_dirs': ['openssl/include'],
       },
     },
   ],
