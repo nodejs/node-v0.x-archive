@@ -53,9 +53,9 @@ function version (args, silent, cb_) {
       return cb_(er)
     }
 
-		var newVer = semver.valid(args[0])
-		if (!newVer) newVer = semver.inc(data.version, args[0])
-		if (!newVer) return cb_(version.usage)
+    var newVer = semver.valid(args[0])
+    if (!newVer) newVer = semver.inc(data.version, args[0])
+    if (!newVer) return cb_(version.usage)
     if (data.version === newVer) return cb_(new Error("Version not changed"))
     data.version = newVer
 
