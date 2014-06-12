@@ -100,12 +100,8 @@ macro TYPED_ARRAY_CONSTRUCTOR(ARRAY_ID, NAME, ELEMENT_SIZE)
       throw MakeRangeError("invalid_typed_array_length");
     }
     var byteLength = l * ELEMENT_SIZE;
-    if (byteLength > %_TypedArrayMaxSizeInHeap()) {
-      var buffer = new $ArrayBuffer(byteLength);
-      %_TypedArrayInitialize(obj, ARRAY_ID, buffer, 0, byteLength);
-    } else {
-      %_TypedArrayInitialize(obj, ARRAY_ID, null, 0, byteLength);
-    }
+    var buffer = new $ArrayBuffer(byteLength);
+    %_TypedArrayInitialize(obj, ARRAY_ID, buffer, 0, byteLength);
   }
 
   function NAMEConstructByArrayLike(obj, arrayLike) {

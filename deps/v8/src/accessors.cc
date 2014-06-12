@@ -119,7 +119,9 @@ bool Accessors::IsJSObjectFieldAccessor(typename T::TypeHandle type,
         CheckForName(name, isolate->heap()->byte_length_string(),
                      JSTypedArray::kByteLengthOffset, object_offset) ||
         CheckForName(name, isolate->heap()->byte_offset_string(),
-                     JSTypedArray::kByteOffsetOffset, object_offset);
+                     JSTypedArray::kByteOffsetOffset, object_offset) ||
+        CheckForName(name, isolate->heap()->buffer_string(),
+                     JSTypedArray::kBufferOffset, object_offset);
     case JS_ARRAY_BUFFER_TYPE:
       return
         CheckForName(name, isolate->heap()->byte_length_string(),
@@ -129,7 +131,9 @@ bool Accessors::IsJSObjectFieldAccessor(typename T::TypeHandle type,
         CheckForName(name, isolate->heap()->byte_length_string(),
                      JSDataView::kByteLengthOffset, object_offset) ||
         CheckForName(name, isolate->heap()->byte_offset_string(),
-                     JSDataView::kByteOffsetOffset, object_offset);
+                     JSDataView::kByteOffsetOffset, object_offset) ||
+        CheckForName(name, isolate->heap()->buffer_string(),
+                     JSDataView::kBufferOffset, object_offset);
     default:
       return false;
   }
