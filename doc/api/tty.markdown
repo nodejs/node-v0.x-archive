@@ -24,8 +24,7 @@ terminal.
 
 ## tty.setRawMode(mode)
 
-Deprecated. Use `tty.ReadStream#setRawMode()`
-(i.e. `process.stdin.setRawMode()`) instead.
+    Stability: 0 - Deprecated: use [rs.setRawMode()](#tty_rs_setrawmode_mode) instead.
 
 
 ## Class: ReadStream
