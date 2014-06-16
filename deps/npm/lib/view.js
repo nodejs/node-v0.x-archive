@@ -4,16 +4,19 @@ module.exports = view
 view.usage = "npm view pkg[@version] [<field>[.subfield]...]"
 
 view.completion = function (opts, cb) {
+  var uri
   if (opts.conf.argv.remain.length <= 2) {
-    return registry.get("/-/short", cb)
+    uri = url.resolve(npm.config.get("registry"), "/-/short")
+    return registry.get(uri, null, cb)
   }
   // have the package, get the fields.
   var tag = npm.config.get("tag")
-  registry.get(opts.conf.argv.remain[2], function (er, d) {
+  uri = url.resolve(npm.config.get("registry"), opts.conf.argv.remain[2])
+  registry.get(uri, null, function (er, d) {
     if (er) return cb(er)
     var dv = d.versions[d["dist-tags"][tag]]
       , fields = []
-    d.versions = Object.keys(d.versions).sort(semver.compare)
+    d.versions = Object.keys(d.versions).sort(semver.compareLoose)
     fields = getFields(d).concat(getFields(dv))
     cb(null, fields)
   })
@@ -39,7 +42,8 @@ view.completion = function (opts, cb) {
   }
 }
 
-var npm = require("./npm.js")
+var url = require("url")
+  , npm = require("./npm.js")
   , registry = npm.registry
   , log = require("npmlog")
   , util = require("util")
@@ -56,15 +60,27 @@ function view (args, silent, cb) {
   if (name === ".") return cb(view.usage)
 
   // get the data about this package
-  registry.get(name, 600, function (er, data) {
+  var uri = url.resolve(npm.config.get("registry"), name)
+  registry.get(uri, null, function (er, data) {
     if (er) return cb(er)
-    if (data["dist-tags"].hasOwnProperty(version)) {
+    if (data["dist-tags"] && data["dist-tags"].hasOwnProperty(version)) {
       version = data["dist-tags"][version]
     }
+
+    if (data.time && data.time.unpublished) {
+      var u = data.time.unpublished
+      er = new Error("Unpublished by " + u.name + " on " + u.time)
+      er.statusCode = 404
+      er.code = "E404"
+      er.pkgid = data._id
+      return cb(er, data)
+    }
+
+
     var results = []
       , error = null
-      , versions = data.versions
-    data.versions = Object.keys(data.versions).sort(semver.compare)
+      , versions = data.versions || {}
+    data.versions = Object.keys(versions).sort(semver.compareLoose)
     if (!args.length) args = [""]
 
     // remove readme unless we asked for it
@@ -73,7 +89,7 @@ function view (args, silent, cb) {
     }
 
     Object.keys(versions).forEach(function (v) {
-      if (semver.satisfies(v, version)) args.forEach(function (args) {
+      if (semver.satisfies(v, version, true)) args.forEach(function (args) {
         // remove readme unless we asked for it
         if (-1 === args.indexOf("readme")) {
           delete versions[v].readme
@@ -128,8 +144,9 @@ function search (data, fields, version, title) {
     , tail = fields
   while (!field && fields.length) field = tail.shift()
   fields = [field].concat(tail)
+  var o
   if (!field && !tail.length) {
-    var o = {}
+    o = {}
     o[version] = {}
     o[version][title] = data
     return o
@@ -149,7 +166,6 @@ function search (data, fields, version, title) {
       return search(data[0], fields, version, title)
     }
     var results = []
-      , res = null
     data.forEach(function (data, i) {
       var tl = title.length
         , newt = title.substr(0, tl-(fields.join(".").length) - 1)
@@ -171,7 +187,7 @@ function search (data, fields, version, title) {
       return new Error("Not an object: "+data)
     }
   }
-  var o = {}
+  o = {}
   o[version] = {}
   o[version][title] = data
   return o
@@ -183,7 +199,7 @@ function printData (data, name, cb) {
     , showVersions = versions.length > 1
     , showFields
 
-  versions.forEach(function (v, i) {
+  versions.forEach(function (v) {
     var fields = Object.keys(data[v])
     showFields = showFields || (fields.length > 1)
     fields.forEach(function (f) {
@@ -197,7 +213,7 @@ function printData (data, name, cb) {
         d = JSON.stringify(d)
       }
       if (f && showFields) f += " = "
-      if (d.indexOf("\n") !== -1) d = "\n" + d
+      if (d.indexOf("\n") !== -1) d = " \n" + d
       msg += (showVersions ? name + "@" + v + " " : "")
            + (showFields ? f : "") + d + "\n"
     })

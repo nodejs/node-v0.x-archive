@@ -1,5 +1,7 @@
+var common = require('../common-tap.js')
 var test = require('tap').test
 var fs = require('fs')
+var osenv = require('osenv')
 var pkg = process.env.npm_config_tmp || '/tmp'
 pkg += '/npm-test-publish-config'
 
@@ -8,7 +10,7 @@ require('mkdirp').sync(pkg)
 fs.writeFileSync(pkg + '/package.json', JSON.stringify({
   name: 'npm-test-publish-config',
   version: '1.2.3',
-  publishConfig: { registry: 'http://localhost:13370' }
+  publishConfig: { registry: common.registry }
 }), 'utf8')
 
 var spawn = require('child_process').spawn
@@ -24,7 +26,7 @@ test(function (t) {
     res.statusCode = 500
     res.end('{"error":"sshhh. naptime nao. \\^O^/ <(YAWWWWN!)"}')
     child.kill()
-  }).listen(13370, function () {
+  }).listen(common.port, function () {
     t.pass('server is listening')
 
     // don't much care about listening to the child's results
@@ -34,14 +36,15 @@ test(function (t) {
     // itself functions normally.
     //
     // Make sure that we don't sit around waiting for lock files
-    child = spawn(node, [npm, 'publish'], {
+    child = spawn(node, [npm, 'publish', '--email=fancy', '--_auth=feast'], {
       cwd: pkg,
       env: {
         npm_config_cache_lock_stale: 1000,
         npm_config_cache_lock_wait: 1000,
         HOME: process.env.HOME,
         Path: process.env.PATH,
-        PATH: process.env.PATH
+        PATH: process.env.PATH,
+        USERPROFILE: osenv.home()
       }
     })
   })

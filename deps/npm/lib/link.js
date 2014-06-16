@@ -8,7 +8,7 @@ var npm = require("./npm.js")
   , asyncMap = require("slide").asyncMap
   , chain = require("slide").chain
   , path = require("path")
-  , rm = require("rimraf")
+  , rm = require("./utils/gently-rm.js")
   , build = require("./build.js")
 
 module.exports = link
@@ -121,6 +121,10 @@ function linkPkg (folder, cb_) {
       return cb_(er, [[d && d._id, target, null, null]])
     }
     if (er) return cb(er)
+    if (!d.name) {
+      er = new Error("Package must have a name field to be linked")
+      return cb(er)
+    }
     var target = path.resolve(npm.globalDir, d.name)
     rm(target, function (er) {
       if (er) return cb(er)
@@ -128,7 +132,7 @@ function linkPkg (folder, cb_) {
         if (er) return cb(er)
         log.verbose("link", "build target", target)
         // also install missing dependencies.
-        npm.commands.install(me, [], function (er, installed) {
+        npm.commands.install(me, [], function (er) {
           if (er) return cb(er)
           // build the global stuff.  Don't run *any* scripts, because
           // install command already will have done that.
