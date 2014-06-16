@@ -13,7 +13,7 @@ view.completion = function (opts, cb) {
     if (er) return cb(er)
     var dv = d.versions[d["dist-tags"][tag]]
       , fields = []
-    d.versions = Object.keys(d.versions).sort(semver.compare)
+    d.versions = Object.keys(d.versions).sort(semver.compareLoose)
     fields = getFields(d).concat(getFields(dv))
     cb(null, fields)
   })
@@ -56,15 +56,26 @@ function view (args, silent, cb) {
   if (name === ".") return cb(view.usage)
 
   // get the data about this package
-  registry.get(name, 600, function (er, data) {
+  registry.get(name, function (er, data) {
     if (er) return cb(er)
-    if (data["dist-tags"].hasOwnProperty(version)) {
+    if (data["dist-tags"] && data["dist-tags"].hasOwnProperty(version)) {
       version = data["dist-tags"][version]
     }
+
+    if (data.time && data.time.unpublished) {
+      var u = data.time.unpublished
+      var er = new Error("Unpublished by " + u.name + " on " + u.time)
+      er.statusCode = 404
+      er.code = "E404"
+      er.pkgid = data._id
+      return cb(er, data)
+    }
+
+
     var results = []
       , error = null
-      , versions = data.versions
-    data.versions = Object.keys(data.versions).sort(semver.compare)
+      , versions = data.versions || {}
+    data.versions = Object.keys(versions).sort(semver.compareLoose)
     if (!args.length) args = [""]
 
     // remove readme unless we asked for it
@@ -73,7 +84,7 @@ function view (args, silent, cb) {
     }
 
     Object.keys(versions).forEach(function (v) {
-      if (semver.satisfies(v, version)) args.forEach(function (args) {
+      if (semver.satisfies(v, version, true)) args.forEach(function (args) {
         // remove readme unless we asked for it
         if (-1 === args.indexOf("readme")) {
           delete versions[v].readme
@@ -197,7 +208,7 @@ function printData (data, name, cb) {
         d = JSON.stringify(d)
       }
       if (f && showFields) f += " = "
-      if (d.indexOf("\n") !== -1) d = "\n" + d
+      if (d.indexOf("\n") !== -1) d = " \n" + d
       msg += (showVersions ? name + "@" + v + " " : "")
            + (showFields ? f : "") + d + "\n"
     })

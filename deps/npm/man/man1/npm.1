@@ -1,7 +1,7 @@
 .\" Generated with Ronnjs 0.3.8
 .\" http://github.com/kapouer/ronnjs/
 .
-.TH "NPM" "1" "June 2013" "" ""
+.TH "NPM" "1" "June 2014" "" ""
 .
 .SH "NAME"
 \fBnpm\fR \-\- node package manager
@@ -14,7 +14,7 @@ npm <command> [args]
 .fi
 .
 .SH "VERSION"
-1.2.30
+1.4.15
 .
 .SH "DESCRIPTION"
 npm is the package manager for the Node JavaScript platform\.  It puts
@@ -33,14 +33,28 @@ Run \fBnpm help\fR to get a list of available commands\.
 You probably got npm because you want to install stuff\.
 .
 .P
-Use \fBnpm install blerg\fR to install the latest version of "blerg"\.  Check out \fBnpm help install\fR for more info\.  It can do a lot of stuff\.
+npm help Use \fBnpm install blerg\fR to install the latest version of "blerg"\.  Check out \fBnpm\-install\fR for more info\.  It can do a lot of stuff\.
 .
 .P
 Use the \fBnpm search\fR command to show everything that\'s available\.
 Use \fBnpm ls\fR to show everything you\'ve installed\.
 .
+.SH "DEPENDENCIES"
+If a package references to another package with a git URL, npm depends
+on a preinstalled git\.
+.
+.P
+If one of the packages npm tries to install is a native node module and
+requires compiling of C++ Code, npm will use node\-gyp \fIhttps://github\.com/TooTallNate/node\-gyp\fR for that task\.
+For a Unix system, node\-gyp \fIhttps://github\.com/TooTallNate/node\-gyp\fR
+needs Python, make and a buildchain like GCC\. On Windows,
+Python and Microsoft Visual Studio C++ is needed\. Python 3 is
+not supported by node\-gyp \fIhttps://github\.com/TooTallNate/node\-gyp\fR\|\.
+For more information visit the node\-gyp repository \fIhttps://github\.com/TooTallNate/node\-gyp\fR and
+the node\-gyp Wiki \fIhttps://github\.com/TooTallNate/node\-gyp/wiki\fR\|\.
+.
 .SH "DIRECTORIES"
-See \fBnpm help folders\fR to learn about where npm puts stuff\.
+npm help  See \fBnpm\-folders\fR to learn about where npm puts stuff\.
 .
 .P
 In particular, npm has two modes of operation:
@@ -70,7 +84,7 @@ following help topics:
 .
 .IP "\(bu" 4
 json:
-Make a package\.json file\.  See \fBnpm help json\fR\|\.
+npm help  Make a package\.json file\.  See \fBpackage\.json\fR\|\.
 .
 .IP "\(bu" 4
 link:
@@ -139,14 +153,14 @@ lib/utils/config\-defs\.js\.  These must not be changed\.
 .IP "" 0
 .
 .P
-See \fBnpm help config\fR for much much more information\.
+npm help  See \fBnpm\-config\fR for much much more information\.
 .
 .SH "CONTRIBUTIONS"
 Patches welcome!
 .
 .IP "\(bu" 4
 code:
-Read through \fBnpm help coding\-style\fR if you plan to submit code\.
+npm help  Read through \fBnpm\-coding\-style\fR if you plan to submit code\.
 You don\'t have to agree with it, but you do have to follow it\.
 .
 .IP "\(bu" 4
@@ -165,7 +179,7 @@ If you would like to contribute, but don\'t know what to work on, check
 the issues list or ask on the mailing list\.
 .
 .IP "\(bu" 4
-\fIhttp://github\.com/isaacs/npm/issues\fR
+\fIhttp://github\.com/npm/npm/issues\fR
 .
 .IP "\(bu" 4
 \fInpm\-@googlegroups\.com\fR
@@ -176,7 +190,7 @@ the issues list or ask on the mailing list\.
 When you find issues, please report them:
 .
 .IP "\(bu" 4
-web: \fIhttp://github\.com/isaacs/npm/issues\fR
+web: \fIhttp://github\.com/npm/npm/issues\fR
 .
 .IP "\(bu" 4
 email: \fInpm\-@googlegroups\.com\fR
@@ -191,9 +205,6 @@ as expected\.  The \fBnpm\-debug\.log\fR file is also helpful to provide\.
 You can also look for isaacs in #node\.js on irc://irc\.freenode\.net\.  He
 will no doubt tell you to put the output in a gist or email\.
 .
-.SH "HISTORY"
-See npm help changelog
-.
 .SH "AUTHOR"
 Isaac Z\. Schlueter \fIhttp://blog\.izs\.me/\fR :: isaacs \fIhttps://github\.com/isaacs/\fR :: @izs \fIhttp://twitter\.com/izs\fR :: \fIi@izs\.me\fR
 .
@@ -203,13 +214,13 @@ Isaac Z\. Schlueter \fIhttp://blog\.izs\.me/\fR :: isaacs \fIhttps://github\.com
 npm help help
 .
 .IP "\(bu" 4
-npm help faq
+npm help  faq
 .
 .IP "\(bu" 4
 README
 .
 .IP "\(bu" 4
-npm help json
+npm help  package\.json
 .
 .IP "\(bu" 4
 npm help install
@@ -218,7 +229,13 @@ npm help install
 npm help config
 .
 .IP "\(bu" 4
-npm help index
+npm help  config
+.
+.IP "\(bu" 4
+npm help  npmrc
+.
+.IP "\(bu" 4
+npm help  index
 .
 .IP "\(bu" 4
 npm apihelp npm

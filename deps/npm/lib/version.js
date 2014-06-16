@@ -11,7 +11,7 @@ var exec = require("child_process").execFile
   , which = require("which")
   , npm = require("./npm.js")
 
-version.usage = "npm version [<newversion> | major | minor | patch | build]\n"
+version.usage = "npm version [<newversion> | major | minor | patch | prerelease | preminor | premajor ]\n"
               + "\n(run in package dir)\n"
               + "'npm -v' or 'npm --version' to print npm version "
               + "("+npm.version+")\n"
@@ -65,7 +65,8 @@ function version (args, silent, cb_) {
         cb_(er)
       }
 
-      var doGit = !er && s.isDirectory()
+      var tags = npm.config.get('git-tag-version')
+      var doGit = !er && s.isDirectory() && tags
       if (!doGit) return write(data, cb)
       else checkGit(data, cb)
     })
@@ -104,6 +105,11 @@ function checkGit (data, cb) {
         chain
           ( [ [ exec, git, [ "add", "package.json" ], {env: process.env} ]
             , [ exec, git, [ "commit", "-m", message ], {env: process.env} ]
+            , sign && function (cb) {
+                npm.spinner.stop()
+                cb()
+              }
+
             , [ exec, git, [ "tag", "v" + data.version, flag, message ]
               , {env: process.env} ] ]
           , cb )
