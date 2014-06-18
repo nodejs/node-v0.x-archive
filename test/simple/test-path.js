@@ -324,6 +324,7 @@ if (isWindows) {
        [['.'], process.cwd()],
        [['//server/share', '..', 'relative\\'], '\\\\server\\share\\relative'],
        [['c:/', '//'], 'c:\\'],
+       [['C:/'], 'c:\\'],
        [['c:/', '//dir'], 'c:\\dir'],
        [['c:/', '//server/share'], '\\\\server\\share\\'],
        [['c:/', '//server//share'], '\\\\server\\share\\'],
