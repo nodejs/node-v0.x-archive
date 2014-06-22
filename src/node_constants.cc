@@ -24,8 +24,10 @@
 #undef _XOPEN_SOURCE
 #endif
 
-#if !defined(_XOPEN_SOURCE)
-#define _XOPEN_SOURCE 500
+#if defined(__FreeBSD__)
+# define _XOPEN_SOURCE 600
+#elif !defined(_XOPEN_SOURCE)
+# define _XOPEN_SOURCE 500
 #endif
 
 #include "node_constants.h"
@@ -35,7 +37,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #if !defined(_MSC_VER)
-#include <unistd.h>
+# include <unistd.h>
 #endif
 #include <signal.h>
 #include <sys/types.h>
