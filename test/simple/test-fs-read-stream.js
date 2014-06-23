@@ -195,3 +195,16 @@ process.on('exit', function() {
   assert(!file9.closed);
   assert(file9.destroyed);
 });
+
+// https://github.com/joyent/node/issues/7819
+var readSize = 10;
+var file10 = fs.createReadStream(fn, {end: readSize - 1});
+
+file10.dataSize = 0;
+file10.on('data', function(data) {
+  file10.dataSize += data.length;
+});
+
+process.on('exit', function() {
+  assert.equal(file10.dataSize, readSize);
+});
