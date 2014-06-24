@@ -21,7 +21,7 @@
 
 // O_NONBLOCK is not exported unless _XOPEN_SOURCE >= 600.
 #if defined(_XOPEN_SOURCE) && _XOPEN_SOURCE < 600
-#undef _XOPEN_SOURCE
+# undef _XOPEN_SOURCE
 #endif
 
 #if !defined(_XOPEN_SOURCE)
