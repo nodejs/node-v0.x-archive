@@ -396,7 +396,7 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
                      const uv_buf_t* buf,
                      const struct sockaddr* addr,
                      unsigned int flags) {
-  if (nread == 0) {
+  if (nread == 0 && addr == NULL) {
     if (buf->base != NULL)
       free(buf->base);
     return;
