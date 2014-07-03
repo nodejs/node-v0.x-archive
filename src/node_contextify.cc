@@ -646,15 +646,16 @@ class ContextifyScript : public BaseObject {
 
     Local<Value> result;
     if (timeout != -1) {
-      Watchdog wd(timeout);
+      Watchdog wd(env, timeout);
       result = script->Run();
     } else {
       result = script->Run();
     }
 
     if (try_catch.HasCaught() && try_catch.HasTerminated()) {
-      V8::CancelTerminateExecution(args.GetIsolate());
+      V8::CancelTerminateExecution(env->isolate());
       env->ThrowError("Script execution timed out.");
+      try_catch.ReThrow();
       return false;
     }
 

@@ -36,7 +36,7 @@ Emitted when:
 2. The process could not be killed, or
 3. Sending a message to the child process failed for whatever reason.
 
-Note that the `exit`-event may or may not fire after an error has occured. If
+Note that the `exit`-event may or may not fire after an error has occurred. If
 you are listening on both events to fire a function, remember to guard against
 calling your function twice.
 
@@ -491,6 +491,8 @@ See also: `child_process.exec()` and `child_process.fork()`
   * `timeout` {Number} (Default: 0)
   * `maxBuffer` {Number} (Default: `200*1024`)
   * `killSignal` {String} (Default: 'SIGTERM')
+  * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
+  * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
 * `callback` {Function} called with the output when process terminates
   * `error` {Error}
   * `stdout` {Buffer}
@@ -544,6 +546,8 @@ the child process is killed.
   * `timeout` {Number} (Default: 0)
   * `maxBuffer` {Number} (Default: 200\*1024)
   * `killSignal` {String} (Default: 'SIGTERM')
+  * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
+  * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
 * `callback` {Function} called with the output when process terminates
   * `error` {Error}
   * `stdout` {Buffer}
@@ -570,6 +574,8 @@ leaner than `child_process.exec`. It has the same options.
     piped to the parent, otherwise they will be inherited from the parent, see
     the "pipe" and "inherit" options for `spawn()`'s `stdio` for more details
     (default is false)
+  * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
+  * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
 * Return: ChildProcess object
 
 This is a special case of the `spawn()` functionality for spawning Node
@@ -610,7 +616,7 @@ output on this fd is expected to be line delimited JSON objects.
   * `stderr` {Buffer|String} The contents of `output[2]`
   * `status` {Number} The exit code of the child process
   * `signal` {String} The signal used to kill the child process
-  * `error` {Error} The error object if the child process failed or timedout
+  * `error` {Error} The error object if the child process failed or timed out
 
 `spawnSync` will not return until the child process has fully closed. When a
 timeout has been encountered and `killSignal` is sent, the method won't return
