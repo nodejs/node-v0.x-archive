@@ -295,6 +295,9 @@ child process has any open IPC channels with the parent (i.e `fork()`).
 
 ## Asynchronous Process Creation
 
+These methods follow the common async programming patterns (accepting a
+callback or returning an EventEmitter).
+
 ### child_process.spawn(command, [args], [options])
 
 * `command` {String} The command to run
@@ -596,6 +599,13 @@ environmental variable `NODE_CHANNEL_FD` on the child process. The input and
 output on this fd is expected to be line delimited JSON objects.
 
 ## Synchronous Process Creation
+
+These methods are **synchronous**, meaning they **WILL** block the event loop,
+pausing execution of your code until the spawned process exits.
+
+Blocking calls like these are mostly useful for simplifying general purpose
+scripting tasks and for simplifying the loading/processing of application
+configuration at startup.
 
 ### child_process.spawnSync(command, [args], [options])
 
