@@ -8,11 +8,15 @@ Node provides a tri-directional `popen(3)` facility through the
 It is possible to stream data through a child's `stdin`, `stdout`, and
 `stderr` in a fully non-blocking way.  (Note that some programs use
 line-buffered I/O internally.  That doesn't affect node.js but it means
-data you send to the child process is not immediately consumed.)
+data you send to the child process may not be immediately consumed.)
 
 To create a child process use `require('child_process').spawn()` or
 `require('child_process').fork()`.  The semantics of each are slightly
-different, and explained below.
+different, and explained [below](#child_process_asynchronous_process_creation).
+
+For scripting purposes you may find the
+[synchronous counterparts](#child_process_synchronous_process_creation) more
+convenient.
 
 ## Class: ChildProcess
 
@@ -24,7 +28,8 @@ streams of the parent process, or they may be separate stream objects
 which can be piped to and from.
 
 The ChildProcess class is not intended to be used directly.  Use the
-`spawn()` or `fork()` methods to create a Child Process instance.
+`spawn()`, `exec()`, `execFile()`, or `fork()` methods to create a Child
+Process instance.
 
 ### Event:  'error'
 
