@@ -321,7 +321,7 @@ callback or returning an EventEmitter).
 Launches a new process with the given `command`, with  command line arguments in `args`.
 If omitted, `args` defaults to an empty Array.
 
-The third argument is used to specify additional options, which defaults to:
+The third argument is used to specify additional options, with these defaults:
 
     { cwd: undefined,
       env: process.env
@@ -392,11 +392,6 @@ Example of checking for failed exec:
     child.on('error', function (err) {
       console.log('Failed to start child process.');
     });
-
-Note that if spawn receives an empty options object, it will result in
-spawning the process with an empty environment rather than using
-`process.env`. This due to backwards compatibility issues with a deprecated
-API.
 
 The 'stdio' option to `child_process.spawn()` is an array where each
 index corresponds to a fd in the child.  The value is one of the following:
