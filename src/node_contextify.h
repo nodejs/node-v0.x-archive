@@ -28,7 +28,9 @@
 
 namespace node {
 
-void InitContextify(v8::Handle<v8::Object> target);
+void InitContextify(v8::Handle<v8::Object> target,
+                    v8::Handle<v8::Value> unused,
+                    v8::Handle<v8::Context> context);
 
 }  // namespace node
 
