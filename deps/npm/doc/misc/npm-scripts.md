@@ -34,7 +34,7 @@ following scripts:
   stop and start scripts if no `restart` script is provided.
 
 Additionally, arbitrary scripts can be run by doing
-`npm run-script <pkg> <stage>`.
+`npm run-script <pkg> <stage>`. *pre-* and *post-* commands with matching names would be ran for those as well (i.e.:'premyscript', 'myscript', 'postmyscript').
 
 ## NOTE: INSTALL SCRIPTS ARE AN ANTIPATTERN
 
