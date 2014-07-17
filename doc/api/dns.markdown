@@ -45,10 +45,11 @@ and v6 addresses are accepted. The `hints` field, if present, should be one
 or more of the supported `getaddrinfo` flags. If `hints` is not provided, 
 then no flags are passed to `getaddrinfo`. Multiple flags can be passed 
 through `hints` by logically `OR`ing their values. An example usage of 
-`hints` (without `family`) is shown below.
+`hints` (without `family`) is shown below. See [Supported `getaddrinfo` flags](#supported-getaddrinfo-flags) below for more information on supported flags.
 
 ```
 {
+  family: 4,
   hints: dns.ADDRCONFIG | dns.V4MAPPED
 }
 ```
