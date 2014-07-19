@@ -87,7 +87,8 @@ var qsWeirdObjects = [
   [{f: false, t: true}, 'f=false&t=true', {'f': 'false', 't': 'true'}],
   [{n: null}, 'n=', {'n': ''}],
   [{nan: NaN}, 'nan=', {'nan': ''}],
-  [{inf: Infinity}, 'inf=', {'inf': ''}]
+  [{inf: Infinity}, 'inf=', {'inf': ''}],
+  [{a: [], b: []}, '', {}]
 ];
 // }}}
 
