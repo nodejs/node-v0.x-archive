@@ -716,6 +716,10 @@
     process.kill = function(pid, sig) {
       var r;
 
+      if (typeof pid !== 'number') { // Copy of util.isNumber()
+        throw new TypeError('pid must be a number');
+      }
+
       // preserve null signal
       if (0 === sig) {
         r = process._kill(pid, 0);
