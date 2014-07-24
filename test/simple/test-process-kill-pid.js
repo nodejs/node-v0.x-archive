@@ -41,12 +41,18 @@ process.on('exit', function(code) {
 //
 // String(process.pid): TypeError
 //
+// Nan, Infinity, -Infinity: TypeError
+//
 // 0, process.pid: ourself
 
 assert.throws(function() { process.kill('SIGTERM'); }, TypeError);
 assert.throws(function() { process.kill(String(process.pid)); }, TypeError);
 assert.throws(function() { process.kill(null); }, TypeError);
 assert.throws(function() { process.kill(undefined); }, TypeError);
+assert.throws(function() { process.kill(undefined); }, TypeError);
+assert.throws(function() { process.kill(+'not a number'); }, TypeError);
+assert.throws(function() { process.kill(1/0); }, TypeError);
+assert.throws(function() { process.kill(-1/0); }, TypeError);
 
 process.once('SIGHUP', function() {
   process.once('SIGHUP', function() {

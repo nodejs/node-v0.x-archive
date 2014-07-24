@@ -716,7 +716,7 @@
     process.kill = function(pid, sig) {
       var r;
 
-      if (typeof pid !== 'number') { // Copy of util.isNumber()
+      if (typeof pid !== 'number' || !isFinite(pid)) {
         throw new TypeError('pid must be a number');
       }
 
