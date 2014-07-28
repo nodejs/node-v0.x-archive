@@ -31,14 +31,15 @@ var msg = 'foo';
 
 if (cluster.isMaster) {
   var worker = cluster.fork();
-
-  setTimeout(function() {
+  var timer = setTimeout(function() {
     assert(false, 'message not received');
-  }, 100);
+  }, 1000);
+
+  timer.unref();
 
   worker.on('message', function(message) {
     assert(message, 'did not receive expected message');
-    process.exit(0);
+    worker.disconnect();
   });
 
   worker.on('online', function() {
