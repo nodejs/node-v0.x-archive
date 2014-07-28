@@ -4,7 +4,13 @@
 
 html {
   -webkit-font-smoothing: antialiased;
-  -webkit-text-stroke: .1px;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+hr {
+  border: none;
+  background-color: #999999;
+  height: 1px;
 }
 
 .din {
@@ -26,7 +32,9 @@ html {
 
 body {
   background: #1d1d1d;
-  color: #black;
+  color: #333333;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing: grayscale;
   font-size: 17px;
   line-height: 200%;
   font-family: "source-sans-pro", sans-serif;
@@ -35,8 +43,8 @@ body {
   margin: 0;
 }
 
-body.alt {
-  color: #000000;
+body a {
+  font-weight: bold;
 }
 
 img {
@@ -93,16 +101,17 @@ h3, h4 {
   color: #80bd01;
 }*/
 
-.contributing h2 {
+#Community h2 {
   font-weight: 200;
   font-size: 30px;
   text-transform: uppercase;
-  line-height: 90px;
+  line-height: 60px;
   margin-bottom: 0;
+  margin-top: 10px;
 }
 
-.contributing #content ul a {
-  font-weight: bold;
+#Community #content ul a {
+  font-weight: 600;
   line-height: 15px;
   text-decoration: underline;
 }
@@ -111,6 +120,10 @@ h1 code, h2 code, h3 code, h4 code,
 h1 a, h2 a, h3 a, h4 a {
   color: inherit;
   font-size: inherit;
+}
+
+h3 a {
+  color: #80bd01;
 }
 
 #nav {
@@ -159,6 +172,7 @@ h1 a, h2 a, h3 a, h4 a {
 
 #nav ul li a {
   padding: 0 12px;
+  font-weight: normal;
   border-left: 1px solid rgba(109,109,109,.4);
   text-transform: uppercase;
   font-size: 14px;
@@ -310,13 +324,13 @@ h1 a, h2 a, h3 a, h4 a {
   padding-top: 10px;
 }
 
-.contributing #content, .docs #content {
+#Community #content, .docs #content {
   width: 953px;
 }
 
-.int.community #content {
+/* .int.community #content {
   width: 775px;
-}
+} */
 
 #column1 {
   width: 460px;
@@ -464,6 +478,10 @@ h1 a, h2 a, h3 a, h4 a {
   padding-left: 40px;
 }
 
+#content ul li ul {
+  margin-top: 0;
+}
+
 #docs #column1.interior {
   width: 866px;
   float: left;
@@ -504,12 +522,12 @@ h1 a, h2 a, h3 a, h4 a {
   margin-right: 30px;
 }
 
-.community .block {
+/* .community .block {
   width: 365px;
   min-height: 270px;
-}
+} */
 
-div.block:nth-of-type(4n),.community div.block:nth-of-type(2n) {
+div.block:nth-of-type(4n) {
   margin-right: 0;
 }
 
@@ -524,6 +542,7 @@ div.block:nth-of-type(4n),.community div.block:nth-of-type(2n) {
 #content .block ul {
   list-style-type: none;
   margin-top: 0;
+  padding-left: 0;
 }
 
 #footer {
@@ -593,6 +612,7 @@ div.block:nth-of-type(4n),.community div.block:nth-of-type(2n) {
   padding-top: 6px;
   padding-bottom: 6px;
   padding-left: 10px;
+  font-weight: normal;
 }
 
 #footer a.getstarted:hover {
@@ -632,6 +652,10 @@ div.block:nth-of-type(4n),.community div.block:nth-of-type(2n) {
   font-size: 13px;
   line-height: 13px;
   margin-bottom: 15px;
+}
+
+#footer ul li a {
+  font-weight: normal;
 }
 
 pre, tt, code {
@@ -709,7 +733,7 @@ a:hover {
 
 .blog p.prev, .blog p.next {
   font-size: 14px !important;
-  font-weight: bold;
+  font-weight: 600;
   margin-top: 0;
   margin-bottom: 0;
 }
@@ -740,14 +764,8 @@ a:hover {
 }
 
 #content h1 {
-  padding-bottom: 0;
-}
-
-#content hr {
-  border: 0;
-  height: 1px;
-  background: #000000;
-  color: #000000;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #000000;
 }
 
 #content h1 + p {
@@ -771,13 +789,14 @@ a:hover {
 
 .docs-nav li a {
   color: black;
+  font-weight: 400;
   font-size: 14px;
   line-height: 25px;
   text-transform: uppercase;
 }
 
 .docs-nav li.active a {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 #frame-wrap {
@@ -811,4 +830,59 @@ a.mark:hover {
   padding-bottom: 30px;
   margin-bottom: 40px;
   border-bottom: 1px solid rgba(0,0,0,.1);
+}
+
+.carousel {
+  background: url(/images/contributing-photo-combo.jpg) no-repeat left top #80bd01;
+  height: 270px;
+  width: 100%;
+  text-align: center;
+  background-size: auto 300px;
+}
+
+.carousel img {
+  height: 270px;
+  margin: 0 auto;
+}
+
+.carousel .cycle-slideshow {
+  width: 973px;
+  margin: 0 auto;
+}
+
+#Community #content h1 {
+  border-bottom: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 23px;
+  position: relative;
+  top: -160px;
+  margin: 0 auto;
+  text-align: center;
+  color: white;
+  background: rgba(0,0,0,.7);
+  padding: 3px 10px 3px 15px;
+  z-index: 999;
+}
+
+#Community #content #column1 {
+  padding-top: 0;
+}
+
+#Community #content #column1 h1 + p {
+  margin-top: 0;
+}
+
+table th {
+  font-weight: 600;
+}
+
+b {
+  font-weight: 600;
+}
+
+table.logos td.jstm img {
+  width: 130px;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
