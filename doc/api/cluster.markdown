@@ -370,6 +370,15 @@ A Worker object contains all public information and method about a worker.
 In the master it can be obtained using `cluster.workers`. In a worker
 it can be obtained using `cluster.worker`.
 
+### Worker([options])
+
+* options {Object}
+  * id {Number} used as the worker's identifier. Defaults to `0`.
+  * state {String} specifies the initial state of the worker. Defaults to
+  `none`.
+  * process {Object} the process represented by the worker. Should be the
+  global `process` object or a `ChildProcess` object.
+
 ### worker.id
 
 * {String}
