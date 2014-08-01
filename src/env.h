@@ -79,6 +79,7 @@ namespace node {
   V(disposed_string, "_disposed")                                             \
   V(domain_string, "domain")                                                  \
   V(exchange_string, "exchange")                                              \
+  V(id_string, "id")                                                          \
   V(idle_string, "idle")                                                      \
   V(irq_string, "irq")                                                        \
   V(enter_string, "enter")                                                    \

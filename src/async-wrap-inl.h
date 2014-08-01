@@ -58,6 +58,9 @@ inline AsyncWrap::AsyncWrap(Environment* env,
       async_flags_(NO_OPTIONS),
       provider_type_(provider),
       id_(env->NewUniqueId()) {
+  object->Set(env->id_string(),
+              v8::Number::New(env->isolate(), static_cast<double>(id())));
+
   if (!env->has_async_listener())
     return;
 
