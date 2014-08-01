@@ -19,30 +19,31 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+// test-cluster-worker-constructor.js
+// validates correct behavior of the cluster.Worker constructor
+
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
+var cluster = require('cluster');
+var worker;
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
+worker = new cluster.Worker();
+assert.equal(worker.suicide, undefined);
+assert.equal(worker.state, 'none');
+assert.equal(worker.id, 0);
+assert.equal(worker.process, undefined);
 
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
-  });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
-  process.exit(0);
+worker = new cluster.Worker({
+  id: 3,
+  state: 'online',
+  process: process
 });
+assert.equal(worker.suicide, undefined);
+assert.equal(worker.state, 'online');
+assert.equal(worker.id, 3);
+assert.equal(worker.process, process);
 
-process.on('exit', function() {
-  assert(accessedProperties);
-});
+worker = cluster.Worker.call({}, {id: 5});
+assert(worker instanceof cluster.Worker);
+assert.equal(worker.id, 5);

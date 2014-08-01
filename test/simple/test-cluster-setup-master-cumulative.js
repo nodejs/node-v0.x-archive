@@ -19,30 +19,44 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
+var cluster = require('cluster');
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
+assert(cluster.isMaster);
 
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
-  });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
-  process.exit(0);
-});
+assert.deepEqual(cluster.settings, {},
+                 'cluster.settings should not be initialized until needed');
 
-process.on('exit', function() {
-  assert(accessedProperties);
+cluster.setupMaster();
+assert.deepEqual(cluster.settings, {
+  args: process.argv.slice(2),
+  exec: process.argv[1],
+  execArgv: process.execArgv,
+  silent: false,
 });
+console.log('ok sets defaults');
+
+cluster.setupMaster({ exec: 'overridden' });
+assert.strictEqual(cluster.settings.exec, 'overridden');
+console.log('ok overrids defaults');
+
+cluster.setupMaster({ args: ['foo', 'bar'] });
+assert.strictEqual(cluster.settings.exec, 'overridden');
+assert.deepEqual(cluster.settings.args, ['foo', 'bar']);
+
+cluster.setupMaster({ execArgv: ['baz', 'bang'] });
+assert.strictEqual(cluster.settings.exec, 'overridden');
+assert.deepEqual(cluster.settings.args, ['foo', 'bar']);
+assert.deepEqual(cluster.settings.execArgv, ['baz', 'bang']);
+console.log('ok preserves unchanged settings on repeated calls');
+
+cluster.setupMaster();
+assert.deepEqual(cluster.settings, {
+  args: ['foo', 'bar'],
+  exec: 'overridden',
+  execArgv: ['baz', 'bang'],
+  silent: false,
+});
+console.log('ok preserves current settings');

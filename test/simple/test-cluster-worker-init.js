@@ -19,30 +19,35 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+// test-cluster-worker-init.js
+// verifies that, when a child process is forked, the cluster.worker
+// object can receive messages as expected
+
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
+var cluster = require('cluster');
+var msg = 'foo';
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
+if (cluster.isMaster) {
+  var worker = cluster.fork();
+  var timer = setTimeout(function() {
+    assert(false, 'message not received');
+  }, 1000);
 
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
+  timer.unref();
+
+  worker.on('message', function(message) {
+    assert(message, 'did not receive expected message');
+    worker.disconnect();
   });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
-  process.exit(0);
-});
 
-process.on('exit', function() {
-  assert(accessedProperties);
-});
+  worker.on('online', function() {
+    worker.send(msg);
+  });
+} else {
+  // GH #7998
+  cluster.worker.on('message', function(message) {
+    process.send(message === msg);
+  });
+}

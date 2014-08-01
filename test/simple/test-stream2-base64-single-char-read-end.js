@@ -19,30 +19,40 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+
+var common = require('../common.js');
+var R = require('_stream_readable');
+var W = require('_stream_writable');
 var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
+var src = new R({encoding: 'base64'});
+var dst = new W();
+var hasRead = false;
+var accum = [];
+var timeout;
 
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
-  });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
-  process.exit(0);
-});
+src._read = function(n) {
+  if(!hasRead) {
+    hasRead = true;
+    process.nextTick(function() {
+      src.push(new Buffer('1'));
+      src.push(null);
+    });
+  };
+};
 
-process.on('exit', function() {
-  assert(accessedProperties);
-});
+dst._write = function(chunk, enc, cb) {
+  accum.push(chunk);
+  cb();
+};
+
+src.on('end', function() {
+  assert.equal(Buffer.concat(accum) + '', 'MQ==');
+  clearTimeout(timeout);
+})
+
+src.pipe(dst);
+
+timeout = setTimeout(function() {
+  assert.fail('timed out waiting for _write');
+}, 100);

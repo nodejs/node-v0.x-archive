@@ -19,17 +19,31 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef SRC_NODE_CONTEXTIFY_H_
-#define SRC_NODE_CONTEXTIFY_H_
+var common = require('../common');
+var assert = require('assert');
 
-#include "node.h"
-#include "v8.h"
-#include "uv.h"
+var spawn = require('child_process').spawn;
 
-namespace node {
+var isWindows = process.platform === 'win32';
 
-void InitContextify(v8::Handle<v8::Object> target);
+process.env.HELLO = 'WORLD';
 
-}  // namespace node
+if (isWindows) {
+  var child = spawn('cmd.exe', ['/c', 'set'], {});
+} else {
+  var child = spawn('/usr/bin/env', [], {});
+}
 
-#endif  // SRC_NODE_CONTEXTIFY_H_
+var response = '';
+
+child.stdout.setEncoding('utf8');
+
+child.stdout.on('data', function(chunk) {
+  console.log('stdout: ' + chunk);
+  response += chunk;
+});
+
+process.on('exit', function() {
+  assert.ok(response.indexOf('HELLO=WORLD') >= 0,
+            'spawn did not use process.env as default');
+});

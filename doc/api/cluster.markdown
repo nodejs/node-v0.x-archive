@@ -250,7 +250,15 @@ See [child_process event: 'exit'](child_process.html#child_process_event_exit).
 
 ## Event: 'setup'
 
-Emitted the first time that `.setupMaster()` is called.
+* `settings` {Object}
+
+Emitted every time `.setupMaster()` is called.
+
+The `settings` object is the `cluster.settings` object at the time
+`.setupMaster()` was called and is advisory only, since multiple calls to
+`.setupMaster()` can be made in a single tick.
+
+If accuracy is important, use `cluster.settings`.
 
 ## cluster.setupMaster([settings])
 
@@ -266,23 +274,26 @@ the settings will be present in `cluster.settings`.
 
 Note that:
 
-* Only the first call to `.setupMaster()` has any effect, subsequent calls are
-  ignored
-* That because of the above, the *only* attribute of a worker that may be
-  customized per-worker is the `env` passed to `.fork()`
-* `.fork()` calls `.setupMaster()` internally to establish the defaults, so to
-  have any effect, `.setupMaster()` must be called *before* any calls to
-  `.fork()`
+* any settings changes only affect future calls to `.fork()` and have no
+  effect on workers that are already running
+* The *only* attribute of a worker that cannot be set via `.setupMaster()` is
+  the `env` passed to `.fork()`
+* the defaults above apply to the first call only, the defaults for later
+  calls is the current value at the time of `cluster.setupMaster()` is called
 
 Example:
 
-    var cluster = require("cluster");
+    var cluster = require('cluster');
     cluster.setupMaster({
-      exec : "worker.js",
-      args : ["--use", "https"],
-      silent : true
+      exec: 'worker.js',
+      args: ['--use', 'https'],
+      silent: true
     });
-    cluster.fork();
+    cluster.fork(); // https worker
+    cluster.setupMaster({
+      args: ['--use', 'http']
+    });
+    cluster.fork(); // http worker
 
 This can only be called from the master process.
 

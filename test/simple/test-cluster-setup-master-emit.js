@@ -19,30 +19,42 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
+var cluster = require('cluster');
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
+assert(cluster.isMaster);
 
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
+var assertsRun = 0;
+
+function emitAndCatch(next) {
+  cluster.once('setup', function(settings) {
+    assert.strictEqual(settings.exec, 'new-exec');
+    console.log('ok "setup" emitted with options set');
+    assertsRun += 1;
+    setImmediate(next);
   });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
-  process.exit(0);
-});
+  cluster.setupMaster({ exec: 'new-exec' });
+}
+
+function emitAndCatch2(next) {
+  cluster.once('setup', function(settings) {
+    assert('exec' in settings);
+    console.log('ok "setup" emitted without options set');
+    assertsRun += 1;
+    setImmediate(next);
+  });
+  cluster.setupMaster();
+}
 
 process.on('exit', function() {
-  assert(accessedProperties);
+  assert.strictEqual(assertsRun, 2);
+  console.log('ok correct number of assertions');
+});
+
+emitAndCatch(function() {
+  emitAndCatch2(function() {
+    console.log('ok emitted and caught');
+  });
 });

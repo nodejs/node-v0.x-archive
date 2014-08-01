@@ -19,30 +19,22 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+var common = require('../common.js');
 var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
+var zlib = require('zlib');
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
+var closed = false;
 
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
+zlib.gzip('hello', function(err, out) {
+  var unzip = zlib.createGunzip();
+  unzip.close(function() {
+    closed = true;
   });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
-  process.exit(0);
+  assert.throws(function() {
+    unzip.write(out);
+  });
 });
 
 process.on('exit', function() {
-  assert(accessedProperties);
+  assert(closed);
 });

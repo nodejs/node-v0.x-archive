@@ -20,29 +20,44 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var common = require('../common');
-var assert = require('assert');
-var net = require('net');
-var accessedProperties = false;
 
-var server = net.createServer(function(socket) {
-  socket.end();
-});
-
-server.listen(common.PORT, function() {
-  var client = net.createConnection(common.PORT);
-  server.close();
-  // server connection event has not yet fired
-  // client is still attempting to connect
-  assert.doesNotThrow(function() {
-    client.remoteAddress;
-    client.remoteFamily;
-    client.remotePort;
-  });
-  accessedProperties = true;
-  // exit now, do not wait for the client error event
+if (!common.opensslCli) {
+  console.error('Skipping because node compiled without OpenSSL CLI.');
   process.exit(0);
-});
+}
 
+var assert = require('assert');
+var fs = require('fs');
+var tls = require('tls');
+var spawn = require('child_process').spawn;
+
+var success = false;
+
+function filenamePEM(n) {
+  return require('path').join(common.fixturesDir, 'keys', n + '.pem');
+}
+
+function loadPEM(n) {
+  return fs.readFileSync(filenamePEM(n));
+}
+
+var server = tls.Server({
+  secureProtocol: 'TLSv1_2_server_method',
+  key: loadPEM('agent2-key'),
+  cert:loadPEM('agent2-cert')
+}, null).listen(common.PORT, function() {
+  var args = ['s_client', '-quiet', '-tls1_1','-connect', '127.0.0.1:' + common.PORT];
+  var client = spawn(common.opensslCli, args);
+  var out = '';
+  client.stderr.setEncoding('utf8');
+  client.stderr.on('data', function(d) {
+    out += d;
+    if (/SSL alert number 70/.test(out)) {
+      success = true;
+      server.close();
+    }
+  });
+});
 process.on('exit', function() {
-  assert(accessedProperties);
+  assert(success);
 });

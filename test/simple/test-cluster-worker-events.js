@@ -19,23 +19,59 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+
 var assert = require('assert');
+var cluster = require('cluster');
 
-var Readable = require('stream').Readable;
+var OK = 2;
 
-var r = new Readable();
-var errors = 0;
+if (cluster.isMaster) {
 
-// Setting `data` listener should not trigger `_read()` calls before we will
-// set the `error` listener below
-r.on('data', function() {
+  var worker = cluster.fork();
+
+  worker.on('exit', function(code) {
+    assert.equal(code, OK);
+    process.exit(0);
+  });
+
+  worker.send('SOME MESSAGE');
+
+  return;
+}
+
+// Messages sent to a worker will be emitted on both the process object and the
+// process.worker object.
+
+assert(cluster.isWorker);
+
+var sawProcess;
+var sawWorker;
+
+process.on('message', function(m) {
+  assert(!sawProcess);
+  sawProcess = true;
+  check(m);
 });
 
-r.on('error', function() {
-  errors++;
+cluster.worker.on('message', function(m) {
+  assert(!sawWorker);
+  sawWorker = true;
+  check(m);
 });
 
-process.on('exit', function() {
-  assert.equal(errors, 1);
-});
+var messages = [];
+
+function check(m) {
+  messages.push(m);
+
+  if (messages.length < 2) return;
+
+  assert.deepEqual(messages[0], messages[1]);
+
+  cluster.worker.once('error', function(e) {
+    assert.equal(e, 'HI');
+    process.exit(OK);
+  });
+
+  process.emit('error', 'HI');
+}
