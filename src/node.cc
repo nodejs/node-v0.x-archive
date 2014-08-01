@@ -116,6 +116,7 @@ using v8::TryCatch;
 using v8::Uint32;
 using v8::V8;
 using v8::Value;
+using v8::kExternalFloat64Array;
 using v8::kExternalUnsignedIntArray;
 
 // FIXME(bnoordhuis) Make these per-context?
@@ -2591,6 +2592,13 @@ void SetupProcessObject(Environment* env,
   HandleScope scope(env->isolate());
 
   Local<Object> process = env->process_object();
+
+  // Node.js attaches a unique id to libuv handles and requests that is
+  // exposed to JS land as a single-element typed array-ish object.
+  Local<Object> uv_context_id_obj = Object::New(env->isolate());
+  uv_context_id_obj->SetIndexedPropertiesToExternalArrayData(
+      env->uv_context_id_pointer(), kExternalFloat64Array, 1);
+  READONLY_PROPERTY(process, "_uvContextId", uv_context_id_obj);
 
   process->SetAccessor(env->title_string(),
                        ProcessTitleGetter,

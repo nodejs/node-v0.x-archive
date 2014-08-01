@@ -35,12 +35,29 @@
 
 namespace node {
 
+inline AsyncWrap::ScopedExposeId::ScopedExposeId(AsyncWrap* wrap)
+    : uv_context_id_pointer_(wrap->env()->uv_context_id_pointer()),
+      previous_value_(*uv_context_id_pointer_) {
+  // |uv_context_id_pointer_| points to the backing store of a float64 typed
+  // array-like object that is exposed to JS land.  Because identifiers are
+  // 64 bits integers and there is no integral typed array type wide enough
+  // to hold them, they are exposed as doubles instead.
+  *uv_context_id_pointer_ = static_cast<double>(wrap->id());
+}
+
+
+inline AsyncWrap::ScopedExposeId::~ScopedExposeId() {
+  *uv_context_id_pointer_ = previous_value_;
+}
+
+
 inline AsyncWrap::AsyncWrap(Environment* env,
                             v8::Handle<v8::Object> object,
                             ProviderType provider)
     : BaseObject(env, object),
       async_flags_(NO_OPTIONS),
-      provider_type_(provider) {
+      provider_type_(provider),
+      id_(env->NewUniqueId()) {
   if (!env->has_async_listener())
     return;
 
@@ -59,6 +76,12 @@ inline AsyncWrap::AsyncWrap(Environment* env,
 inline AsyncWrap::~AsyncWrap() {
 }
 
+
+inline uint64_t AsyncWrap::id() const {
+  return id_;
+}
+
+
 inline uint32_t AsyncWrap::provider_type() const {
   return provider_type_;
 }
@@ -75,6 +98,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
     int argc,
     v8::Handle<v8::Value>* argv) {
   assert(env()->context() == env()->isolate()->GetCurrentContext());
+  ScopedExposeId scoped_exposed_id(this);
 
   v8::Local<v8::Object> context = object();
   v8::Local<v8::Object> process = env()->process_object();
@@ -166,6 +190,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
     return MakeDomainCallback(cb, argc, argv);
 
   assert(env()->context() == env()->isolate()->GetCurrentContext());
+  ScopedExposeId scoped_exposed_id(this);
 
   v8::Local<v8::Object> context = object();
   v8::Local<v8::Object> process = env()->process_object();

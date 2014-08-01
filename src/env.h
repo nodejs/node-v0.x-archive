@@ -364,6 +364,8 @@ class Environment {
 
   void AssignToContext(v8::Local<v8::Context> context);
 
+  inline uint64_t NewUniqueId();
+
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
   inline bool has_async_listener() const;
@@ -398,6 +400,8 @@ class Environment {
 
   inline bool printed_error() const;
   inline void set_printed_error(bool value);
+
+  inline double* uv_context_id_pointer();
 
   inline void ThrowError(const char* errmsg);
   inline void ThrowTypeError(const char* errmsg);
@@ -460,6 +464,8 @@ class Environment {
   bool using_domains_;
   QUEUE gc_tracker_queue_;
   bool printed_error_;
+  uint64_t unique_id_;
+  double uv_context_id_;
 
 #define V(PropertyName, TypeName)                                             \
   v8::Persistent<TypeName> PropertyName ## _;
