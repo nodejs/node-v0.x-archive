@@ -1019,7 +1019,7 @@ static void GetAddrInfo(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value hostname(args[1]);
 
   int family;
-  int flags = args[3]->Int32Value();
+  int32_t flags = args[3]->Int32Value();
 
   switch (args[2]->Int32Value()) {
   case 0:
