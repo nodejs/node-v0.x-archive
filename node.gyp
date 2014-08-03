@@ -158,12 +158,22 @@
       'defines': [
         'NODE_WANT_INTERNALS=1',
         'ARCH="<(target_arch)"',
-        'PLATFORM="<(OS)"',
         'NODE_TAG="<(node_tag)"',
         'NODE_V8_OPTIONS="<(node_v8_options)"',
       ],
 
       'conditions': [
+        [ 'OS=="win"', {
+            'defines': [
+# we need to use node's preferred "win32" rather than gyp's preferred "win"
+              'PLATFORM="win32"'
+            ]
+          }, {
+            'defines': [
+              'PLATFORM="<(OS)"'
+            ]
+          }
+        ],
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [
@@ -357,6 +367,9 @@
       'msvs_settings': {
         'VCLinkerTool': {
           'SubSystem': 1, # /subsystem:console
+        },
+        'VCCLCompilerTool':{
+          'WarnAsError': 'true',
         },
       },
     },

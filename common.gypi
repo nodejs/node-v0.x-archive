@@ -151,7 +151,9 @@
         ],
       },
     },
-    'msvs_disabled_warnings': [4351, 4355, 4800],
+    # 4267 - when passing an int64 as int, and truncation might happen (depends on linkage)
+    # 4244 - when passing an int64 as int, and truncation will happen
+    'msvs_disabled_warnings': [4351, 4355, 4800, 4267, 4244],
     'conditions': [
       ['OS == "win"', {
         'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin

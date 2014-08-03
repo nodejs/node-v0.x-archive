@@ -66,6 +66,9 @@ using v8::Value;
 
 #define THROW_BAD_ARGS TYPE_ERROR("Bad argument")
 
+#ifdef _MSC_VER
+  #pragma warning( disable: 4291 ) 
+#endif
 class FSReqWrap: public ReqWrap<uv_fs_t> {
  public:
   void* operator new(size_t size) { return new char[size]; }
