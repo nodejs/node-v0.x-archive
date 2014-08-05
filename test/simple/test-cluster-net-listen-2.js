@@ -45,10 +45,12 @@ else {
   A = net.createServer().listen(0, function() {
     console.log('Listen A');
     A.close();
-    B = net.createServer().listen(0, function() {
-      console.log('Listen B');
-      B.close();
-      process.send('PASS');
+    A.on('close', function() {
+      B = net.createServer().listen(0, function() {
+        console.log('Listen B');
+        B.close();
+        process.send('PASS');
+      });
     });
   });
 }
