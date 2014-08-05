@@ -30,11 +30,6 @@ if (cluster.isMaster) {
     assert.equal(statusCode, 0);
     worker = null;
   });
-  worker.on('message', function(msg) {
-    if (msg === 'PASS') {
-      worker.disconnect();
-    }
-  });
   process.on('exit', function() {
     assert.equal(worker, null);
   });
@@ -49,6 +44,4 @@ A.bind(0);
 var B = dgram.createSocket('udp4');
 B.bind(0);
 
-setTimeout(function() {
-  process.send('PASS');
-}, 0);
+setTimeout(process.disconnect.bind(process), 10);
