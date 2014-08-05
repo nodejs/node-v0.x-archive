@@ -47,12 +47,13 @@ var A = dgram.createSocket('udp4');
 A.bind(0, function() {
   A.close();
 
-  var B = dgram.createSocket('udp4');
-  B.bind(0);
+  A.on('close', function() {
+    var B = dgram.createSocket('udp4');
+    B.bind(0);
 
-  setTimeout(function() {
-    B.close();
-    process.send('PASS');
-  }, 0);
+    setTimeout(function() {
+      B.close();
+      process.send('PASS');
+    }, 0);
+  });
 });
-
