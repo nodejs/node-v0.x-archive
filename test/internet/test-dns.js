@@ -431,6 +431,7 @@ TEST(function test_lookup_failure(done) {
     assert.strictEqual(err.errno, dns.NOTFOUND);
     assert.strictEqual(err.errno, 'ENOTFOUND');
     assert.ok(!/ENOENT/.test(err.message));
+    assert.ok(/does\.not\.exist/.test(err.message));
 
     done();
   });
@@ -528,6 +529,7 @@ TEST(function test_lookupservice_invalid(done) {
   var req = dns.lookupService('1.2.3.4', 80, function(err, host, service) {
     assert(err instanceof Error);
     assert.strictEqual(err.code, 'ENOTFOUND');
+    assert.ok(/1\.2\.3\.4/.test(err.message));
 
     done();
   });
@@ -541,6 +543,7 @@ TEST(function test_reverse_failure(done) {
     assert(err instanceof Error);
     assert.strictEqual(err.code, 'ENOTFOUND');  // Silly error code...
     assert.strictEqual(err.hostname, '0.0.0.0');
+    assert.ok(/0\.0\.0\.0/.test(err.message));
 
     done();
   });
@@ -554,6 +557,7 @@ TEST(function test_lookup_failure(done) {
     assert(err instanceof Error);
     assert.strictEqual(err.code, 'ENOTFOUND');  // Silly error code...
     assert.strictEqual(err.hostname, 'nosuchhostimsure');
+    assert.ok(/nosuchhostimsure/.test(err.message));
 
     done();
   });
@@ -576,6 +580,7 @@ TEST(function test_resolve_failure(done) {
     }
 
     assert.strictEqual(err.hostname, 'nosuchhostimsure');
+    assert.ok(/nosuchhostimsure/.test(err.message));
 
     done();
   });
