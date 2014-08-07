@@ -311,6 +311,8 @@ callback or returning an EventEmitter).
   * `cwd` {String} Current working directory of the child process
   * `stdio` {Array|String} Child's stdio configuration. (See below)
   * `env` {Object} Environment key-value pairs
+  * `windowsVerbatimArguments` {Boolean} Disable unix-like argument formatting and 
+    instead use only spaces to separate provided arguments.
   * `detached` {Boolean} The child will be a process group leader.  (See below)
   * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
   * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
