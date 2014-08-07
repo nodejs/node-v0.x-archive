@@ -155,9 +155,10 @@ test-npm-publish: node
 test-addons: test-build
 	$(PYTHON) tools/test.py --mode=release addons
 
-apidoc_sources = $(wildcard doc/api/*.markdown)
-apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
-          $(addprefix out/,$(apidoc_sources:.markdown=.json))
+apidoc_sources = $(filter-out lib/_%, $(wildcard lib/*.js))
+apidocs = $(subst lib/,out/doc/api/,$(apidoc_sources:.js=.html)) \
+          $(subst lib/,out/doc/api/,$(apidoc_sources:.js=.json))
+
 
 apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets
 
@@ -181,11 +182,11 @@ out/doc/changelog.html: ChangeLog doc/changelog-head.html doc/changelog-foot.htm
 out/doc/%: doc/%
 	cp -r $< $@
 
-out/doc/api/%.json: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=json $< > $@
+out/doc/api/%.json: lib/%.js tools/jsdoc/ tools/jsdoc/template/ node
+	out/Release/node tools/jsdoc/node_modules/jsdoc/jsdoc.js --configure tools/jsdoc/jsdoc.json --query format=json $< > $@
 
-out/doc/api/%.html: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
+out/doc/api/%.html: lib/%.js tools/jsdoc/ tools/jsdoc/template/ node
+	out/Release/node tools/jsdoc/node_modules/jsdoc/jsdoc.js --configure tools/jsdoc/jsdoc.json --query format=html $< > $@
 
 email.md: ChangeLog tools/email-footer.md
 	bash tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
@@ -209,6 +210,9 @@ docopen: out/doc/api/all.html
 
 docclean:
 	-rm -rf out/doc
+
+docwatch:
+	nodemon --watch tools/jsdoc/ --exec "make" doc
 
 RAWVER=$(shell $(PYTHON) tools/getnodeversion.py)
 VERSION=v$(RAWVER)

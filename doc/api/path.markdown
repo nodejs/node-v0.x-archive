@@ -8,7 +8,7 @@ The file system is not consulted to check whether paths are valid.
 
 Use `require('path')` to use this module.  The following methods are provided:
 
-## path.normalize(p)
+## path.normalize(path)
 
 Normalize a string path, taking care of `'..'` and `'.'` parts.
 
@@ -22,7 +22,7 @@ Example:
     // returns
     '/foo/bar/baz/asdf'
 
-## path.join([path1], [path2], [...])
+## path.join([path ...])
 
 Join all arguments together and normalize the resulting path.
 
