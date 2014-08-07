@@ -22,6 +22,7 @@
 var path = require('path');
 var fs = require('fs');
 var assert = require('assert');
+var os = require('os');
 
 exports.testDir = path.dirname(__filename);
 exports.fixturesDir = path.join(exports.testDir, 'fixtures');
@@ -38,6 +39,13 @@ if (process.platform === 'win32') {
 }
 if (!fs.existsSync(exports.opensslCli))
   exports.opensslCli = false;
+
+var ifaces = os.networkInterfaces();
+exports.hasIPv6 = Object.keys(ifaces).some(function(name) {
+  return /lo/.test(name) && ifaces[name].some(function(info) {
+    return info.family === 'IPv6';
+  });
+});
 
 var util = require('util');
 for (var i in util) exports[i] = util[i];
