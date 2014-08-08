@@ -16,7 +16,7 @@ opportunity to **intercept** this error based on how the API **propagates** it.
 The style of API called determines how generated errors are handed back, or
 **propagated**, to client code, which in turn informs how client may **intercept**
 the error. Exceptions can be intercepted using the `try / catch` construct;
-other propagation strategies are covered [below](#errors_error_progagation_and_interception).
+other propagation strategies are covered [below](#errors_error_propagation_and_interception).
 
 ## JavaScript Errors
 
@@ -273,7 +273,7 @@ An connect or send request failed because the connected party did not properly
 respond after a period of time. Usually encountered by [http](http.html) or [net](net.html) --
 often a sign that a connected socket was not `.end()`'d appropriately.
 
-## Error Progagation and Interception
+## Error Propagation and Interception
 
 <!--type=misc-->
 
