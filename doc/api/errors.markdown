@@ -32,7 +32,7 @@ program.
 
 A general error object -- its imparts no meaning to the situation that 
 generated the error. Errors capture a "stack trace" detailing the point
-in the program at which they were instantiated, and may provide an
+in the program at which they were instantiated, and may provide a
 description of the error.
 
 **Note**: Node will generate this class of error to encapsulate system
@@ -42,9 +42,9 @@ errors as well as plain JavaScript errors.
 
 Instantiates a new Error object and sets its `.message` property to the provided
 message. Its `.stack` will represent the point in the program at which `new Error`
-was called. Stack traces are subject to [V8's stack trace API](https://code.google.com/p/v8/wiki/JavaScriptStackTraceApi). Stack traces only
-extend as far back as the current event loop tick, *or* a number of frames given by
-`Error.stackTraceLimit`.
+was called. Stack traces are subject to [V8's stack trace API](https://code.google.com/p/v8/wiki/JavaScriptStackTraceApi). 
+Stack traces only extend as far back as the current event loop tick, *or* a number of frames given by
+`Error.stackTraceLimit`, whichever is smaller.
 
 #### error.message
 
