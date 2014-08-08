@@ -62,7 +62,8 @@ It can be constructed in a variety of ways.
 
 * `size` Number
 
-Allocates a new buffer of `size` octets.
+Allocates a new buffer of `size` octets. No guarantees are given regarding the
+contents of the buffer, so it may contain non-zero octets.
 
 ### new Buffer(array)
 
