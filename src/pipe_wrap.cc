@@ -114,6 +114,8 @@ void PipeWrap::Initialize(Handle<Object> target,
   NODE_SET_PROTOTYPE_METHOD(t, "setPendingInstances", SetPendingInstances);
 #endif
 
+  AsyncWrap::AddMethods<PipeWrap>(t);
+
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe"), t->GetFunction());
   env->set_pipe_constructor_template(t);
 }
@@ -130,7 +132,9 @@ void PipeWrap::New(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-PipeWrap::PipeWrap(Environment* env, Handle<Object> object, bool ipc)
+PipeWrap::PipeWrap(Environment* env,
+                   Handle<Object> object,
+                   bool ipc)
     : StreamWrap(env,
                  object,
                  reinterpret_cast<uv_stream_t*>(&handle_),
@@ -205,8 +209,10 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
     return;
   }
 
+  env->set_async_wrap_parent_class<PipeWrap>(pipe_wrap);
   // Instanciate the client javascript object and handle.
   Local<Object> client_obj = Instantiate(env);
+  env->reset_async_wrap_parent_class();
 
   // Unwrap the client javascript object.
   PipeWrap* wrap = Unwrap<PipeWrap>(client_obj);
@@ -286,7 +292,7 @@ void PipeWrap::Connect(const FunctionCallbackInfo<Value>& args) {
 
   ConnectWrap* req_wrap = new ConnectWrap(env,
                                           req_wrap_obj,
-                                          AsyncWrap::PROVIDER_CONNECTWRAP);
+                                          AsyncWrap::PROVIDER_PIPEWRAP);
   uv_pipe_connect(&req_wrap->req_,
                   &wrap->handle_,
                   *name,

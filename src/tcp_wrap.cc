@@ -117,6 +117,8 @@ void TCPWrap::Initialize(Handle<Object> target,
                             SetSimultaneousAccepts);
 #endif
 
+  AsyncWrap::AddMethods<TCPWrap>(t);
+
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "TCP"), t->GetFunction());
   env->set_tcp_constructor_template(t);
 }
@@ -325,8 +327,10 @@ void TCPWrap::OnConnection(uv_stream_t* handle, int status) {
   };
 
   if (status == 0) {
+    env->set_async_wrap_parent_class<TCPWrap>(tcp_wrap);
     // Instantiate the client javascript object and handle.
     Local<Object> client_obj = Instantiate(env);
+    env->reset_async_wrap_parent_class();
 
     // Unwrap the client javascript object.
     TCPWrap* wrap = Unwrap<TCPWrap>(client_obj);
@@ -388,9 +392,11 @@ void TCPWrap::Connect(const FunctionCallbackInfo<Value>& args) {
   int err = uv_ip4_addr(*ip_address, port, &addr);
 
   if (err == 0) {
+    env->set_async_wrap_parent_class<TCPWrap>(wrap);
     ConnectWrap* req_wrap = new ConnectWrap(env,
                                             req_wrap_obj,
-                                            AsyncWrap::PROVIDER_CONNECTWRAP);
+                                            AsyncWrap::PROVIDER_TCPWRAP);
+    env->reset_async_wrap_parent_class();
     err = uv_tcp_connect(&req_wrap->req_,
                          &wrap->handle_,
                          reinterpret_cast<const sockaddr*>(&addr),
@@ -422,9 +428,11 @@ void TCPWrap::Connect6(const FunctionCallbackInfo<Value>& args) {
   int err = uv_ip6_addr(*ip_address, port, &addr);
 
   if (err == 0) {
+    env->set_async_wrap_parent_class<TCPWrap>(wrap);
     ConnectWrap* req_wrap = new ConnectWrap(env,
                                             req_wrap_obj,
-                                            AsyncWrap::PROVIDER_CONNECTWRAP);
+                                            AsyncWrap::PROVIDER_TCPWRAP);
+    env->reset_async_wrap_parent_class();
     err = uv_tcp_connect(&req_wrap->req_,
                          &wrap->handle_,
                          reinterpret_cast<const sockaddr*>(&addr),

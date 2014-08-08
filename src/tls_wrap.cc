@@ -835,6 +835,8 @@ void TLSCallbacks::Initialize(Handle<Object> target,
   NODE_SET_PROTOTYPE_METHOD(t, "setServername", SetServername);
 #endif  // SSL_CRT_SET_TLSEXT_SERVERNAME_CB
 
+  AsyncWrap::AddMethods<TLSCallbacks>(t);
+
   env->set_tls_wrap_constructor_function(t->GetFunction());
 }
 

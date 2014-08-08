@@ -64,6 +64,8 @@ class ProcessWrap : public HandleWrap {
     NODE_SET_PROTOTYPE_METHOD(constructor, "ref", HandleWrap::Ref);
     NODE_SET_PROTOTYPE_METHOD(constructor, "unref", HandleWrap::Unref);
 
+    AsyncWrap::AddMethods<ProcessWrap>(constructor);
+
     target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Process"),
                 constructor->GetFunction());
   }

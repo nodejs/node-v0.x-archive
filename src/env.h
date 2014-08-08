@@ -263,6 +263,7 @@ namespace node {
   V(tty_constructor_template, v8::FunctionTemplate)                           \
   V(udp_constructor_function, v8::Function)                                   \
 
+class AsyncWrap;
 class Environment;
 
 // TODO(bnoordhuis) Rename struct, the ares_ prefix implies it's part
@@ -282,7 +283,11 @@ class Environment {
    public:
     inline uint32_t* fields();
     inline int fields_count() const;
-    inline bool has_listener() const;
+    inline bool has_active_context() const;
+    inline bool has_async_queue() const;
+    inline bool processing_async_callbacks() const;
+    // Using int32_t because JS specific flags are < 0.
+    inline void set_provider_type(int32_t provider);
     inline uint32_t watched_providers() const;
 
    private:
@@ -290,8 +295,16 @@ class Environment {
     inline AsyncListener();
 
     enum Fields {
-      kHasListener,
+      // The PROVIDER of the activeContext.
+      // TODO(trevnorris): While the PROVIDER type is being stored, there's
+      // no API to actually retrieve what it is.
+      kActiveAsyncContextType,
+      // If there's an active asyncQueue on the activeContext.
+      kHasAsyncQueue,
+      // All watched PROVIDERs that should trigger callbacks.
       kWatchedProviders,
+      // Whether async listener callbacks are being processed.
+      kProcessingAsync,
       kFieldsCount
     };
 
@@ -366,7 +379,10 @@ class Environment {
 
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
-  inline bool has_async_listener() const;
+  inline bool has_active_context() const;
+  inline bool has_async_queue() const;
+  inline bool processing_async_callbacks() const;
+  inline void set_provider_type(int32_t provider);
   inline bool in_domain() const;
   inline uint32_t watched_providers() const;
 
@@ -416,6 +432,13 @@ class Environment {
   inline static void ThrowTypeError(v8::Isolate* isolate, const char* errmsg);
   inline static void ThrowRangeError(v8::Isolate* isolate, const char* errmsg);
 
+  // Temporarily set the async wrap parent class when instantiating a
+  // new class originating from a libuv callback.
+  template <class WrapType>
+  inline void set_async_wrap_parent_class(WrapType* parent);
+  inline AsyncWrap* async_wrap_parent_class() const;
+  inline void reset_async_wrap_parent_class();
+
   // Strings are shared across shared contexts. The getters simply proxy to
   // the per-isolate primitive.
 #define V(PropertyName, StringValue)                                          \
@@ -444,13 +467,14 @@ class Environment {
     kContextEmbedderDataIndex = NODE_CONTEXT_EMBEDDER_DATA_INDEX
   };
 
+  AsyncWrap* async_wrap_parent_;
   v8::Isolate* const isolate_;
   IsolateData* const isolate_data_;
   uv_check_t immediate_check_handle_;
   uv_idle_t immediate_idle_handle_;
   uv_prepare_t idle_prepare_handle_;
   uv_check_t idle_check_handle_;
-  AsyncListener async_listener_count_;
+  AsyncListener async_listener_;
   DomainFlag domain_flag_;
   TickInfo tick_info_;
   uv_timer_t cares_timer_handle_;

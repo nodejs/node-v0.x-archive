@@ -58,6 +58,8 @@ class SignalWrap : public HandleWrap {
     NODE_SET_PROTOTYPE_METHOD(constructor, "start", Start);
     NODE_SET_PROTOTYPE_METHOD(constructor, "stop", Stop);
 
+    AsyncWrap::AddMethods<SignalWrap>(constructor);
+
     target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Signal"),
                 constructor->GetFunction());
   }

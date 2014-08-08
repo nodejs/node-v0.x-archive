@@ -57,6 +57,12 @@ namespace node {
 
 #define UNREACHABLE() abort()
 
+#define CATCH_RETURN_UNDEF(try_catch, env)                                    \
+  do {                                                                        \
+    if (try_catch.HasCaught())                                                \
+      return v8::Undefined(env->isolate());                                   \
+  } while (0)
+
 // The helper is for doing safe downcasts from base types to derived types.
 template <typename Inner, typename Outer>
 class ContainerOfHelper {

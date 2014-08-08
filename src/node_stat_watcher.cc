@@ -56,6 +56,8 @@ void StatWatcher::Initialize(Environment* env, Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "start", StatWatcher::Start);
   NODE_SET_PROTOTYPE_METHOD(t, "stop", StatWatcher::Stop);
 
+  AsyncWrap::AddMethods<StatWatcher>(t);
+
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "StatWatcher"),
               t->GetFunction());
 }
