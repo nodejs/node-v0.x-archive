@@ -29,7 +29,7 @@ var caught = [];
 var expect = [];
 
 var callbacksObj = {
-  error: function(value, er) {
+  error: function(ctx, value, er) {
     process._rawDebug('caught', er.message);
     caught.push(er.message);
     return (expect.indexOf(er.message) !== -1);

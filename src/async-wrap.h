@@ -36,25 +36,24 @@ class AsyncWrap : public BaseObject {
   };
 
   enum ProviderType {
-    PROVIDER_NONE               = 1 << 0,
-    PROVIDER_CARES              = 1 << 1,
-    PROVIDER_CONNECTWRAP        = 1 << 2,
-    PROVIDER_CRYPTO             = 1 << 3,
-    PROVIDER_FSEVENTWRAP        = 1 << 4,
-    PROVIDER_GETADDRINFOREQWRAP = 1 << 5,
-    PROVIDER_PIPEWRAP           = 1 << 6,
-    PROVIDER_PROCESSWRAP        = 1 << 7,
-    PROVIDER_REQWRAP            = 1 << 8,
-    PROVIDER_SHUTDOWNWRAP       = 1 << 9,
-    PROVIDER_SIGNALWRAP         = 1 << 10,
-    PROVIDER_STATWATCHER        = 1 << 11,
-    PROVIDER_TCPWRAP            = 1 << 12,
-    PROVIDER_TIMERWRAP          = 1 << 13,
-    PROVIDER_TLSWRAP            = 1 << 14,
-    PROVIDER_TTYWRAP            = 1 << 15,
-    PROVIDER_UDPWRAP            = 1 << 16,
-    PROVIDER_ZLIB               = 1 << 17,
-    PROVIDER_GETNAMEINFOREQWRAP = 1 << 18
+    PROVIDER_NONE               = 0,
+    PROVIDER_CRYPTO             = 1 << 0,
+    PROVIDER_FSEVENTWRAP        = 1 << 1,
+    PROVIDER_FSREQWRAP          = 1 << 2,
+    PROVIDER_GETADDRINFOREQWRAP = 1 << 3,
+    PROVIDER_GETNAMEINFOREQWRAP = 1 << 4,
+    PROVIDER_PIPEWRAP           = 1 << 5,
+    PROVIDER_PROCESSWRAP        = 1 << 6,
+    PROVIDER_QUERYWRAP          = 1 << 7,
+    PROVIDER_SHUTDOWNWRAP       = 1 << 8,
+    PROVIDER_SIGNALWRAP         = 1 << 9,
+    PROVIDER_STATWATCHER        = 1 << 10,
+    PROVIDER_TCPWRAP            = 1 << 11,
+    PROVIDER_TIMERWRAP          = 1 << 12,
+    PROVIDER_TLSWRAP            = 1 << 13,
+    PROVIDER_TTYWRAP            = 1 << 14,
+    PROVIDER_UDPWRAP            = 1 << 15,
+    PROVIDER_ZLIB               = 1 << 16
   };
 
   inline AsyncWrap(Environment* env,
@@ -63,9 +62,12 @@ class AsyncWrap : public BaseObject {
 
   inline ~AsyncWrap();
 
-  inline bool has_async_listener();
+  template <class Type>
+  static inline void AddMethods(v8::Local<v8::FunctionTemplate> t);
 
-  inline uint32_t provider_type() const;
+  inline bool has_async_queue();
+
+  inline ProviderType provider_type() const;
 
   // Only call these within a valid HandleScope.
   inline v8::Handle<v8::Value> MakeCallback(const v8::Handle<v8::Function> cb,
@@ -80,6 +82,9 @@ class AsyncWrap : public BaseObject {
 
  private:
   inline AsyncWrap();
+  template <class Type>
+  static inline void RemoveAsyncQueue(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
 
   // TODO(trevnorris): BURN IN FIRE! Remove this as soon as a suitable
   // replacement is committed.
@@ -89,7 +94,7 @@ class AsyncWrap : public BaseObject {
       v8::Handle<v8::Value>* argv);
 
   uint32_t async_flags_;
-  uint32_t provider_type_;
+  ProviderType provider_type_;
 };
 
 }  // namespace node

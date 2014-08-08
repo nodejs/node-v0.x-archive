@@ -41,30 +41,63 @@ inline AsyncWrap::AsyncWrap(Environment* env,
     : BaseObject(env, object),
       async_flags_(NO_OPTIONS),
       provider_type_(provider) {
-  if (!env->has_async_listener())
+  AsyncWrap* parent = env->async_wrap_parent_class();
+  bool parent_has_async_queue = parent != NULL && parent->has_async_queue();
+
+  // No need to run if in the middle of processing any AsyncListener callbacks
+  // or if there is neither an activeContext nor is there a parent context
+  // that contains an async queue.
+  if (env->in_async_tick() ||
+      (!env->has_active_async_queue() && !parent_has_async_queue))
     return;
 
-  // TODO(trevnorris): Do we really need to TryCatch this call?
+  env->set_provider_type(provider);
+
+  v8::Local<v8::Object> process = env->process_object();
+  v8::Local<v8::Value> parent_val;
+
   v8::TryCatch try_catch;
   try_catch.SetVerbose(true);
 
-  v8::Local<v8::Value> val = object.As<v8::Value>();
-  env->async_listener_run_function()->Call(env->process_object(), 1, &val);
+  if (parent_has_async_queue) {
+    parent_val = parent->object().As<v8::Value>();
+    env->async_listener_load_function()->Call(process, 1, &parent_val);
+
+    if (try_catch.HasCaught())
+      return;
+  }
+
+  v8::Local<v8::Value> val_v[] = {
+    object.As<v8::Value>(),
+    v8::Integer::NewFromUnsigned(env->isolate(), provider)
+  };
+  env->async_listener_run_function()->Call(process, ARRAY_SIZE(val_v), val_v);
 
   if (!try_catch.HasCaught())
     async_flags_ |= HAS_ASYNC_LISTENER;
+  else
+    return;
+
+  if (parent_has_async_queue)
+    env->async_listener_unload_function()->Call(process, 1, &parent_val);
 }
 
 
 inline AsyncWrap::~AsyncWrap() {
 }
 
-inline uint32_t AsyncWrap::provider_type() const {
+
+template <class Type>
+inline void AsyncWrap::AddMethods(v8::Local<v8::FunctionTemplate> t) {
+  NODE_SET_PROTOTYPE_METHOD(t, "_removeAsyncQueue", RemoveAsyncQueue<Type>);
+}
+
+inline AsyncWrap::ProviderType AsyncWrap::provider_type() const {
   return provider_type_;
 }
 
 
-inline bool AsyncWrap::has_async_listener() {
+inline bool AsyncWrap::has_async_queue() {
   return async_flags_ & HAS_ASYNC_LISTENER;
 }
 
@@ -84,7 +117,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
   v8::TryCatch try_catch;
   try_catch.SetVerbose(true);
 
-  if (has_async_listener()) {
+  if (has_async_queue()) {
     v8::Local<v8::Value> val = context.As<v8::Value>();
     env()->async_listener_load_function()->Call(process, 1, &val);
 
@@ -124,7 +157,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
       return Undefined(env()->isolate());
   }
 
-  if (has_async_listener()) {
+  if (has_async_queue()) {
     v8::Local<v8::Value> val = context.As<v8::Value>();
     env()->async_listener_unload_function()->Call(process, 1, &val);
 
@@ -173,7 +206,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
   v8::TryCatch try_catch;
   try_catch.SetVerbose(true);
 
-  if (has_async_listener()) {
+  if (has_async_queue()) {
     v8::Local<v8::Value> val = context.As<v8::Value>();
     env()->async_listener_load_function()->Call(process, 1, &val);
 
@@ -187,7 +220,7 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
     return Undefined(env()->isolate());
   }
 
-  if (has_async_listener()) {
+  if (has_async_queue()) {
     v8::Local<v8::Value> val = context.As<v8::Value>();
     env()->async_listener_unload_function()->Call(process, 1, &val);
 
@@ -242,6 +275,14 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
   assert(cb->IsFunction());
 
   return MakeCallback(cb, argc, argv);
+}
+
+
+template <class Type>
+inline void AsyncWrap::RemoveAsyncQueue(
+    const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Type* wrap = Unwrap<Type>(args.Holder());
+  wrap->async_flags_ = NO_OPTIONS;
 }
 
 }  // namespace node

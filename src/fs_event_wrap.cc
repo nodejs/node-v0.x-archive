@@ -90,6 +90,8 @@ void FSEventWrap::Initialize(Handle<Object> target,
   NODE_SET_PROTOTYPE_METHOD(t, "start", Start);
   NODE_SET_PROTOTYPE_METHOD(t, "close", Close);
 
+  AsyncWrap::AddMethods<FSEventWrap>(t);
+
   target->Set(env->fsevent_string(), t->GetFunction());
 }
 

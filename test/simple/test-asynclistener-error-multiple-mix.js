@@ -25,13 +25,13 @@ var tracing = require('tracing');
 
 var results = [];
 var asyncNoHandleError = {
-  error: function(stor) {
+  error: function(ctx, stor) {
     results.push(1);
   }
 };
 
 var asyncHandleError = {
-  error: function(stor) {
+  error: function(ctx, stor) {
     results.push(0);
     return true;
   }

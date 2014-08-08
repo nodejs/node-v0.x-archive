@@ -30,7 +30,7 @@ var handlers = {
   before: function() {
     throw 1;
   },
-  error: function(stor, err) {
+  error: function(ctx, stor, err) {
     // Must catch error thrown in before callback.
     assert.equal(err, 1);
     once++;
@@ -42,7 +42,7 @@ var handlers1 = {
   before: function() {
     throw 2;
   },
-  error: function(stor, err) {
+  error: function(ctx, stor, err) {
     // Must catch *other* handlers throw by error callback.
     assert.equal(err, 1);
     once++;

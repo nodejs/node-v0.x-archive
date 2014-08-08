@@ -22,26 +22,55 @@
 var common = require('../common');
 var assert = require('assert');
 var tracing = require('tracing');
-var val;
+
+var queue = [];
+var actual = 0;
+var expected = 0;
+
+var addListener = tracing.addAsyncListener;
+var removeListener = tracing.removeAsyncListener;
+
 var callbacks = {
-  create: function() {
-    return 42;
+  create: function onCreate() {
+    return 'good';
   },
-  before: function() {
-    tracing.removeAsyncListener(listener);
-    tracing.addAsyncListener(listener);
-  },
-  after: function(context, storage) {
-    val = storage;
+  before: function onBefore(ctx, stor) { },
+  after: function onAfter(ctx, stor) {
+    assert.ok(stor !== 'bad');
   }
 };
 
-var listener = tracing.addAsyncListener(callbacks);
+var listener = tracing.createAsyncListener(callbacks, 'bad');
 
-process.nextTick(function() {});
-
-process.on('exit', function(status) {
-  tracing.removeAsyncListener(listener);
-  assert.equal(status, 0);
-  assert.equal(val, 42);
+process.on('beforeExit', function() {
+  if (queue.length > 0)
+    runQueue();
 });
+
+process.on('exit', function(code) {
+  removeListener(listener);
+
+  // Very important this code is checked, or real reason for failure may
+  // be obfuscated by a failing assert below.
+  if (code !== 0)
+    return;
+
+  console.log('ok');
+});
+
+setImmediate(function() {
+  addListener(listener);
+
+  setImmediate(function() {
+    removeListener(listener);
+    addListener(listener);
+    setImmediate(function() {
+      removeListener(listener);
+      setImmediate(function() {
+        addListener(listener);
+      });
+    });
+  });
+});
+
+

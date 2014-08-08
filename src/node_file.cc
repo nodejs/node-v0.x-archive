@@ -72,7 +72,9 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
   void* operator new(size_t size, char* storage) { return storage; }
 
   FSReqWrap(Environment* env, const char* syscall, char* data = NULL)
-    : ReqWrap<uv_fs_t>(env, Object::New(env->isolate())),
+    : ReqWrap<uv_fs_t>(env,
+                       Object::New(env->isolate()),
+                       AsyncWrap::PROVIDER_FSREQWRAP),
       syscall_(syscall),
       data_(data),
       dest_len_(0) {

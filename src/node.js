@@ -253,8 +253,8 @@
         var t = setImmediate(process._tickCallback);
         // Complete hack to make sure any errors thrown from async
         // listeners don't cause an infinite loop.
-        if (t._asyncQueue)
-          t._asyncQueue = [];
+        if (t._async && t._async.queue)
+          t._async.queue = [];
       }
 
       return caught;
@@ -289,11 +289,20 @@
 
   startup.processNextTick = function() {
     var tracing = NativeModule.require('tracing');
+    var PROVIDER_NEXTTICK = tracing.ASYNC_PROVIDERS.NEXTTICK;
     var nextTickQueue = [];
+
     var asyncFlags = tracing._asyncFlags;
     var _runAsyncQueue = tracing._runAsyncQueue;
     var _loadAsyncQueue = tracing._loadAsyncQueue;
     var _unloadAsyncQueue = tracing._unloadAsyncQueue;
+
+    // For AsyncListener.
+    // *Must* match Environment::AsyncListener::Fields in src/env.h.
+    var kActiveAsyncContextType = 0;
+    var kActiveAsyncQueueLength = 1;
+    var kWatchedProviders = 2;
+    var kInAsyncTick = 3;
 
     // This tickInfo thing is used so that the C++ code in src/node.cc
     // can have easy accesss to our nextTick state, and avoid unnecessary
@@ -302,10 +311,6 @@
     // *Must* match Environment::TickInfo::Fields in src/env.h.
     var kIndex = 0;
     var kLength = 1;
-
-    // For asyncFlags.
-    // *Must* match Environment::AsyncListeners::Fields in src/env.h
-    var kCount = 0;
 
     process.nextTick = nextTick;
     // Needs to be accessible from beyond this scope.
@@ -336,7 +341,7 @@
         tock = nextTickQueue[tickInfo[kIndex]++];
         callback = tock.callback;
         threw = true;
-        hasQueue = !!tock._asyncQueue;
+        hasQueue = tock._async && tock._async.queue.length > 0;
         if (hasQueue)
           _loadAsyncQueue(tock);
         try {
@@ -362,7 +367,7 @@
         tock = nextTickQueue[tickInfo[kIndex]++];
         callback = tock.callback;
         domain = tock.domain;
-        hasQueue = !!tock._asyncQueue;
+        hasQueue = tock._async && tock._async.queue.length > 0;
         if (hasQueue)
           _loadAsyncQueue(tock);
         if (domain)
@@ -394,11 +399,18 @@
       var obj = {
         callback: callback,
         domain: process.domain || null,
-        _asyncQueue: undefined
+        _async: undefined
       };
 
-      if (asyncFlags[kCount] > 0)
-        _runAsyncQueue(obj);
+      // The AsyncListener callbacks must be run for all nextTick() if
+      // there is an activeContext because currently there is no reliable
+      // way to determine what the source of the caller is. For cases
+      // when nextTick() is implicitly called from core code.
+      //
+      // TODO(trevnorris): Find way to reliably pass the caller's type.
+      if (asyncFlags[kInAsyncTick] === 0 &&
+          asyncFlags[kActiveAsyncQueueLength] > 0)
+        _runAsyncQueue(obj, PROVIDER_NEXTTICK);
 
       nextTickQueue.push(obj);
       tickInfo[kLength]++;

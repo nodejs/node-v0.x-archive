@@ -85,6 +85,8 @@ void TTYWrap::Initialize(Handle<Object> target,
   NODE_SET_METHOD(target, "isTTY", IsTTY);
   NODE_SET_METHOD(target, "guessHandleType", GuessHandleType);
 
+  AsyncWrap::AddMethods<TTYWrap>(t);
+
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "TTY"), t->GetFunction());
   env->set_tty_constructor_template(t);
 }

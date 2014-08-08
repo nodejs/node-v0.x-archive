@@ -30,7 +30,7 @@ var handlers = {
   after: function() {
     throw 1;
   },
-  error: function(stor, err) {
+  error: function(ctx, stor, err) {
     // Error handler must be called exactly *once*.
     once++;
     assert.equal(err, 1);

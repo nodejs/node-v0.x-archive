@@ -27,7 +27,7 @@ var tracing = require('tracing');
 var errMsg = 'net - error: server connection';
 var cntr = 0;
 var al = tracing.addAsyncListener({
-  error: function(stor, er) {
+  error: function(ctx, stor, er) {
     cntr++;
     process._rawDebug('Handling error: ' + er.message);
     assert.equal(errMsg, er.message);

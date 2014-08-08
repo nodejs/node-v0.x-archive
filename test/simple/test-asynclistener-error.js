@@ -35,7 +35,7 @@ var expectCaught = 0;
 var exitCbRan = false;
 
 var callbacksObj = {
-  error: function(value, er) {
+  error: function(ctx, value, er) {
     var idx = errorMsgs.indexOf(er.message);
 
     caught++;
@@ -66,19 +66,6 @@ process.on('exit', function(code) {
 
   assert.equal(caught, expectCaught, 'caught all expected errors');
   process._rawDebug('ok');
-});
-
-
-// Catch synchronous throws
-errorMsgs.push('sync throw');
-process.nextTick(function() {
-  addListener(listener);
-
-  expectCaught++;
-  currentMsg = 'sync throw';
-  throw new Error(currentMsg);
-
-  removeListener(listener);
 });
 
 
@@ -117,6 +104,7 @@ process.nextTick(function() {
 
   removeListener(listener);
 });
+
 
 
 // Deeply nested

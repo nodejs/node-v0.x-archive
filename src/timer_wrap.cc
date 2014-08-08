@@ -71,6 +71,8 @@ class TimerWrap : public HandleWrap {
 
     target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Timer"),
                 constructor->GetFunction());
+
+    AsyncWrap::AddMethods<TimerWrap>(constructor);
   }
 
  private:
