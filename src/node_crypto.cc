@@ -3544,16 +3544,12 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-typedef int (*EVP_PKEY_cipher_init_t)(EVP_PKEY_CTX *ctx);
-typedef int (*EVP_PKEY_cipher_t)(EVP_PKEY_CTX *ctx,
-			unsigned char *out, size_t *outlen,
-			const unsigned char *in, size_t inlen);
-template <EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init, EVP_PKEY_cipher_t EVP_PKEY_cipher>
-bool PKEYCipher(EVP_PKEY* pkey,
-                const unsigned char* data,
-                int len,
-                unsigned char** out,
-                size_t* out_len) {
+template <PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init, PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
+bool PublicKeyCipher::Cipher(EVP_PKEY* pkey,
+                             const unsigned char* data,
+                             int len,
+                             unsigned char** out,
+                             size_t* out_len) {
   EVP_PKEY_CTX* ctx = NULL;
   bool fatal = true;
 
@@ -3584,13 +3580,13 @@ exit:
 }
 
 
-bool PublicEncrypt(const char* key_pem,
-                   int key_pem_len,
-                   const char* passphrase,
-                   const unsigned char* data,
-                   int len,
-                   unsigned char** out,
-                   size_t* out_len) {
+bool PublicKeyCipher::PublicEncrypt(const char* key_pem,
+                                    int key_pem_len,
+                                    const char* passphrase,
+                                    const unsigned char* data,
+                                    int len,
+                                    unsigned char** out,
+                                    size_t* out_len) {
   EVP_PKEY* pkey = NULL;
   BIO* bp = NULL;
   bool fatal = true;
@@ -3619,7 +3615,7 @@ bool PublicEncrypt(const char* key_pem,
       goto exit;
   }
 
-  if (!PKEYCipher<EVP_PKEY_encrypt_init, EVP_PKEY_encrypt>(pkey, data, len, out, out_len))
+  if (!PublicKeyCipher::Cipher<EVP_PKEY_encrypt_init, EVP_PKEY_encrypt>(pkey, data, len, out, out_len))
     goto exit;
 
   fatal = false;
@@ -3632,13 +3628,13 @@ exit:
 }
 
 
-bool PrivateDecrypt(const char* key_pem,
-                    int key_pem_len,
-                    const char* passphrase,
-                    const unsigned char* data,
-                    int len,
-                    unsigned char** out,
-                    size_t* out_len) {
+bool PublicKeyCipher::PrivateDecrypt(const char* key_pem,
+                                     int key_pem_len,
+                                     const char* passphrase,
+                                     const unsigned char* data,
+                                     int len,
+                                     unsigned char** out,
+                                     size_t* out_len) {
   EVP_PKEY* pkey = NULL;
   BIO* bp = NULL;
   bool fatal = true;
@@ -3657,7 +3653,7 @@ bool PrivateDecrypt(const char* key_pem,
   if (pkey == NULL)
     goto exit;
 
-  if (!PKEYCipher<EVP_PKEY_decrypt_init, EVP_PKEY_decrypt>(pkey, data, len, out, out_len))
+  if (!PublicKeyCipher::Cipher<EVP_PKEY_decrypt_init, EVP_PKEY_decrypt>(pkey, data, len, out, out_len))
     goto exit;
 
   fatal = false;
@@ -3670,14 +3666,14 @@ exit:
 }
 
 
-template <bool (*Cipher)(const char* key_pem,
-                         int key_pem_len,
-                         const char* passphrase,
-                         const unsigned char* data,
-                         int len,
-                         unsigned char** out,
-                         size_t* out_len)>
-void PKEYCipher(const FunctionCallbackInfo<Value>& args) {
+template <bool (*PKEYCipher)(const char* key_pem,
+                             int key_pem_len,
+                             const char* passphrase,
+                             const unsigned char* data,
+                             int len,
+                             unsigned char** out,
+                             size_t* out_len)>
+void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
 
@@ -3694,7 +3690,7 @@ void PKEYCipher(const FunctionCallbackInfo<Value>& args) {
   unsigned char* out_value = NULL;
   size_t out_len = -1;
 
-  bool r = Cipher(
+  bool r = PKEYCipher(
       kbuf,
       klen,
       args.Length() >= 3 && !args[2]->IsNull() ? *passphrase : NULL,
@@ -4905,8 +4901,8 @@ void InitCrypto(Handle<Object> target,
   NODE_SET_METHOD(target, "getSSLCiphers", GetSSLCiphers);
   NODE_SET_METHOD(target, "getCiphers", GetCiphers);
   NODE_SET_METHOD(target, "getHashes", GetHashes);
-  NODE_SET_METHOD(target, "publicEncrypt", PKEYCipher<PublicEncrypt>);
-  NODE_SET_METHOD(target, "privateDecrypt", PKEYCipher<PrivateDecrypt>);
+  NODE_SET_METHOD(target, "publicEncrypt", PublicKeyCipher::Cipher<PublicKeyCipher::PublicEncrypt>);
+  NODE_SET_METHOD(target, "privateDecrypt", PublicKeyCipher::Cipher<PublicKeyCipher::PrivateDecrypt>);
 }
 
 }  // namespace crypto

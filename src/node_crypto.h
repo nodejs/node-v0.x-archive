@@ -559,6 +559,46 @@ class Verify : public SignBase {
   }
 };
 
+class PublicKeyCipher {
+ public:
+  typedef int (*EVP_PKEY_cipher_init_t)(EVP_PKEY_CTX *ctx);
+  typedef int (*EVP_PKEY_cipher_t)(EVP_PKEY_CTX *ctx,
+  			unsigned char *out, size_t *outlen,
+  			const unsigned char *in, size_t inlen);
+
+  template <EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init, EVP_PKEY_cipher_t EVP_PKEY_cipher>
+  static bool Cipher(EVP_PKEY* pkey,
+                     const unsigned char* data,
+                     int len,
+                     unsigned char** out,
+                     size_t* out_len);
+
+  static bool PublicEncrypt(const char* key_pem,
+                            int key_pem_len,
+                            const char* passphrase,
+                            const unsigned char* data,
+                            int len,
+                            unsigned char** out,
+                            size_t* out_len);
+
+  static bool PrivateDecrypt(const char* key_pem,
+                             int key_pem_len,
+                             const char* passphrase,
+                             const unsigned char* data,
+                             int len,
+                             unsigned char** out,
+                             size_t* out_len);
+
+  template <bool (*PKEYCipher)(const char* key_pem,
+                               int key_pem_len,
+                               const char* passphrase,
+                               const unsigned char* data,
+                               int len,
+                               unsigned char** out,
+                               size_t* out_len)>
+  static void Cipher(const v8::FunctionCallbackInfo<v8::Value>& args);
+};
+
 class DiffieHellman : public BaseObject {
  public:
   ~DiffieHellman() {
