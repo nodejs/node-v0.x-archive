@@ -3544,9 +3544,11 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-template <int (*EVP_PKEY_cipher_init)(EVP_PKEY_CTX *ctx), int (*EVP_PKEY_cipher)(EVP_PKEY_CTX *,
+typedef int (*EVP_PKEY_cipher_init_t)(EVP_PKEY_CTX *ctx);
+typedef int (*EVP_PKEY_cipher_t)(EVP_PKEY_CTX *ctx,
 			unsigned char *out, size_t *outlen,
-			const unsigned char *in, size_t inlen)>
+			const unsigned char *in, size_t inlen);
+template <EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init, EVP_PKEY_cipher_t EVP_PKEY_cipher>
 bool PKEYCipher(EVP_PKEY* pkey,
                 const unsigned char* data,
                 int len,
