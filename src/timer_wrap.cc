@@ -57,6 +57,7 @@ class TimerWrap : public HandleWrap {
     constructor->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kOnTimeout"),
                      Integer::New(env->isolate(), kOnTimeout));
 
+    NODE_SET_METHOD(constructor, "updateTime", UpdateTime);
     NODE_SET_METHOD(constructor, "now", Now);
 
     NODE_SET_PROTOTYPE_METHOD(constructor, "close", HandleWrap::Close);
@@ -150,6 +151,12 @@ class TimerWrap : public HandleWrap {
     HandleScope handle_scope(env->isolate());
     Context::Scope context_scope(env->context());
     wrap->MakeCallback(kOnTimeout, 0, NULL);
+  }
+
+  static void UpdateTime(const FunctionCallbackInfo<Value>& args) {
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
+    uv_update_time(env->event_loop());
   }
 
   static void Now(const FunctionCallbackInfo<Value>& args) {
