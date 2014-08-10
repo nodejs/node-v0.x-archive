@@ -114,6 +114,7 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   HandleWrap* wrap = static_cast<HandleWrap*>(handle->data);
   Environment* env = wrap->env();
   HandleScope scope(env->isolate());
+  Context::Scope context_scope(env->context());
 
   // The wrap object should still be there.
   assert(wrap->persistent().IsEmpty() == false);
@@ -121,8 +122,6 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   // But the handle pointer should be gone.
   assert(wrap->handle__ == NULL);
 
-  HandleScope handle_scope(env->isolate());
-  Context::Scope context_scope(env->context());
   Local<Object> object = wrap->object();
 
   if (wrap->flags_ & kCloseCallback) {
