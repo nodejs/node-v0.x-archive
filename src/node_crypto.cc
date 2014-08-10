@@ -3544,14 +3544,51 @@ void Verify::VerifyFinal(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-template <PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init, PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
-bool PublicKeyCipher::Cipher(EVP_PKEY* pkey,
+template <PublicKeyCipher::Operation operation,
+          PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
+          PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
+bool PublicKeyCipher::Cipher(const char* key_pem,
+                             int key_pem_len,
+                             const char* passphrase,
                              const unsigned char* data,
                              int len,
                              unsigned char** out,
                              size_t* out_len) {
+  EVP_PKEY* pkey = NULL;
   EVP_PKEY_CTX* ctx = NULL;
+  BIO* bp = NULL;
   bool fatal = true;
+
+  bp = BIO_new(BIO_s_mem());
+  if (bp == NULL)
+    goto exit;
+
+  if (!BIO_write(bp, key_pem, key_pem_len))
+    goto exit;
+
+  // Check if this is a PKCS#8 or RSA public key before trying as a private key.
+  if (operation == kEncrypt && strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
+    pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+    if (pkey == NULL)
+      goto exit;
+  } else if (operation == kEncrypt && strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
+    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
+    if (rsa) {
+      pkey = EVP_PKEY_new();
+      if (pkey)
+        EVP_PKEY_set1_RSA(pkey, rsa);
+      RSA_free(rsa);
+    }
+    if (pkey == NULL)
+      goto exit;
+  } else {
+    pkey = PEM_read_bio_PrivateKey(bp,
+                                   NULL,
+                                   CryptoPemCallback,
+                                   const_cast<char*>(passphrase));
+    if (pkey == NULL)
+      goto exit;
+  }
 
   ctx = EVP_PKEY_CTX_new(pkey, NULL);
   if (!ctx)
@@ -3573,6 +3610,8 @@ bool PublicKeyCipher::Cipher(EVP_PKEY* pkey,
 exit:
   if (pkey != NULL)
     EVP_PKEY_free(pkey);
+  if (bp != NULL)
+    BIO_free_all(bp);
   if (ctx != NULL)
     EVP_PKEY_CTX_free(ctx);
 
@@ -3580,99 +3619,9 @@ exit:
 }
 
 
-bool PublicKeyCipher::PublicEncrypt(const char* key_pem,
-                                    int key_pem_len,
-                                    const char* passphrase,
-                                    const unsigned char* data,
-                                    int len,
-                                    unsigned char** out,
-                                    size_t* out_len) {
-  EVP_PKEY* pkey = NULL;
-  BIO* bp = NULL;
-  bool fatal = true;
-
-  bp = BIO_new(BIO_s_mem());
-  if (bp == NULL)
-    goto exit;
-
-  if (!BIO_write(bp, key_pem, key_pem_len))
-    goto exit;
-
-  // Check if this is a PKCS#8 or RSA public key
-  if (strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
-    pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
-    if (pkey == NULL)
-      goto exit;
-  } else {
-    RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
-    if (rsa) {
-      pkey = EVP_PKEY_new();
-      if (pkey)
-        EVP_PKEY_set1_RSA(pkey, rsa);
-      RSA_free(rsa);
-    }
-    if (pkey == NULL)
-      goto exit;
-  }
-
-  if (!PublicKeyCipher::Cipher<EVP_PKEY_encrypt_init, EVP_PKEY_encrypt>(pkey, data, len, out, out_len))
-    goto exit;
-
-  fatal = false;
-
-exit:
-  if (bp != NULL)
-    BIO_free_all(bp);
-
-  return !fatal;
-}
-
-
-bool PublicKeyCipher::PrivateDecrypt(const char* key_pem,
-                                     int key_pem_len,
-                                     const char* passphrase,
-                                     const unsigned char* data,
-                                     int len,
-                                     unsigned char** out,
-                                     size_t* out_len) {
-  EVP_PKEY* pkey = NULL;
-  BIO* bp = NULL;
-  bool fatal = true;
-
-  bp = BIO_new(BIO_s_mem());
-  if (bp == NULL)
-    goto exit;
-
-  if (!BIO_write(bp, key_pem, key_pem_len))
-    goto exit;
-
-  pkey = PEM_read_bio_PrivateKey(bp,
-                                 NULL,
-                                 CryptoPemCallback,
-                                 const_cast<char*>(passphrase));
-  if (pkey == NULL)
-    goto exit;
-
-  if (!PublicKeyCipher::Cipher<EVP_PKEY_decrypt_init, EVP_PKEY_decrypt>(pkey, data, len, out, out_len))
-    goto exit;
-
-  fatal = false;
-
-exit:
-  if (bp != NULL)
-    BIO_free_all(bp);
-
-  return !fatal;
-}
-
-
-template <bool (*PKEYCipher)(const char* key_pem,
-                             int key_pem_len,
-                             const char* passphrase,
-                             const unsigned char* data,
-                             int len,
-                             unsigned char** out,
-                             size_t* out_len)>
+template <PublicKeyCipher::Operation operation,
+          PublicKeyCipher::EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
+          PublicKeyCipher::EVP_PKEY_cipher_t EVP_PKEY_cipher>
 void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
@@ -3690,7 +3639,7 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   unsigned char* out_value = NULL;
   size_t out_len = -1;
 
-  bool r = PKEYCipher(
+  bool r = Cipher<operation, EVP_PKEY_cipher_init, EVP_PKEY_cipher>(
       kbuf,
       klen,
       args.Length() >= 3 && !args[2]->IsNull() ? *passphrase : NULL,
@@ -3710,7 +3659,7 @@ void PublicKeyCipher::Cipher(const FunctionCallbackInfo<Value>& args) {
   }
 
   args.GetReturnValue().Set(
-    Buffer::New(env, reinterpret_cast<char*>(out_value), out_len));
+      Buffer::New(env, reinterpret_cast<char*>(out_value), out_len));
   delete[] out_value;
 }
 
@@ -4901,8 +4850,16 @@ void InitCrypto(Handle<Object> target,
   NODE_SET_METHOD(target, "getSSLCiphers", GetSSLCiphers);
   NODE_SET_METHOD(target, "getCiphers", GetCiphers);
   NODE_SET_METHOD(target, "getHashes", GetHashes);
-  NODE_SET_METHOD(target, "publicEncrypt", PublicKeyCipher::Cipher<PublicKeyCipher::PublicEncrypt>);
-  NODE_SET_METHOD(target, "privateDecrypt", PublicKeyCipher::Cipher<PublicKeyCipher::PrivateDecrypt>);
+  NODE_SET_METHOD(target,
+                  "publicEncrypt",
+                  PublicKeyCipher::Cipher<PublicKeyCipher::kEncrypt,
+                                          EVP_PKEY_encrypt_init,
+                                          EVP_PKEY_encrypt>);
+  NODE_SET_METHOD(target,
+                  "privateDecrypt",
+                  PublicKeyCipher::Cipher<PublicKeyCipher::kDecrypt,
+                                          EVP_PKEY_decrypt_init,
+                                          EVP_PKEY_decrypt>);
 }
 
 }  // namespace crypto

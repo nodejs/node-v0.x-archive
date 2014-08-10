@@ -566,36 +566,25 @@ class PublicKeyCipher {
   			unsigned char *out, size_t *outlen,
   			const unsigned char *in, size_t inlen);
 
-  template <EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init, EVP_PKEY_cipher_t EVP_PKEY_cipher>
-  static bool Cipher(EVP_PKEY* pkey,
+  enum Operation {
+    kEncrypt,
+    kDecrypt
+  };
+
+  template <Operation operation,
+            EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
+            EVP_PKEY_cipher_t EVP_PKEY_cipher>
+  static bool Cipher(const char* key_pem,
+                     int key_pem_len,
+                     const char* passphrase,
                      const unsigned char* data,
                      int len,
                      unsigned char** out,
                      size_t* out_len);
 
-  static bool PublicEncrypt(const char* key_pem,
-                            int key_pem_len,
-                            const char* passphrase,
-                            const unsigned char* data,
-                            int len,
-                            unsigned char** out,
-                            size_t* out_len);
-
-  static bool PrivateDecrypt(const char* key_pem,
-                             int key_pem_len,
-                             const char* passphrase,
-                             const unsigned char* data,
-                             int len,
-                             unsigned char** out,
-                             size_t* out_len);
-
-  template <bool (*PKEYCipher)(const char* key_pem,
-                               int key_pem_len,
-                               const char* passphrase,
-                               const unsigned char* data,
-                               int len,
-                               unsigned char** out,
-                               size_t* out_len)>
+  template <Operation operation,
+            EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
+            EVP_PKEY_cipher_t EVP_PKEY_cipher>
   static void Cipher(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
 
