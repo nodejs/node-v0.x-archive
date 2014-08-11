@@ -839,6 +839,16 @@ assert.equal(bad_dh.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
   }, encryptedBuffer);
   assert.equal(input, decryptedBufferWithPassword.toString());
 
+  encryptedBuffer = crypto.publicEncrypt(certPem, bufferToEncrypt);
+
+  decryptedBuffer = crypto.privateDecrypt(keyPem, encryptedBuffer);
+  assert.equal(input, decryptedBuffer.toString());
+
+  encryptedBuffer = crypto.publicEncrypt(keyPem, bufferToEncrypt);
+
+  decryptedBuffer = crypto.privateDecrypt(keyPem, encryptedBuffer);
+  assert.equal(input, decryptedBuffer.toString());
+
   assert.throws(function() {
     crypto.privateDecrypt({
       key: rsaKeyPemEncrypted,

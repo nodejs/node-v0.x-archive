@@ -65,6 +65,9 @@ static const char PUBLIC_KEY_PFX[] =  "-----BEGIN PUBLIC KEY-----";
 static const int PUBLIC_KEY_PFX_LEN = sizeof(PUBLIC_KEY_PFX) - 1;
 static const char PUBRSA_KEY_PFX[] =  "-----BEGIN RSA PUBLIC KEY-----";
 static const int PUBRSA_KEY_PFX_LEN = sizeof(PUBRSA_KEY_PFX) - 1;
+static const char CERTIFICATE_PFX[] =  "-----BEGIN CERTIFICATE-----";
+static const int CERTIFICATE_PFX_LEN = sizeof(CERTIFICATE_PFX) - 1;
+
 static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | ASN1_STRFLGS_ESC_MSB
                                  | XN_FLAG_SEP_MULTILINE
@@ -3557,6 +3560,7 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
   EVP_PKEY* pkey = NULL;
   EVP_PKEY_CTX* ctx = NULL;
   BIO* bp = NULL;
+  X509* x509 = NULL;
   bool fatal = true;
 
   bp = BIO_new(BIO_s_mem());
@@ -3566,12 +3570,14 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
   if (!BIO_write(bp, key_pem, key_pem_len))
     goto exit;
 
-  // Check if this is a PKCS#8 or RSA public key before trying as a private key.
-  if (operation == kEncrypt && strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
+  // Check if this is a PKCS#8 or RSA public key before trying as X.509 and private key.
+  if (operation == kEncrypt &&
+      strncmp(key_pem, PUBLIC_KEY_PFX, PUBLIC_KEY_PFX_LEN) == 0) {
     pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
     if (pkey == NULL)
       goto exit;
-  } else if (operation == kEncrypt && strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
+  } else if (operation == kEncrypt &&
+             strncmp(key_pem, PUBRSA_KEY_PFX, PUBRSA_KEY_PFX_LEN) == 0) {
     RSA* rsa = PEM_read_bio_RSAPublicKey(bp, NULL, NULL, NULL);
     if (rsa) {
       pkey = EVP_PKEY_new();
@@ -3579,6 +3585,15 @@ bool PublicKeyCipher::Cipher(const char* key_pem,
         EVP_PKEY_set1_RSA(pkey, rsa);
       RSA_free(rsa);
     }
+    if (pkey == NULL)
+      goto exit;
+  } else if (operation == kEncrypt &&
+             strncmp(key_pem, CERTIFICATE_PFX, CERTIFICATE_PFX_LEN) == 0) {
+    x509 = PEM_read_bio_X509(bp, NULL, CryptoPemCallback, NULL);
+    if (x509 == NULL)
+      goto exit;
+
+    pkey = X509_get_pubkey(x509);
     if (pkey == NULL)
       goto exit;
   } else {
