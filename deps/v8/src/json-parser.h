@@ -185,8 +185,10 @@ Handle<Object> JsonParser<seq_ascii>::ParseJson(Handle<String> source,
   AdvanceSkipWhitespace();
   Handle<Object> result = ParseJsonValue();
   if (result.is_null() || c0_ != kEndOfString) {
-    // Parse failed. Current character is the unexpected token.
+    // Some exception (for example stack overflow) is already pending.
+    if (isolate_->has_pending_exception()) return Handle<Object>::null();
 
+    // Parse failed. Current character is the unexpected token.
     const char* message;
     Factory* factory = isolate()->factory();
     Handle<JSArray> array;
@@ -237,6 +239,12 @@ Handle<Object> JsonParser<seq_ascii>::ParseJson(Handle<String> source,
 // Parse any JSON value.
 template <bool seq_ascii>
 Handle<Object> JsonParser<seq_ascii>::ParseJsonValue() {
+  StackLimitCheck stack_check(isolate_);
+  if (stack_check.HasOverflowed()) {
+    isolate_->StackOverflow();
+    return Handle<Object>::null();
+  }
+
   switch (c0_) {
     case '"':
       return ParseJsonString();
