@@ -354,7 +354,7 @@ TEST(function test_lookup_ipv4_explicit_object(done) {
 
 TEST(function test_lookup_ipv4_hint_addrconfig(done) {
   var req = dns.lookup('www.google.com', {
-    hint: dns.ADDRCONFIG
+    hints: dns.ADDRCONFIG
   }, function(err, ip, family) {
     if (err) throw err;
     assert.ok(net.isIPv4(ip));
@@ -412,7 +412,7 @@ TEST(function test_lookup_ipv6_explicit_object(done) {
 
 TEST(function test_lookup_ipv6_hint(done) {
   var req = dns.lookup('ipv6.google.com', {
-    hint: dns.V4MAPPED
+    hints: dns.V4MAPPED
   }, function(err, ip, family) {
     if (err) throw err;
     assert.ok(net.isIPv6(ip));
