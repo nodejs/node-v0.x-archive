@@ -27,8 +27,8 @@ var dns = require('dns');
 var serverGotEnd = false;
 var clientGotEnd = false;
 
-dns.lookup('localhost', 6, function(err) {
-  if (err) {
+dns.lookup('localhost', 6, function(err, _, family) {
+  if (err || family !== 6) {
     console.error('Looks like IPv6 is not really supported');
     console.error(err);
     return;
