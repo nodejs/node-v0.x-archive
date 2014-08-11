@@ -411,7 +411,8 @@ TEST(function test_lookup_ipv6_explicit_object(done) {
 
 
 TEST(function test_lookup_ipv6_hint(done) {
-  var req = dns.lookup('ipv6.google.com', {
+  var req = dns.lookup('www.google.com', {
+    family: 6,
     hints: dns.V4MAPPED
   }, function(err, ip, family) {
     if (err) throw err;
