@@ -72,6 +72,7 @@ function publish_ (arg, data, isRetry, cachedir, cb) {
   var registry = npm.registry
   if (data.publishConfig) {
     var pubConf = new Conf(npm.config)
+    pubConf.save = npm.config.save.bind(npm.config)
 
     // don't modify the actual publishConfig object, in case we have
     // to set a login token or some other data.
@@ -98,9 +99,12 @@ function publish_ (arg, data, isRetry, cachedir, cb) {
       log.warn("publish", "Forced publish over "+data._id)
       return npm.commands.unpublish([data._id], function (er) {
         // ignore errors.  Use the force.  Reach out with your feelings.
-        publish([arg], true, cb)
+        // but if it fails again, then report the first error.
+        publish([arg], er || true, cb)
       })
     }
+    // report the unpublish error if this was a retry and unpublish failed
+    if (er && isRetry && isRetry !== true) return cb(isRetry)
     if (er) return cb(er)
     console.log("+ " + data._id)
     cb()

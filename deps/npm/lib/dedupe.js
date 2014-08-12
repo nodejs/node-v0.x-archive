@@ -15,10 +15,8 @@ var archy = require("archy")
 var util = require("util")
 var RegClient = require("npm-registry-client")
 var npmconf = require("npmconf")
-var npm = require("npm")
 var semver = require("semver")
-var npm = require("npm")
-var rimraf = require("rimraf")
+var rm = require("./utils/gently-rm.js")
 var log = require("npmlog")
 var npm = require("./npm.js")
 
@@ -132,15 +130,16 @@ function dedupe_ (dir, filter, unavoidable, dryrun, silent, cb) {
         // a=/path/to/node_modules/foo/node_modules/bar
         // b=/path/to/node_modules/elk/node_modules/bar
         // ==/path/to/node_modules/bar
-        a = a.split(/\/node_modules\//)
-        b = b.split(/\/node_modules\//)
+        var nmReg = new RegExp("\\" + path.sep + "node_modules\\" + path.sep)
+        a = a.split(nmReg)
+        b = b.split(nmReg)
         var name = a.pop()
         b.pop()
         // find the longest chain that both A and B share.
         // then push the name back on it, and join by /node_modules/
         var res = []
         for (var i = 0, al = a.length, bl = b.length; i < al && i < bl && a[i] === b[i]; i++);
-        return a.slice(0, i).concat(name).join("/node_modules/")
+        return a.slice(0, i).concat(name).join(path.sep + "node_modules" + path.sep)
       }) : undefined
 
       return [item[0], { item: item
@@ -194,9 +193,10 @@ function installAndRetest (set, filter, dir, unavoidable, silent, cb) {
       // where is /path/to/node_modules/foo/node_modules/bar
       // for package "bar", but we need it to be just
       // /path/to/node_modules/foo
-      where = where.split(/\/node_modules\//)
+      var nmReg = new RegExp("\\" + path.sep + "node_modules\\" + path.sep)
+      where = where.split(nmReg)
       where.pop()
-      where = where.join("/node_modules/")
+      where = where.join(path.sep + "node_modules" + path.sep)
       remove.push.apply(remove, others)
 
       return npm.commands.install(where, what, cb)
@@ -208,7 +208,7 @@ function installAndRetest (set, filter, dir, unavoidable, silent, cb) {
 
   }, function (er, installed) {
     if (er) return cb(er)
-    asyncMap(remove, rimraf, function (er) {
+    asyncMap(remove, rm, function (er) {
       if (er) return cb(er)
       remove.forEach(function (r) {
         log.info("rm", r)
@@ -248,19 +248,30 @@ function findVersions (npm, summary, cb) {
     npm.registry.get(name, function (er, data) {
       var regVersions = er ? [] : Object.keys(data.versions)
       var locMatch = bestMatch(versions, ranges)
-      var regMatch = bestMatch(regVersions, ranges)
+      var regMatch;
+      var tag = npm.config.get("tag")
+      var distTag = data["dist-tags"] && data["dist-tags"][tag]
+      if (distTag && data.versions[distTag] && matches(distTag, ranges)) {
+        regMatch = distTag
+      } else {
+        regMatch = bestMatch(regVersions, ranges)
+      }
 
       cb(null, [[name, has, loc, locMatch, regMatch, locs]])
     })
   }, cb)
 }
 
+function matches (version, ranges) {
+  return !ranges.some(function (r) {
+    return !semver.satisfies(version, r, true)
+  })
+}
+
 function bestMatch (versions, ranges) {
   return versions.filter(function (v) {
-    return !ranges.some(function (r) {
-      return !semver.satisfies(v, r)
-    })
-  }).sort(semver.compare).pop()
+    return matches(v, ranges)
+  }).sort(semver.compareLoose).pop()
 }
 
 
@@ -343,4 +354,3 @@ function whoDepends_ (pkg, who, test) {
   })
   return who
 }
-
