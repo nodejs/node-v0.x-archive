@@ -11,7 +11,6 @@ config.usage = "npm config set <key> <value>"
 
 var log = require("npmlog")
   , npm = require("./npm.js")
-  , spawn = require("child_process").spawn
   , fs = require("graceful-fs")
   , npmconf = require("npmconf")
   , types = npmconf.defs.types
@@ -83,9 +82,17 @@ function edit (cb) {
                        , ";;;;"
                        ]
                      )
-              .concat(Object.keys(npmconf.defaults).map(function (k) {
-                return "; " + k + " = " + npmconf.defaults[k]
-              }))
+              .concat(Object.keys(npmconf.defaults).reduce(function (arr, key) {
+                var obj = {};
+                obj[key] = npmconf.defaults[key]
+                if (key === "logstream") return arr
+                return arr.concat(
+                  ini.stringify(obj)
+                    .replace(/\n$/m, '')
+                    .replace(/^/g, '; ')
+                    .replace(/\n/g, '\n; ')
+                    .split('\n'))
+              }, []))
               .concat([""])
               .join(os.EOL)
       fs.writeFile
@@ -140,10 +147,6 @@ function get (key, cb) {
 
 function sort (a, b) {
   return a > b ? 1 : -1
-}
-
-function reverse (a, b) {
-  return a > b ? -1 : 1
 }
 
 function public (k) {
@@ -228,7 +231,6 @@ function list (cb) {
       , bpath = builtin.path
       , bconfKeys = getKeys(bconf)
     if (bconfKeys.length) {
-      var path = require("path")
       msg += "; builtin config " + bpath + "\n"
       bconfKeys.forEach(function (k) {
         var val = (k.charAt(0) === "_")

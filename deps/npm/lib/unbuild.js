@@ -2,11 +2,10 @@ module.exports = unbuild
 unbuild.usage = "npm unbuild <folder>\n(this is plumbing)"
 
 var readJson = require("read-package-json")
-  , rm = require("rimraf")
+  , rm = require("./utils/gently-rm.js")
   , gentlyRm = require("./utils/gently-rm.js")
   , npm = require("./npm.js")
   , path = require("path")
-  , fs = require("graceful-fs")
   , lifecycle = require("./utils/lifecycle.js")
   , asyncMap = require("slide").asyncMap
   , chain = require("slide").chain
@@ -15,12 +14,18 @@ var readJson = require("read-package-json")
 
 // args is a list of folders.
 // remove any bins/etc, and then delete the folder.
-function unbuild (args, cb) { asyncMap(args, unbuild_, cb) }
+function unbuild (args, silent, cb) {
+  if (typeof silent === 'function') cb = silent, silent = false
+  asyncMap(args, unbuild_(silent), cb)
+}
 
-function unbuild_ (folder, cb) {
+function unbuild_ (silent) { return function (folder, cb_) {
+  function cb (er) {
+    cb_(er, path.relative(npm.root, folder))
+  }
   folder = path.resolve(folder)
   delete build._didBuild[folder]
-  log.info(folder, "unbuild")
+  log.verbose(folder.substr(npm.prefix.length + 1), "unbuild")
   readJson(path.resolve(folder, "package.json"), function (er, pkg) {
     // if no json, then just trash it, but no scripts or whatever.
     if (er) return rm(folder, cb)
@@ -28,12 +33,16 @@ function unbuild_ (folder, cb) {
     chain
       ( [ [lifecycle, pkg, "preuninstall", folder, false, true]
         , [lifecycle, pkg, "uninstall", folder, false, true]
+        , !silent && function(cb) {
+            console.log("unbuild " + pkg._id)
+            cb()
+          }
         , [rmStuff, pkg, folder]
         , [lifecycle, pkg, "postuninstall", folder, false, true]
         , [rm, folder] ]
       , cb )
   })
-}
+}}
 
 function rmStuff (pkg, folder, cb) {
   // if it's global, and folder is in {prefix}/node_modules,
@@ -45,7 +54,7 @@ function rmStuff (pkg, folder, cb) {
 
   readJson.cache.del(path.resolve(folder, "package.json"))
 
-  log.verbose([top, gnm, parent], "unbuild "+pkg._id)
+  log.verbose([top, gnm, parent], "unbuild " + pkg._id)
   asyncMap([rmBins, rmMans], function (fn, cb) {
     fn(pkg, folder, parent, top, cb)
   }, cb)
@@ -77,12 +86,12 @@ function rmMans (pkg, folder, parent, top, cb) {
   var manRoot = path.resolve(npm.config.get("prefix"), "share", "man")
   asyncMap(pkg.man, function (man, cb) {
     if (Array.isArray(man)) {
-      man.forEach(rm)
+      man.forEach(rmMan)
     } else {
-      rm(man)
+      rmMan(man)
     }
 
-    function rm(man) {
+    function rmMan(man) {
       var parseMan = man.match(/(.*)\.([0-9]+)(\.gz)?$/)
         , stem = parseMan[1]
         , sxn = parseMan[2]
