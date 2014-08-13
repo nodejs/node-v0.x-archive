@@ -226,3 +226,12 @@ exports.checkSpawnSyncRet = function(ret) {
   assert.strictEqual(ret.status, 0);
   assert.strictEqual(ret.error, undefined);
 };
+
+exports.isValidHostname = function(str) {
+  // See http://stackoverflow.com/a/3824105
+  var re = new RegExp(
+    '^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])' +
+    '(\\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9]))*$');
+    
+  return !!str.match(re) && str.length <= 255;
+}
