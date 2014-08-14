@@ -59,6 +59,29 @@ test(function serverTimeout(cb) {
   http.get({ port: common.PORT }).on('error', function() {});
 });
 
+test(function serverClearTimeout(cb) {
+  var caughtTimeout = false;
+  process.on('exit', function() {
+    assert(caughtTimeout);
+  });
+  var server = http.createServer(function(req, res) {
+    assert.equal(server.timeout, 0);
+    caughtTimeout = true;
+    res.end();
+    server.close();
+    cb();
+  });
+  server.listen(common.PORT);
+  server.clearTimeout();
+  server.once('timeout', unreachable);
+  function unreachable() {
+    assert(false);
+  }
+
+  assert(server._events.timeout.name, unreachable.name);
+  http.get({ port: common.PORT }).on('error', function() {});
+});
+
 test(function serverRequestTimeout(cb) {
   var caughtTimeout = false;
   process.on('exit', function() {
