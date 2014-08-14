@@ -761,12 +761,13 @@ assert.equal(buf[3], 0xFF);
 });
 
 // test offset returns are correct
-var b = new Buffer(16);
-assert.equal(4, b.writeUInt32LE(0, 0));
-assert.equal(6, b.writeUInt16LE(0, 4));
-assert.equal(7, b.writeUInt8(0, 6));
-assert.equal(8, b.writeInt8(0, 7));
-assert.equal(16, b.writeDoubleLE(0, 8));
+var b = new Buffer(21);
+assert.equal(5, b.writeUInt40LE(0, 0));
+assert.equal(9, b.writeUInt32LE(0, 5));
+assert.equal(11, b.writeUInt16LE(0, 9));
+assert.equal(12, b.writeUInt8(0, 11));
+assert.equal(13, b.writeInt8(0, 12));
+assert.equal(21, b.writeDoubleLE(0, 13));
 
 // test unmatched surrogates not producing invalid utf8 output
 // ef bf bd = utf-8 representation of unicode replacement character
@@ -924,7 +925,7 @@ assert.equal(buf.readInt8(0), -1);
 
 
 
-[16, 32].forEach(function(bits) {
+[16, 32, 40].forEach(function(bits) {
   var buf = new Buffer(bits / 8 - 1);
 
   assert.throws(function() { buf['readUInt' + bits + 'BE'](0); },
@@ -948,16 +949,28 @@ assert.equal(buf.readInt8(0), -1);
   var buf = new Buffer([0xFF, 0xFF, 0xFF, 0xFF]);
 
   assert.equal(buf['readUInt' + bits + 'BE'](0),
-                (0xFFFFFFFF >>> (32 - bits)));
+                (0xFFFFFFFFFF >>> (32 - bits)));
 
   assert.equal(buf['readUInt' + bits + 'LE'](0),
-                (0xFFFFFFFF >>> (32 - bits)));
+                (0xFFFFFFFFFF >>> (32 - bits)));
 
   assert.equal(buf['readInt' + bits + 'BE'](0),
-                (0xFFFFFFFF >> (32 - bits)));
+                (0xFFFFFFFFFF >> (32 - bits)));
 
   assert.equal(buf['readInt' + bits + 'LE'](0),
-                (0xFFFFFFFF >> (32 - bits)));
+                (0xFFFFFFFFFF >> (32 - bits)));
+});
+
+[40].forEach(function(bits) {
+  var buf = new Buffer([0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+  assert.equal(buf['readUInt' + bits + 'BE'](0), 1095216660479);
+
+  assert.equal(buf['readUInt' + bits + 'LE'](0), 1095216660479);
+
+  assert.equal(buf['readInt' + bits + 'BE'](0), -1);
+
+  assert.equal(buf['readInt' + bits + 'LE'](0), -1);
 });
 
 // test Buffer slice
