@@ -677,6 +677,7 @@ unsigned long *OPENSSL_ia32cap_loc(void)
     return (unsigned long *)OPENSSL_ia32cap_P;
 }
 
+#if !defined(__arm__)
 #if defined(OPENSSL_CPUID_OBJ) && !defined(OPENSSL_NO_ASM) && !defined(I386_ONLY)
 #define OPENSSL_CPUID_SETUP
 #if defined(_WIN32)
@@ -721,6 +722,7 @@ unsigned long *OPENSSL_ia32cap_loc(void) { return NULL; }
 int OPENSSL_NONPIC_relocated = 0;
 #if !defined(OPENSSL_CPUID_SETUP) && !defined(OPENSSL_CPUID_OBJ)
 void OPENSSL_cpuid_setup(void) {}
+#endif
 #endif
 
 #if (defined(_WIN32) || defined(__CYGWIN__)) && defined(_WINDLL)
