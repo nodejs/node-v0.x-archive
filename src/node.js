@@ -670,7 +670,7 @@
       if (isSignal(type)) {
         assert(signalWraps.hasOwnProperty(type));
 
-        if (this.listeners(type).length === 0) {
+        if (NativeModule.require('events').listenerCount(this, type) === 0) {
           signalWraps[type].close();
           delete signalWraps[type];
         }
