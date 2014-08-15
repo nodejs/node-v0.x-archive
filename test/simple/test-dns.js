@@ -69,6 +69,11 @@ assert.throws(function() {
   return !(err instanceof TypeError);
 }, 'Unexpected error');
 
+// GH #8187
+assert.throws(function() {
+  dns.lookup({}, noop);
+}, 'invalid arguments: hostname must be a string or null');
+
 /*
  * Make sure that dns.lookup throws if hints does not represent a valid flag.
  * (dns.V4MAPPED | dns.ADDRCONFIG) + 1 is invalid because:
