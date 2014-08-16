@@ -352,6 +352,8 @@ def configure_arm(o):
 
 def configure_node(o):
   # TODO add gdb
+  if options.dest_os == 'android':
+    o['variables']['OS'] = 'android'
   o['variables']['v8_no_strict_aliasing'] = 1 # work around compiler bugs
   o['variables']['node_prefix'] = os.path.expanduser(options.prefix or '')
   o['variables']['node_install_npm'] = b(not options.without_npm)
