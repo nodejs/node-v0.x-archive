@@ -72,6 +72,19 @@ OBJS += src/unix/linux/linux-core.o \
         src/unix/linux/syscalls.o
 endif
 
+ifeq (Android,$(uname_S))
+EV_CONFIG=config_android.h
+EIO_CONFIG=config_android.h
+CSTDFLAG += -D_GNU_SOURCE 
+CPPFLAGS += -Isrc/ares/config_android -DLINUX 
+LINKFLAGS+=-ldl 
+OBJS += src/unix/linux/linux-core.o \
+        src/unix/linux/inotify.o    \
+        src/unix/linux/syscalls.o   \
+        src/unix/android/android-ifaddrs.o \
+        src/unix/android/pthread-fixes.o
+endif
+
 ifeq (FreeBSD,$(uname_S))
 EV_CONFIG=config_freebsd.h
 EIO_CONFIG=config_freebsd.h
@@ -162,6 +175,7 @@ clean-platform:
 	-rm -f src/unix/ev/*.o
 	-rm -f src/unix/eio/*.o
 	-rm -f src/unix/linux/*.o
+	-rm -f src/unix/android/*.o	
 	-rm -rf test/run-tests.dSYM run-benchmarks.dSYM
 
 distclean-platform:
@@ -170,4 +184,5 @@ distclean-platform:
 	-rm -f src/unix/ev/*.o
 	-rm -f src/unix/eio/*.o
 	-rm -f src/unix/linux/*.o
+	-rm -f src/unix/android/*.o
 	-rm -rf test/run-tests.dSYM run-benchmarks.dSYM

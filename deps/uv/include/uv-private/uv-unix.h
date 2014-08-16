@@ -41,6 +41,9 @@
 #include <pwd.h>
 
 #include <pthread.h>
+#ifdef __ANDROID__
+#include "pthread-fixes.h"
+#endif
 #include <signal.h>
 
 #if defined(__APPLE__) && defined(__MACH__)

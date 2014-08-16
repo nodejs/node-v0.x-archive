@@ -343,7 +343,13 @@ EV_CPP(extern "C" {)
 /* on linux, we can use a (slow) syscall to avoid a dependency on pthread, */
 /* which makes programs even slower. might work on other unices, too. */
 #if EV_USE_CLOCK_SYSCALL
+
+#ifndef __ANDROID__
 # include <syscall.h>
+#else
+# include <sys/syscall.h>
+#endif
+
 # ifdef SYS_clock_gettime
 #  define clock_gettime(id, ts) syscall (SYS_clock_gettime, (id), (ts))
 #  undef EV_USE_MONOTONIC

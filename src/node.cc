@@ -56,9 +56,9 @@ typedef int mode_t;
 #include <sys/types.h>
 #include "zlib.h"
 
-#ifdef __POSIX__
-# include <pwd.h> /* getpwnam() */
-# include <grp.h> /* getgrnam() */
+#if defined(__POSIX__) && !defined(__ANDROID__)
+#include <pwd.h>  // getpwnam()
+#include <grp.h>  // getgrnam()
 #endif
 
 #include "node_buffer.h"
@@ -1484,7 +1484,7 @@ static Handle<Value> Umask(const Arguments& args) {
 }
 
 
-#ifdef __POSIX__
+#if defined(__POSIX__) && !defined(__ANDROID__)
 
 static Handle<Value> GetUid(const Arguments& args) {
   HandleScope scope;
@@ -2309,13 +2309,13 @@ Handle<Object> SetupProcessObject(int argc, char *argv[]) {
 
   NODE_SET_METHOD(process, "umask", Umask);
 
-#ifdef __POSIX__
+#if defined(__POSIX__) && !defined(__ANDROID__)
   NODE_SET_METHOD(process, "getuid", GetUid);
   NODE_SET_METHOD(process, "setuid", SetUid);
 
   NODE_SET_METHOD(process, "setgid", SetGid);
   NODE_SET_METHOD(process, "getgid", GetGid);
-#endif // __POSIX__
+#endif  // __POSIX__ && !defined(__ANDROID__)
 
   NODE_SET_METHOD(process, "_kill", Kill);
 

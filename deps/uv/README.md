@@ -68,12 +68,17 @@ checkout GYP into the project tree manually:
 Unix users run
 
     ./gyp_uv -f make
-    make
+    make -C out
 
 Macintosh users run
 
     ./gyp_uv -f xcode
     xcodebuild -project uv.xcodeproj -configuration Release -target All
+
+Android users run
+
+    $ source ./android-configure NDK_PATH gyp
+    $ make -C out
 
 
 ## Supported Platforms

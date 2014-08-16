@@ -43,7 +43,11 @@
 # endif
 #endif
 #ifdef HAVE_IFADDRS_H
-# include <ifaddrs.h>
+# if defined(__ANDROID__)
+#  include "android-ifaddrs.h"
+# else
+#  include <ifaddrs.h>
+# endif
 #endif
 
 #undef NANOSEC

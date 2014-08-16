@@ -266,7 +266,15 @@ static int gettimeofday(struct timeval *tv, struct timezone *tz)
 
   #include <sys/time.h>
   #include <sys/select.h>
+
+#ifndef __ANDROID__
   #include <sys/statvfs.h>
+#else
+  #include <sys/vfs.h>
+  #define statvfs statfs
+  #define fstatvfs fstatfs
+#endif  
+
   #include <unistd.h>
   #include <signal.h>
   #include <dirent.h>
