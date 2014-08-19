@@ -293,7 +293,7 @@ of being received, most likely immediately.
 Note that you can also call `process.disconnect()` in the child process when the
 child process has any open IPC channels with the parent (i.e `fork()`).
 
-## child_process.spawn(command, [args], [options])
+## child_process.spawn(command, [args, [options]])
 
 * `command` {String} The command to run
 * `args` {Array} List of string arguments
