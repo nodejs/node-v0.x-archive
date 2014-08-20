@@ -69,10 +69,46 @@ assert.throws(function() {
   return !(err instanceof TypeError);
 }, 'Unexpected error');
 
-// GH #8187
+// dns.lookup should accept falsey and string values
 assert.throws(function() {
   dns.lookup({}, noop);
-}, 'invalid arguments: hostname must be a string or null');
+}, 'invalid arguments: hostname must be a string or falsey');
+
+assert.throws(function() {
+  dns.lookup([], noop);
+}, 'invalid arguments: hostname must be a string or falsey');
+
+assert.throws(function() {
+  dns.lookup(true, noop);
+}, 'invalid arguments: hostname must be a string or falsey');
+
+assert.throws(function() {
+  dns.lookup(1, noop);
+}, 'invalid arguments: hostname must be a string or falsey');
+
+assert.throws(function() {
+  dns.lookup(noop, noop);
+}, 'invalid arguments: hostname must be a string or falsey');
+
+assert.doesNotThrow(function() {
+  dns.lookup('', noop);
+});
+
+assert.doesNotThrow(function() {
+  dns.lookup(null, noop);
+});
+
+assert.doesNotThrow(function() {
+  dns.lookup(undefined, noop);
+});
+
+assert.doesNotThrow(function() {
+  dns.lookup(0, noop);
+});
+
+assert.doesNotThrow(function() {
+  dns.lookup(NaN, noop);
+});
 
 /*
  * Make sure that dns.lookup throws if hints does not represent a valid flag.
