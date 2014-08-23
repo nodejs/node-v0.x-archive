@@ -845,11 +845,11 @@
                 'openssl/crypto/camellia/cmll_cbc.c',
                 'openssl/crypto/camellia/cmll_misc.c',
                 'openssl/crypto/des/des_enc.c',
-                'openssl/crypto/des/fcrypt_b.c'
+                'openssl/crypto/des/fcrypt_b.c',
                 'openssl/crypto/mem_clr.c',
                 'openssl/crypto/rc4/rc4_enc.c',
                 'openssl/crypto/rc4/rc4_skey.c',
-                'openssl/crypto/whrlpool/wp_block.c'
+                'openssl/crypto/whrlpool/wp_block.c',
               ]
             }],
             ['OS=="win" and target_arch=="ia32"', {
