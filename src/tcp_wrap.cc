@@ -83,6 +83,17 @@ void TCPWrap::Initialize(Handle<Object> target,
                                      v8::DEFAULT,
                                      attributes);
 
+  // Init properties
+  t->InstanceTemplate()->Set(String::NewFromUtf8(isolate, "reading"),
+                             Boolean::New(isolate, false));
+  t->InstanceTemplate()->Set(String::NewFromUtf8(isolate, "owner"),
+                             Null(isolate));
+  t->InstanceTemplate()->Set(String::NewFromUtf8(isolate, "onread"),
+                             Null(isolate));
+  t->InstanceTemplate()->Set(String::NewFromUtf8(isolate, "onconnection"),
+                             Null(isolate));
+
+
   NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
 
   NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
