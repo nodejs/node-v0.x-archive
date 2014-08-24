@@ -836,6 +836,7 @@
                 'asm/arm-elf-gas/sha/sha256-armv4.s',
                 'asm/arm-elf-gas/modes/ghash-armv4.s',
                 # No asm available
+                'openssl/crypto/aes/aes_cbc.c',
                 'openssl/crypto/bf/bf_enc.c',
                 'openssl/crypto/bn/bn_asm.c',
                 'openssl/crypto/cast/c_enc.c',
