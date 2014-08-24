@@ -676,9 +676,7 @@
           # Enable asm
           'defines': [
             'AES_ASM',
-            'BN_ASM',
             'CPUID_ASM',
-            'OPENSSL_BN_ASM',
             'OPENSSL_BN_ASM_MONT',
             'OPENSSL_CPUID_OBJ',
             'SHA1_ASM',
@@ -691,11 +689,13 @@
             ['target_arch!="arm"', {
               'defines': [
                 'VPAES_ASM',
+                'BN_ASM',
                 'BF_ASM',
                 'BNCO_ASM',
                 'DES_ASM',
                 'LIB_BN_ASM',
                 'MD5_ASM',
+                'OPENSSL_BN_ASM',
                 'RIP_ASM',
                 'RMD160_ASM',
                 'WHIRLPOOL_ASM',
@@ -827,9 +827,6 @@
               ]
             }],
             ['target_arch=="arm"', {
-              'defines': [
-                'OPENSSL_BN_ASM_MONT5',
-              ],
               'sources': [
                 'asm/arm-elf-gas/aes/aes-armv4.s',
                 'asm/arm-elf-gas/bn/armv4-mont.s',
@@ -840,6 +837,7 @@
                 'asm/arm-elf-gas/modes/ghash-armv4.s',
                 # No asm available
                 'openssl/crypto/bf/bf_enc.c',
+                'openssl/crypto/bn/bn_asm.c',
                 'openssl/crypto/cast/c_enc.c',
                 'openssl/crypto/camellia/camellia.c',
                 'openssl/crypto/camellia/cmll_cbc.c',
@@ -850,6 +848,9 @@
                 'openssl/crypto/rc4/rc4_enc.c',
                 'openssl/crypto/rc4/rc4_skey.c',
                 'openssl/crypto/whrlpool/wp_block.c',
+                # PCAP stuff
+                'openssl/crypto/armcap.c',
+                'openssl/crypto/armv4cpuid.S',
               ]
             }],
             ['OS=="win" and target_arch=="ia32"', {
@@ -967,12 +968,6 @@
           'defines': [
             'DSO_DLFCN',
             'HAVE_DLFCN_H'
-          ],
-        }],
-        ['target_arch=="arm"', {
-          'sources': [
-            'openssl/crypto/armcap.c',
-            'openssl/crypto/armv4cpuid.S',
           ],
         }],
       ],
