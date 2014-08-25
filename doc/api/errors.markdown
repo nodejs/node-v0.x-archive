@@ -30,7 +30,7 @@ program.
 
 <!--type=class-->
 
-A general error object -- its imparts no meaning to the situation that 
+A general error object -- it imparts no meaning to the situation that 
 generated the error. Errors capture a "stack trace" detailing the point
 in the program at which they were instantiated, and may provide a
 description of the error.
