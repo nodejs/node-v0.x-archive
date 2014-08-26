@@ -601,3 +601,24 @@ test('lifecycle: addErrorHandler / pipe / unpipe / error', function(assert) {
     assert.fail('should have thrown');
   }
 });
+
+test('multiple error handlers on a single stream', function(assert) {
+  var A = makeReadable();
+  var seen = 0;
+
+  A.addErrorHandler(countError);
+  A.addErrorHandler(countError);
+  A.addErrorHandler(function (ev) {
+    ev.handleError();
+  });
+  A.addErrorHandler(countError);
+  A.addErrorHandler(countError);
+
+  A.emit('error', new Error('wuh oh'));
+  assert.equal(seen, 2);
+  assert.end();
+
+  function countError() {
+    ++seen;
+  }
+});
