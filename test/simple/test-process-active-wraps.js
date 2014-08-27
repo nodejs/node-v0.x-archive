@@ -64,9 +64,10 @@ var handles = [];
     handle.once('close', onclose);
   });
   function onclose() {
-    if (++n === handles.length)
+    if (++n === handles.length) {
       setImmediate(function() {
         assert.equal(process._getActiveHandles().length, 0);
       });
+    }
   }
 })();
