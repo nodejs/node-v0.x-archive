@@ -57,7 +57,8 @@ parser.add_option('--no-ifaddrs',
 parser.add_option("--fully-static",
     action="store_true",
     dest="fully_static",
-    help="Generate an executable without external dynamic libraries")
+    help="Generate an executable without external dynamic libraries. This "
+         "will not work on OSX when using default compilation environment")
 
 # deprecated
 parser.add_option('--openssl-includes',
@@ -658,6 +659,9 @@ def configure_openssl(o):
 def configure_fullystatic(o):
   if options.fully_static:
     o['libraries'] += ['-static']
+    if flavor == 'mac':
+      print("Generation of static executable will not work on OSX "
+            "when using default compilation environment")
 
 
 def configure_winsdk(o):
