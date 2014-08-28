@@ -122,8 +122,8 @@ process.nextTick(run);
 test('PipelineError has expected attributes', function(assert) {
   var readable = new stream.Readable;
   var error = new Error;
-  readable.addErrorHandler(function handler(ev) {
-    readable.removeErrorHandler(handler);
+  readable.addPipelineErrorHandler(function handler(ev) {
+    readable.removePipelineErrorHandler(handler);
     assert.strictEqual(ev.error, error);
     assert.strictEqual(ev.stream, readable);
     assert.end();
@@ -145,11 +145,11 @@ test('handleError stops propagation', function(assert) {
 
   A.pipe(B).pipe(C);
 
-  B.addErrorHandler(function(ev) {
+  B.addPipelineErrorHandler(function(ev) {
     ev.handleError();  
   });
 
-  C.addErrorHandler(function(ev) {
+  C.addPipelineErrorHandler(function(ev) {
     assert.fail('should not have seen pipelineError');
   });
 
@@ -169,9 +169,9 @@ test('event handler does not prevent default behavior', function(assert) {
 
   A.pipe(B).pipe(C);
 
-  A.addErrorHandler(onpipelineerror);
-  B.addErrorHandler(onpipelineerror);
-  C.addErrorHandler(onpipelineerror);
+  A.addPipelineErrorHandler(onpipelineerror);
+  B.addPipelineErrorHandler(onpipelineerror);
+  C.addPipelineErrorHandler(onpipelineerror);
 
   function onpipelineerror(ev) {
     assert.ok(ev);
@@ -204,9 +204,9 @@ test('propagation 1 - simple pipeline', function(assert) {
   C.id = 'C'
 
 
-  A.addErrorHandler(countPipelineError);
-  B.addErrorHandler(countPipelineError);
-  C.addErrorHandler(countPipelineError);
+  A.addPipelineErrorHandler(countPipelineError);
+  B.addPipelineErrorHandler(countPipelineError);
+  C.addPipelineErrorHandler(countPipelineError);
 
   var situations = [
     [A, C, [A, B, C]],
@@ -222,11 +222,11 @@ test('propagation 1 - simple pipeline', function(assert) {
 
   function examine(situation, idx) {
     visited.length = 0;
-    situation[1].addErrorHandler(handlePipelineError);
+    situation[1].addPipelineErrorHandler(handlePipelineError);
     try {
       situation[0].emit('error', new Error('should not throw: ' + idx));
     } finally {
-      situation[1].removeErrorHandler(handlePipelineError);
+      situation[1].removePipelineErrorHandler(handlePipelineError);
     }
     assert.deepEqual(
         visited,
@@ -264,8 +264,8 @@ test('propagation 2 - duplex pipeline', function(assert) {
 
   A.pipe(B).pipe(A);
 
-  A.addErrorHandler(countPipelineError);
-  B.addErrorHandler(countPipelineError);
+  A.addPipelineErrorHandler(countPipelineError);
+  B.addPipelineErrorHandler(countPipelineError);
 
   // throws error / handles errors / propagation sequence
   var situations = [
@@ -281,11 +281,11 @@ test('propagation 2 - duplex pipeline', function(assert) {
 
   function examine(situation, idx) {
     visited.length = 0;
-    situation[1].addErrorHandler(handlePipelineError);
+    situation[1].addPipelineErrorHandler(handlePipelineError);
     try {
       situation[0].emit('error', new Error);
     } finally {
-      situation[1].removeErrorHandler(handlePipelineError);
+      situation[1].removePipelineErrorHandler(handlePipelineError);
     }
     assert.deepEqual(
         visited,
@@ -336,7 +336,8 @@ test('propagation 3 - complex pipeline', function(assert) {
   var visited = [];
 
   [A, B, C, D, U, V, W, X, Y, Z].forEach(function(xs) {
-    xs.addErrorHandler(countPipelineError); 
+    xs.addPipelineErrorHandler(countPipelineError);
+    xs.setMaxListeners(11);
   });
 
   A.pipe(B).pipe(C).pipe(D).pipe(C);
@@ -359,12 +360,13 @@ test('propagation 3 - complex pipeline', function(assert) {
 
   function examine(situation, idx) {
     visited.length = 0;
-    situation[1].addErrorHandler(handlePipelineError);
+    situation[1].addPipelineErrorHandler(handlePipelineError);
     try {
       situation[0].emit('error', new Error);
     } finally {
-      situation[1].removeErrorHandler(handlePipelineError);
+      situation[1].removePipelineErrorHandler(handlePipelineError);
     }
+
     assert.deepEqual(
         visited,
         situation[2],
@@ -416,7 +418,7 @@ test('pipelineError inside pipelineError works', function(assert) {
 
   // we're checking here that during the processing of one pipelineError,
   // another distinct pipelineError can be emitted / handled separately.
-  C.addErrorHandler(function(ev) {
+  C.addPipelineErrorHandler(function(ev) {
     var error = ev.error;
     var stream = ev.stream;
     assert.strictEqual(error, abProblem);
@@ -428,7 +430,7 @@ test('pipelineError inside pipelineError works', function(assert) {
     ev.handleError();
   });
 
-  Y.addErrorHandler(function(ev) {
+  Y.addPipelineErrorHandler(function(ev) {
     ++seen; 
     assert.strictEqual(ev.stream, X);
     assert.strictEqual(ev.error, xyProblem);
@@ -452,7 +454,7 @@ test('single readableStream has pipelineError', function(assert) {
   var readable = fs.createReadStream(path.join(__dirname, 'dne'));
 
   // if this does not get handled the process will crash.
-  readable.addErrorHandler(function(ev) {
+  readable.addPipelineErrorHandler(function(ev) {
     ev.handleError();
     assert.end();
   })
@@ -464,7 +466,7 @@ test('unpiped streams regain their own pipelineError machinery', function(assert
 
   A.pipe(B);
 
-  B.addErrorHandler(function(ev) {
+  B.addPipelineErrorHandler(function(ev) {
     ev.handleError();  
   });
 
@@ -489,9 +491,9 @@ test('legacy streams work with pipelineError', function(assert) {
 
   A.pipe(B).pipe(C);
 
-  A.addErrorHandler(countPipelineError);
-  B.addErrorHandler(countPipelineError);
-  C.addErrorHandler(countPipelineError);
+  A.addPipelineErrorHandler(countPipelineError);
+  B.addPipelineErrorHandler(countPipelineError);
+  C.addPipelineErrorHandler(countPipelineError);
 
   var situations = [
     [A, C, [A, B, C]],
@@ -507,9 +509,9 @@ test('legacy streams work with pipelineError', function(assert) {
 
   function examine(situation, idx) {
     visited.length = 0;
-    situation[1].addErrorHandler(handlePipelineError);
+    situation[1].addPipelineErrorHandler(handlePipelineError);
     situation[0].emit('error', new Error('failed ' + idx));
-    situation[1].removeErrorHandler(handlePipelineError);
+    situation[1].removePipelineErrorHandler(handlePipelineError);
     assert.deepEqual(
         visited,
         situation[2],
@@ -535,7 +537,7 @@ test('legacy streams work with pipelineError', function(assert) {
   }    
 });
 
-test('lifecycle: addErrorHandler / pipe / error', function(assert) {
+test('lifecycle: addPipelineErrorHandler / pipe / error', function(assert) {
   var tests = [
     [makeReadable, makeWritable],
     [makeLegacy, makeWritable],
@@ -553,7 +555,7 @@ test('lifecycle: addErrorHandler / pipe / error', function(assert) {
     var A = testPair[0]();
     var B = testPair[1]();
 
-    B.addErrorHandler(function(ev) {
+    B.addPipelineErrorHandler(function(ev) {
       ev.handleError();
       assert.ok('saw error event');
     });
@@ -563,7 +565,7 @@ test('lifecycle: addErrorHandler / pipe / error', function(assert) {
   }
 });
 
-test('lifecycle: addErrorHandler / pipe / unpipe / error', function(assert) {
+test('lifecycle: addPipelineErrorHandler / pipe / unpipe / error', function(assert) {
   // legacy streams don't have `.unpipe`, so are omitted here.
   var tests = [
     [makeReadable, makeWritable],
@@ -580,7 +582,7 @@ test('lifecycle: addErrorHandler / pipe / unpipe / error', function(assert) {
     var B = testPair[1]();
     var C = makeReadable();
 
-    B.addErrorHandler(function(ev) {
+    B.addPipelineErrorHandler(function(ev) {
       ev.handleError();
       assert.ok('saw error event');
     });
@@ -606,13 +608,13 @@ test('multiple error handlers on a single stream', function(assert) {
   var A = makeReadable();
   var seen = 0;
 
-  A.addErrorHandler(countError);
-  A.addErrorHandler(countError);
-  A.addErrorHandler(function (ev) {
+  A.addPipelineErrorHandler(countError);
+  A.addPipelineErrorHandler(countError);
+  A.addPipelineErrorHandler(function (ev) {
     ev.handleError();
   });
-  A.addErrorHandler(countError);
-  A.addErrorHandler(countError);
+  A.addPipelineErrorHandler(countError);
+  A.addPipelineErrorHandler(countError);
 
   A.emit('error', new Error('wuh oh'));
   assert.equal(seen, 2);
