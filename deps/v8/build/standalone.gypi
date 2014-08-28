@@ -51,7 +51,7 @@
               # Anything else gets passed through, which probably won't work
               # very well; such hosts should pass an explicit target_arch
               # to gyp.
-              'host_arch%': '<!pymod_do_main(detect_v8_host_arch)',
+              'host_arch%': '<!python detect_v8_host_arch.py',
             }, {
               # OS!="linux" and OS!="freebsd" and OS!="openbsd" and
               # OS!="netbsd" and OS!="mac"

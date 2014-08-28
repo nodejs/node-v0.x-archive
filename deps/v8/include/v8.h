@@ -66,7 +66,6 @@ class Boolean;
 class BooleanObject;
 class Context;
 class CpuProfiler;
-class Data;
 class Date;
 class DeclaredAccessorDescriptor;
 class External;
@@ -111,7 +110,6 @@ template<class V, class T> class PersistentValueVector;
 template<class T, class P> class WeakCallbackObject;
 class FunctionTemplate;
 class ObjectTemplate;
-class Data;
 template<typename T> class FunctionCallbackInfo;
 template<typename T> class PropertyCallbackInfo;
 class StackTrace;
@@ -911,8 +909,6 @@ inline Maybe<T> maybe(T t) {
  * The superclass of values and API object templates.
  */
 class V8_EXPORT Data {
- private:
-  Data();
 };
 
 

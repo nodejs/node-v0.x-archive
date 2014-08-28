@@ -95,6 +95,9 @@
       ['v8_use_external_startup_data==1', {
         'defines': ['V8_USE_EXTERNAL_STARTUP_DATA',],
       }],
+      ['OS == "win"', {
+        'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin
+      }]
     ],  # conditions
     'configurations': {
       'DebugBaseCommon': {
