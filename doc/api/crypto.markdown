@@ -528,7 +528,7 @@ The class for creating EC Diffie-Hellman key exchanges.
 
 Returned by `crypto.createECDH`.
 
-### ECDH.generateKeys([format], [encoding])
+### ECDH.generateKeys([encoding], [format])
 
 Generates private and public EC Diffie-Hellman key values, and returns
 the public key in the specified format and encoding. This key should be
@@ -552,7 +552,7 @@ provided, then a buffer is expected.
 
 If no output encoding is given, then a buffer is returned.
 
-### ECDH.getPublicKey([format], [encoding])
+### ECDH.getPublicKey([encoding], [format])
 
 Returns the EC Diffie-Hellman public key in the specified encoding and format.
 

@@ -666,7 +666,7 @@ class ECDH : public BaseObject {
   static void GetPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-  EC_POINT* BufferToPoint(v8::Handle<v8::Value> buf);
+  EC_POINT* BufferToPoint(char* data, size_t len);
 
   bool generated_;
   EC_KEY* key_;

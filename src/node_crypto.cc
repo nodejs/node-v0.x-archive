@@ -4086,6 +4086,8 @@ bool DiffieHellman::VerifyContext() {
 
 
 void ECDH::Initialize(Environment* env, Handle<Object> target) {
+  HandleScope scope(env->isolate());
+
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
 
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -4107,7 +4109,7 @@ void ECDH::New(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   // TODO(indutny): Support raw curves?
-  CHECK_EQ(args.Length(), 1);
+  CHECK(args[0]->IsString());
   node::Utf8Value curve(args[0]);
 
   int nid = OBJ_sn2nid(*curve);
@@ -4135,7 +4137,7 @@ void ECDH::GenerateKeys(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-EC_POINT* ECDH::BufferToPoint(Handle<Value> buf) {
+EC_POINT* ECDH::BufferToPoint(char* data, size_t len) {
   EC_POINT* pub;
   int r;
 
@@ -4148,8 +4150,8 @@ EC_POINT* ECDH::BufferToPoint(Handle<Value> buf) {
   r = EC_POINT_oct2point(
       group_,
       pub,
-      reinterpret_cast<unsigned char*>(Buffer::Data(buf)),
-      Buffer::Length(buf),
+      reinterpret_cast<unsigned char*>(data),
+      len,
       NULL);
   if (!r) {
     env()->ThrowError("Failed to translate Buffer to a EC_POINT");
@@ -4172,23 +4174,25 @@ void ECDH::ComputeSecret(const FunctionCallbackInfo<Value>& args) {
 
   ECDH* ecdh = Unwrap<ECDH>(args.Holder());
 
-  EC_POINT* pub = ecdh->BufferToPoint(args[0]);
+  EC_POINT* pub = ecdh->BufferToPoint(Buffer::Data(args[0]),
+                                      Buffer::Length(args[0]));
   if (pub == NULL)
     return;
 
   // NOTE: field_size is in bits
   int field_size = EC_GROUP_get_degree(ecdh->group_);
-  Local<Value> buf = Buffer::New(env, (field_size + 7) / 8);
-  int r = ECDH_compute_key(Buffer::Data(buf),
-                           Buffer::Length(buf),
-                           pub,
-                           ecdh->key_,
-                           NULL);
-  EC_POINT_free(pub);
-  if (!r)
-    return env->ThrowError("Failed to compute ECDH key");
+  size_t out_len = (field_size + 7) / 8;
+  char* out = static_cast<char*>(malloc(out_len));
+  CHECK_NE(out, NULL);
 
-  args.GetReturnValue().Set(buf);
+  int r = ECDH_compute_key(out, out_len, pub, ecdh->key_, NULL);
+  EC_POINT_free(pub);
+  if (!r) {
+    free(out);
+    return env->ThrowError("Failed to compute ECDH key");
+  }
+
+  args.GetReturnValue().Set(Buffer::Use(env, out, out_len));
 }
 
 
@@ -4216,19 +4220,18 @@ void ECDH::GetPublicKey(const FunctionCallbackInfo<Value>& args) {
   if (size == 0)
     return env->ThrowError("Failed to get public key length");
 
-  Local<Value> out = Buffer::New(env, size);
+  unsigned char* out = static_cast<unsigned char*>(malloc(size));
+  CHECK_NE(out, NULL);
 
-  int r = EC_POINT_point2oct(
-      ecdh->group_,
-      pub,
-      form,
-      reinterpret_cast<unsigned char*>(Buffer::Data(out)),
-      Buffer::Length(out),
-      NULL);
-  if (r != size)
+  int r = EC_POINT_point2oct(ecdh->group_, pub, form, out, size, NULL);
+  if (r != size) {
+    free(out);
     return env->ThrowError("Failed to get public key");
+  }
 
-  args.GetReturnValue().Set(out);
+  args.GetReturnValue().Set(Buffer::Use(env,
+                                        reinterpret_cast<char*>(out),
+                                        size));
 }
 
 
@@ -4246,13 +4249,17 @@ void ECDH::GetPrivateKey(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Failed to get ECDH private key");
 
   int size = BN_num_bytes(b);
-  Local<Value> out = Buffer::New(env, size);
-  if (size !=
-      BN_bn2bin(b, reinterpret_cast<unsigned char*>(Buffer::Data(out)))) {
+  unsigned char* out = static_cast<unsigned char*>(malloc(size));
+  CHECK_NE(out, NULL);
+
+  if (size != BN_bn2bin(b, out)) {
+    free(out);
     return env->ThrowError("Failed to convert ECDH private key to Buffer");
   }
 
-  args.GetReturnValue().Set(out);
+  args.GetReturnValue().Set(Buffer::Use(env,
+                                        reinterpret_cast<char*>(out),
+                                        size));
 }
 
 
@@ -4284,7 +4291,8 @@ void ECDH::SetPublicKey(const FunctionCallbackInfo<Value>& args) {
 
   ASSERT_IS_BUFFER(args[0]);
 
-  EC_POINT* pub = ecdh->BufferToPoint(args[0]);
+  EC_POINT* pub = ecdh->BufferToPoint(Buffer::Data(args[0]),
+                                      Buffer::Length(args[0]));
   if (pub == NULL)
     return;
 

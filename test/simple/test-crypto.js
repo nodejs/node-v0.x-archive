@@ -1178,6 +1178,13 @@ var secret2 = ecdh2.computeSecret(key1, 'binary', 'buffer');
 
 assert.equal(secret1, secret2.toString('base64'));
 
+// Point formats
+assert.equal(ecdh1.getPublicKey('buffer', 'uncompressed')[0], 4);
+var firstByte = ecdh1.getPublicKey('buffer', 'compressed')[0];
+assert(firstByte === 2 || firstByte === 3);
+var firstByte = ecdh1.getPublicKey('buffer', 'hybrid')[0];
+assert(firstByte === 6 || firstByte === 7);
+
 // ECDH should check that point is on curve
 var ecdh3 = crypto.createECDH('secp256k1');
 var key3 = ecdh3.generateKeys();
