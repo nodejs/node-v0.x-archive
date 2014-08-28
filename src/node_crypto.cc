@@ -4272,8 +4272,8 @@ void ECDH::SetPrivateKey(const FunctionCallbackInfo<Value>& args) {
   ASSERT_IS_BUFFER(args[0]);
 
   BIGNUM* priv = BN_bin2bn(
-      reinterpret_cast<unsigned char*>(Buffer::Data(args[0])),
-      Buffer::Length(args[0]),
+      reinterpret_cast<unsigned char*>(Buffer::Data(args[0].As<Object>())),
+      Buffer::Length(args[0].As<Object>()),
       NULL);
   if (priv == NULL)
     return env->ThrowError("Failed to convert Buffer to BN");
@@ -4291,8 +4291,8 @@ void ECDH::SetPublicKey(const FunctionCallbackInfo<Value>& args) {
 
   ASSERT_IS_BUFFER(args[0]);
 
-  EC_POINT* pub = ecdh->BufferToPoint(Buffer::Data(args[0]),
-                                      Buffer::Length(args[0]));
+  EC_POINT* pub = ecdh->BufferToPoint(Buffer::Data(args[0].As<Object>()),
+                                      Buffer::Length(args[0].As<Object>()));
   if (pub == NULL)
     return;
 
