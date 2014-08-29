@@ -215,7 +215,7 @@ the last parameter `callback` will be added as an listener for the
   * `host` {String} - Optional.
   * `backlog` {Number} - Optional.
   * `exclusive` {Boolean} - Optional.
-* `callback` {Function}
+* `callback` {Function} - Optional.
 
 The `port`, `host`, and `backlog` properties of `options`, as well as the
 optional callback function, behave as they do on a call to 
