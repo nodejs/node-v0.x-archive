@@ -211,16 +211,18 @@ the last parameter `callback` will be added as an listener for the
 ### server.listen(options, [callback])
 
 * `options` {Object} - Required. Supports the following properties:
-  * `port` {Number} - Required.
+  * `port` {Number} - Optional.
   * `host` {String} - Optional.
   * `backlog` {Number} - Optional.
+  * `path` {String} - Optional.
   * `exclusive` {Boolean} - Optional.
 * `callback` {Function} - Optional.
 
 The `port`, `host`, and `backlog` properties of `options`, as well as the
 optional callback function, behave as they do on a call to 
 [server.listen(port, \[host\], \[backlog\], \[callback\])
-](#net_server_listen_port_host_backlog_callback).
+](#net_server_listen_port_host_backlog_callback). Alternatively, the `path`
+option can be used to specify a UNIX socket.
 
 If `exclusive` is `false` (default), then cluster workers will use the same
 underlying handle, allowing connection handling duties to be shared. When
