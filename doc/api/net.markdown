@@ -214,7 +214,7 @@ the last parameter `callback` will be added as an listener for the
   * `port` {Number} - Required.
   * `host` {String} - Optional.
   * `backlog` {Number} - Optional.
-  * `shared` {Boolean} - Optional.
+  * `exclusive` {Boolean} - Optional.
 * `callback` {Function}
 
 The `port`, `host`, and `backlog` properties of `options`, as well as the
@@ -222,16 +222,16 @@ optional callback function, behave as they do on a call to
 [server.listen(port, \[host\], \[backlog\], \[callback\])
 ](#net_server_listen_port_host_backlog_callback).
 
-If `shared` is `true` (default), then cluster workers will use the same
+If `exclusive` is `false` (default), then cluster workers will use the same
 underlying handle, allowing connection handling duties to be shared. When
-`shared` is `false`, the handle is not shared, and attempted port sharing
+`exclusive` is `true`, the handle is not shared, and attempted port sharing
 results in an error. An example which listens on an exclusive port is
 shown below.
 
     server.listen({
       host: 'localhost',
       port: 80,
-      shared: true
+      exclusive: true
     });
 
 ### server.close([callback])
