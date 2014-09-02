@@ -48,8 +48,9 @@ Stack traces only extend to the beginning of synchronous code execution, *or* a 
 
 #### error.message
 
-A string representing the message the error was instantiated with. Intended for human
-consumption. The message will appear in the first line of the stack trace of the error.
+A string of the value passed to `Error()` upon instantiation. The message will
+also appear in the first line of the stack trace of the error. Changing this
+property *may not* change the first line of the stack trace.
 
 #### error.stack
 
@@ -62,7 +63,7 @@ at which this error was instantiated. An example stacktrace follows:
        at Actor.<anonymous> (/home/gbusey/actors.js:400:8)
        at increaseSynergy (/home/gbusey/actors.js:701:6)
 
-The first line is formatted as "error class name: error message", and it is followed
+The first line is formatted as `<error class name>: <error message>`, and it is followed
 by a series of stack frames (each line beginning with "at "). Each frame describes
 a call site in your program that lead to the error being generated. V8 attempts to
 display a name for your function (by variable name, function name, or object 
