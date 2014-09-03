@@ -23,8 +23,7 @@ other propagation strategies are covered [below](#errors_error_propagation_and_i
 <!--type=misc-->
 
 JavaScript errors typically denote that an API is being used incorrectly, or that
-there is a problem with your program -- these errors can be eliminated by changing the
-program.
+there is a problem with the program as written.
 
 ### Class: Error
 
@@ -70,10 +69,12 @@ display a name for your function (by variable name, function name, or object
 method name), but occasionally it will not be able to find a suitable name. If
 V8 cannot determine a name for the function, only location information will be
 displayed for that frame. Otherwise, the determined function name will be displayed
-with location information appended in parentheses. Frames are **only** generated for
-JavaScript functions -- if, for example, execution synchronously passes through a
-C++ addon function called `cheetahify` -- which itself calls a JavaScript function, the 
-frame representing the `cheetahify` call will **not** be present in stacktraces:
+with location information appended in parentheses. 
+
+Frames are **only** generated for JavaScript functions. If, for example, execution 
+synchronously passes through a C++ addon function called `cheetahify`, which itself 
+calls a JavaScript function, the frame representing the `cheetahify` call will **not** 
+be present in stacktraces:
 
 ```javascript
 var cheetahify = require('./native-binding.node');
@@ -105,11 +106,11 @@ makeFaster(); // will throw:
 The location information will be one of: 
 
 * `native`, if the frame represents a call internal to V8 (as in `[].forEach`).
-* `plain-filename.js:line:column`, if the frame represents a call internal to Node. 
+* `plain-filename.js:line:column`, if the frame represents a call internal to Node.
 * `/absolute/path/to/file.js:line:column`, if the frame represents a call in your program, or your program's dependencies.
 
 It is important to note that the string representing the stacktrace is only
-generated on **access** -- in other words, it is lazily generated. 
+generated on **access** (it is lazily generated). 
 
 The number of frames captured by the stack trace is bounded by the smaller of
 `Error.stackTraceLimit` or the number of available frames on the current event
@@ -215,7 +216,7 @@ be considered a bug in your program, or your program's dependencies.
 
 ## System Errors
 
-System errors are errors that are generated in response to your program's runtime
+System errors are generated in response to a program's runtime
 environment. Ideally, they represent operational errors that your program needs to
 be able to react to. They are generated at the syscall level -- you can get an 
 exhaustive list of error codes and their meanings by running `man 2 intro` on most
