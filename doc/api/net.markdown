@@ -219,7 +219,7 @@ the last parameter `callback` will be added as an listener for the
 * `callback` {Function} - Optional.
 
 The `port`, `host`, and `backlog` properties of `options`, as well as the
-optional callback function, behave as they do on a call to 
+optional callback function, behave as they do on a call to
 [server.listen(port, \[host\], \[backlog\], \[callback\])
 ](#net_server_listen_port_host_backlog_callback). Alternatively, the `path`
 option can be used to specify a UNIX socket.
