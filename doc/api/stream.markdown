@@ -45,7 +45,7 @@ somewhat different.
 It is not necessary to implement Stream interfaces in order to consume
 streams in your programs.  If you **are** implementing streaming
 interfaces in your own program, please also refer to
-[API for Stream Implementors][] below.
+[API for Stream Implementers][] below.
 
 Almost all Node programs, no matter how simple, use Streams in some
 way.  Here is an example of using Streams in a Node program:
@@ -398,7 +398,7 @@ passed on to some other party.
 
 If you find that you must often call `stream.unshift(chunk)` in your
 programs, consider implementing a [Transform][] stream instead.  (See API
-for Stream Implementors, below.)
+for Stream Implementers, below.)
 
 ```javascript
 // Pull off a header delimited by \n\n
@@ -647,7 +647,7 @@ Examples of Transform streams include:
 * [crypto streams][]
 
 
-## API for Stream Implementors
+## API for Stream Implementers
 
 <!--type=misc-->
 
@@ -932,7 +932,7 @@ becomes available.  There is no need, for example to "wait" until
   Buffer encoding, such as `'utf8'` or `'ascii'`
 * return {Boolean} Whether or not more pushes should be performed
 
-Note: **This function should be called by Readable implementors, NOT
+Note: **This function should be called by Readable implementers, NOT
 by consumers of Readable streams.**
 
 The `_read()` function will not be called again until at least one
@@ -1517,7 +1517,7 @@ JSONParseStream.prototype._flush = function(cb) {
 [process.stderr]: process.html#process_process_stderr
 [child process stdout and stderr]: child_process.html#child_process_child_stdout
 [API for Stream Consumers]: #stream_api_for_stream_consumers
-[API for Stream Implementors]: #stream_api_for_stream_implementors
+[API for Stream Implementers]: #stream_api_for_stream_implementers
 [Readable]: #stream_class_stream_readable
 [Writable]: #stream_class_stream_writable
 [Duplex]: #stream_class_stream_duplex
