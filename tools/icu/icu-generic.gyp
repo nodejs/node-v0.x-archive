@@ -373,6 +373,7 @@
       # (which is not currently built)
       'sources!': [
         '<@(icu_src_derb)',
+        'no-op.cc',
       ],
     },
     # This tool is used to rebuild res_index.res manifests
@@ -383,6 +384,7 @@
       'dependencies': [ 'icutools', 'icuucx', 'icui18n', 'icuio' ],
       'sources': [
         'iculslocs.cc',
+        'no-op.cc',
       ],
     },
     # This tool is used to package, unpackage, repackage .dat files
@@ -393,7 +395,8 @@
       'type': 'executable',
       'dependencies': [ 'icutools', 'icuucx', 'icui18n' ],
       'sources': [
-        '<@(icu_src_icupkg)'
+        '<@(icu_src_icupkg)',
+        'no-op.cc',
       ],
     },
     # this is used to convert .dat directly into .obj
