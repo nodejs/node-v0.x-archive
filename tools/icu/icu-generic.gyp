@@ -133,7 +133,7 @@
     {
       'target_name': 'icudata',
       'type': '<(library)',
-      'toolsets': [ 'host' ],
+      'toolsets': [ 'target' ],
       'conditions': [
         [ 'OS == "win"', {
           'conditions': [
@@ -157,7 +157,7 @@
             }, { # icu_small == TRUE and OS == win
               # link against stub data primarily
               # then, use icupkg and genccode to rebuild data
-              'dependencies': [ 'icustubdata#target', 'genccode#host', 'icupkg#host', 'genrb#host', 'iculslocs#host' ],
+              'dependencies': [ 'icustubdata', 'genccode#host', 'icupkg#host', 'genrb#host', 'iculslocs#host' ],
               'export_dependent_settings': [ 'icustubdata' ],
               'actions': [
                 {
@@ -196,7 +196,7 @@
             [ 'icu_small == "false"', {
               # full data - just build the full data file, then we are done.
               'sources': [ '<(SHARED_INTERMEDIATE_DIR)/icudt<(icu_ver_major)_dat.c' ],
-              'dependencies': [ 'genccode#host', 'icupkg#host', 'icu_implementation#host', 'icu_uconfig#host' ],
+              'dependencies': [ 'genccode#host', 'icupkg#host', 'icu_implementation#host', 'icu_uconfig' ],
               'include_dirs': [
                 '../../deps/icu/source/common',
               ],
@@ -236,8 +236,8 @@
             }, { # icu_small == true ( and OS != win )
               # link against stub data (as primary data)
               # then, use icupkg and genccode to rebuild small data
-              'dependencies': [ 'icustubdata#target', 'genccode#host', 'icupkg#host', 'genrb#host', 'iculslocs#host',
-                               'icu_implementation#target', 'icu_uconfig#target' ],
+              'dependencies': [ 'icustubdata', 'genccode#host', 'icupkg#host', 'genrb#host', 'iculslocs#host',
+                               'icu_implementation', 'icu_uconfig' ],
               'export_dependent_settings': [ 'icustubdata' ],
               'actions': [
                 {
@@ -298,10 +298,11 @@
     },
     # this target is for v8 consumption.
     # it is icuuc + stubdata
+    # it is only built for target
     {
       'target_name': 'icuuc',
       'type': 'none',
-      'toolsets': [ 'host', 'target' ],
+      'toolsets': [ 'target' ],
       'dependencies': [ 'icuucx', 'icudata' ],
       'export_dependent_settings': [ 'icuucx', 'icudata' ],
     },
