@@ -29,7 +29,7 @@ namespace node {
 
 struct node_fs_t {
     uv_fs_t req;
-    int throw_safe;
+    bool throw_safe;
     void* data;
 };
 

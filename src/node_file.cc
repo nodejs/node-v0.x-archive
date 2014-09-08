@@ -328,9 +328,9 @@ static void Close(const FunctionCallbackInfo<Value>& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(close, args[1], 0, fd)
+    ASYNC_CALL(close, args[1], false, fd)
   } else {
-    SYNC_CALL(close, 0, 0, fd)
+    SYNC_CALL(close, 0, false, fd)
   }
 }
 
@@ -443,9 +443,9 @@ static void Stat(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  int throw_safe = 0;
+  bool throw_safe = false;
   if (args[2]->IsTrue()) {
-    throw_safe = 1;
+    throw_safe = true;
   }
 
   if (args[1]->IsFunction()) {
@@ -469,9 +469,9 @@ static void LStat(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(lstat, args[1], 0, *path)
+    ASYNC_CALL(lstat, args[1], false, *path)
   } else {
-    SYNC_CALL(lstat, *path, 0, *path)
+    SYNC_CALL(lstat, *path, false, *path)
     args.GetReturnValue().Set(
         BuildStatsObject(env, static_cast<const uv_stat_t*>(SYNC_REQ.ptr)));
   }
@@ -488,9 +488,9 @@ static void FStat(const FunctionCallbackInfo<Value>& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(fstat, args[1], 0, fd)
+    ASYNC_CALL(fstat, args[1], false, fd)
   } else {
-    SYNC_CALL(fstat, 0, 0, fd)
+    SYNC_CALL(fstat, 0, false, fd)
     args.GetReturnValue().Set(
         BuildStatsObject(env, static_cast<const uv_stat_t*>(SYNC_REQ.ptr)));
   }
@@ -526,9 +526,9 @@ static void Symlink(const FunctionCallbackInfo<Value>& args) {
   }
 
   if (args[3]->IsFunction()) {
-    ASYNC_DEST_CALL(symlink, args[3], *dest, 0, *dest, *path, flags)
+    ASYNC_DEST_CALL(symlink, args[3], *dest, false, *dest, *path, flags)
   } else {
-    SYNC_DEST_CALL(symlink, *path, *dest, 0, *dest, *path, flags)
+    SYNC_DEST_CALL(symlink, *path, *dest, false, *dest, *path, flags)
   }
 }
 
@@ -568,9 +568,9 @@ static void ReadLink(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(readlink, args[1], 0, *path)
+    ASYNC_CALL(readlink, args[1], false, *path)
   } else {
-    SYNC_CALL(readlink, *path, 0, *path)
+    SYNC_CALL(readlink, *path, false, *path)
     const char* link_path = static_cast<const char*>(SYNC_REQ.ptr);
     Local<String> rc = String::NewFromUtf8(env->isolate(), link_path);
     args.GetReturnValue().Set(rc);
@@ -615,9 +615,9 @@ static void FTruncate(const FunctionCallbackInfo<Value>& args) {
   int64_t len = GET_TRUNCATE_LENGTH(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(ftruncate, args[2], 0, fd, len)
+    ASYNC_CALL(ftruncate, args[2], false, fd, len)
   } else {
-    SYNC_CALL(ftruncate, 0, 0, fd, len)
+    SYNC_CALL(ftruncate, 0, false, fd, len)
   }
 }
 
@@ -632,9 +632,9 @@ static void Fdatasync(const FunctionCallbackInfo<Value>& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(fdatasync, args[1], 0, fd)
+    ASYNC_CALL(fdatasync, args[1], false, fd)
   } else {
-    SYNC_CALL(fdatasync, 0, 0, fd)
+    SYNC_CALL(fdatasync, 0, false, fd)
   }
 }
 
@@ -649,9 +649,9 @@ static void Fsync(const FunctionCallbackInfo<Value>& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(fsync, args[1], 0, fd)
+    ASYNC_CALL(fsync, args[1], false, fd)
   } else {
-    SYNC_CALL(fsync, 0, 0, fd)
+    SYNC_CALL(fsync, 0, false, fd)
   }
 }
 
@@ -667,9 +667,9 @@ static void Unlink(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(unlink, args[1], 0, *path)
+    ASYNC_CALL(unlink, args[1], false, *path)
   } else {
-    SYNC_CALL(unlink, *path, 0, *path)
+    SYNC_CALL(unlink, *path, false, *path)
   }
 }
 
@@ -685,9 +685,9 @@ static void RMDir(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(rmdir, args[1], 0, *path)
+    ASYNC_CALL(rmdir, args[1], false, *path)
   } else {
-    SYNC_CALL(rmdir, *path, 0, *path)
+    SYNC_CALL(rmdir, *path, false, *path)
   }
 }
 
@@ -703,9 +703,9 @@ static void MKDir(const FunctionCallbackInfo<Value>& args) {
   int mode = static_cast<int>(args[1]->Int32Value());
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(mkdir, args[2], 0, *path, mode)
+    ASYNC_CALL(mkdir, args[2], false, *path, mode)
   } else {
-    SYNC_CALL(mkdir, *path, 0, *path, mode)
+    SYNC_CALL(mkdir, *path, false, *path, mode)
   }
 }
 
@@ -721,9 +721,9 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(readdir, args[1], 0, *path, 0 /*flags*/)
+    ASYNC_CALL(readdir, args[1], false, *path, 0 /*flags*/)
   } else {
-    SYNC_CALL(readdir, *path, 0, *path, 0 /*flags*/)
+    SYNC_CALL(readdir, *path, false, *path, 0 /*flags*/)
 
     assert(SYNC_REQ.result >= 0);
     char* namebuf = static_cast<char*>(SYNC_REQ.ptr);
@@ -768,9 +768,9 @@ static void Open(const FunctionCallbackInfo<Value>& args) {
   int mode = static_cast<int>(args[2]->Int32Value());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(open, args[3], 0, *path, flags, mode)
+    ASYNC_CALL(open, args[3], false, *path, flags, mode)
   } else {
-    SYNC_CALL(open, *path, 0, *path, flags, mode)
+    SYNC_CALL(open, *path, false, *path, flags, mode)
     args.GetReturnValue().Set(SYNC_RESULT);
   }
 }
@@ -815,11 +815,11 @@ static void WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
 
   if (cb->IsFunction()) {
-    ASYNC_CALL(write, cb, 0, fd, &uvbuf, 1, pos)
+    ASYNC_CALL(write, cb, false, fd, &uvbuf, 1, pos)
     return;
   }
 
-  SYNC_CALL(write, NULL, 0, fd, &uvbuf, 1, pos)
+  SYNC_CALL(write, NULL, false, fd, &uvbuf, 1, pos)
   args.GetReturnValue().Set(SYNC_RESULT);
 }
 
@@ -866,7 +866,7 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
   uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
 
   if (!cb->IsFunction()) {
-    SYNC_CALL(write, NULL, 0, fd, &uvbuf, 1, pos)
+    SYNC_CALL(write, NULL, false, fd, &uvbuf, 1, pos)
     if (must_free)
       delete[] buf;
     return args.GetReturnValue().Set(SYNC_RESULT);
@@ -949,9 +949,9 @@ static void Read(const FunctionCallbackInfo<Value>& args) {
   cb = args[5];
 
   if (cb->IsFunction()) {
-    ASYNC_CALL(read, cb, 0, fd, &uvbuf, 1, pos);
+    ASYNC_CALL(read, cb, false, fd, &uvbuf, 1, pos);
   } else {
-    SYNC_CALL(read, 0, 0, fd, &uvbuf, 1, pos)
+    SYNC_CALL(read, 0, false, fd, &uvbuf, 1, pos)
     args.GetReturnValue().Set(SYNC_RESULT);
   }
 }
@@ -971,9 +971,9 @@ static void Chmod(const FunctionCallbackInfo<Value>& args) {
   int mode = static_cast<int>(args[1]->Int32Value());
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(chmod, args[2], 0, *path, mode);
+    ASYNC_CALL(chmod, args[2], false, *path, mode);
   } else {
-    SYNC_CALL(chmod, *path, 0, *path, mode);
+    SYNC_CALL(chmod, *path, false, *path, mode);
   }
 }
 
@@ -992,9 +992,9 @@ static void FChmod(const FunctionCallbackInfo<Value>& args) {
   int mode = static_cast<int>(args[1]->Int32Value());
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(fchmod, args[2], 0, fd, mode);
+    ASYNC_CALL(fchmod, args[2], false, fd, mode);
   } else {
-    SYNC_CALL(fchmod, 0, 0, fd, mode);
+    SYNC_CALL(fchmod, 0, false, fd, mode);
   }
 }
 
@@ -1025,9 +1025,9 @@ static void Chown(const FunctionCallbackInfo<Value>& args) {
   uv_gid_t gid = static_cast<uv_gid_t>(args[2]->Uint32Value());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(chown, args[3], 0, *path, uid, gid);
+    ASYNC_CALL(chown, args[3], false, *path, uid, gid);
   } else {
-    SYNC_CALL(chown, *path, 0, *path, uid, gid);
+    SYNC_CALL(chown, *path, false, *path, uid, gid);
   }
 }
 
@@ -1058,9 +1058,9 @@ static void FChown(const FunctionCallbackInfo<Value>& args) {
   uv_gid_t gid = static_cast<uv_gid_t>(args[2]->Uint32Value());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(fchown, args[3], 0, fd, uid, gid);
+    ASYNC_CALL(fchown, args[3], false, fd, uid, gid);
   } else {
-    SYNC_CALL(fchown, 0, 0, fd, uid, gid);
+    SYNC_CALL(fchown, 0, false, fd, uid, gid);
   }
 }
 
@@ -1088,9 +1088,9 @@ static void UTimes(const FunctionCallbackInfo<Value>& args) {
   const double mtime = static_cast<double>(args[2]->NumberValue());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(utime, args[3], 0, *path, atime, mtime);
+    ASYNC_CALL(utime, args[3], false, *path, atime, mtime);
   } else {
-    SYNC_CALL(utime, *path, 0, *path, atime, mtime);
+    SYNC_CALL(utime, *path, false, *path, atime, mtime);
   }
 }
 
@@ -1117,9 +1117,9 @@ static void FUTimes(const FunctionCallbackInfo<Value>& args) {
   const double mtime = static_cast<double>(args[2]->NumberValue());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(futime, args[3], 0, fd, atime, mtime);
+    ASYNC_CALL(futime, args[3], false, fd, atime, mtime);
   } else {
-    SYNC_CALL(futime, 0, 0, fd, atime, mtime);
+    SYNC_CALL(futime, 0, false, fd, atime, mtime);
   }
 }
 
