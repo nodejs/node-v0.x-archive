@@ -70,8 +70,6 @@ StreamWrap::StreamWrap(Environment* env,
 
 void StreamWrap::GetFD(Local<String>, const PropertyCallbackInfo<Value>& args) {
 #if !defined(_WIN32)
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
   int fd = -1;
   if (wrap != NULL && wrap->stream() != NULL) {
@@ -90,9 +88,6 @@ void StreamWrap::UpdateWriteQueueSize() {
 }
 
 void StreamWrap::ReadStart(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
 
   int err = uv_read_start(wrap->stream(), OnAlloc, OnRead);
@@ -102,9 +97,6 @@ void StreamWrap::ReadStart(const FunctionCallbackInfo<Value>& args) {
 
 
 void StreamWrap::ReadStop(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
 
   int err = uv_read_stop(wrap->stream());
@@ -505,9 +497,6 @@ void StreamWrap::WriteBinaryString(const FunctionCallbackInfo<Value>& args) {
 }
 
 void StreamWrap::SetBlocking(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
 
   assert(args.Length() > 0);

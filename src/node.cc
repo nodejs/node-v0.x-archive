@@ -683,16 +683,19 @@ const char *signo_string(int signo) {
 
 
 void ThrowError(v8::Isolate* isolate, const char* errmsg) {
+  HandleScope scope(isolate);
   Environment::GetCurrent(isolate)->ThrowError(errmsg);
 }
 
 
 void ThrowTypeError(v8::Isolate* isolate, const char* errmsg) {
+  HandleScope scope(isolate);
   Environment::GetCurrent(isolate)->ThrowTypeError(errmsg);
 }
 
 
 void ThrowRangeError(v8::Isolate* isolate, const char* errmsg) {
+  HandleScope scope(isolate);
   Environment::GetCurrent(isolate)->ThrowRangeError(errmsg);
 }
 
@@ -702,6 +705,7 @@ void ThrowErrnoException(v8::Isolate* isolate,
                          const char* syscall,
                          const char* message,
                          const char* path) {
+  HandleScope scope(isolate);
   Environment::GetCurrent(isolate)->ThrowErrnoException(errorno,
                                                         syscall,
                                                         message,
@@ -714,6 +718,7 @@ void ThrowUVException(v8::Isolate* isolate,
                       const char* syscall,
                       const char* message,
                       const char* path) {
+  HandleScope scope(isolate);
   Environment::GetCurrent(isolate)->ThrowErrnoException(errorno,
                                                         syscall,
                                                         message,
@@ -726,6 +731,7 @@ Local<Value> ErrnoException(Isolate* isolate,
                             const char *syscall,
                             const char *msg,
                             const char *path) {
+  EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
 
   Local<Value> e;
@@ -763,7 +769,7 @@ Local<Value> ErrnoException(Isolate* isolate,
     obj->Set(env->syscall_string(), OneByteString(env->isolate(), syscall));
   }
 
-  return e;
+  return handle_scope.Escape(e);
 }
 
 
@@ -773,6 +779,7 @@ Local<Value> UVException(Isolate* isolate,
                          const char *syscall,
                          const char *msg,
                          const char *path) {
+  EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
 
   if (!msg || !msg[0])
@@ -826,7 +833,7 @@ Local<Value> UVException(Isolate* isolate,
     obj->Set(env->syscall_string(), OneByteString(env->isolate(), syscall));
   }
 
-  return e;
+  return handle_scope.Escape(e);
 }
 
 
@@ -863,6 +870,7 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
                                   const char* syscall,
                                   const char* msg,
                                   const char* path) {
+  EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
   Local<Value> e;
   bool must_free = false;
@@ -897,7 +905,7 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
   if (must_free)
     LocalFree((HLOCAL)msg);
 
-  return e;
+  return handle_scope.Escape(e);
 }
 #endif
 
@@ -929,13 +937,13 @@ void SetupAsyncListener(const FunctionCallbackInfo<Value>& args) {
 
 
 void SetupDomainUse(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   if (env->using_domains())
     return;
   env->set_using_domains(true);
 
-  HandleScope scope(env->isolate());
   Local<Object> process_object = env->process_object();
 
   Local<String> tick_callback_function_key = env->tick_domain_cb_string();
@@ -1550,8 +1558,8 @@ static void GetActiveRequests(const FunctionCallbackInfo<Value>& args) {
 // Non-static, friend of HandleWrap. Could have been a HandleWrap method but
 // implemented here for consistency with GetActiveRequests().
 void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   Local<Array> ary = Array::New(env->isolate());
   QUEUE* q = NULL;
@@ -1580,8 +1588,8 @@ static void Abort(const FunctionCallbackInfo<Value>& args) {
 
 
 static void Chdir(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (args.Length() != 1 || !args[0]->IsString()) {
     // FIXME(bnoordhuis) ThrowTypeError?
@@ -1597,8 +1605,8 @@ static void Chdir(const FunctionCallbackInfo<Value>& args) {
 
 
 static void Cwd(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 #ifdef _WIN32
   /* MAX_PATH is in characters, not bytes. Make sure we have enough headroom. */
   char buf[MAX_PATH * 4];
@@ -1621,8 +1629,8 @@ static void Cwd(const FunctionCallbackInfo<Value>& args) {
 
 
 static void Umask(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   uint32_t old;
 
   if (args.Length() < 1 || args[0]->IsUndefined()) {
@@ -1770,8 +1778,8 @@ static void GetGid(const FunctionCallbackInfo<Value>& args) {
 
 
 static void SetGid(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
     return env->ThrowTypeError("setgid argument must be a number or a string");
@@ -1790,8 +1798,8 @@ static void SetGid(const FunctionCallbackInfo<Value>& args) {
 
 
 static void SetUid(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
     return env->ThrowTypeError("setuid argument must be a number or a string");
@@ -1810,8 +1818,8 @@ static void SetUid(const FunctionCallbackInfo<Value>& args) {
 
 
 static void GetGroups(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   int ngroups = getgroups(0, NULL);
 
@@ -1849,8 +1857,8 @@ static void GetGroups(const FunctionCallbackInfo<Value>& args) {
 
 
 static void SetGroups(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (!args[0]->IsArray()) {
     return env->ThrowTypeError("argument 1 must be an array");
@@ -1881,8 +1889,8 @@ static void SetGroups(const FunctionCallbackInfo<Value>& args) {
 
 
 static void InitGroups(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
     return env->ThrowTypeError("argument 1 must be a number or a string");
@@ -1932,15 +1940,14 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
 
 
 void Exit(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
   exit(args[0]->IntegerValue());
 }
 
 
 static void Uptime(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   double uptime;
 
   uv_update_time(uv_default_loop());
@@ -1951,8 +1958,8 @@ static void Uptime(const FunctionCallbackInfo<Value>& args) {
 
 
 void MemoryUsage(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   size_t rss;
   int err = uv_resident_set_memory(&rss);
@@ -1979,8 +1986,8 @@ void MemoryUsage(const FunctionCallbackInfo<Value>& args) {
 
 
 void Kill(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (args.Length() != 2) {
     return env->ThrowError("Bad argument.");
@@ -2001,8 +2008,8 @@ void Kill(const FunctionCallbackInfo<Value>& args) {
 // and nanoseconds, to avoid any integer overflow possibility.
 // Pass in an Array from a previous hrtime() call to instead get a time diff.
 void Hrtime(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   uint64_t t = uv_hrtime();
 
@@ -2257,8 +2264,8 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
 
 static void ProcessTitleGetter(Local<String> property,
                                const PropertyCallbackInfo<Value>& info) {
+  HandleScope scope(info.GetIsolate());
   Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
   char buffer[512];
   uv_get_process_title(buffer, sizeof(buffer));
   info.GetReturnValue().Set(String::NewFromUtf8(env->isolate(), buffer));
@@ -2268,8 +2275,7 @@ static void ProcessTitleGetter(Local<String> property,
 static void ProcessTitleSetter(Local<String> property,
                                Local<Value> value,
                                const PropertyCallbackInfo<void>& info) {
-  Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(info.GetIsolate());
   node::Utf8Value title(value);
   // TODO(piscisaureus): protect with a lock
   uv_set_process_title(*title);
@@ -2278,8 +2284,8 @@ static void ProcessTitleSetter(Local<String> property,
 
 static void EnvGetter(Local<String> property,
                       const PropertyCallbackInfo<Value>& info) {
+  HandleScope scope(info.GetIsolate());
   Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
 #ifdef __POSIX__
   node::Utf8Value key(property);
   const char* val = getenv(*key);
@@ -2311,8 +2317,7 @@ static void EnvGetter(Local<String> property,
 static void EnvSetter(Local<String> property,
                       Local<Value> value,
                       const PropertyCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(info.GetIsolate());
 #ifdef __POSIX__
   node::Utf8Value key(property);
   node::Utf8Value val(value);
@@ -2333,8 +2338,7 @@ static void EnvSetter(Local<String> property,
 
 static void EnvQuery(Local<String> property,
                      const PropertyCallbackInfo<Integer>& info) {
-  Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(info.GetIsolate());
   int32_t rc = -1;  // Not found unless proven otherwise.
 #ifdef __POSIX__
   node::Utf8Value key(property);
@@ -2361,8 +2365,7 @@ static void EnvQuery(Local<String> property,
 
 static void EnvDeleter(Local<String> property,
                        const PropertyCallbackInfo<Boolean>& info) {
-  Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(info.GetIsolate());
   bool rc = true;
 #ifdef __POSIX__
   node::Utf8Value key(property);
@@ -2384,8 +2387,8 @@ static void EnvDeleter(Local<String> property,
 
 
 static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
+  HandleScope scope(info.GetIsolate());
   Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
 #ifdef __POSIX__
   int size = 0;
   while (environ[size])
@@ -2484,8 +2487,6 @@ static Handle<Object> GetFeatures(Environment* env) {
 
 static void DebugPortGetter(Local<String> property,
                             const PropertyCallbackInfo<Value>& info) {
-  Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
   info.GetReturnValue().Set(debug_port);
 }
 
@@ -2493,8 +2494,6 @@ static void DebugPortGetter(Local<String> property,
 static void DebugPortSetter(Local<String> property,
                             Local<Value> value,
                             const PropertyCallbackInfo<void>& info) {
-  Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
   debug_port = value->NumberValue();
 }
 
@@ -2824,8 +2823,7 @@ static void SignalExit(int signo) {
 // when debugging the stream.Writable class or the process.nextTick
 // function, it is useful to bypass JavaScript entirely.
 static void RawDebug(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   assert(args.Length() == 1 && args[0]->IsString() &&
          "must be called with a single string");
@@ -3172,8 +3170,8 @@ static void RegisterSignalHandler(int signal,
 
 
 void DebugProcess(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (args.Length() != 1) {
     return env->ThrowError("Invalid number of arguments.");
@@ -3261,8 +3259,8 @@ static int RegisterDebugSignalHandler() {
 
 static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
-  Environment* env = Environment::GetCurrent(isolate);
   HandleScope scope(isolate);
+  Environment* env = Environment::GetCurrent(isolate);
   DWORD pid;
   HANDLE process = NULL;
   HANDLE thread = NULL;

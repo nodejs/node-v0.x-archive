@@ -109,8 +109,7 @@ void StatWatcher::New(const FunctionCallbackInfo<Value>& args) {
 
 void StatWatcher::Start(const FunctionCallbackInfo<Value>& args) {
   assert(args.Length() == 3);
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   StatWatcher* wrap = Unwrap<StatWatcher>(args.Holder());
   node::Utf8Value path(args[0]);

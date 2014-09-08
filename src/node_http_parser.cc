@@ -437,8 +437,8 @@ class Parser : public BaseObject {
 
 
   static void Finish(const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(args.GetIsolate());
     Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
 
     Parser* parser = Unwrap<Parser>(args.Holder());
 

@@ -97,8 +97,6 @@ class TimerWrap : public HandleWrap {
   }
 
   static void Start(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     TimerWrap* wrap = Unwrap<TimerWrap>(args.Holder());
 
     int64_t timeout = args[0]->IntegerValue();
@@ -108,8 +106,6 @@ class TimerWrap : public HandleWrap {
   }
 
   static void Stop(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     TimerWrap* wrap = Unwrap<TimerWrap>(args.Holder());
 
     int err = uv_timer_stop(&wrap->handle_);
@@ -117,8 +113,6 @@ class TimerWrap : public HandleWrap {
   }
 
   static void Again(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     TimerWrap* wrap = Unwrap<TimerWrap>(args.Holder());
 
     int err = uv_timer_again(&wrap->handle_);
@@ -126,8 +120,6 @@ class TimerWrap : public HandleWrap {
   }
 
   static void SetRepeat(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     TimerWrap* wrap = Unwrap<TimerWrap>(args.Holder());
 
     int64_t repeat = args[0]->IntegerValue();
@@ -136,8 +128,6 @@ class TimerWrap : public HandleWrap {
   }
 
   static void GetRepeat(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     TimerWrap* wrap = Unwrap<TimerWrap>(args.Holder());
 
     int64_t repeat = uv_timer_get_repeat(&wrap->handle_);
@@ -147,7 +137,6 @@ class TimerWrap : public HandleWrap {
   static void OnTimeout(uv_timer_t* handle) {
     TimerWrap* wrap = static_cast<TimerWrap*>(handle->data);
     Environment* env = wrap->env();
-    HandleScope handle_scope(env->isolate());
     Context::Scope context_scope(env->context());
     wrap->MakeCallback(kOnTimeout, 0, NULL);
   }

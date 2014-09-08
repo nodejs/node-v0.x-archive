@@ -250,8 +250,8 @@ class ContextifyContext {
 
 
   static void MakeContext(const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(args.GetIsolate());
     Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
 
     if (!args[0]->IsObject()) {
       return env->ThrowTypeError("sandbox argument must be an object.");
@@ -281,8 +281,8 @@ class ContextifyContext {
 
 
   static void IsContext(const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(args.GetIsolate());
     Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
 
     if (!args[0]->IsObject()) {
       env->ThrowTypeError("sandbox must be an object");
@@ -456,8 +456,8 @@ class ContextifyScript : public BaseObject {
 
   // args: code, [options]
   static void New(const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(args.GetIsolate());
     Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
 
     if (!args.IsConstructCall()) {
       return env->ThrowError("Must call vm.Script as a constructor.");
@@ -518,8 +518,8 @@ class ContextifyScript : public BaseObject {
 
   // args: sandbox, [options]
   static void RunInContext(const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(args.GetIsolate());
     Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
 
     // Assemble arguments
     TryCatch try_catch;

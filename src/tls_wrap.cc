@@ -262,8 +262,8 @@ void TLSCallbacks::Receive(const FunctionCallbackInfo<Value>& args) {
 
 
 void TLSCallbacks::Start(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 
@@ -671,8 +671,8 @@ int TLSCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
 
 
 void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 
@@ -703,9 +703,6 @@ void TLSCallbacks::SetVerifyMode(const FunctionCallbackInfo<Value>& args) {
 
 void TLSCallbacks::EnableSessionCallbacks(
     const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 
   wrap->enable_session_callbacks();
@@ -714,9 +711,6 @@ void TLSCallbacks::EnableSessionCallbacks(
 
 
 void TLSCallbacks::EnableHelloParser(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 
   wrap->hello_parser_.Start(SSLWrap<TLSCallbacks>::OnClientHello,
@@ -733,8 +727,8 @@ void TLSCallbacks::OnClientHelloParseEnd(void* arg) {
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 void TLSCallbacks::GetServername(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 
@@ -749,8 +743,8 @@ void TLSCallbacks::GetServername(const FunctionCallbackInfo<Value>& args) {
 
 
 void TLSCallbacks::SetServername(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 

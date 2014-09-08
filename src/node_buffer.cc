@@ -165,8 +165,8 @@ Local<Object> New(Environment* env, size_t length) {
 
 
 Local<Object> New(Isolate* isolate, const char* data, size_t length) {
+  EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
-  EscapableHandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length);
   return handle_scope.Escape(obj);
 }
@@ -207,8 +207,8 @@ Local<Object> New(Isolate* isolate,
                   size_t length,
                   smalloc::FreeCallback callback,
                   void* hint) {
+  EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
-  EscapableHandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::New(env, data, length, callback, hint);
   return handle_scope.Escape(obj);
 }
@@ -233,8 +233,8 @@ Local<Object> New(Environment* env,
 
 
 Local<Object> Use(Isolate* isolate, char* data, uint32_t length) {
+  EscapableHandleScope handle_scope(isolate);
   Environment* env = Environment::GetCurrent(isolate);
-  EscapableHandleScope handle_scope(env->isolate());
   Local<Object> obj = Buffer::Use(env, data, length);
   return handle_scope.Escape(obj);
 }
@@ -256,8 +256,8 @@ Local<Object> Use(Environment* env, char* data, uint32_t length) {
 
 template <encoding encoding>
 void StringSlice(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This())
   SLICE_START_END(args[0], args[1], obj_length)
@@ -299,8 +299,8 @@ void Base64Slice(const FunctionCallbackInfo<Value>& args) {
 
 // bytesCopied = buffer.copy(target[, targetStart][, sourceStart][, sourceEnd]);
 void Copy(const FunctionCallbackInfo<Value> &args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   Local<Object> target = args[0]->ToObject();
 
@@ -340,8 +340,8 @@ void Copy(const FunctionCallbackInfo<Value> &args) {
 
 // buffer.fill(value[, start][, end]);
 void Fill(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This())
   SLICE_START_END(args[1], args[2], obj_length)
@@ -386,8 +386,8 @@ void Fill(const FunctionCallbackInfo<Value>& args) {
 
 template <encoding encoding>
 void StringWrite(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   ARGS_THIS(args.This())
 
@@ -468,6 +468,7 @@ static inline void Swizzle(char* start, unsigned int len) {
 
 template <typename T, enum Endianness endianness>
 void ReadFloatGeneric(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   bool doAssert = !args[1]->BooleanValue();
   size_t offset;
@@ -518,6 +519,7 @@ void ReadDoubleBE(const FunctionCallbackInfo<Value>& args) {
 
 template <typename T, enum Endianness endianness>
 uint32_t WriteFloatGeneric(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   bool doAssert = !args[2]->BooleanValue();
 
@@ -573,8 +575,8 @@ void WriteDoubleBE(const FunctionCallbackInfo<Value>& args) {
 
 
 void ByteLength(const FunctionCallbackInfo<Value> &args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (!args[0]->IsString())
     return env->ThrowTypeError("Argument must be a string");
@@ -622,8 +624,8 @@ void Compare(const FunctionCallbackInfo<Value> &args) {
 
 // pass Buffer object to load prototype methods
 void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   assert(args[0]->IsFunction());
 

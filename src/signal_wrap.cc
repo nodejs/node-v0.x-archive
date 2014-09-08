@@ -86,8 +86,7 @@ class SignalWrap : public HandleWrap {
   }
 
   static void Start(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
     SignalWrap* wrap = Unwrap<SignalWrap>(args.Holder());
 
     int signum = args[0]->Int32Value();
@@ -96,8 +95,7 @@ class SignalWrap : public HandleWrap {
   }
 
   static void Stop(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
     SignalWrap* wrap = Unwrap<SignalWrap>(args.Holder());
 
     int err = uv_signal_stop(&wrap->handle_);

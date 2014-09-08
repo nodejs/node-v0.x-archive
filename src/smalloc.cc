@@ -172,8 +172,8 @@ size_t ExternalArraySize(enum ExternalArrayType type) {
 
 // copyOnto(source, source_start, dest, dest_start, copy_length)
 void CopyOnto(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   if (!args[0]->IsObject())
     return env->ThrowTypeError("source must be an object");
@@ -249,9 +249,6 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    dest._data = sliceOnto(source, dest, start, end);
 void SliceOnto(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   Local<Object> source = args[0].As<Object>();
   Local<Object> dest = args[1].As<Object>();
 
@@ -290,8 +287,8 @@ void SliceOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    alloc(obj, n[, type]);
 void Alloc(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   Local<Object> obj = args[0].As<Object>();
 
@@ -354,6 +351,7 @@ void Alloc(Environment* env,
 
 // for internal use: dispose(obj);
 void AllocDispose(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   AllocDispose(env, args[0].As<Object>());
 }
@@ -436,6 +434,7 @@ void Alloc(Environment* env,
 
 
 void HasExternalData(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   args.GetReturnValue().Set(args[0]->IsObject() &&
                             HasExternalData(env, args[0].As<Object>()));
@@ -448,8 +447,8 @@ bool HasExternalData(Environment* env, Local<Object> obj) {
 
 
 void AllocTruncate(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   Local<Object> obj = args[0].As<Object>();
 
