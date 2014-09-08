@@ -133,7 +133,7 @@ static void After(uv_fs_t *req) {
   Local<Value> argv[2];
 
   if (req->result < 0) {
-    if (req_node->throwSafe == 1) {
+    if (req_node->throw_safe == 1) {
       argc = 2;
       argv[0] = True(env->isolate());
       argv[1] = False(env->isolate());
@@ -257,7 +257,7 @@ struct fs_req_wrap {
 };
 
 
-#define ASYNC_DEST_CALL(func, callback, dest_path, throwSafeVal, ...)         \
+#define ASYNC_DEST_CALL(func, callback, dest_path, throw_safe_val, ...)       \
   Environment* env = Environment::GetCurrent(args.GetIsolate());              \
   FSReqWrap* req_wrap;                                                        \
   char* dest_str = (dest_path);                                               \
@@ -270,7 +270,7 @@ struct fs_req_wrap {
            dest_str,                                                          \
            dest_len + 1);                                                     \
   }                                                                           \
-  req_wrap->req_.throwSafe = throwSafeVal;                                   \
+  req_wrap->req_.throw_safe = throw_safe_val;                                 \
   int err = uv_fs_ ## func(env->event_loop() ,                                \
                            &req_wrap->req_.req,                               \
                            __VA_ARGS__,                                       \
@@ -285,18 +285,18 @@ struct fs_req_wrap {
   }                                                                           \
   args.GetReturnValue().Set(req_wrap->persistent());
 
-#define ASYNC_CALL(func, callback, throwSafeVal, ...)                         \
-  ASYNC_DEST_CALL(func, callback, NULL, throwSafeVal, __VA_ARGS__)            \
+#define ASYNC_CALL(func, callback, throw_safe_val, ...)                       \
+  ASYNC_DEST_CALL(func, callback, NULL, throw_safe_val, __VA_ARGS__)          \
 
-#define SYNC_DEST_CALL(func, path, dest, throwSafeVal, ...)                   \
+#define SYNC_DEST_CALL(func, path, dest, throw_safe_val, ...)                 \
   fs_req_wrap req_wrap;                                                       \
-  req_wrap.req.throwSafe = throwSafeVal;                                     \
+  req_wrap.req.throw_safe = throw_safe_val;                                   \
   int err = uv_fs_ ## func(env->event_loop(),                                 \
                          &req_wrap.req.req,                                   \
                          __VA_ARGS__,                                         \
                          NULL);                                               \
   if (err < 0) {                                                              \
-    if (req_wrap.req.throwSafe == 1) {                                       \
+    if (req_wrap.req.throw_safe == 1) {                                       \
       args.GetReturnValue().Set(False(env->isolate()));                       \
       return;                                                                 \
     } else if (dest != NULL &&                                                \
@@ -309,8 +309,8 @@ struct fs_req_wrap {
     }                                                                         \
   }                                                                           \
 
-#define SYNC_CALL(func, path, throwSafeVal, ...)                              \
-  SYNC_DEST_CALL(func, path, NULL, throwSafeVal, __VA_ARGS__)                 \
+#define SYNC_CALL(func, path, throw_safe_val, ...)                            \
+  SYNC_DEST_CALL(func, path, NULL, throw_safe_val, __VA_ARGS__)               \
 
 #define SYNC_REQ req_wrap.req.req
 
@@ -443,15 +443,15 @@ static void Stat(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  int throwSafe = 0;
+  int throw_safe = 0;
   if (args[2]->IsTrue()) {
-    throwSafe = 1;
+    throw_safe = 1;
   }
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(stat, args[1], throwSafe, *path)
+    ASYNC_CALL(stat, args[1], throw_safe, *path)
   } else {
-    SYNC_CALL(stat, *path, throwSafe, *path)
+    SYNC_CALL(stat, *path, throw_safe, *path)
     args.GetReturnValue().Set(
         BuildStatsObject(env, static_cast<const uv_stat_t*>(SYNC_REQ.ptr)));
   }
@@ -873,7 +873,7 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
   }
 
   FSReqWrap* req_wrap = new FSReqWrap(env, "write", must_free ? buf : NULL);
-  req_wrap->req_.throwSafe = 0;
+  req_wrap->req_.throw_safe = 0;
   int err = uv_fs_write(env->event_loop(),
                         &req_wrap->req_.req,
                         fd,

@@ -22,6 +22,7 @@
 var common = require('../common');
 var assert = require('assert');
 var fs = require('fs');
+var throwSafeFs = fs.CreateConfiguredFSObject({ throwSafe: true });
 var got_error = false;
 var success_count = 0;
 
@@ -33,7 +34,6 @@ fs.stat('.', function(err, stats) {
     assert.ok(stats.mtime instanceof Date);
     success_count++;
   }
-  assert(this === global);
 });
 
 fs.stat('.', function(err, stats) {
@@ -48,15 +48,13 @@ fs.stat('nonexisting_file', function(err, stats) {
   } else {
     got_error = true;
   }
-  assert(this === global);
 });
 
-fs.stat('nonexisting_file', function(err, stats) {
+throwSafeFs.stat('nonexisting_file', function(err, stats) {
   assert.equal(true, err);
   assert.equal(false, stats);
-  assert(this === global);
   success_count++;
-}, true);
+});
 
 fs.lstat('.', function(err, stats) {
   if (err) {
@@ -66,7 +64,6 @@ fs.lstat('.', function(err, stats) {
     assert.ok(stats.mtime instanceof Date);
     success_count++;
   }
-  assert(this === global);
 });
 
 // fstat
@@ -83,10 +80,8 @@ fs.open('.', 'r', undefined, function(err, fd) {
       success_count++;
       fs.close(fd);
     }
-    assert(this === global);
   });
 
-  assert(this === global);
 });
 
 // fstatSync
