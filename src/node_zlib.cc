@@ -557,10 +557,12 @@ class ZCtx : public AsyncWrap {
     switch (ctx->mode_) {
       case DEFLATE:
       case DEFLATERAW:
+      case GZIP:
         ctx->err_ = deflateReset(&ctx->strm_);
         break;
       case INFLATE:
       case INFLATERAW:
+      case GUNZIP:
         ctx->err_ = inflateReset(&ctx->strm_);
         break;
       default:
