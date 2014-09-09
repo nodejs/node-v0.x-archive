@@ -37,27 +37,27 @@ var options = {
 
 var reqCount = 0;
 
-var server = https.createServer(options, function(req, res) {
+var server = https.createServer(options, function (req, res) {
   ++reqCount;
   res.writeHead(200);
   res.end();
   req.resume();
-}).listen(common.PORT, function() {
-    authorized();
+}).listen(common.PORT, function () {
+  authorized();
 });
 
 function authorized() {
-    var req = https.request({
-        port: common.PORT,
-        rejectUnauthorized: true,
-        ca: [fs.readFileSync(path.join(common.fixturesDir, 'keys/ca2-cert.pem'))]
-    }, function(res) {
-        assert(false);
-    });
-    req.on('error', function(err) {
-        override();
-    });
-    req.end();
+  var req = https.request({
+    port: common.PORT,
+    rejectUnauthorized: true,
+    ca: [fs.readFileSync(path.join(common.fixturesDir, 'keys/ca2-cert.pem'))]
+  }, function (res) {
+    assert(false);
+  });
+  req.on('error', function (err) {
+    override();
+  });
+  req.end();
 }
 
 function override() {
@@ -66,20 +66,20 @@ function override() {
     rejectUnauthorized: true,
     ca: [fs.readFileSync(path.join(common.fixturesDir, 'keys/ca2-cert.pem'))],
     checkServerIdentity: function (host, cert) {
-        return false;
+      return false;
     }
   };
   options.agent = new https.Agent(options);
-  var req = https.request(options, function(res) {
+  var req = https.request(options, function (res) {
     assert(req.socket.authorized);
     server.close();
   });
-  req.on('error', function(err) {
+  req.on('error', function (err) {
     throw err;
   });
   req.end();
 }
 
-process.on('exit', function() {
+process.on('exit', function () {
   assert.equal(reqCount, 1);
 });
