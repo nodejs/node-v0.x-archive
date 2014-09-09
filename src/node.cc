@@ -2871,7 +2871,7 @@ static Handle<Value> DebugProcess(const Arguments& args) {
     CloseHandle(mapping);
   }
 
-  return Undefined();
+  return rv;
 }
 #endif // _WIN32
 
