@@ -99,8 +99,8 @@ uv_tty_t* TTYWrap::UVHandle() {
 
 
 void TTYWrap::GuessHandleType(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   int fd = args[0]->Int32Value();
   assert(fd >= 0);
 
@@ -123,8 +123,6 @@ void TTYWrap::GuessHandleType(const FunctionCallbackInfo<Value>& args) {
 
 
 void TTYWrap::IsTTY(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   int fd = args[0]->Int32Value();
   assert(fd >= 0);
   bool rc = uv_guess_handle(fd) == UV_TTY;
@@ -133,8 +131,8 @@ void TTYWrap::IsTTY(const FunctionCallbackInfo<Value>& args) {
 
 
 void TTYWrap::GetWindowSize(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   TTYWrap* wrap = Unwrap<TTYWrap>(args.Holder());
   assert(args[0]->IsArray());
@@ -153,9 +151,6 @@ void TTYWrap::GetWindowSize(const FunctionCallbackInfo<Value>& args) {
 
 
 void TTYWrap::SetRawMode(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   TTYWrap* wrap = Unwrap<TTYWrap>(args.Holder());
 
   int err = uv_tty_set_mode(&wrap->handle_, args[0]->IsTrue());

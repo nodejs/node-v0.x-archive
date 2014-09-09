@@ -254,8 +254,6 @@ class ProcessWrap : public HandleWrap {
   }
 
   static void Kill(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     ProcessWrap* wrap = Unwrap<ProcessWrap>(args.Holder());
 
     int signal = args[0]->Int32Value();

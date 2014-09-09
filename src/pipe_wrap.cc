@@ -146,8 +146,7 @@ PipeWrap::PipeWrap(Environment* env, Handle<Object> object, bool ipc)
 
 
 void PipeWrap::Bind(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
 
@@ -159,8 +158,8 @@ void PipeWrap::Bind(const FunctionCallbackInfo<Value>& args) {
 
 #ifdef _WIN32
 void PipeWrap::SetPendingInstances(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
 
@@ -172,8 +171,7 @@ void PipeWrap::SetPendingInstances(const FunctionCallbackInfo<Value>& args) {
 
 
 void PipeWrap::Listen(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
 
@@ -261,8 +259,8 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
 
 
 void PipeWrap::Open(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
 

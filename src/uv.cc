@@ -39,8 +39,8 @@ using v8::Value;
 
 
 void ErrName(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   int err = args[0]->Int32Value();
   if (err >= 0)
     return env->ThrowError("err >= 0");

@@ -219,9 +219,6 @@ void TCPWrap::GetPeerName(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::SetNoDelay(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
 
   int enable = static_cast<int>(args[0]->BooleanValue());
@@ -231,9 +228,6 @@ void TCPWrap::SetNoDelay(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::SetKeepAlive(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
 
   int enable = args[0]->Int32Value();
@@ -246,8 +240,8 @@ void TCPWrap::SetKeepAlive(const FunctionCallbackInfo<Value>& args) {
 
 #ifdef _WIN32
 void TCPWrap::SetSimultaneousAccepts(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
 
@@ -259,17 +253,14 @@ void TCPWrap::SetSimultaneousAccepts(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::Open(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
-  int fd = static_cast<int>(args[0]->IntegerValue());
+  int fd = static_cast<int>(args[0]->Int32Value());
   uv_tcp_open(&wrap->handle_, fd);
 }
 
 
 void TCPWrap::Bind(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
 
@@ -289,8 +280,7 @@ void TCPWrap::Bind(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::Bind6(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
 
@@ -310,9 +300,6 @@ void TCPWrap::Bind6(const FunctionCallbackInfo<Value>& args) {
 
 
 void TCPWrap::Listen(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   TCPWrap* wrap = Unwrap<TCPWrap>(args.Holder());
 
   int backlog = args[0]->Int32Value();

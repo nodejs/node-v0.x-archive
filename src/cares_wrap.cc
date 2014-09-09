@@ -991,8 +991,7 @@ void AfterGetNameInfo(uv_getnameinfo_t* req,
 
 
 static void IsIP(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(args.GetIsolate());
 
   node::Utf8Value ip(args[0]);
   char address_buffer[sizeof(struct in6_addr)];
@@ -1061,8 +1060,8 @@ static void GetAddrInfo(const FunctionCallbackInfo<Value>& args) {
 
 
 static void GetNameInfo(const FunctionCallbackInfo<Value>& args) {
+  HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope handle_scope(env->isolate());
 
   CHECK(args[0]->IsObject());
   CHECK(args[1]->IsString());
@@ -1193,8 +1192,8 @@ static void SetServers(const FunctionCallbackInfo<Value>& args) {
 
 
 static void StrError(const FunctionCallbackInfo<Value>& args) {
+  HandleScope scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   const char* errmsg = ares_strerror(args[0]->Int32Value());
   args.GetReturnValue().Set(OneByteString(env->isolate(), errmsg));
 }

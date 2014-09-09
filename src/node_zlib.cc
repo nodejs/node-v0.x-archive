@@ -128,8 +128,7 @@ class ZCtx : public AsyncWrap {
 
 
   static void Close(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
     ZCtx* ctx = Unwrap<ZCtx>(args.Holder());
     ctx->Close();
   }
@@ -138,8 +137,7 @@ class ZCtx : public AsyncWrap {
   // write(flush, in, in_off, in_len, out, out_off, out_len)
   template <bool async>
   static void Write(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
     assert(args.Length() == 7);
 
     ZCtx* ctx = Unwrap<ZCtx>(args.Holder());
@@ -223,8 +221,8 @@ class ZCtx : public AsyncWrap {
 
 
   static void AfterSync(ZCtx* ctx, const FunctionCallbackInfo<Value>& args) {
+    HandleScope scope(args.GetIsolate());
     Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
     Local<Integer> avail_out = Integer::New(env->isolate(),
                                             ctx->strm_.avail_out);
     Local<Integer> avail_in = Integer::New(env->isolate(),
@@ -387,8 +385,7 @@ class ZCtx : public AsyncWrap {
 
   // just pull the ints out of the args and call the other Init
   static void Init(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
 
     assert((args.Length() == 4 || args.Length() == 5) &&
            "init(windowBits, level, memLevel, strategy, [dictionary])");
@@ -428,8 +425,7 @@ class ZCtx : public AsyncWrap {
   }
 
   static void Params(const FunctionCallbackInfo<Value>& args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
 
     assert(args.Length() == 2 && "params(level, strategy)");
 
@@ -439,8 +435,7 @@ class ZCtx : public AsyncWrap {
   }
 
   static void Reset(const FunctionCallbackInfo<Value> &args) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
-    HandleScope scope(env->isolate());
+    HandleScope scope(args.GetIsolate());
 
     ZCtx* ctx = Unwrap<ZCtx>(args.Holder());
 

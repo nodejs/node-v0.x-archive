@@ -357,6 +357,9 @@ class Environment {
     DISALLOW_COPY_AND_ASSIGN(TickInfo);
   };
 
+  // Environment::GetCurrent(Isolate*) calls Isolate::GetCurrentContext().
+  // Which returns a Local<Context>. So to prevent memory leaks all calls
+  // should be made within a {Escapable}HandleScope.
   static inline Environment* GetCurrent(v8::Isolate* isolate);
   static inline Environment* GetCurrent(v8::Local<v8::Context> context);
 
