@@ -65,7 +65,8 @@ enum node_zlib_mode {
 
 enum node_zlib_error {
   NO_ERROR,
-  FAILED
+  FAILED,
+  WRITE_PENDING
 };
 
 void InitZlib(v8::Handle<v8::Object> target);
@@ -312,8 +313,12 @@ class ZCtx : public AsyncWrap {
       return FAILED;
     default:
       // something else.
-      ZCtx::Error(ctx, "Zlib error");
-      return FAILED;
+      if (ctx->strm_.total_out == 0) {
+        ZCtx::Error(ctx, "Zlib error");
+        return FAILED;
+      } else {
+        return WRITE_PENDING;
+      }
     }
 
     return NO_ERROR;
@@ -330,7 +335,8 @@ class ZCtx : public AsyncWrap {
     HandleScope handle_scope(env->isolate());
     Context::Scope context_scope(env->context());
 
-    if (CheckError(ctx) == FAILED)
+    node_zlib_error error = CheckError(ctx);
+    if (error == FAILED)
       return;
 
     Local<Integer> avail_out = Integer::New(env->isolate(),
@@ -343,6 +349,11 @@ class ZCtx : public AsyncWrap {
     // call the write() cb
     Local<Value> args[2] = { avail_in, avail_out };
     ctx->MakeCallback(env->callback_string(), ARRAY_SIZE(args), args);
+
+    if (error == WRITE_PENDING) {
+      ZCtx::Error(ctx, "Zlib error");
+      return;
+    }
 
     ctx->Unref();
     if (ctx->pending_close_)
