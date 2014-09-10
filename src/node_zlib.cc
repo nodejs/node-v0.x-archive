@@ -63,6 +63,10 @@ enum node_zlib_mode {
   UNZIP
 };
 
+enum node_zlib_error {
+  NO_ERROR,
+  FAILED
+};
 
 void InitZlib(v8::Handle<v8::Object> target);
 
@@ -207,7 +211,7 @@ class ZCtx : public AsyncWrap {
     if (!async) {
       // sync version
       Process(work_req);
-      if (CheckError(ctx))
+      if (CheckError(ctx) == NO_ERROR)
         AfterSync(ctx, args);
       return;
     }
@@ -292,7 +296,7 @@ class ZCtx : public AsyncWrap {
   }
 
 
-  static bool CheckError(ZCtx* ctx) {
+  static node_zlib_error CheckError(ZCtx* ctx) {
     // Acceptable error states depend on the type of zlib stream.
     switch (ctx->err_) {
     case Z_OK:
@@ -305,14 +309,14 @@ class ZCtx : public AsyncWrap {
         ZCtx::Error(ctx, "Missing dictionary");
       else
         ZCtx::Error(ctx, "Bad dictionary");
-      return false;
+      return FAILED;
     default:
       // something else.
       ZCtx::Error(ctx, "Zlib error");
-      return false;
+      return FAILED;
     }
 
-    return true;
+    return NO_ERROR;
   }
 
 
@@ -326,7 +330,7 @@ class ZCtx : public AsyncWrap {
     HandleScope handle_scope(env->isolate());
     Context::Scope context_scope(env->context());
 
-    if (!CheckError(ctx))
+    if (CheckError(ctx) == FAILED)
       return;
 
     Local<Integer> avail_out = Integer::New(env->isolate(),
