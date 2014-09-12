@@ -74,6 +74,7 @@ Finish timer, record output. Example:
       ;
     }
     console.timeEnd('100-elements');
+    //prints 100-elements: 262ms
 
 ## console.trace(message, [...])
 
