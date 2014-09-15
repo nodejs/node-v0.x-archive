@@ -990,6 +990,41 @@ void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+Handle<Boolean> ExecuteNextTickCallback(Environment* env) {
+  Environment::TickInfo* tick_info = env->tick_info();
+
+  TryCatch try_catch;
+  try_catch.SetVerbose(true);
+
+  if (tick_info->last_threw() == 1) {
+    tick_info->set_last_threw(0);
+    return True(env->isolate());
+  }
+
+  if (tick_info->in_tick()) {
+    return True(env->isolate());
+  }
+
+  if (tick_info->length() == 0) {
+    tick_info->set_index(0);
+    return True(env->isolate());
+  }
+
+  tick_info->set_in_tick(true);
+
+  env->tick_callback_function()->Call(env->process_object(), 0, NULL);
+
+  tick_info->set_in_tick(false);
+
+  if (try_catch.HasCaught()) {
+    tick_info->set_last_threw(true);
+    return False(env->isolate());
+  }
+
+  return True(env->isolate());
+}
+
+
 Handle<Value> MakeDomainCallback(Environment* env,
                                  Handle<Value> recv,
                                  const Handle<Function> callback,
@@ -1063,30 +1098,7 @@ Handle<Value> MakeDomainCallback(Environment* env,
       return Undefined(env->isolate());
   }
 
-  Environment::TickInfo* tick_info = env->tick_info();
-
-  if (tick_info->last_threw() == 1) {
-    tick_info->set_last_threw(0);
-    return ret;
-  }
-
-  if (tick_info->in_tick()) {
-    return ret;
-  }
-
-  if (tick_info->length() == 0) {
-    tick_info->set_index(0);
-    return ret;
-  }
-
-  tick_info->set_in_tick(true);
-
-  env->tick_callback_function()->Call(process, 0, NULL);
-
-  tick_info->set_in_tick(false);
-
-  if (try_catch.HasCaught()) {
-    tick_info->set_last_threw(true);
+  if (ExecuteNextTickCallback(env)->IsFalse()) {
     return Undefined(env->isolate());
   }
 
@@ -1132,26 +1144,7 @@ Handle<Value> MakeCallback(Environment* env,
       return Undefined(env->isolate());
   }
 
-  Environment::TickInfo* tick_info = env->tick_info();
-
-  if (tick_info->in_tick()) {
-    return ret;
-  }
-
-  if (tick_info->length() == 0) {
-    tick_info->set_index(0);
-    return ret;
-  }
-
-  tick_info->set_in_tick(true);
-
-  // process nextTicks after call
-  env->tick_callback_function()->Call(process, 0, NULL);
-
-  tick_info->set_in_tick(false);
-
-  if (try_catch.HasCaught()) {
-    tick_info->set_last_threw(true);
+  if (ExecuteNextTickCallback(env)->IsFalse()) {
     return Undefined(env->isolate());
   }
 
@@ -2893,6 +2886,8 @@ void Load(Environment* env) {
 
   Local<Value> arg = env->process_object();
   f->Call(global, 1, &arg);
+  // Handle any nextTicks added in the first tick of the program
+  ExecuteNextTickCallback(env);
 }
 
 static void PrintHelp();
