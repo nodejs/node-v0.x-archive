@@ -12,6 +12,7 @@ var mkdir = require("mkdirp")
   , unlock = locker.unlock
   , addLocalTarball = require("./add-local-tarball.js")
   , cacheFile = require("npm-cache-filename")
+  , remoteOptions = require("./remote-options.js")
 
 module.exports = addRemoteTarball
 
@@ -23,6 +24,9 @@ function addRemoteTarball (u, pkgData, shasum, cb_) {
     if (data) {
       data._from = u
       data._shasum = data._shasum || shasum
+      // If HTTP date/etag was available, store that for a future option check (for outdated support)
+      if (pkgData && pkgData._remote)
+      	data._remote = pkgData._remote;
       data._resolved = u
     }
     unlock(u, function () {
@@ -40,6 +44,11 @@ function addRemoteTarball (u, pkgData, shasum, cb_) {
 
   function next (er, resp, shasum) {
     if (er) return cb(er)
+    // If HTTP date/eTag available, store it in pkgData
+    if (resp.headers) {
+       pkgData = pkgData || {}
+       pkgData._remote = remoteOptions.save(resp.headers, u)
+    }
     addLocalTarball(tmp, pkgData, shasum, cb)
   }
 

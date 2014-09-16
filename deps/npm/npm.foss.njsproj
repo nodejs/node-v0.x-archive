@@ -1,0 +1,610 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{f9985682-0795-43c7-8029-66718bd65fdf}</ProjectGuid>
+    <ProjectHome />
+    <ProjectView>ShowAllFiles</ProjectView>
+    <StartupFile>bin\npm-cli.js</StartupFile>
+    <WorkingDirectory>E:\dev\html\ion.web</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{3AF33F2E-1136-4D97-BBB7-1795711AC8B8};{349c5851-65df-11da-9384-00065b846f21};{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}</ProjectTypeGuids>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">11.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+    <StartWebBrowser>True</StartWebBrowser>
+    <ScriptArguments>update</ScriptArguments>
+    <DebuggerPort>1345</DebuggerPort>
+    <NodejsPort>1346</NodejsPort>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <ItemGroup>
+    <Content Include="package.json" />
+    <Content Include="CONTRIBUTING.md" />
+    <Content Include="README.md" />
+    <Compile Include="bin\npm-cli.js" />
+    <Compile Include="bin\read-package-json.js" />
+    <Content Include="html\docfoot.html" />
+    <Content Include="html\dochead.html" />
+    <Content Include="html\index.html" />
+    <Content Include="html\favicon.ico" />
+    <Compile Include="lib\adduser.js" />
+    <Compile Include="lib\bin.js" />
+    <Compile Include="lib\bugs.js" />
+    <Compile Include="lib\build.js" />
+    <Compile Include="lib\cache.js" />
+    <Compile Include="lib\cache\check-remote-tarball.js" />
+    <Compile Include="lib\cache\remote-options.js" />
+    <Compile Include="lib\completion.js" />
+    <Compile Include="lib\config.js" />
+    <Compile Include="lib\dedupe.js" />
+    <Compile Include="lib\deprecate.js" />
+    <Compile Include="lib\docs.js" />
+    <Compile Include="lib\edit.js" />
+    <Compile Include="lib\explore.js" />
+    <Compile Include="lib\faq.js" />
+    <Compile Include="lib\get.js" />
+    <Compile Include="lib\help-search.js" />
+    <Compile Include="lib\help.js" />
+    <Compile Include="lib\init.js" />
+    <Compile Include="lib\install.js" />
+    <Compile Include="lib\link.js" />
+    <Compile Include="lib\ls.js" />
+    <Compile Include="lib\npm.js" />
+    <Compile Include="lib\outdated.js" />
+    <Compile Include="lib\owner.js" />
+    <Compile Include="lib\pack.js" />
+    <Compile Include="lib\prefix.js" />
+    <Compile Include="lib\prune.js" />
+    <Compile Include="lib\publish.js" />
+    <Compile Include="lib\rebuild.js" />
+    <Compile Include="lib\repo.js" />
+    <Compile Include="lib\restart.js" />
+    <Compile Include="lib\root.js" />
+    <Compile Include="lib\run-script.js" />
+    <Compile Include="lib\search.js" />
+    <Compile Include="lib\set.js" />
+    <Compile Include="lib\shrinkwrap.js" />
+    <Compile Include="lib\star.js" />
+    <Compile Include="lib\stars.js" />
+    <Compile Include="lib\start.js" />
+    <Compile Include="lib\stop.js" />
+    <Compile Include="lib\submodule.js" />
+    <Compile Include="lib\substack.js" />
+    <Compile Include="lib\tag.js" />
+    <Compile Include="lib\test.js" />
+    <Compile Include="lib\unbuild.js" />
+    <Compile Include="lib\uninstall.js" />
+    <Compile Include="lib\unpublish.js" />
+    <Compile Include="lib\update.js" />
+    <Compile Include="lib\version.js" />
+    <Compile Include="lib\view.js" />
+    <Compile Include="lib\visnup.js" />
+    <Compile Include="lib\whoami.js" />
+    <Compile Include="lib\xmas.js" />
+    <Compile Include="scripts\index-build.js" />
+    <Compile Include="test\common-tap.js" />
+    <Compile Include="test\common.js" />
+    <Compile Include="test\run.js" />
+    <Content Include="doc\api\npm-bin.md" />
+    <Content Include="doc\api\npm-bugs.md" />
+    <Content Include="doc\api\npm-cache.md" />
+    <Content Include="doc\api\npm-commands.md" />
+    <Content Include="doc\api\npm-config.md" />
+    <Content Include="doc\api\npm-deprecate.md" />
+    <Content Include="doc\api\npm-docs.md" />
+    <Content Include="doc\api\npm-edit.md" />
+    <Content Include="doc\api\npm-explore.md" />
+    <Content Include="doc\api\npm-help-search.md" />
+    <Content Include="doc\api\npm-init.md" />
+    <Content Include="doc\api\npm-install.md" />
+    <Content Include="doc\api\npm-link.md" />
+    <Content Include="doc\api\npm-load.md" />
+    <Content Include="doc\api\npm-ls.md" />
+    <Content Include="doc\api\npm-outdated.md" />
+    <Content Include="doc\api\npm-owner.md" />
+    <Content Include="doc\api\npm-pack.md" />
+    <Content Include="doc\api\npm-prefix.md" />
+    <Content Include="doc\api\npm-prune.md" />
+    <Content Include="doc\api\npm-publish.md" />
+    <Content Include="doc\api\npm-rebuild.md" />
+    <Content Include="doc\api\npm-repo.md" />
+    <Content Include="doc\api\npm-restart.md" />
+    <Content Include="doc\api\npm-root.md" />
+    <Content Include="doc\api\npm-run-script.md" />
+    <Content Include="doc\api\npm-search.md" />
+    <Content Include="doc\api\npm-shrinkwrap.md" />
+    <Content Include="doc\api\npm-start.md" />
+    <Content Include="doc\api\npm-stop.md" />
+    <Content Include="doc\api\npm-submodule.md" />
+    <Content Include="doc\api\npm-tag.md" />
+    <Content Include="doc\api\npm-test.md" />
+    <Content Include="doc\api\npm-uninstall.md" />
+    <Content Include="doc\api\npm-unpublish.md" />
+    <Content Include="doc\api\npm-update.md" />
+    <Content Include="doc\api\npm-version.md" />
+    <Content Include="doc\api\npm-view.md" />
+    <Content Include="doc\api\npm-whoami.md" />
+    <Content Include="doc\api\npm.md" />
+    <Content Include="doc\cli\npm-adduser.md" />
+    <Content Include="doc\cli\npm-bin.md" />
+    <Content Include="doc\cli\npm-bugs.md" />
+    <Content Include="doc\cli\npm-build.md" />
+    <Content Include="doc\cli\npm-bundle.md" />
+    <Content Include="doc\cli\npm-cache.md" />
+    <Content Include="doc\cli\npm-completion.md" />
+    <Content Include="doc\cli\npm-config.md" />
+    <Content Include="doc\cli\npm-dedupe.md" />
+    <Content Include="doc\cli\npm-deprecate.md" />
+    <Content Include="doc\cli\npm-docs.md" />
+    <Content Include="doc\cli\npm-edit.md" />
+    <Content Include="doc\cli\npm-explore.md" />
+    <Content Include="doc\cli\npm-help-search.md" />
+    <Content Include="doc\cli\npm-help.md" />
+    <Content Include="doc\cli\npm-init.md" />
+    <Content Include="doc\cli\npm-install.md" />
+    <Content Include="doc\cli\npm-link.md" />
+    <Content Include="doc\cli\npm-ls.md" />
+    <Content Include="doc\cli\npm-outdated.md" />
+    <Content Include="doc\cli\npm-owner.md" />
+    <Content Include="doc\cli\npm-pack.md" />
+    <Content Include="doc\cli\npm-prefix.md" />
+    <Content Include="doc\cli\npm-prune.md" />
+    <Content Include="doc\cli\npm-publish.md" />
+    <Content Include="doc\cli\npm-rebuild.md" />
+    <Content Include="doc\cli\npm-repo.md" />
+    <Content Include="doc\cli\npm-restart.md" />
+    <Content Include="doc\cli\npm-rm.md" />
+    <Content Include="doc\cli\npm-root.md" />
+    <Content Include="doc\cli\npm-run-script.md" />
+    <Content Include="doc\cli\npm-search.md" />
+    <Content Include="doc\cli\npm-shrinkwrap.md" />
+    <Content Include="doc\cli\npm-star.md" />
+    <Content Include="doc\cli\npm-stars.md" />
+    <Content Include="doc\cli\npm-start.md" />
+    <Content Include="doc\cli\npm-stop.md" />
+    <Content Include="doc\cli\npm-submodule.md" />
+    <Content Include="doc\cli\npm-tag.md" />
+    <Content Include="doc\cli\npm-test.md" />
+    <Content Include="doc\cli\npm-uninstall.md" />
+    <Content Include="doc\cli\npm-unpublish.md" />
+    <Content Include="doc\cli\npm-update.md" />
+    <Content Include="doc\cli\npm-version.md" />
+    <Content Include="doc\cli\npm-view.md" />
+    <Content Include="doc\cli\npm-whoami.md" />
+    <Content Include="doc\cli\npm.md" />
+    <Content Include="doc\files\npm-folders.md" />
+    <Content Include="doc\files\npmrc.md" />
+    <Content Include="doc\files\package.json.md" />
+    <Content Include="doc\misc\npm-coding-style.md" />
+    <Content Include="doc\misc\npm-config.md" />
+    <Content Include="doc\misc\npm-developers.md" />
+    <Content Include="doc\misc\npm-disputes.md" />
+    <Content Include="doc\misc\npm-faq.md" />
+    <Content Include="doc\misc\npm-index.md" />
+    <Content Include="doc\misc\npm-registry.md" />
+    <Content Include="doc\misc\npm-scripts.md" />
+    <Content Include="doc\misc\removing-npm.md" />
+    <Content Include="doc\misc\semver.md" />
+    <Content Include="html\doc\index.html" />
+    <Content Include="html\doc\README.html" />
+    <Content Include="html\static\style.css" />
+    <Compile Include="html\static\toc.js" />
+    <Content Include="html\doc\api\npm-bin.html" />
+    <Content Include="html\doc\api\npm-bugs.html" />
+    <Content Include="html\doc\api\npm-cache.html" />
+    <Content Include="html\doc\api\npm-commands.html" />
+    <Content Include="html\doc\api\npm-config.html" />
+    <Content Include="html\doc\api\npm-deprecate.html" />
+    <Content Include="html\doc\api\npm-docs.html" />
+    <Content Include="html\doc\api\npm-edit.html" />
+    <Content Include="html\doc\api\npm-explore.html" />
+    <Content Include="html\doc\api\npm-help-search.html" />
+    <Content Include="html\doc\api\npm-init.html" />
+    <Content Include="html\doc\api\npm-install.html" />
+    <Content Include="html\doc\api\npm-link.html" />
+    <Content Include="html\doc\api\npm-load.html" />
+    <Content Include="html\doc\api\npm-ls.html" />
+    <Content Include="html\doc\api\npm-outdated.html" />
+    <Content Include="html\doc\api\npm-owner.html" />
+    <Content Include="html\doc\api\npm-pack.html" />
+    <Content Include="html\doc\api\npm-prefix.html" />
+    <Content Include="html\doc\api\npm-prune.html" />
+    <Content Include="html\doc\api\npm-publish.html" />
+    <Content Include="html\doc\api\npm-rebuild.html" />
+    <Content Include="html\doc\api\npm-repo.html" />
+    <Content Include="html\doc\api\npm-restart.html" />
+    <Content Include="html\doc\api\npm-root.html" />
+    <Content Include="html\doc\api\npm-run-script.html" />
+    <Content Include="html\doc\api\npm-search.html" />
+    <Content Include="html\doc\api\npm-shrinkwrap.html" />
+    <Content Include="html\doc\api\npm-start.html" />
+    <Content Include="html\doc\api\npm-stop.html" />
+    <Content Include="html\doc\api\npm-submodule.html" />
+    <Content Include="html\doc\api\npm-tag.html" />
+    <Content Include="html\doc\api\npm-test.html" />
+    <Content Include="html\doc\api\npm-uninstall.html" />
+    <Content Include="html\doc\api\npm-unpublish.html" />
+    <Content Include="html\doc\api\npm-update.html" />
+    <Content Include="html\doc\api\npm-version.html" />
+    <Content Include="html\doc\api\npm-view.html" />
+    <Content Include="html\doc\api\npm-whoami.html" />
+    <Content Include="html\doc\api\npm.html" />
+    <Content Include="html\doc\cli\npm-adduser.html" />
+    <Content Include="html\doc\cli\npm-bin.html" />
+    <Content Include="html\doc\cli\npm-bugs.html" />
+    <Content Include="html\doc\cli\npm-build.html" />
+    <Content Include="html\doc\cli\npm-bundle.html" />
+    <Content Include="html\doc\cli\npm-cache.html" />
+    <Content Include="html\doc\cli\npm-completion.html" />
+    <Content Include="html\doc\cli\npm-config.html" />
+    <Content Include="html\doc\cli\npm-dedupe.html" />
+    <Content Include="html\doc\cli\npm-deprecate.html" />
+    <Content Include="html\doc\cli\npm-docs.html" />
+    <Content Include="html\doc\cli\npm-edit.html" />
+    <Content Include="html\doc\cli\npm-explore.html" />
+    <Content Include="html\doc\cli\npm-help-search.html" />
+    <Content Include="html\doc\cli\npm-help.html" />
+    <Content Include="html\doc\cli\npm-init.html" />
+    <Content Include="html\doc\cli\npm-install.html" />
+    <Content Include="html\doc\cli\npm-link.html" />
+    <Content Include="html\doc\cli\npm-ls.html" />
+    <Content Include="html\doc\cli\npm-outdated.html" />
+    <Content Include="html\doc\cli\npm-owner.html" />
+    <Content Include="html\doc\cli\npm-pack.html" />
+    <Content Include="html\doc\cli\npm-prefix.html" />
+    <Content Include="html\doc\cli\npm-prune.html" />
+    <Content Include="html\doc\cli\npm-publish.html" />
+    <Content Include="html\doc\cli\npm-rebuild.html" />
+    <Content Include="html\doc\cli\npm-repo.html" />
+    <Content Include="html\doc\cli\npm-restart.html" />
+    <Content Include="html\doc\cli\npm-rm.html" />
+    <Content Include="html\doc\cli\npm-root.html" />
+    <Content Include="html\doc\cli\npm-run-script.html" />
+    <Content Include="html\doc\cli\npm-search.html" />
+    <Content Include="html\doc\cli\npm-shrinkwrap.html" />
+    <Content Include="html\doc\cli\npm-star.html" />
+    <Content Include="html\doc\cli\npm-stars.html" />
+    <Content Include="html\doc\cli\npm-start.html" />
+    <Content Include="html\doc\cli\npm-stop.html" />
+    <Content Include="html\doc\cli\npm-submodule.html" />
+    <Content Include="html\doc\cli\npm-tag.html" />
+    <Content Include="html\doc\cli\npm-test.html" />
+    <Content Include="html\doc\cli\npm-uninstall.html" />
+    <Content Include="html\doc\cli\npm-unpublish.html" />
+    <Content Include="html\doc\cli\npm-update.html" />
+    <Content Include="html\doc\cli\npm-version.html" />
+    <Content Include="html\doc\cli\npm-view.html" />
+    <Content Include="html\doc\cli\npm-whoami.html" />
+    <Content Include="html\doc\cli\npm.html" />
+    <Content Include="html\doc\files\npm-folders.html" />
+    <Content Include="html\doc\files\npm-global.html" />
+    <Content Include="html\doc\files\npm-json.html" />
+    <Content Include="html\doc\files\npmrc.html" />
+    <Content Include="html\doc\files\package.json.html" />
+    <Content Include="html\doc\misc\index.html" />
+    <Content Include="html\doc\misc\npm-coding-style.html" />
+    <Content Include="html\doc\misc\npm-config.html" />
+    <Content Include="html\doc\misc\npm-developers.html" />
+    <Content Include="html\doc\misc\npm-disputes.html" />
+    <Content Include="html\doc\misc\npm-faq.html" />
+    <Content Include="html\doc\misc\npm-index.html" />
+    <Content Include="html\doc\misc\npm-registry.html" />
+    <Content Include="html\doc\misc\npm-scripts.html" />
+    <Content Include="html\doc\misc\removing-npm.html" />
+    <Content Include="html\doc\misc\semver.html" />
+    <Compile Include="lib\cache\add-local-tarball.js" />
+    <Compile Include="lib\cache\add-local.js" />
+    <Compile Include="lib\cache\add-named.js" />
+    <Compile Include="lib\cache\add-remote-git.js" />
+    <Compile Include="lib\cache\add-remote-tarball.js" />
+    <Compile Include="lib\cache\get-stat.js" />
+    <Compile Include="lib\cache\maybe-github.js" />
+    <Compile Include="lib\utils\depr-check.js" />
+    <Compile Include="lib\utils\error-handler.js" />
+    <Compile Include="lib\utils\fetch.js" />
+    <Compile Include="lib\utils\gently-rm.js" />
+    <Compile Include="lib\utils\git.js" />
+    <Compile Include="lib\utils\is-git-url.js" />
+    <Compile Include="lib\utils\is-http-url.js" />
+    <Compile Include="lib\utils\lifecycle.js" />
+    <Compile Include="lib\utils\link.js" />
+    <Compile Include="lib\utils\locker.js" />
+    <Compile Include="lib\utils\tar.js" />
+    <Compile Include="lib\utils\completion\file-completion.js" />
+    <Compile Include="lib\utils\completion\installed-deep.js" />
+    <Compile Include="lib\utils\completion\installed-shallow.js" />
+    <Compile Include="test\disabled\outdated-depth-integer.js" />
+    <Compile Include="test\tap\00-check-mock-dep.js" />
+    <Compile Include="test\tap\00-verify-bundle-deps.js" />
+    <Compile Include="test\tap\404-parent.js" />
+    <Compile Include="test\tap\cache-add-unpublished.js" />
+    <Compile Include="test\tap\cache-shasum.js" />
+    <Compile Include="test\tap\circular-dep.js" />
+    <Compile Include="test\tap\config-meta.js" />
+    <Compile Include="test\tap\dedupe.js" />
+    <Compile Include="test\tap\false_name.js" />
+    <Compile Include="test\tap\git-cache-locking.js" />
+    <Compile Include="test\tap\global-prefix-set-in-userconfig.js" />
+    <Compile Include="test\tap\ignore-install-link.js" />
+    <Compile Include="test\tap\ignore-scripts.js" />
+    <Compile Include="test\tap\ignore-shrinkwrap.js" />
+    <Compile Include="test\tap\install-at-locally.js" />
+    <Compile Include="test\tap\install-cli-unicode.js" />
+    <Compile Include="test\tap\install-save-exact.js" />
+    <Compile Include="test\tap\install-save-prefix.js" />
+    <Compile Include="test\tap\invalid-cmd-exit-code.js" />
+    <Compile Include="test\tap\lifecycle-signal.js" />
+    <Compile Include="test\tap\lifecycle.js" />
+    <Compile Include="test\tap\ls-depth-cli.js" />
+    <Compile Include="test\tap\ls-depth-unmet.js" />
+    <Compile Include="test\tap\ls-no-results.js" />
+    <Compile Include="test\tap\maybe-github.js" />
+    <Compile Include="test\tap\noargs-install-config-save.js" />
+    <Compile Include="test\tap\npm-api-not-loaded-error.js" />
+    <Compile Include="test\tap\outdated-color.js" />
+    <Compile Include="test\tap\outdated-depth.js" />
+    <Compile Include="test\tap\outdated-git.js" />
+    <Compile Include="test\tap\outdated-include-devdependencies.js" />
+    <Compile Include="test\tap\outdated-json.js" />
+    <Compile Include="test\tap\outdated-new-versions.js" />
+    <Compile Include="test\tap\outdated-notarget.js" />
+    <Compile Include="test\tap\outdated.js" />
+    <Compile Include="test\tap\peer-deps-invalid.js" />
+    <Compile Include="test\tap\peer-deps-without-package-json.js" />
+    <Compile Include="test\tap\peer-deps.js" />
+    <Compile Include="test\tap\prepublish.js" />
+    <Compile Include="test\tap\prune.js" />
+    <Compile Include="test\tap\publish-config.js" />
+    <Compile Include="test\tap\referer.js" />
+    <Compile Include="test\tap\registry.js" />
+    <Compile Include="test\tap\repo.js" />
+    <Compile Include="test\tap\scripts-whitespace-windows.js" />
+    <Compile Include="test\tap\semver-doc.js" />
+    <Compile Include="test\tap\shrinkwrap-dev-dependency.js" />
+    <Compile Include="test\tap\shrinkwrap-empty-deps.js" />
+    <Compile Include="test\tap\shrinkwrap-shared-dev-dependency.js" />
+    <Compile Include="test\tap\sorted-package-json.js" />
+    <Compile Include="test\tap\startstop.js" />
+    <Compile Include="test\tap\test-run-ls.js" />
+    <Compile Include="test\tap\uninstall-package.js" />
+    <Compile Include="test\tap\update-save.js" />
+    <Compile Include="test\tap\url-dependencies.js" />
+    <Compile Include="test\tap\version-no-tags.js" />
+    <Content Include="test\disabled\bundlerecurs\package.json" />
+    <Content Include="test\disabled\change-bin-1\package.json" />
+    <Content Include="test\disabled\change-bin-2\package.json" />
+    <Content Include="test\disabled\failer\package.json" />
+    <Content Include="test\disabled\fast\package.json" />
+    <Content Include="test\disabled\outdated-depth-integer\package.json" />
+    <Content Include="test\disabled\outdated-depth-integer\README.md" />
+    <Compile Include="test\disabled\outdated-depth-integer\index.js" />
+    <Content Include="test\disabled\package-bar\package.json" />
+    <Content Include="test\disabled\package-config\package.json" />
+    <Compile Include="test\disabled\package-config\test.js" />
+    <Content Include="test\disabled\package-foo\package.json" />
+    <Content Include="test\disabled\slow\package.json" />
+    <Content Include="test\packages\npm-test-array-bin\package.json" />
+    <Compile Include="test\packages\npm-test-array-bin\test.js" />
+    <Content Include="test\packages\npm-test-blerg\package.json" />
+    <Compile Include="test\packages\npm-test-blerg\test.js" />
+    <Content Include="test\packages\npm-test-blerg3\package.json" />
+    <Compile Include="test\packages\npm-test-blerg3\test.js" />
+    <Content Include="test\packages\npm-test-bundled-git\minimatch-expected.json" />
+    <Content Include="test\packages\npm-test-bundled-git\package.json" />
+    <Compile Include="test\packages\npm-test-bundled-git\test.js" />
+    <Content Include="test\packages\npm-test-dir-bin\package.json" />
+    <Compile Include="test\packages\npm-test-dir-bin\test.js" />
+    <Content Include="test\packages\npm-test-env-reader\package.json" />
+    <Compile Include="test\packages\npm-test-env-reader\test.js" />
+    <Content Include="test\packages\npm-test-files\package.json" />
+    <Content Include="test\packages\npm-test-ignore\package.json" />
+    <Content Include="test\packages\npm-test-ignore-nested-nm\package.json" />
+    <Compile Include="test\packages\npm-test-ignore-nested-nm\test.js" />
+    <Content Include="test\packages\npm-test-missing-bindir\package.json" />
+    <Compile Include="test\packages\npm-test-missing-bindir\test.js" />
+    <Content Include="test\packages\npm-test-optional-deps\package.json" />
+    <Compile Include="test\packages\npm-test-optional-deps\test.js" />
+    <Content Include="test\packages\npm-test-platform\package.json" />
+    <Content Include="test\packages\npm-test-platform-all\package.json" />
+    <Content Include="test\packages\npm-test-private\package.json" />
+    <Content Include="test\packages\npm-test-shrinkwrap\npm-shrinkwrap.json" />
+    <Content Include="test\packages\npm-test-shrinkwrap\package.json" />
+    <Compile Include="test\packages\npm-test-shrinkwrap\test.js" />
+    <Content Include="test\packages\npm-test-test-package\package.json" />
+    <Content Include="test\packages\npm-test-url-dep\package.json" />
+    <Content Include="test\tap\dedupe\package.json" />
+    <Content Include="test\tap\false_name\package.json" />
+    <Compile Include="test\tap\false_name\index.js" />
+    <Content Include="test\tap\ignore-scripts\package.json" />
+    <Content Include="test\tap\ignore-shrinkwrap\npm-shrinkwrap.json" />
+    <Content Include="test\tap\ignore-shrinkwrap\package.json" />
+    <Content Include="test\tap\install-cli\package.json" />
+    <Content Include="test\tap\install-cli\README.md" />
+    <Compile Include="test\tap\install-cli\index.js" />
+    <Content Include="test\tap\install-save-exact\package.json" />
+    <Content Include="test\tap\install-save-exact\README.md" />
+    <Compile Include="test\tap\install-save-exact\index.js" />
+    <Content Include="test\tap\install-save-prefix\package.json" />
+    <Content Include="test\tap\install-save-prefix\README.md" />
+    <Compile Include="test\tap\install-save-prefix\index.js" />
+    <Content Include="test\tap\lifecycle-signal\package.json" />
+    <Content Include="test\tap\ls-depth\package.json" />
+    <Content Include="test\tap\ls-depth-unmet\package.json" />
+    <Content Include="test\tap\outdated\package.json" />
+    <Content Include="test\tap\outdated\README.md" />
+    <Compile Include="test\tap\outdated\index.js" />
+    <Content Include="test\tap\outdated-depth\package.json" />
+    <Content Include="test\tap\outdated-depth\README.md" />
+    <Compile Include="test\tap\outdated-depth\index.js" />
+    <Content Include="test\tap\outdated-git\package.json" />
+    <Content Include="test\tap\outdated-git\README.md" />
+    <Content Include="test\tap\outdated-include-devdependencies\package.json" />
+    <Content Include="test\tap\outdated-new-versions\package.json" />
+    <Content Include="test\tap\package-with-peer-dep\package.json" />
+    <Content Include="test\tap\peer-deps\desired-ls-results.json" />
+    <Content Include="test\tap\peer-deps\package.json" />
+    <Content Include="test\tap\peer-deps-invalid\package.json" />
+    <Compile Include="test\tap\peer-deps-invalid\file-fail.js" />
+    <Compile Include="test\tap\peer-deps-invalid\file-ok.js" />
+    <Compile Include="test\tap\peer-deps-without-package-json\file-js.js" />
+    <Content Include="test\tap\prune\package.json" />
+    <Content Include="test\tap\scripts-whitespace-windows\package.json" />
+    <Content Include="test\tap\scripts-whitespace-windows\README.md" />
+    <Content Include="test\tap\shrinkwrap-dev-dependency\desired-shrinkwrap-results.json" />
+    <Content Include="test\tap\shrinkwrap-dev-dependency\package.json" />
+    <Content Include="test\tap\shrinkwrap-empty-deps\package.json" />
+    <Content Include="test\tap\shrinkwrap-shared-dev-dependency\desired-shrinkwrap-results.json" />
+    <Content Include="test\tap\shrinkwrap-shared-dev-dependency\package.json" />
+    <Content Include="test\tap\startstop\package.json" />
+    <Content Include="test\tap\uninstall-package\package.json" />
+    <Content Include="test\tap\update-save\package.json" />
+    <Content Include="test\tap\update-save\README.md" />
+    <Compile Include="test\tap\update-save\index.js" />
+    <Content Include="test\tap\url-dependencies\package.json" />
+    <Content Include="test\tap\circular-dep\minimist\package.json" />
+    <Content Include="test\tap\install-at-locally\package@1.2.3\package.json" />
+    <Content Include="test\tap\scripts-whitespace-windows\dep\package.json" />
+    <Content Include="test\tap\scripts-whitespace-windows\dep\README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="bin" />
+    <Folder Include="bin\node-gyp-bin" />
+    <Folder Include="doc" />
+    <Folder Include="doc\api" />
+    <Folder Include="doc\cli" />
+    <Folder Include="doc\files" />
+    <Folder Include="doc\misc" />
+    <Folder Include="html" />
+    <Folder Include="html\doc" />
+    <Folder Include="html\doc\api" />
+    <Folder Include="html\doc\cli" />
+    <Folder Include="html\doc\files" />
+    <Folder Include="html\doc\misc" />
+    <Folder Include="html\static" />
+    <Folder Include="lib" />
+    <Folder Include="lib\cache" />
+    <Folder Include="lib\utils" />
+    <Folder Include="lib\utils\completion" />
+    <Folder Include="man" />
+    <Folder Include="man\man1" />
+    <Folder Include="man\man3" />
+    <Folder Include="man\man5" />
+    <Folder Include="man\man7" />
+    <Folder Include="scripts" />
+    <Folder Include="test" />
+    <Folder Include="test\disabled" />
+    <Folder Include="test\disabled\bundlerecurs" />
+    <Folder Include="test\disabled\change-bin-1" />
+    <Folder Include="test\disabled\change-bin-1\bin" />
+    <Folder Include="test\disabled\change-bin-2" />
+    <Folder Include="test\disabled\change-bin-2\bin" />
+    <Folder Include="test\disabled\failer" />
+    <Folder Include="test\disabled\fast" />
+    <Folder Include="test\disabled\outdated-depth-integer" />
+    <Folder Include="test\disabled\package-bar" />
+    <Folder Include="test\disabled\package-config" />
+    <Folder Include="test\disabled\package-foo" />
+    <Folder Include="test\disabled\slow" />
+    <Folder Include="test\packages" />
+    <Folder Include="test\packages\npm-test-array-bin" />
+    <Folder Include="test\packages\npm-test-array-bin\bin" />
+    <Folder Include="test\packages\npm-test-blerg" />
+    <Folder Include="test\packages\npm-test-blerg3" />
+    <Folder Include="test\packages\npm-test-bundled-git" />
+    <Folder Include="test\packages\npm-test-dir-bin" />
+    <Folder Include="test\packages\npm-test-dir-bin\bin" />
+    <Folder Include="test\packages\npm-test-env-reader" />
+    <Folder Include="test\packages\npm-test-files" />
+    <Folder Include="test\packages\npm-test-files\sub" />
+    <Folder Include="test\packages\npm-test-ignore" />
+    <Folder Include="test\packages\npm-test-ignore\sub" />
+    <Folder Include="test\packages\npm-test-ignore-nested-nm" />
+    <Folder Include="test\packages\npm-test-ignore-nested-nm\lib" />
+    <Folder Include="test\packages\npm-test-ignore-nested-nm\lib\node_modules" />
+    <Folder Include="test\packages\npm-test-missing-bindir" />
+    <Folder Include="test\packages\npm-test-optional-deps" />
+    <Folder Include="test\packages\npm-test-platform" />
+    <Folder Include="test\packages\npm-test-platform-all" />
+    <Folder Include="test\packages\npm-test-private" />
+    <Folder Include="test\packages\npm-test-shrinkwrap" />
+    <Folder Include="test\packages\npm-test-test-package" />
+    <Folder Include="test\packages\npm-test-url-dep" />
+    <Folder Include="test\tap" />
+    <Folder Include="test\tap\circular-dep" />
+    <Folder Include="test\tap\circular-dep\minimist" />
+    <Folder Include="test\tap\dedupe" />
+    <Folder Include="test\tap\false_name" />
+    <Folder Include="test\tap\ignore-scripts" />
+    <Folder Include="test\tap\ignore-shrinkwrap" />
+    <Folder Include="test\tap\install-at-locally" />
+    <Folder Include="test\tap\install-at-locally\package@1.2.3" />
+    <Folder Include="test\tap\install-cli" />
+    <Folder Include="test\tap\install-save-exact" />
+    <Folder Include="test\tap\install-save-prefix" />
+    <Folder Include="test\tap\lifecycle-signal" />
+    <Folder Include="test\tap\ls-depth" />
+    <Folder Include="test\tap\ls-depth-unmet" />
+    <Folder Include="test\tap\outdated" />
+    <Folder Include="test\tap\outdated-depth" />
+    <Folder Include="test\tap\outdated-git" />
+    <Folder Include="test\tap\outdated-include-devdependencies" />
+    <Folder Include="test\tap\outdated-new-versions" />
+    <Folder Include="test\tap\package-with-peer-dep" />
+    <Folder Include="test\tap\peer-deps" />
+    <Folder Include="test\tap\peer-deps-invalid" />
+    <Folder Include="test\tap\peer-deps-without-package-json" />
+    <Folder Include="test\tap\prune" />
+    <Folder Include="test\tap\scripts-whitespace-windows" />
+    <Folder Include="test\tap\scripts-whitespace-windows\dep" />
+    <Folder Include="test\tap\scripts-whitespace-windows\dep\bin" />
+    <Folder Include="test\tap\shrinkwrap-dev-dependency" />
+    <Folder Include="test\tap\shrinkwrap-empty-deps" />
+    <Folder Include="test\tap\shrinkwrap-shared-dev-dependency" />
+    <Folder Include="test\tap\startstop" />
+    <Folder Include="test\tap\uninstall-package" />
+    <Folder Include="test\tap\update-save" />
+    <Folder Include="test\tap\url-dependencies" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="$(VSToolsPath)\Node.js Tools\Microsoft.NodejsTools.targets" />
+  <ProjectExtensions>
+    <VisualStudio>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}">
+        <WebProjectProperties>
+          <UseIIS>False</UseIIS>
+          <AutoAssignPort>True</AutoAssignPort>
+          <DevelopmentServerPort>0</DevelopmentServerPort>
+          <DevelopmentServerVPath>/</DevelopmentServerVPath>
+          <IISUrl>http://localhost:48022/</IISUrl>
+          <NTLMAuthentication>False</NTLMAuthentication>
+          <UseCustomServer>True</UseCustomServer>
+          <CustomServerUrl>http://localhost:1337</CustomServerUrl>
+          <SaveServerSettingsInUserFile>False</SaveServerSettingsInUserFile>
+        </WebProjectProperties>
+      </FlavorProperties>
+      <FlavorProperties GUID="{349c5851-65df-11da-9384-00065b846f21}" User="">
+        <WebProjectProperties>
+          <StartPageUrl>
+          </StartPageUrl>
+          <StartAction>CurrentPage</StartAction>
+          <AspNetDebugging>True</AspNetDebugging>
+          <SilverlightDebugging>False</SilverlightDebugging>
+          <NativeDebugging>False</NativeDebugging>
+          <SQLDebugging>False</SQLDebugging>
+          <ExternalProgram>
+          </ExternalProgram>
+          <StartExternalURL>
+          </StartExternalURL>
+          <StartCmdLineArguments>
+          </StartCmdLineArguments>
+          <StartWorkingDirectory>
+          </StartWorkingDirectory>
+          <EnableENC>False</EnableENC>
+          <AlwaysStartWebServerOnDebug>False</AlwaysStartWebServerOnDebug>
+        </WebProjectProperties>
+      </FlavorProperties>
+    </VisualStudio>
+  </ProjectExtensions>
+</Project>
