@@ -20,10 +20,16 @@ function fetch (remote, local, headers, cb) {
   if (typeof cb !== "function") cb = headers, headers = {}
   cb = once(cb)
   log.verbose("fetch", "to=", local)
-  mkdir(path.dirname(local), function (er, made) {
-    if (er) return cb(er)
-    fetch_(remote, local, headers, cb)
-  })
+  if (local) {
+    mkdir(path.dirname(local), function (er, made) {
+      if (er) return cb(er)
+      fetch_(remote, local, headers, cb)
+    })
+  } 
+  else {
+    // Only fetch headers (with an HEAD call)
+    head_(remote, headers, cb)
+  }
 }
 
 function fetch_ (remote, local, headers, cb) {
@@ -35,7 +41,10 @@ function fetch_ (remote, local, headers, cb) {
     fstr.destroy()
   })
 
-  var req = makeRequest(remote, fstr, headers)
+  var req = makeRequest(remote, "GET", headers, function(er) {
+      return fstr.emit("error", er) 
+  })
+  req.pipe(fstr)
   req.on("response", function (res) {
     log.http(res.statusCode, remote)
     response = res
@@ -62,15 +71,30 @@ function fetch_ (remote, local, headers, cb) {
   })
 }
 
-function makeRequest (remote, fstr, headers) {
+function head_ (remote, headers, cb) {
+  var req = makeRequest(remote, "HEAD", headers, function(e) {
+    cb(e)
+  })
+  req.on("response", function (response) {
+    var er
+    log.http(response.statusCode, remote)
+    if (response && response.statusCode && response.statusCode >= 400) {
+      er = new Error(response.statusCode + " " 
+                    + require("http").STATUS_CODES[response.statusCode])
+    }
+    cb(er, response)
+  })  
+}
+
+function makeRequest (remote, method, headers, err) {
   remote = url.parse(remote)
-  log.http("GET", remote.href)
+  log.http(method, remote.href)
   regHost = regHost || url.parse(npm.config.get("registry")).host
 
   if (remote.host === regHost && npm.config.get("always-auth")) {
     remote.auth = new Buffer( npm.config.get("_auth")
                             , "base64" ).toString("utf8")
-    if (!remote.auth) return fstr.emit("error", new Error(
+    if (!remote.auth) return err(new Error(
       "Auth required and none provided. Please run 'npm adduser'"))
   }
 
@@ -84,23 +108,24 @@ function makeRequest (remote, fstr, headers) {
     sessionToken = crypto.randomBytes(8).toString("hex")
     npm.registry.sessionToken = sessionToken
   }
-
+    
+  headers = headers || {}    
+  headers["user-agent"] = npm.config.get("user-agent")
+  headers["npm-session"] = sessionToken
+  headers.referer = npm.registry.refer
+ 
   var ca = remote.host === regHost ? npm.config.get("ca") : undefined
   var opts = { url: remote
              , proxy: proxy
              , strictSSL: npm.config.get("strict-ssl")
              , rejectUnauthorized: npm.config.get("strict-ssl")
              , ca: ca
-             , headers:
-               { "user-agent": npm.config.get("user-agent")
-               , "npm-session": sessionToken
-               , referer: npm.registry.refer
-               }
+             , headers: headers
+             , method: method
              }
   var req = request(opts)
   req.on("error", function (er) {
-    fstr.emit("error", er)
+    err(er)
   })
-  req.pipe(fstr)
   return req
 }

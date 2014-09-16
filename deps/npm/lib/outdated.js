@@ -29,6 +29,8 @@ var path = require("path")
   , npm = require("./npm.js")
   , url = require("url")
   , isGitUrl = require("./utils/is-git-url.js")
+  , isHttpUrl = require("./utils/is-http-url.js")
+  , checkRemoteTarball = require("./cache/check-remote-tarball.js")
   , color = require("ansicolors")
   , styles = require("ansistyles")
   , table = require("text-table")
@@ -204,7 +206,7 @@ function outdated_ (args, dir, parentHas, depth, cb) {
       var jsonFile = path.resolve(dir, "node_modules", pkg, "package.json")
       readJson(jsonFile, function (er, d) {
         if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
-        cb(null, er ? [] : [[d.name, d.version, d._from]])
+        cb(null, er ? [] : [[d.name, d.version, d._from, d._remote]])
       })
     }, function (er, pvs) {
       if (er) return cb(er)
@@ -212,7 +214,8 @@ function outdated_ (args, dir, parentHas, depth, cb) {
       pvs.forEach(function (pv) {
         has[pv[0]] = {
           version: pv[1],
-          from: pv[2]
+          from: pv[2],
+          remoteOpts: pv[3]
         }
       })
 
@@ -266,6 +269,21 @@ function shouldUpdate (args, dir, dep, has, req, depth, cb) {
 
   if (isGitUrl(url.parse(req)))
     return doIt("git", "git")
+    
+  if (isHttpUrl(url.parse(req)) && curr.remoteOpts) {
+    // An external HTTP(s) request can be checked using a HEAD request
+    checkRemoteTarball(req, curr.remoteOpts, function (er, d) {
+      // Never returns the error, fail-safe approach, since HEAD call could be not implemented
+      if (er || !d) {
+        // Skip, up-to-date or error fetching HEAD
+        return skip()
+      }
+      else {
+        // Etag/date checked, and found outdated. Fetch it again
+        return doIt("http", "http")
+      }
+    })
+  }
 
   // search for the latest package
   var uri = url.resolve(npm.config.get("registry"), dep)

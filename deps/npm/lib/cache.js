@@ -66,6 +66,7 @@ var npm = require("./npm.js")
   , tar = require("./utils/tar.js")
   , fileCompletion = require("./utils/completion/file-completion.js")
   , isGitUrl = require("./utils/is-git-url.js")
+  , isHttpUrl = require("./utils/is-http-url.js")
   , deprCheck = require("./utils/depr-check.js")
   , addNamed = require("./cache/add-named.js")
   , addLocal = require("./cache/add-local.js")
@@ -262,22 +263,17 @@ function add (args, cb) {
     return maybeFile(spec, cb)
   }
   else {
-    switch (p.protocol) {
-      case "http:":
-      case "https:":
-        return addRemoteTarball(spec, { name: name }, null, cb)
+    if (isHttpUrl(p)) return addRemoteTarball(spec, { name: name }, null, cb)
 
-      default:
-        if (isGitUrl(p)) return addRemoteGit(spec, p, false, cb)
+    if (isGitUrl(p)) return addRemoteGit(spec, p, false, cb)
 
-        // if we have a name and a spec, then try name@spec
-        if (name) {
-          addNamed(name, spec, null, cb)
-        }
-        // if not, then try just spec (which may try name@"" if not found)
-        else {
-          addLocal(spec, {}, cb)
-        }
+    // if we have a name and a spec, then try name@spec
+    if (name) {
+      addNamed(name, spec, null, cb)
+    }
+    // if not, then try just spec (which may try name@"" if not found)
+    else {
+      addLocal(spec, {}, cb)
     }
   }
 }
