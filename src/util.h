@@ -31,6 +31,8 @@ extern v8::Persistent<v8::String> process_symbol;
 extern v8::Persistent<v8::String> domain_symbol;
 
 inline void SetActiveDomain(v8::Persistent<v8::Object> obj) {
+  assert(!process_symbol.IsEmpty());
+  assert(!domain_symbol.IsEmpty());
   v8::Local<v8::Value> domain = v8::Context::GetCurrent()
          ->Global()
          ->Get(process_symbol)
