@@ -64,6 +64,10 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
 
 namespace node {
 
+// defined in node.cc
+extern v8::Persistent<v8::String> process_symbol;
+extern v8::Persistent<v8::String> domain_symbol;
+
 const char* root_certs[] = {
 #include "node_root_certs.h"  // NOLINT(build/include_order)
   NULL
@@ -3982,8 +3986,19 @@ Handle<Value> PBKDF2(const Arguments& args) {
   req->keylen = keylen;
 
   if (args[4]->IsFunction()) {
+    Local<Value> domain = Context::GetCurrent()
+                                  ->Global()
+                                  ->Get(process_symbol)
+                                  ->ToObject()
+                                  ->Get(domain_symbol);
+
     req->obj = Persistent<Object>::New(Object::New());
     req->obj->Set(String::New("ondone"), args[4]);
+
+    if (!domain->IsUndefined()) {
+      req->obj->Set(domain_symbol, domain);
+    }
+
     uv_queue_work(uv_default_loop(),
                   &req->work_req,
                   EIO_PBKDF2,
@@ -4111,6 +4126,16 @@ Handle<Value> RandomBytes(const Arguments& args) {
   if (args[1]->IsFunction()) {
     req->obj_ = Persistent<Object>::New(Object::New());
     req->obj_->Set(String::New("ondone"), args[1]);
+    Local<Value> domain = Context::GetCurrent()
+                                  ->Global()
+                                  ->Get(process_symbol)
+                                  ->ToObject()
+                                  ->Get(domain_symbol);
+
+
+    if (!domain->IsUndefined()) {
+      req->obj_->Set(domain_symbol, domain);
+    }
 
     uv_queue_work(uv_default_loop(),
                   &req->work_req_,
