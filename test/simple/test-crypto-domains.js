@@ -21,11 +21,17 @@
 
 var crypto = require('crypto');
 var domain = require('domain');
+var assert = require('assert');
 var d = domain.create();
-d.on('error', function (e) { console.log('got', e.message); });
+var expect = ['pbkdf2', 'randomBytes', 'pseudoRandomBytes']
+
+d.on('error', function (e) {
+  assert.equal(e.message, expect.shift());
+});
+
 d.run(function () {
   crypto.pbkdf2('a', 'b', 1, 8, function () {
-    throw new Error('pdbkdf2');
+    throw new Error('pbkdf2');
   });
 
   crypto.randomBytes(4, function () {
