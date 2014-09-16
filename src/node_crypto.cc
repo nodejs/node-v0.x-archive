@@ -64,10 +64,6 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
 
 namespace node {
 
-// defined in node.cc
-extern v8::Persistent<v8::String> process_symbol;
-extern v8::Persistent<v8::String> domain_symbol;
-
 const char* root_certs[] = {
 #include "node_root_certs.h"  // NOLINT(build/include_order)
   NULL
