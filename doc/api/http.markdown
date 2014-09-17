@@ -489,7 +489,7 @@ upload a file with a POST request, then write to the `ClientRequest` object.
 
 Example:
 
-    var post_data = querystring.stringify({
+    var postData = querystring.stringify({
       'msg' : 'Hello World!'
     });
 
@@ -500,7 +500,7 @@ Example:
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': post_data.length
+        'Content-Length': postData.length
       }
     };
 
@@ -518,7 +518,7 @@ Example:
     });
 
     // write data to request body
-    req.write(post_data);
+    req.write(postData);
     req.end();
 
 Note that in the example `req.end()` was called. With `http.request()` one
