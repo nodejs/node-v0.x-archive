@@ -518,7 +518,7 @@ Example:
     });
 
     // write data to request body
-    post_req.write(post_data);
+    req.write(post_data);
     req.end();
 
 Note that in the example `req.end()` was called. With `http.request()` one
