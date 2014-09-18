@@ -2495,7 +2495,7 @@ static void DebugPortSetter(Local<String> property,
                             const PropertyCallbackInfo<void>& info) {
   Environment* env = Environment::GetCurrent(info.GetIsolate());
   HandleScope scope(env->isolate());
-  debug_port = value->NumberValue();
+  debug_port = static_cast<int>(value->NumberValue());
 }
 
 
