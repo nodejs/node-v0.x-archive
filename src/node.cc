@@ -3523,7 +3523,7 @@ int EmitExit(Environment* env) {
   process_object->Set(env->exiting_string(), True(env->isolate()));
 
   Handle<String> exitCode = env->exit_code_string();
-  int code = process_object->Get(exitCode)->IntegerValue();
+  int code = static_cast<int>(process_object->Get(exitCode)->IntegerValue());
 
   Local<Value> args[] = {
     env->exit_string(),
