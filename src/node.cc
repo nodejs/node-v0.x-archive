@@ -3533,7 +3533,7 @@ int EmitExit(Environment* env) {
   MakeCallback(env, process_object, "emit", ARRAY_SIZE(args), args);
 
   // Reload exit code, it may be changed by `emit('exit')`
-  return process_object->Get(exitCode)->IntegerValue();
+  return static_cast<int>(process_object->Get(exitCode)->IntegerValue());
 }
 
 
