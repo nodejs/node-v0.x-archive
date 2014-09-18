@@ -1934,7 +1934,7 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
 void Exit(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
-  exit(args[0]->IntegerValue());
+  exit(static_cast<int>(args[0]->IntegerValue()));
 }
 
 
@@ -1986,7 +1986,7 @@ void Kill(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Bad argument.");
   }
 
-  int pid = args[0]->IntegerValue();
+  int pid = static_cast<int>(args[0]->IntegerValue());
   int sig = args[1]->Int32Value();
   int err = uv_kill(pid, sig);
   args.GetReturnValue().Set(err);
