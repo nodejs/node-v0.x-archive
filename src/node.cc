@@ -3368,7 +3368,7 @@ void Init(int* argc,
           int* exec_argc,
           const char*** exec_argv) {
   // Initialize prog_start_time to get relative uptime.
-  prog_start_time = uv_now(uv_default_loop());
+  prog_start_time = static_cast<double>(uv_now(uv_default_loop()));
 
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
