@@ -138,6 +138,8 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
     return ret;
   }
 
+  env()->isolate()->RunMicrotasks();
+
   if (tick_info->length() == 0) {
     tick_info->set_index(0);
     return ret;
@@ -200,6 +202,8 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
   if (tick_info->in_tick()) {
     return ret;
   }
+
+  env()->isolate()->RunMicrotasks();
 
   if (tick_info->length() == 0) {
     tick_info->set_index(0);
