@@ -564,6 +564,12 @@ Buffered data will be flushed either at `.uncork()` or at `.end()` call.
 
 Flush all data, buffered since `.cork()` call.
 
+#### writable.setDefaultEncoding(encoding)
+
+`encoding` {String} The new default encoding
+
+Sets the default encoding for a writable stream
+
 #### writable.end([chunk], [encoding], [callback])
 
 * `chunk` {String | Buffer} Optional data to write
