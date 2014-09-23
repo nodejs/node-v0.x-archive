@@ -66,6 +66,10 @@
 
 #include "node_object_wrap.h"
 
+#ifndef NODE_WANT_INTERNALS
+# define NODE_WANT_INTERNALS 0
+#endif
+
 #if NODE_WANT_INTERNALS
 # include "node_internals.h"
 #endif
