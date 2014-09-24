@@ -52,8 +52,16 @@ function test(headers) {
         gotEnd = true;
       });
       response.resume();
+      response.on('chunkedRemainingBytes', function(bytes) {
+        console.error('we had extra bytes', bytes);
+        assert(false);
+      });
     });
     request.end();
+    request.on('error', function() {
+      console.error('we should not be getting a client error');
+      assert(false);
+    });
   });
 
   process.on('exit', function() {
