@@ -37,8 +37,12 @@ if (process.platform === 'win32') {
   exports.PIPE = exports.tmpDir + '/test.sock';
   exports.opensslCli = path.join(process.execPath, '..', 'openssl-cli');
 }
-if (!fs.existsSync(exports.opensslCli))
+
+try {
+  fs.statSync(exports.opensslCli);
+} catch (err) {
   exports.opensslCli = false;
+}
 
 if (process.platform === 'win32') {
   exports.faketimeCli = false;

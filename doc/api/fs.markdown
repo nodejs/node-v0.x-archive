@@ -641,6 +641,8 @@ callback, and have some fallback logic if it is null.
 
 ## fs.exists(path, callback)
 
+This function is **deprecated**.
+
 Test whether or not the given path exists by checking with the file system.
 Then call the `callback` argument with either true or false.  Example:
 
@@ -657,6 +659,8 @@ file between the calls to `fs.exists()` and `fs.open()`.  Just open the file
 and handle the error when it's not there.
 
 ## fs.existsSync(path)
+
+This function is **deprecated**.
 
 Synchronous version of `fs.exists`.
 
