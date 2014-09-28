@@ -292,6 +292,11 @@ parser.add_option('--xcode',
     dest='use_xcode',
     help='generate build files for use with xcode')
 
+parser.add_option('--verbose',
+    action='store_true',
+    dest='is_verbose',
+    help='will output some more info')
+
 (options, args) = parser.parse_args()
 
 
@@ -858,11 +863,14 @@ output = {
   'variables': variables,
   'target_defaults': output
 }
-pprint.pprint(output, indent=2)
+
+if options.is_verbose:
+  pprint.pprint(output, indent=2)
 
 def write(filename, data):
   filename = os.path.join(root_dir, filename)
-  print 'creating ', filename
+  if options.is_verbose:
+    print 'creating ', filename
   f = open(filename, 'w+')
   f.write(data)
 
@@ -896,5 +904,8 @@ else:
   gyp_args += ['-f', 'make-' + flavor]
 
 gyp_args += args
+
+if options.is_verbose:
+  print(' '.join(gyp_args))
 
 subprocess.call(gyp_args)
