@@ -77,12 +77,14 @@
 
       'dependencies': [
         'node_js2c#host',
+        'deps/node_debug_agent/debug-agent.gyp:node_debug_agent',
       ],
 
       'include_dirs': [
         'src',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
+        'deps/node_debug_agent',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
 

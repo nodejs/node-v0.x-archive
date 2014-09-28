@@ -53,9 +53,13 @@
 #include "string_bytes.h"
 #include "util.h"
 #include "uv.h"
-#include "v8-debug.h"
-#include "v8-profiler.h"
 #include "zlib.h"
+
+// v8 includes work more consistantly when treated as global
+// since v8/v8@53eafd0fded347b8e320af244197a6b9c61141ca
+#include <debug-agent.h>
+#include <v8-debug.h>
+#include <v8-profiler.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -3127,15 +3131,11 @@ static void DispatchMessagesDebugAgentCallback() {
 
 
 // Called from the main thread.
-static void EnableDebug(Isolate* isolate, bool wait_connect) {
+static void EnableDebug(Isolate* isolate, bool wait) {
   assert(debugger_running == false);
   Isolate::Scope isolate_scope(isolate);
   HandleScope handle_scope(isolate);
-  v8::Debug::SetDebugMessageDispatchHandler(DispatchMessagesDebugAgentCallback,
-                                            false);
-  debugger_running = v8::Debug::EnableAgent("node " NODE_VERSION,
-                                            debug_port,
-                                            wait_connect);
+  debugger_running = DebuggerAgent::StartAgent(isolate, debug_port, wait);
   if (debugger_running == false) {
     fprintf(stderr, "Starting debugger on port %d failed\n", debug_port);
     fflush(stderr);
@@ -3196,8 +3196,7 @@ static void InstallEarlyDebugSignalHandler() {
 
 static void EnableDebugSignalHandler(int signo) {
   // Call only async signal-safe functions here!
-  v8::Debug::DebugBreak(*static_cast<Isolate* volatile*>(&node_isolate));
-  uv_async_send(&dispatch_debug_messages_async);
+  v8::Debug::DebugBreak(Isolate::GetCurrent());
 }
 
 
@@ -3246,10 +3245,12 @@ static int RegisterDebugSignalHandler() {
 
 #ifdef _WIN32
 DWORD WINAPI EnableDebugThreadProc(void* arg) {
-  v8::Debug::DebugBreak(*static_cast<Isolate* volatile*>(&node_isolate));
-  uv_async_send(&dispatch_debug_messages_async);
+  v8::Debug::DebugBreak(Isolate::GetCurrent());
   return 0;
 }
+
+
+inline void InstallEarlyDebugSignalHandler() {}
 
 
 static int GetDebugSignalHandlerMappingName(DWORD pid, wchar_t* buf,
@@ -3399,7 +3400,7 @@ static void DebugPause(const FunctionCallbackInfo<Value>& args) {
 
 static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
   if (debugger_running) {
-    v8::Debug::DisableAgent();
+    DebuggerAgent::StopAgent();
     debugger_running = false;
   }
 }
@@ -3706,7 +3707,6 @@ int Start(int argc, char** argv) {
       RunAtExit(env);
     }
     env->Dispose();
-    env = NULL;
   }
 
   CHECK_NE(node_isolate, NULL);
