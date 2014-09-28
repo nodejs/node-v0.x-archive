@@ -15,21 +15,18 @@
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
 
-    # Enable V8's post-mortem debugging only on unix flavors.
     'conditions': [
       ['OS == "win"', {
         'os_posix': 0,
-        'v8_postmortem_support': 'false'
       }, {
         'os_posix': 1,
-        'v8_postmortem_support': 'true'
       }],
       ['GENERATOR == "ninja" or OS== "mac"', {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj',
-        'V8_BASE': '<(PRODUCT_DIR)/libv8_base.<(target_arch).a',
+        'V8_BASE': '<(PRODUCT_DIR)/libv8_base.a',
       }, {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj.target',
-        'V8_BASE': '<(PRODUCT_DIR)/obj.target/deps/v8/tools/gyp/libv8_base.<(target_arch).a',
+        'V8_BASE': '<(PRODUCT_DIR)/obj.target/deps/v8/tools/gyp/libv8_base.a',
       }],
     ],
   },
@@ -172,8 +169,9 @@
         'ldflags': [ '-pthread' ],
       }],
       [ 'OS in "linux freebsd openbsd solaris android"', {
-        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
-        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
+        # flags reconciled with v8/build/standalone.gypi
+        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', '-fno-exceptions' ],
+        'cflags_cc': [ '-fno-rtti', '-fno-exceptions', '-std=gnu++0x' ],
         'ldflags': [ '-rdynamic' ],
         'target_conditions': [
           ['_type=="static_library"', {

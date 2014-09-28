@@ -49,9 +49,12 @@
 #include "string_bytes.h"
 #include "util.h"
 #include "uv.h"
-#include "v8-debug.h"
-#include "v8-profiler.h"
 #include "zlib.h"
+
+// v8 includes work more consistantly when treated as global
+// since v8/v8@53eafd0fded347b8e320af244197a6b9c61141ca
+#include <libplatform/libplatform.h>
+#include <v8-profiler.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -95,7 +98,6 @@ using v8::ArrayBuffer;
 using v8::Boolean;
 using v8::Context;
 using v8::EscapableHandleScope;
-using v8::Exception;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -105,7 +107,6 @@ using v8::HeapStatistics;
 using v8::Integer;
 using v8::Isolate;
 using v8::Local;
-using v8::Locker;
 using v8::Message;
 using v8::Number;
 using v8::Object;
@@ -141,9 +142,7 @@ bool no_deprecation = false;
 // process-relative uptime base, initialized at start-up
 static double prog_start_time;
 static bool debugger_running;
-static uv_async_t dispatch_debug_messages_async;
 
-static Isolate* node_isolate = NULL;
 
 int WRITE_UTF8_FLAGS = v8::String::HINT_MANY_WRITES_EXPECTED |
                        v8::String::NO_NULL_TERMINATION;
@@ -746,9 +745,9 @@ Local<Value> ErrnoException(Isolate* isolate,
         String::Concat(cons3, String::NewFromUtf8(env->isolate(), path));
     Local<String> cons5 =
         String::Concat(cons4, FIXED_ONE_BYTE_STRING(env->isolate(), "'"));
-    e = Exception::Error(cons5);
+    e = v8::Exception::Error(cons5);
   } else {
-    e = Exception::Error(cons2);
+    e = v8::Exception::Error(cons2);
   }
 
   Local<Object> obj = e->ToObject();
@@ -808,9 +807,9 @@ Local<Value> UVException(Isolate* isolate,
         String::Concat(cons3, path_str);
     Local<String> cons5 =
         String::Concat(cons4, FIXED_ONE_BYTE_STRING(env->isolate(), "'"));
-    e = Exception::Error(cons5);
+    e = v8::Exception::Error(cons5);
   } else {
-    e = Exception::Error(cons2);
+    e = v8::Exception::Error(cons2);
   }
 
   Local<Object> obj = e->ToObject();
@@ -878,9 +877,9 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
         String::Concat(cons1, String::NewFromUtf8(isolate, path));
     Local<String> cons3 =
         String::Concat(cons2, FIXED_ONE_BYTE_STRING(isolate, "'"));
-    e = Exception::Error(cons3);
+    e = v8::Exception::Error(cons3);
   } else {
-    e = Exception::Error(message);
+    e = v8::Exception::Error(message);
   }
 
   Local<Object> obj = e->ToObject();
@@ -2079,7 +2078,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
     // Windows needs to add the filename into the error message
     errmsg = String::Concat(errmsg, args[1]->ToString());
 #endif  // _WIN32
-    env->isolate()->ThrowException(Exception::Error(errmsg));
+    env->isolate()->ThrowException(v8::Exception::Error(errmsg));
     return;
   }
 
@@ -2582,15 +2581,13 @@ void StopProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
 
 #define READONLY_PROPERTY(obj, str, var)                                      \
   do {                                                                        \
-    obj->Set(OneByteString(env->isolate(), str), var, v8::ReadOnly);          \
+    obj->ForceSet(OneByteString(env->isolate(), str), var, v8::ReadOnly);     \
   } while (0)
 
 
 void SetupProcessObject(Environment* env,
-                        int argc,
-                        const char* const* argv,
-                        int exec_argc,
-                        const char* const* exec_argv) {
+                        int argc, const char* const* argv,
+                        int exec_argc, const char* const* exec_argv) {
   HandleScope scope(env->isolate());
 
   Local<Object> process = env->process_object();
@@ -3078,63 +3075,6 @@ static void ParseArgs(int* argc,
 }
 
 
-// Called from V8 Debug Agent TCP thread.
-static void DispatchMessagesDebugAgentCallback() {
-  uv_async_send(&dispatch_debug_messages_async);
-}
-
-
-// Called from the main thread.
-static void EnableDebug(Isolate* isolate, bool wait_connect) {
-  assert(debugger_running == false);
-  Isolate::Scope isolate_scope(isolate);
-  HandleScope handle_scope(isolate);
-  v8::Debug::SetDebugMessageDispatchHandler(DispatchMessagesDebugAgentCallback,
-                                            false);
-  debugger_running = v8::Debug::EnableAgent("node " NODE_VERSION,
-                                            debug_port,
-                                            wait_connect);
-  if (debugger_running == false) {
-    fprintf(stderr, "Starting debugger on port %d failed\n", debug_port);
-    fflush(stderr);
-    return;
-  }
-  fprintf(stderr, "Debugger listening on port %d\n", debug_port);
-  fflush(stderr);
-
-  if (isolate == NULL)
-    return;  // Still starting up.
-  Local<Context> context = isolate->GetCurrentContext();
-  if (context.IsEmpty())
-    return;  // Still starting up.
-  Environment* env = Environment::GetCurrent(context);
-
-  // Assign environment to the debugger's context
-  env->AssignToContext(v8::Debug::GetDebugContext());
-
-  Context::Scope context_scope(env->context());
-  Local<Object> message = Object::New(env->isolate());
-  message->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "cmd"),
-               FIXED_ONE_BYTE_STRING(env->isolate(), "NODE_DEBUG_ENABLED"));
-  Local<Value> argv[] = {
-    FIXED_ONE_BYTE_STRING(env->isolate(), "internalMessage"),
-    message
-  };
-  MakeCallback(env, env->process_object(), "emit", ARRAY_SIZE(argv), argv);
-}
-
-
-// Called from the main thread.
-static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle) {
-  if (debugger_running == false) {
-    fprintf(stderr, "Starting debugger agent.\n");
-    EnableDebug(node_isolate, false);
-  }
-  Isolate::Scope isolate_scope(node_isolate);
-  v8::Debug::ProcessDebugMessages();
-}
-
-
 #ifdef __POSIX__
 static volatile sig_atomic_t caught_early_debug_signal;
 
@@ -3153,9 +3093,6 @@ static void InstallEarlyDebugSignalHandler() {
 
 
 static void EnableDebugSignalHandler(int signo) {
-  // Call only async signal-safe functions here!
-  v8::Debug::DebugBreak(*static_cast<Isolate* volatile*>(&node_isolate));
-  uv_async_send(&dispatch_debug_messages_async);
 }
 
 
@@ -3204,10 +3141,11 @@ static int RegisterDebugSignalHandler() {
 
 #ifdef _WIN32
 DWORD WINAPI EnableDebugThreadProc(void* arg) {
-  v8::Debug::DebugBreak(*static_cast<Isolate* volatile*>(&node_isolate));
-  uv_async_send(&dispatch_debug_messages_async);
   return 0;
 }
+
+
+inline void InstallEarlyDebugSignalHandler() {}
 
 
 static int GetDebugSignalHandlerMappingName(DWORD pid, wchar_t* buf,
@@ -3355,11 +3293,46 @@ static void DebugPause(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
+static void _DebugEnd() {
   if (debugger_running) {
-    v8::Debug::DisableAgent();
     debugger_running = false;
   }
+}
+
+
+static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
+  _DebugEnd();
+}
+
+
+// Called from the main thread.
+static void SetupDebugger(Environment* env, bool wait_connect) {
+  if (!use_debug_agent) {
+    RegisterDebugSignalHandler();
+    return;
+  }
+
+  // If the --debug flag was specified then initialize the debug thread.
+  assert(debugger_running == false);
+  HandleScope handle_scope(env->isolate());
+  debugger_running = false;
+  if (debugger_running == false) {
+    fprintf(stderr, "Starting debugger on port %d failed\n", debug_port);
+    fflush(stderr);
+    return;
+  }
+  fprintf(stderr, "Debugger listening on port %d\n", debug_port);
+  fflush(stderr);
+
+  Context::Scope context_scope(env->context());
+  Local<Object> message = Object::New(env->isolate());
+  message->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "cmd"),
+    FIXED_ONE_BYTE_STRING(env->isolate(), "NODE_DEBUG_ENABLED"));
+  Local<Value> argv[] = {
+    FIXED_ONE_BYTE_STRING(env->isolate(), "internalMessage"),
+    message
+  };
+  MakeCallback(env, env->process_object(), "emit", ARRAY_SIZE(argv), argv);
 }
 
 
@@ -3373,12 +3346,6 @@ void Init(int* argc,
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
 
-  // init async debug messages dispatching
-  // FIXME(bnoordhuis) Should be per-isolate or per-context, not global.
-  uv_async_init(uv_default_loop(),
-                &dispatch_debug_messages_async,
-                DispatchDebugMessagesAsyncCallback);
-  uv_unref(reinterpret_cast<uv_handle_t*>(&dispatch_debug_messages_async));
 
 #if defined(NODE_V8_OPTIONS)
   // Should come before the call to V8::SetFlagsFromCommandLine()
@@ -3425,9 +3392,12 @@ void Init(int* argc,
 
   V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
 
-  // Fetch a reference to the main isolate, so we have a reference to it
-  // even when we need it to access it from another (debugger) thread.
-  node_isolate = Isolate::GetCurrent();
+
+#if HAVE_OPENSSL
+  // V8 on Windows doesn't have a good source of entropy. Seed it from
+  // OpenSSL's pool.
+  V8::SetEntropySource(crypto::EntropySource);
+#endif
 
 #ifdef __POSIX__
   // Raise the open file descriptor limit.
@@ -3457,16 +3427,6 @@ void Init(int* argc,
   RegisterSignalHandler(SIGINT, SignalExit, true);
   RegisterSignalHandler(SIGTERM, SignalExit, true);
 #endif  // __POSIX__
-
-  V8::SetFatalErrorHandler(node::OnFatalError);
-  V8::AddMessageListener(OnMessage);
-
-  // If the --debug flag was specified then initialize the debug thread.
-  if (use_debug_agent) {
-    EnableDebug(node_isolate, debug_wait_connect);
-  } else {
-    RegisterDebugSignalHandler();
-  }
 }
 
 
@@ -3584,18 +3544,38 @@ Environment* CreateEnvironment(Isolate* isolate,
 }
 
 
-int Start(int argc, char** argv) {
-  const char* replaceInvalid = getenv("NODE_INVALID_UTF8");
 
-  if (replaceInvalid == NULL)
+int LOOP(Environment* env) {
+  bool more;
+  do {
+    more = uv_run(env->event_loop(), UV_RUN_ONCE);
+    if (more == false) {
+      EmitBeforeExit(env);
+
+      // Emit `beforeExit` if the loop became alive either after emitting
+      // event, or after running some callbacks.
+      more = uv_loop_alive(env->event_loop());
+      if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
+        more = true;
+    }
+  } while (more == true);
+
+  int errorcode = EmitExit(env);
+  RunAtExit(env);
+
+  return errorcode;
+}
+
+
+
+int Start(int argc, char** argv) {
+  assert(argc > 0);
+
+  if (getenv("NODE_INVALID_UTF8") == NULL)
     WRITE_UTF8_FLAGS |= String::REPLACE_INVALID_UTF8;
 
-#if !defined(_WIN32)
   // Try hard not to lose SIGUSR1 signals during the bootstrap process.
   InstallEarlyDebugSignalHandler();
-#endif
-
-  assert(argc > 0);
 
   // Hack around with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
@@ -3606,61 +3586,37 @@ int Start(int argc, char** argv) {
   const char** exec_argv;
   Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv);
 
-#if HAVE_OPENSSL
-  // V8 on Windows doesn't have a good source of entropy. Seed it from
-  // OpenSSL's pool.
-  V8::SetEntropySource(crypto::EntropySource);
-#endif
-
-  int code;
+  v8::Platform* platform = v8::platform::CreateDefaultPlatform();
+  v8::V8::InitializePlatform(platform);
   V8::Initialize();
+  v8::Isolate* isolate = v8::Isolate::New();
+  int errorcode;
   {
-    Locker locker(node_isolate);
-    Isolate::Scope isolate_scope(node_isolate);
-    HandleScope handle_scope(node_isolate);
-    Local<Context> context = Context::New(node_isolate);
-    Environment* env = CreateEnvironment(
-        node_isolate, context, argc, argv, exec_argc, exec_argv);
-    // Assign env to the debugger's context
-    if (debugger_running) {
-      HandleScope scope(env->isolate());
-      env->AssignToContext(v8::Debug::GetDebugContext());
-    }
-    // This Context::Scope is here so EnableDebug() can look up the current
-    // environment with Environment::GetCurrent().
-    // TODO(bnoordhuis) Reorder the debugger initialization logic so it can
-    // be removed.
-    {
-      Context::Scope context_scope(env->context());
-      bool more;
-      do {
-        more = uv_run(env->event_loop(), UV_RUN_ONCE);
-        if (more == false) {
-          EmitBeforeExit(env);
+    v8::Isolate::Scope isolate_scope(isolate);
+    v8::V8::SetFatalErrorHandler(node::OnFatalError);
+    v8::V8::AddMessageListener(OnMessage);
+    v8::Locker locker(isolate);
+    HandleScope handle_scope(isolate);
+    Local<Context> context = Context::New(isolate);
 
-          // Emit `beforeExit` if the loop became alive either after emitting
-          // event, or after running some callbacks.
-          more = uv_loop_alive(env->event_loop());
-          if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
-            more = true;
-        }
-      } while (more == true);
-      code = EmitExit(env);
-      RunAtExit(env);
-    }
+    Environment* env = CreateEnvironment(isolate, context,
+                                         argc, argv,
+                                         exec_argc, exec_argv);
+
+    // Setup the debugger before we start the loop
+    SetupDebugger(env, debug_wait_connect);
+
+    // and loop ...
+    errorcode = LOOP(env);
+
+    // cleanup;
     env->Dispose();
-    env = NULL;
+    delete[] exec_argv;
   }
+  isolate->Dispose();
+  v8::V8::Dispose();
 
-  CHECK_NE(node_isolate, NULL);
-  node_isolate->Dispose();
-  node_isolate = NULL;
-  V8::Dispose();
-
-  delete[] exec_argv;
-  exec_argv = NULL;
-
-  return code;
+  return errorcode;
 }
 
 
