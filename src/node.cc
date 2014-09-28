@@ -53,7 +53,9 @@
 
 // v8 includes work more consistantly when treated as global
 // since v8/v8@53eafd0fded347b8e320af244197a6b9c61141ca
+#include <debug-agent.h>
 #include <libplatform/libplatform.h>
+#include <v8-debug.h>
 #include <v8-profiler.h>
 
 #include <assert.h>
@@ -3093,6 +3095,8 @@ static void InstallEarlyDebugSignalHandler() {
 
 
 static void EnableDebugSignalHandler(int signo) {
+  // Call only async signal-safe functions here!
+  v8::Debug::DebugBreak(Isolate::GetCurrent());
 }
 
 
@@ -3141,6 +3145,7 @@ static int RegisterDebugSignalHandler() {
 
 #ifdef _WIN32
 DWORD WINAPI EnableDebugThreadProc(void* arg) {
+  v8::Debug::DebugBreak(Isolate::GetCurrent());
   return 0;
 }
 
@@ -3295,6 +3300,7 @@ static void DebugPause(const FunctionCallbackInfo<Value>& args) {
 
 static void _DebugEnd() {
   if (debugger_running) {
+    DebuggerAgent::StopAgent();
     debugger_running = false;
   }
 }
@@ -3315,7 +3321,8 @@ static void SetupDebugger(Environment* env, bool wait_connect) {
   // If the --debug flag was specified then initialize the debug thread.
   assert(debugger_running == false);
   HandleScope handle_scope(env->isolate());
-  debugger_running = false;
+  debugger_running =
+    DebuggerAgent::EnableAgent(env->isolate(), debug_port, wait_connect);
   if (debugger_running == false) {
     fprintf(stderr, "Starting debugger on port %d failed\n", debug_port);
     fflush(stderr);
@@ -3323,6 +3330,10 @@ static void SetupDebugger(Environment* env, bool wait_connect) {
   }
   fprintf(stderr, "Debugger listening on port %d\n", debug_port);
   fflush(stderr);
+
+
+  // Assign environment to the debugger's context
+  env->AssignToContext(v8::Debug::GetDebugContext());
 
   Context::Scope context_scope(env->context());
   Local<Object> message = Object::New(env->isolate());
