@@ -533,6 +533,7 @@ _Same(_compile, 'ForcedUsingFiles', _file_list)  # /FU
 _Same(_compile, 'GenerateXMLDocumentationFiles', _boolean)  # /doc
 _Same(_compile, 'IgnoreStandardIncludePath', _boolean)  # /X
 _Same(_compile, 'MinimalRebuild', _boolean)  # /Gm
+_Same(_compile, 'MultiProcessorCompilation', _boolean)  # /MP
 _Same(_compile, 'OmitDefaultLibName', _boolean)  # /Zl
 _Same(_compile, 'OmitFramePointers', _boolean)  # /Oy
 _Same(_compile, 'PreprocessorDefinitions', _string_list)  # /D
@@ -663,7 +664,6 @@ _MSBuildOnly(_compile, 'CompileAsManaged',
                                    'Safe',  # /clr:safe
                                    'OldSyntax']))  # /clr:oldSyntax
 _MSBuildOnly(_compile, 'CreateHotpatchableImage', _boolean)  # /hotpatch
-_MSBuildOnly(_compile, 'MultiProcessorCompilation', _boolean)  # /MP
 _MSBuildOnly(_compile, 'PreprocessOutputPath', _string)  # /Fi
 _MSBuildOnly(_compile, 'ProcessorNumber', _integer)  # the number of processors
 _MSBuildOnly(_compile, 'TrackerLogDirectory', _folder_name)
@@ -705,6 +705,7 @@ _Same(_link, 'IgnoreEmbeddedIDL', _boolean)  # /IGNOREIDL
 _Same(_link, 'ImportLibrary', _file_name)  # /IMPLIB
 _Same(_link, 'KeyContainer', _file_name)  # /KEYCONTAINER
 _Same(_link, 'KeyFile', _file_name)  # /KEYFILE
+_Same(_link, 'LinkStatus', _boolean)  # /LTCG:STATUS
 _Same(_link, 'ManifestFile', _file_name)  # /ManifestFile
 _Same(_link, 'MapExports', _boolean)  # /MAPINFO:EXPORTS
 _Same(_link, 'MapFileName', _file_name)
@@ -848,7 +849,6 @@ _MSVSOnly(_link, 'AdditionalDependencies_excluded', _file_list)
 _MSBuildOnly(_link, 'BuildingInIDE', _boolean)
 _MSBuildOnly(_link, 'ImageHasSafeExceptionHandlers', _boolean)  # /SAFESEH
 _MSBuildOnly(_link, 'LinkDLL', _boolean)  # /DLL Visible='false'
-_MSBuildOnly(_link, 'LinkStatus', _boolean)  # /LTCG:STATUS
 _MSBuildOnly(_link, 'PreventDllBinding', _boolean)  # /ALLOWBIND
 _MSBuildOnly(_link, 'SupportNobindOfDelayLoadedDLL', _boolean)  # /DELAY:NOBIND
 _MSBuildOnly(_link, 'TrackerLogDirectory', _folder_name)
@@ -1006,7 +1006,7 @@ _MSBuildOnly(_lib, 'RemoveObjects', _file_list)  # /REMOVE
 _MSBuildOnly(_lib, 'SubSystem', _subsystem_enumeration)
 _MSBuildOnly(_lib, 'TrackerLogDirectory', _folder_name)
 _MSBuildOnly(_lib, 'TreatLibWarningAsErrors', _boolean)  # /WX
-_MSBuildOnly(_lib, 'Verbose', _boolean)
+_Same(_lib, 'Verbose', _boolean)
 
 
 # Directives for converting VCManifestTool to Mt.
