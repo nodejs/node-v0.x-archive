@@ -58,6 +58,17 @@ var parseTests = {
     href: 'http://evil-phisher/foo.html?json=%22%5C%22foo%5C%22%22#h%5Ca%5Cs%5Ch'
   },
 
+  'http:\\\\evil-phisher\\foo.html#h\\a\\s\\h?blarg': {
+    protocol: 'http:',
+    slashes: true,
+    host: 'evil-phisher',
+    hostname: 'evil-phisher',
+    pathname: '/foo.html',
+    path: '/foo.html',
+    hash: '#h%5Ca%5Cs%5Ch?blarg',
+    href: 'http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch?blarg'
+  },
+
 
   'http:\\\\evil-phisher\\foo.html': {
     protocol: 'http:',
