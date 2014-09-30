@@ -2606,7 +2606,7 @@ void StopProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
 
 #define READONLY_PROPERTY(obj, str, var)                                      \
   do {                                                                        \
-    obj->Set(OneByteString(env->isolate(), str), var, v8::ReadOnly);          \
+    obj->ForceSet(OneByteString(env->isolate(), str), var, v8::ReadOnly);     \
   } while (0)
 
 
@@ -3481,7 +3481,8 @@ void Init(int* argc,
 
   // Fetch a reference to the main isolate, so we have a reference to it
   // even when we need it to access it from another (debugger) thread.
-  node_isolate = Isolate::GetCurrent();
+  node_isolate = Isolate::New();
+  node_isolate->Enter();
 
 #ifdef __POSIX__
   // Raise the open file descriptor limit.
@@ -3709,6 +3710,7 @@ int Start(int argc, char** argv) {
   }
 
   CHECK_NE(node_isolate, NULL);
+  node_isolate->Exit();
   node_isolate->Dispose();
   node_isolate = NULL;
   V8::Dispose();
