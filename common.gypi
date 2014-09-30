@@ -15,21 +15,18 @@
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
 
-    # Enable V8's post-mortem debugging only on unix flavors.
     'conditions': [
       ['OS == "win"', {
         'os_posix': 0,
-        'v8_postmortem_support': 'false'
       }, {
         'os_posix': 1,
-        'v8_postmortem_support': 'true'
       }],
       ['GENERATOR == "ninja" or OS== "mac"', {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj',
-        'V8_BASE': '<(PRODUCT_DIR)/libv8_base.<(target_arch).a',
+        'V8_BASE': '<(PRODUCT_DIR)/libv8_base.a',
       }, {
         'OBJ_DIR': '<(PRODUCT_DIR)/obj.target',
-        'V8_BASE': '<(PRODUCT_DIR)/obj.target/deps/v8/tools/gyp/libv8_base.<(target_arch).a',
+        'V8_BASE': '<(PRODUCT_DIR)/obj.target/deps/v8/tools/gyp/libv8_base.a',
       }],
     ],
   },
@@ -99,9 +96,6 @@
             'EnableIntrinsicFunctions': 'true',
             'RuntimeTypeInfo': 'false',
             'ExceptionHandling': '0',
-            'AdditionalOptions': [
-              '/MP', # compile across multiple CPUs
-            ],
           },
           'VCLibrarianTool': {
             'AdditionalOptions': [
@@ -130,8 +124,13 @@
         'ExceptionHandling': 1, # /EHsc
         'SuppressStartupBanner': 'true',
         'WarnAsError': 'false',
+        'MultiProcessorCompilation': 'true',
       },
+      # 4221 - linker warning about object not exporting new symbols
       'VCLibrarianTool': {
+        'AdditionalOptions': [
+          '/ignore:4221', # link time code generation
+        ],
       },
       'VCLinkerTool': {
         'conditions': [
@@ -151,7 +150,11 @@
         ],
       },
     },
-    'msvs_disabled_warnings': [4351, 4355, 4800],
+    # 4267 - when passing an int64 as int, and truncation might happen (depends on linkage)
+    # 4244 - when passing an int64 as int, and truncation will happen
+    # 4530 - No exception semantics (leaking from MS STL xlocale)
+    # 4996 - winsock ip4 calls deprecated
+    'msvs_disabled_warnings': [4351, 4355, 4800, 4267, 4244, 4530, 4996],
     'conditions': [
       ['OS == "win"', {
         'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin
@@ -172,8 +175,9 @@
         'ldflags': [ '-pthread' ],
       }],
       [ 'OS in "linux freebsd openbsd solaris android"', {
-        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
-        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
+        # flags reconciled with v8/build/standalone.gypi
+        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', '-fno-exceptions' ],
+        'cflags_cc': [ '-fno-rtti', '-fno-exceptions', '-std=gnu++0x' ],
         'ldflags': [ '-rdynamic' ],
         'target_conditions': [
           ['_type=="static_library"', {

@@ -125,13 +125,16 @@ void CodeAddressNotification(const JitCodeEvent* jevent) {
 //       event callbacks are received in the same thread. Attempts
 //       to write ETW events in this thread will fail.
 void etw_events_change_async(uv_async_t* handle) {
+  v8::JitCodeEventOptions jit_enum;
+  v8::JitCodeEventHandler handler = NULL;
   if (events_enabled > 0) {
     NODE_V8SYMBOL_RESET();
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
-                               CodeAddressNotification);
+    jit_enum = v8::kJitCodeEventEnumExisting;
+    handler = CodeAddressNotification;
   } else {
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+    jit_enum = v8::kJitCodeEventDefault;
   }
+  v8::Isolate::GetCurrent()->SetJitCodeEventHandler(jit_enum, handler);
 }
 
 
@@ -196,7 +199,8 @@ void shutdown_etw() {
   }
 
   events_enabled = 0;
-  V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+  v8::Isolate::GetCurrent()->
+    SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
 
   if (advapi) {
     FreeLibrary(advapi);

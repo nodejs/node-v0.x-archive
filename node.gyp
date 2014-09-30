@@ -77,12 +77,15 @@
 
       'dependencies': [
         'node_js2c#host',
+        'deps/node_debug_agent/debug-agent.gyp:node_debug_agent',
       ],
 
       'include_dirs': [
         'src',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
+        'deps/v8',
+        'deps/node_debug_agent/',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
 
@@ -158,12 +161,22 @@
       'defines': [
         'NODE_WANT_INTERNALS=1',
         'ARCH="<(target_arch)"',
-        'PLATFORM="<(OS)"',
         'NODE_TAG="<(node_tag)"',
         'NODE_V8_OPTIONS="<(node_v8_options)"',
       ],
 
       'conditions': [
+        [ 'OS=="win"', {
+            'defines': [
+              # we need to use node's preferred "win32" rather than gyp's preferred "win"
+              'PLATFORM="win32"'
+            ]
+          }, {
+            'defines': [
+              'PLATFORM="<(OS)"'
+            ]
+          }
+        ],
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [
@@ -285,7 +298,12 @@
             'deps/v8/include/v8.h',
             'deps/v8/include/v8-debug.h',
           ],
-          'dependencies': [ 'deps/v8/tools/gyp/v8.gyp:v8' ],
+          'dependencies': [ 
+            'deps/v8/tools/gyp/v8.gyp:v8',
+            'deps/v8/tools/gyp/v8.gyp:v8_libplatform',
+            'deps/v8/samples/samples.gyp:*',
+            'deps/v8/src/d8.gyp:d8',
+          ],
         }],
 
         [ 'node_shared_zlib=="false"', {
@@ -360,6 +378,9 @@
       'msvs_settings': {
         'VCLinkerTool': {
           'SubSystem': 1, # /subsystem:console
+        },
+        'VCCLCompilerTool':{
+          'WarnAsError': 'true',
         },
       },
     },
