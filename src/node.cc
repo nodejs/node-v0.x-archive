@@ -1090,6 +1090,8 @@ Handle<Value> MakeDomainCallback(Environment* env,
     return ret;
   }
 
+  env->isolate()->RunMicrotasks();
+
   if (tick_info->length() == 0) {
     env->isolate()->RunMicrotasks();
   }
@@ -1157,6 +1159,8 @@ Handle<Value> MakeCallback(Environment* env,
   if (tick_info->in_tick()) {
     return ret;
   }
+
+  env->isolate()->RunMicrotasks();
 
   if (tick_info->length() == 0) {
     env->isolate()->RunMicrotasks();
