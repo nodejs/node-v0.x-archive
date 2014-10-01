@@ -171,7 +171,7 @@ The method will not write partial characters.
 * `offset` {Number}
 * `byteLength` {Number}, must be `<= 4`, Default: 1
 * `noAssert` {Boolean}, Optional, Default: false
-* Return: {null}
+* Return: {Number}
 
 Writes `value` to the buffer at the specified offset and byteLength.
 
@@ -196,7 +196,7 @@ Reads an arbitrary bit that specified by `byteLength` integer from the
 buffer at the specified offset.
 
 `byteLength` in `.read(U)Int(LE|BE)` functions are allowed to be `>= 4`, however we don't recommend
-you to pass a `>= 4` value, that will cause your application slower and CPU-comsumed.
+you to pass a `> 4` value, that will cause your application slower and CPU-comsumed.
 
 Set `noAssert` to true to skip validation of `offset`. This means that `offset`
 may be beyond the end of the buffer. Defaults to `false`.
