@@ -37,7 +37,7 @@ var testFn = function () {};
 var deprecatedFn = util.deprecate(testFn, 'Please use other test function');
 
 deprecatedFn();
-assert.ok(deprecatedFn.deprecated);
+assert.ok(deprecatedFn._deprecated);
 assert.equal(errString, 'Please use other test function\n');
 
 global.process.stderr.write = stderr_write;
