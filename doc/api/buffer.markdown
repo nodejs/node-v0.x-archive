@@ -180,6 +180,44 @@ The method will not write partial characters.
     len = buf.write('\u00bd + \u00bc = \u00be', 0);
     console.log(len + " bytes: " + buf.toString('utf8', 0, len));
 
+### buf.writeUIntLE(value, offset, byteLength[, noAssert])
+### buf.writeUIntBE(value, offset, byteLength[, noAssert])
+### buf.writeIntLE(value, offset, byteLength[, noAssert])
+### buf.writeIntBE(value, offset, byteLength[, noAssert])
+
+* `value` {Number} - bytes to be written to buffer
+* `offset` {Number}
+* `byteLength` {Number}, must be `<= 4`, Default: 1
+* `noAssert` {Boolean}, Optional, Default: false
+* Return: {Number}
+
+Writes `value` to the buffer at the specified offset and byteLength.
+
+`byteLength` must be `<= 4` because of limitation in javascript's bitwise([Mozila Dodumentation](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Bitwise_Operators))
+
+Set `noAssert` to `true` to skip validation of `value` and `offset`. This means
+that `value` may be too large for the specific function and `offset` may be
+beyond the end of the buffer leading to the values being silently dropped. This
+should not be used unless you are certain of correctness. Defaults to `false`.
+
+### buf.readUIntLE(offset, byteLength[, noAssert])
+### buf.readUIntBE(offset, byteLength[, noAssert])
+### buf.readIntLE(offset, byteLength[, noAssert])
+### buf.readIntBE(offset, byteLength[, noAssert])
+
+* `offset` {Number}
+* `byteLength` {Number}, Optional, should be `<= 4`, Default: 1
+* `noAssert` {Boolean}, Optional, Default: false
+* Return: {Number}
+
+Reads an arbitrary bit that specified by `byteLength` integer from the 
+buffer at the specified offset.
+
+`byteLength` in `.read(U)Int(LE|BE)` functions are allowed to be `>= 4`, however we don't recommend
+you to pass a `> 4` value, that will cause your application slower and CPU-comsumed.
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer. Defaults to `false`.
 
 ### buf.toString([encoding], [start], [end])
 

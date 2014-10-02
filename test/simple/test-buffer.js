@@ -922,8 +922,6 @@ var buf = new Buffer([0xFF]);
 assert.equal(buf.readUInt8(0), 255);
 assert.equal(buf.readInt8(0), -1);
 
-
-
 [16, 32].forEach(function(bits) {
   var buf = new Buffer(bits / 8 - 1);
 
@@ -959,6 +957,58 @@ assert.equal(buf.readInt8(0), -1);
   assert.equal(buf['readInt' + bits + 'LE'](0),
                 (0xFFFFFFFF >> (32 - bits)));
 });
+
+// test for common read(U)IntLE/BE
+(function() {
+  var buf24 = new Buffer([0x01, 0x02, 0x03]);
+  assert.equal(buf24.readUIntLE(0, 1), 0x01);
+  assert.equal(buf24.readUIntBE(0, 1), 0x01);
+  assert.equal(buf24.readUIntLE(0, 3), 0x030201);
+  assert.equal(buf24.readUIntBE(0, 3), 0x010203);
+  assert.equal(buf24.readIntLE(0, 1), 0x01);
+  assert.equal(buf24.readIntBE(0, 1), 0x01);
+  assert.equal(buf24.readIntLE(0, 3), 0x030201);
+  assert.equal(buf24.readIntBE(0, 3), 0x010203);
+
+  buf24.writeUIntLE(0xff00ff, 0, 3);
+  assert.equal(buf24[0], 0xff);
+  assert.equal(buf24.readIntBE(0, 3), 0x7f00ff - 0x800000);
+
+  var buf40 = new Buffer([0x01, 0x02, 0x03, 0x04, 0x05]);
+  assert.equal(buf40.readUIntLE(0, 5), 0x0504030201);
+  assert.equal(buf40.readUIntBE(0, 5), 0x0102030405);
+  assert.equal(buf40.readIntLE(0, 5), 0x0504030201);
+  assert.equal(buf40.readIntBE(0, 5), 0x0102030405);
+})();
+
+// test for common write(U)IntLE/BE
+(function() {
+  var buf24 = new Buffer([0x0, 0x0, 0x0]);
+  buf24.writeUIntLE(0xff, 0, 1);
+  assert.equal(buf24[0], 0xff);
+
+  buf24.writeUIntLE(0xff11, 0, 2);
+  assert.equal(buf24[0], 0x11);
+  assert.equal(buf24[1], 0xff);
+  
+  buf24.writeUIntLE(0xff1122, 0, 3);
+  assert.equal(buf24[0], 0x22);
+  assert.equal(buf24[1], 0x11);
+  assert.equal(buf24[2], 0xff);
+  
+  buf24.writeIntLE(-15, 0, 2);
+  assert.equal(buf24[0], 0xf1);
+  assert.equal(buf24[1], 0xff);
+
+  buf24.writeUIntBE(0xff1122, 0, 3);
+  assert.equal(buf24[0], 0xff);
+  assert.equal(buf24[1], 0x11);
+  assert.equal(buf24[2], 0x22);
+  
+  buf24.writeIntBE(-15, 0, 2);
+  assert.equal(buf24[0], 0xff);
+  assert.equal(buf24[1], 0xf1);
+})();
 
 // test Buffer slice
 (function() {
