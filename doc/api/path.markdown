@@ -163,6 +163,10 @@ an empty string.  Examples:
     path.extname('index')
     // returns
     ''
+    
+    path.extname('.index')
+    // returns
+    ''
 
 ## path.sep
 
