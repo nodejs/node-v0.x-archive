@@ -62,11 +62,8 @@ process.on('exit', function onExit() {
 
 function assertOutputLines() {
   var expectedLines = [
-    'Starting debugger agent.',
     'Debugger listening on port ' + 5858,
-    'Starting debugger agent.',
     'Debugger listening on port ' + 5859,
-    'Starting debugger agent.',
     'Debugger listening on port ' + 5860,
   ];
 

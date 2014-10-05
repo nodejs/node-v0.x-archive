@@ -19,51 +19,23 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var spawn = require('child_process').spawn;
 
-var debugPort = common.PORT;
-var args = ['--debug-port=' + debugPort];
-var child = spawn(process.execPath, args);
+#ifndef SRC_NODE_OS_SIGNALS_H_
+#define SRC_NODE_OS_SIGNALS_H_
 
-child.stderr.on('data', function(data) {
-  var lines = data.toString().replace(/\r/g, '').trim().split('\n');
-  lines.forEach(processStderrLine);
-});
+#include "node.h"
+#include <uv.h>
 
-setTimeout(testTimedOut, 3000);
-function testTimedOut() {
-  assert(false, 'test timed out.');
+
+namespace node {
+
+typedef void(*SignalHandler)(int signal);
+
+void RegisterSignalHandler(int signal,
+                           SignalHandler handler,
+                           bool reset_handler = false);
+void RegisterDebugSignalHandler(uv_async_cb handler);
+void SendDebugSignalToProc(v8::Isolate* isolate, int arg_pid);
 }
 
-// Give the child process small amout of time to start
-setTimeout(function() {
-  process._debugProcess(child.pid);
-}, 100);
-
-process.on('exit', function() {
-  child.kill();
-});
-
-var outputLines = [];
-function processStderrLine(line) {
-  console.log('> ' + line);
-  outputLines.push(line);
-
-  if (/Debugger listening/.test(line)) {
-    assertOutputLines();
-    process.exit();
-  }
-}
-
-function assertOutputLines() {
-  var expectedLines = [
-    'Debugger listening on port ' + debugPort
-  ];
-
-  assert.equal(outputLines.length, expectedLines.length);
-  for (var i = 0; i < expectedLines.length; i++)
-    assert.equal(outputLines[i], expectedLines[i]);
-
-}
+#endif  // SRC_NODE_OS_SIGNALS_H_
