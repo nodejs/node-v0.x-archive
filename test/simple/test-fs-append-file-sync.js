@@ -90,6 +90,20 @@ var fileData4 = fs.readFileSync(filename4);
 assert.equal(Buffer.byteLength('' + num) + currentFileData.length,
              fileData4.length);
 
+// test that appendFile accepts file descriptors
+var filename5 = join(common.tmpDir, 'append-sync5.txt');
+fs.writeFileSync(filename5, currentFileData);
+
+common.error('appending to ' + filename5);
+var filename5fd = fs.openSync(filename5, 'a+');
+fs.appendFileSync(filename5fd, data);
+fs.closeSync(filename5fd);
+
+var fileData5 = fs.readFileSync(filename5);
+
+assert.equal(Buffer.byteLength(data) + currentFileData.length,
+             fileData5.length);
+
 //exit logic for cleanup
 
 process.on('exit', function() {
@@ -99,4 +113,5 @@ process.on('exit', function() {
   fs.unlinkSync(filename2);
   fs.unlinkSync(filename3);
   fs.unlinkSync(filename4);
+  fs.unlinkSync(filename5);
 });

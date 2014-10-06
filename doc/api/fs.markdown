@@ -460,9 +460,9 @@ The callback is given the three arguments, `(err, bytesRead, buffer)`.
 
 Synchronous version of `fs.read`. Returns the number of `bytesRead`.
 
-## fs.readFile(filename[, options], callback)
+## fs.readFile(file[, options], callback)
 
-* `filename` {String}
+* `file` {String | Integer} filename or file descriptor
 * `options` {Object}
   * `encoding` {String | Null} default = `null`
   * `flag` {String} default = `'r'`
@@ -480,18 +480,19 @@ contents of the file.
 
 If no encoding is specified, then the raw buffer is returned.
 
+Note that any specified file descriptor needs to support reading. Specified file
+descriptors will not be closed automatically.
 
-## fs.readFileSync(filename[, options])
+## fs.readFileSync(file[, options])
 
-Synchronous version of `fs.readFile`. Returns the contents of the `filename`.
+Synchronous version of `fs.readFile`. Returns the contents of the `file`.
 
 If the `encoding` option is specified then this function returns a
 string. Otherwise it returns a buffer.
 
+## fs.writeFile(file, data[, options], callback)
 
-## fs.writeFile(filename, data[, options], callback)
-
-* `filename` {String}
+* `file` {String | Integer} filename or file descriptor
 * `data` {String | Buffer}
 * `options` {Object}
   * `encoding` {String | Null} default = `'utf8'`
@@ -516,9 +517,16 @@ Example:
 
 The synchronous version of `fs.writeFile`. Returns `undefined`.
 
-## fs.appendFile(filename, data[, options], callback)
+Any specified file descriptor needs to support writing. Specified file
+descriptors will not be closed automatically.
 
-* `filename` {String}
+Note that it is unsafe to use `fs.writeFile` multiple times on the same file
+without waiting for the callback. For this scenario,
+`fs.createWriteStream` is strongly recommended.
+
+## fs.appendFile(file, data[, options], callback)
+
+* `file` {String | Integer} filename or file descriptor
 * `data` {String | Buffer}
 * `options` {Object}
   * `encoding` {String | Null} default = `'utf8'`
@@ -537,6 +545,13 @@ Example:
     });
 
 ## fs.appendFileSync(filename, data[, options])
+
+The synchronous version of `fs.appendFile`. Returns `undefined`.
+
+Note that any specified file descriptor needs to be opened for appending.
+Specified file descriptors will not be closed automatically.
+
+## fs.appendFileSync(file, data[, options])
 
 The synchronous version of `fs.appendFile`. Returns `undefined`.
 
