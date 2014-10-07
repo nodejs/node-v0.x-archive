@@ -568,7 +568,8 @@ Flush all data, buffered since `.cork()` call.
 
 `encoding` {String} The new default encoding
 
-Sets the default encoding for a writable stream
+Sets the default encoding for a writable stream. Returns true if the encoding
+is valid and is set otherwise, it returns false.
 
 #### writable.end([chunk][, encoding][, callback])
 
