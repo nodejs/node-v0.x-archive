@@ -49,7 +49,18 @@ MyWritable.prototype._write = function (chunk, encoding, callback) {
   var m = new MyWritable(function(isBuffer, type, enc) {
     assert.equal(enc, 'ascii');
   }, { decodeStrings: false });
-  m.setDefaultEncoding('ascii');
+  var status = m.setDefaultEncoding('ascii');
+  assert.equal(status, true);
+  m.write('bar');
+  m.end();
+}());
+
+;(function changeDefaultEncodingToInvalidValue(){
+  var m = new MyWritable(function(isBuffer, type, enc) {
+    assert.equal(enc, 'utf8');
+  }, { decodeStrings: false });
+  var status = m.setDefaultEncoding({});
+  assert.equal(status, false);
   m.write('bar');
   m.end();
 }());
