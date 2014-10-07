@@ -36,6 +36,7 @@ set noperfctr=
 set noperfctr_arg=
 set noperfctr_msi_arg=
 set i18n_arg=
+set verbose=
 
 :next-arg
 if "%1"=="" goto args-done
@@ -65,6 +66,7 @@ if /i "%1"=="upload"        set upload=1&goto arg-ok
 if /i "%1"=="jslint"        set jslint=1&goto arg-ok
 if /i "%1"=="small-icu"     set i18n_arg=%1&goto arg-ok
 if /i "%1"=="full-icu"      set i18n_arg=%1&goto arg-ok
+if /i "%1"=="verbose"       set verbose=1&echo on&goto arg-ok
 
 echo Warning: ignoring invalid command line option `%1`.
 
@@ -82,6 +84,7 @@ if "%target_arch%"=="x64" set msiplatform=x64
 if defined nosnapshot set nosnapshot_arg=--without-snapshot
 if defined noetw set noetw_arg=--without-etw& set noetw_msi_arg=/p:NoETW=1
 if defined noperfctr set noperfctr_arg=--without-perfctr& set noperfctr_msi_arg=/p:NoPerfCtr=1
+if "%verbose%"=="1" set verbose_arg=--verbose
 
 if "%i18n_arg%"=="full-icu" set i18n_arg=--with-intl=full-icu
 if "%i18n_arg%"=="small-icu" set i18n_arg=--with-intl=small-icu
@@ -95,7 +98,7 @@ if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 @rem Generate the VS project.
 SETLOCAL
   if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
-  python configure %i18n_arg% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
+  python configure %i18n_arg% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% %verbose_arg% --dest-cpu=%target_arch% --tag=%TAG%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
   echo Project files generated.
@@ -135,7 +138,9 @@ goto run
 
 :msbuild-found
 @rem Build the sln with msbuild.
-msbuild node.sln /m /t:%target% /p:Configuration=%config% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+set msbuildargs=
+if not defined verbose set msbuildargs=/clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild node.sln /m /t:%target% /p:Configuration=%config% %msbuildargs%
 if errorlevel 1 goto exit
 
 :sign
