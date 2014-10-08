@@ -293,7 +293,7 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
              Integer::NewFromUnsigned(env->isolate(), scopeid));
     }
 
-    const bool internal = interfaces[i].is_internal;
+    const bool internal = interfaces[i].is_internal != 0;
     o->Set(env->internal_string(),
            internal ? True(env->isolate()) : False(env->isolate()));
 
