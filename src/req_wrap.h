@@ -31,9 +31,6 @@
 
 namespace node {
 
-// defined in node.cc
-extern QUEUE req_wrap_queue;
-
 template <typename T>
 class ReqWrap : public AsyncWrap {
  public:
@@ -44,7 +41,7 @@ class ReqWrap : public AsyncWrap {
     if (env->in_domain())
       object->Set(env->domain_string(), env->domain_array()->Get(0));
 
-    QUEUE_INSERT_TAIL(&req_wrap_queue, &req_wrap_queue_);
+    QUEUE_INSERT_TAIL(env->req_wrap_queue(), &req_wrap_queue_);
   }
 
 
