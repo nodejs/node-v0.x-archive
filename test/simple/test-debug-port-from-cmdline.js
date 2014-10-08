@@ -59,7 +59,6 @@ function processStderrLine(line) {
 
 function assertOutputLines() {
   var expectedLines = [
-    'Starting debugger agent.',
     'Debugger listening on port ' + debugPort
   ];
 

@@ -77,12 +77,14 @@
 
       'dependencies': [
         'node_js2c#host',
+        'deps/node_debug_agent/debug-agent.gyp:node_debug_agent',
       ],
 
       'include_dirs': [
         'src',
         'tools/msvs/genfiles',
         'deps/uv/src/ares',
+        'deps/node_debug_agent',
         '<(SHARED_INTERMEDIATE_DIR)' # for node_natives.h
       ],
 
@@ -99,6 +101,7 @@
         'src/node_javascript.cc',
         'src/node_main.cc',
         'src/node_os.cc',
+        'src/node_os_signals.cc',
         'src/node_v8.cc',
         'src/node_stat_watcher.cc',
         'src/node_watchdog.cc',
@@ -131,6 +134,7 @@
         'src/node_http_parser.h',
         'src/node_internals.h',
         'src/node_javascript.h',
+        'src/node_os_signals.h',
         'src/node_root_certs.h',
         'src/node_version.h',
         'src/node_watchdog.h',
