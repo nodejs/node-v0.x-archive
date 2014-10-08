@@ -66,6 +66,11 @@ using v8::Value;
 
 #define THROW_BAD_ARGS TYPE_ERROR("Bad argument")
 
+#ifdef _MSC_VER
+  // no matching operator delete found;
+  // memory will not be freed if initialization throws an exception
+  #pragma warning(disable: 4291)
+#endif
 class FSReqWrap: public ReqWrap<uv_fs_t> {
  public:
   void* operator new(size_t size) { return new char[size]; }

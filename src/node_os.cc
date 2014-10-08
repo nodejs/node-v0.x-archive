@@ -122,6 +122,11 @@ static void GetOSRelease(const FunctionCallbackInfo<Value>& args) {
   OSVERSIONINFO info;
 
   info.dwOSVersionInfoSize = sizeof(info);
+#ifdef _MSC_VER
+  // `GetVersionEx` has been deprecated. It seems that it will only report the
+  // version this code is build for (so it can be mocked during build)
+  #pragma warning(disable: 4996)
+#endif
   if (GetVersionEx(&info) == 0)
     return;
 
