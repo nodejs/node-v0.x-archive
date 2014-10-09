@@ -180,6 +180,9 @@ The method will not write partial characters.
     len = buf.write('\u00bd + \u00bc = \u00be', 0);
     console.log(len + " bytes: " + buf.toString('utf8', 0, len));
 
+For some historical reason, the `encoding` can be placed at other position too
+so that it makes following forms legal: `buf.write(string, [offset], [encoding])`
+or `buf.write(string, [encoding], [offset], [length])`.
 
 ### buf.toString([encoding], [start], [end])
 
