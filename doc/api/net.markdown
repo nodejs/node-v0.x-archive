@@ -373,7 +373,8 @@ The `connectListener` parameter will be added as an listener for the
 
 ### socket.bufferSize
 
-`net.Socket` has the property that `socket.write()` always works. This is to
+`net.Socket` has the property that `socket.write()` always works - as long
+as the socket is still open. This is to
 help users get up and running quickly. The computer cannot always keep up
 with the amount of data that is written to a socket - the network connection
 simply might be too slow. Node will internally queue up the data written to a
@@ -406,6 +407,9 @@ buffer. Returns `false` if all or part of the data was queued in user memory.
 
 The optional `callback` parameter will be executed when the data is finally
 written out - this may not be immediately.
+
+In case the socket is already closed, an ['error'][] event with code `EPIPE`
+will be emitted.
 
 ### socket.end([data], [encoding])
 
@@ -570,8 +574,7 @@ See also: the return values of `socket.write()`
 
 * {Error object}
 
-Emitted when an error occurs.  The `'close'` event will be called directly
-following this event.
+Emitted when an error occurs.
 
 ### Event: 'close'
 
@@ -579,6 +582,8 @@ following this event.
 
 Emitted once the socket is fully closed. The argument `had_error` is a boolean
 which says if the socket was closed due to a transmission error.
+
+This event will be emitted exactly once per socket.
 
 ## net.isIP(input)
 
