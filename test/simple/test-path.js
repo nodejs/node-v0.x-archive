@@ -405,6 +405,53 @@ relativeTests.forEach(function(test) {
 });
 assert.equal(failures.length, 0, failures.join(''));
 
+// path.common tests
+if (isWindows) {
+  // windows
+  var resolveTests =
+      // arguments  result
+      [[['C:\\'], 'C:\\'],
+       [['d:\\'], 'd:\\'],
+       [['c:\\', 'd:\\'], null],
+       [['c:\\raz\\dwa\\'], 'c:\\raz\\dwa'],
+       [['C:\\raZ\\dwa'], 'C:\\raZ'],
+       [['c:\\raz\\dwa', 'c:\\trzy\\cztery'], 'c:\\'],
+       [['c:\\raz\\dwa', 'c:\\raz\\trzy'], 'c:\\raz'],
+       [['c:\\raZ\\dwa', 'c:\\rAz\\trzy'], 'c:\\raZ'],
+       [['c:\\raz\\dwa', 'c:\\raz\\dwa\\trzy', 'c:\\raz\\cztery'], 'c:\\raz'],
+       [['C:\\raz\\dwa\\piec', 'c:\\raz\\dwa\\trzy', 'c:\\raz\\dwa\\cztery'],
+         'C:\\raz\\dwa'],
+       [['C:\\raz\\dwa\\piec', 'c:\\raz\\dwa\\trzy', 'c:\\raz\\dwa\\'],
+         'C:\\raz\\dwa'],
+       [['c:\\raz\\dwa\\piec', 'c:\\raz\\dwa\\trzy', 'c:\\raz\\dwa'],
+         'c:\\raz'],
+       [['c:\\raz\\dwa\\trzy', 'c:\\raz\\dwatrzy'], 'c:\\raz']];
+} else {
+  // Posix
+  var resolveTests =
+      // arguments      result
+      [[['/'], '/'],
+       [['/raz/dwa/'], '/raz/dwa'],
+       [['/raz/dwa'], '/raz'],
+       [['/raz/dwa', '/trzy/cztery'], '/'],
+       [['/raz/dwa', '/raz/trzy'], '/raz'],
+       [['/raz/dwa', '/raz/dwa/trzy', '/raz/cztery'], '/raz'],
+       [['/raz/dwa/piec', '/raz/dwa/trzy', '/raz/dwa/cztery'], '/raz/dwa'],
+       [['/raz/dwa/piec', '/raz/dwa/trzy', '/raz/dwa/'], '/raz/dwa'],
+       [['/raz/dwa/piec', '/raz/dwa/trzy', '/raz/dwa'], '/raz'],
+       [['/raz/dwa/trzy', '/raz/dwatrzy'], '/raz']];
+}
+var failures = [];
+resolveTests.forEach(function(test) {
+  var actual = path.common.apply(path, test[0]);
+  var expected = test[1];
+  var message = 'path.common(' + test[0].map(JSON.stringify).join(',') + ')' +
+                '\n  expect=' + JSON.stringify(expected) +
+                '\n  actual=' + JSON.stringify(actual);
+  if (actual !== expected) failures.push('\n' + message);
+});
+assert.equal(failures.length, 0, failures.join(''));
+
 // path.sep tests
 if (isWindows) {
   // windows
