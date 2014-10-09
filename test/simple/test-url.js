@@ -1504,3 +1504,36 @@ relativeTests2.forEach(function(relativeTest) {
                'format(' + relativeTest[1] + ') == ' + expected +
                '\nactual:' + actual);
 });
+
+// Do not parse ".*" as a hostname (breaks regex matching in http-proxy)
+var regexHostname = {
+  'http://.*/': {
+	  'protocol': 'http:',
+    'slashes': true,
+		'host': '',
+	  'hostname': '',
+		'path': '/',
+    'pathname': '/',
+    'href': 'http:///'
+  }
+};
+
+for (var u in regexHostname) {
+  var actual = url.parse(u);
+  var expected = regexHostname[u];
+
+  Object.keys(actual).forEach(function (i) {
+    if (expected[i] === undefined && actual[i] === null) {
+      expected[i] = null;
+    }
+  });
+
+  assert.deepEqual(actual, expected,
+			'Regex .* should not parse as a host and hostname ("." is not a valid hostname)');
+
+  var expected = regexHostname[u].href,
+      actual = url.format(regexHostname[u]);
+
+  assert.equal(actual, expected,
+               'format(' + u + ') == ' + u + '\nactual:' + actual);
+}
