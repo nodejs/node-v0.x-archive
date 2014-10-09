@@ -23,27 +23,27 @@ var common = require('../common');
 var assert = require('assert');
 var net = require('net');
 
-var gotError = false;
-var gotWriteCB = false;
-
-process.on('exit', function() {
-  assert(gotError);
-  assert(gotWriteCB);
-});
-
 var server = net.createServer(function(socket) {
   socket.resume();
 
-  socket.on('error', function(error) {
-    console.error('got error, closing server', error);
-    server.close();
-    gotError = true;
-  });
-
   setTimeout(function() {
     console.error('about to try to write');
+
+    var error;
+    try {
+      socket.write('test');
+    } catch (e) {
+      error = e;
+    }
+
+    assert(error);
+    console.error('about to try to write again');
+
     socket.write('test', function(e) {
-      gotWriteCB = true;
+      assert(e);
+
+      console.error('closing server');
+      server.close();
     });
   }, 250);
 });
