@@ -329,8 +329,6 @@ typedef void (*addon_context_register_func)(
     v8::Handle<v8::Context> context,
     void* priv);
 
-#define NM_F_BUILTIN 0x01
-
 struct node_module {
   int nm_version;
   unsigned int nm_flags;
@@ -342,8 +340,6 @@ struct node_module {
   void* nm_priv;
   struct node_module* nm_link;
 };
-
-node_module* get_builtin_module(const char *name);
 
 extern "C" NODE_EXTERN void node_module_register(void* mod);
 
@@ -409,9 +405,6 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 
 #define NODE_MODULE_CONTEXT_AWARE(modname, regfunc)                   \
   NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, NULL, 0)
-
-#define NODE_MODULE_CONTEXT_AWARE_BUILTIN(modname, regfunc)           \
-  NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, NULL, NM_F_BUILTIN)   \
 
 /*
  * For backward compatibility in add-on modules.

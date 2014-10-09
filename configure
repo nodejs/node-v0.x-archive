@@ -39,6 +39,16 @@ parser.add_option('--dest-os',
     help='operating system to build for. Valid values are: '
          'win, mac, solaris, freebsd, openbsd, linux, android')
 
+parser.add_option('--enable-shared',
+    action='store_true',
+    dest='enable_shared',
+    help='build libnode.so (conflicts with --enable-static)')
+
+parser.add_option('--enable-static',
+    action='store_true',
+    dest='enable_static',
+    help='build libnode.a (conflicts with --enable-shared)')
+
 parser.add_option('--gdb',
     action='store_true',
     dest='gdb',
@@ -476,6 +486,21 @@ def configure_node(o):
   o['variables']['node_prefix'] = os.path.expanduser(options.prefix or '')
   o['variables']['node_install_npm'] = b(not options.without_npm)
   o['default_configuration'] = 'Debug' if options.debug else 'Release'
+
+  if options.enable_shared or options.enable_static:
+    # TODO(bnoordhuis) Should be possible to build them both at the same time
+    # (and the executable too) but that requires some build system overhaul.
+    if options.enable_shared and options.enable_static:
+      raise Exception('--enable-shared and --enable-static are '
+                      'currently mutually exclusive.')
+    if options.enable_shared:
+      component = 'shared_library'
+    elif options.enable_static:
+      component = 'static_library'
+    else:
+      assert(False)
+    o['variables']['component'] = component
+    o['variables']['node_component'] = component
 
   host_arch = host_arch_win() if os.name == 'nt' else host_arch_cc()
   target_arch = options.dest_cpu or host_arch

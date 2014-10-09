@@ -701,14 +701,10 @@ class ContextifyScript : public BaseObject {
 };
 
 
-void InitContextify(Handle<Object> target,
-                    Handle<Value> unused,
-                    Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
+extern "C" void node_builtin_contextify_init(Environment* env,
+                                             Local<Object> target) {
   ContextifyContext::Init(env, target);
   ContextifyScript::Init(env, target);
 }
 
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(contextify, node::InitContextify);

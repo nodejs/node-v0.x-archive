@@ -22,8 +22,6 @@
 #include "node.h"
 #include "node_buffer.h"
 #include "node_constants.h"
-#include "node_file.h"
-#include "node_http_parser.h"
 #include "node_javascript.h"
 #include "node_version.h"
 
@@ -132,7 +130,6 @@ static bool debug_wait_connect = false;
 static int debug_port = 5858;
 static bool v8_is_profiling = false;
 static node_module* modpending;
-static node_module* modlist_builtin;
 static node_module* modlist_addon;
 
 // used by C++ modules as well
@@ -2026,27 +2023,24 @@ void Hrtime(const FunctionCallbackInfo<Value>& args) {
 
 extern "C" void node_module_register(void* m) {
   struct node_module* mp = reinterpret_cast<struct node_module*>(m);
-
-  if (mp->nm_flags & NM_F_BUILTIN) {
-    mp->nm_link = modlist_builtin;
-    modlist_builtin = mp;
-  } else {
-    assert(modpending == NULL);
-    modpending = mp;
-  }
+  assert(modpending == NULL);
+  modpending = mp;
 }
 
-struct node_module* get_builtin_module(const char* name) {
-  struct node_module* mp;
 
-  for (mp = modlist_builtin; mp != NULL; mp = mp->nm_link) {
-    if (strcmp(mp->nm_modname, name) == 0)
-      break;
-  }
+typedef void (*BuiltinModuleInitializerFunction)(Environment*, Local<Object>);
 
-  assert(mp == NULL || (mp->nm_flags & NM_F_BUILTIN) != 0);
-  return (mp);
+BuiltinModuleInitializerFunction GetBuiltinModule(const char* modname) {
+#define V(name)                                                               \
+  do {                                                                        \
+    if (0 == strcmp(#name, modname))                                          \
+      return node_builtin_ ## name ## _init;                                  \
+  } while (0);
+  BUILTIN_MODULES_MAP(V)
+#undef V
+  return NULL;
 }
+
 
 typedef void (UV_DYNAMIC* extInit)(Handle<Object> exports);
 
@@ -2102,10 +2096,6 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
              "Module version mismatch. Expected %d, got %d.",
              NODE_MODULE_VERSION, mp->nm_version);
     env->ThrowError(errmsg);
-    return;
-  }
-  if (mp->nm_flags & NM_F_BUILTIN) {
-    env->ThrowError("Built-in module self-registered.");
     return;
   }
 
@@ -2224,15 +2214,10 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
   uint32_t l = modules->Length();
   modules->Set(l, OneByteString(env->isolate(), buf));
 
-  node_module* mod = get_builtin_module(*module_v);
-  if (mod != NULL) {
+  BuiltinModuleInitializerFunction initializer = GetBuiltinModule(*module_v);
+  if (initializer != NULL) {
     exports = Object::New(env->isolate());
-    // Internal bindings don't have a "module" object, only exports.
-    assert(mod->nm_register_func == NULL);
-    assert(mod->nm_context_register_func != NULL);
-    Local<Value> unused = Undefined(env->isolate());
-    mod->nm_context_register_func(exports, unused,
-      env->context(), mod->nm_priv);
+    initializer(env, exports);
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "constants")) {
     exports = Object::New(env->isolate());
@@ -2476,7 +2461,7 @@ static Handle<Object> GetFeatures(Environment* env) {
   obj->Set(env->tls_ocsp_string(), tls_ocsp);
 
   obj->Set(env->tls_string(),
-           Boolean::New(env->isolate(), get_builtin_module("crypto") != NULL));
+           Boolean::New(env->isolate(), GetBuiltinModule("crypto") != NULL));
 
   return scope.Escape(obj);
 }

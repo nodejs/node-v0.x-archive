@@ -27,12 +27,11 @@
 namespace node {
 namespace uv {
 
-using v8::Context;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
-using v8::Handle;
 using v8::HandleScope;
 using v8::Integer;
+using v8::Local;
 using v8::Object;
 using v8::String;
 using v8::Value;
@@ -49,10 +48,7 @@ void ErrName(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Initialize(Handle<Object> target,
-                Handle<Value> unused,
-                Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
+extern "C" void node_builtin_uv_init(Environment* env, Local<Object> target) {
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "errname"),
               FunctionTemplate::New(env->isolate(), ErrName)->GetFunction());
 #define V(name, _)                                                            \
@@ -65,5 +61,3 @@ void Initialize(Handle<Object> target,
 
 }  // namespace uv
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(uv, node::uv::Initialize)

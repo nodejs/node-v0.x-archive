@@ -32,12 +32,47 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#if defined(HAVE_OPENSSL)
+# define IF_HAVE_OPENSSL(exp) exp
+#else
+# define IF_HAVE_OPENSSL(exp)
+#endif
+
+#define BUILTIN_MODULES_MAP(V)                                                \
+  V(buffer)                                                                   \
+  V(cares_wrap)                                                               \
+  V(contextify)                                                               \
+  V(fs)                                                                       \
+  V(fs_event_wrap)                                                            \
+  V(http_parser)                                                              \
+  V(os)                                                                       \
+  V(pipe_wrap)                                                                \
+  V(process_wrap)                                                             \
+  V(signal_wrap)                                                              \
+  V(smalloc)                                                                  \
+  V(spawn_sync)                                                               \
+  V(tcp_wrap)                                                                 \
+  V(timer_wrap)                                                               \
+  V(tty_wrap)                                                                 \
+  V(udp_wrap)                                                                 \
+  V(uv)                                                                       \
+  V(v8)                                                                       \
+  V(zlib)                                                                     \
+  IF_HAVE_OPENSSL(V(crypto))                                                  \
+  IF_HAVE_OPENSSL(V(tls_wrap))                                                \
+
 struct sockaddr;
 
 namespace node {
 
 // Forward declaration
 class Environment;
+
+#define V(name)                                                               \
+extern "C" void node_builtin_ ## name ## _init(Environment* env,              \
+                                               v8::Local<v8::Object>);
+BUILTIN_MODULES_MAP(V)
+#undef V
 
 // If persistent.IsWeak() == false, then do not call persistent.Reset()
 // while the returned Local<T> is still in scope, it will destroy the

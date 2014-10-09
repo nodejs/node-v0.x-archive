@@ -47,10 +47,7 @@ using v8::Value;
 
 class ProcessWrap : public HandleWrap {
  public:
-  static void Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
-    Environment* env = Environment::GetCurrent(context);
+  static void Initialize(Environment* env, Local<Object> target) {
     Local<FunctionTemplate> constructor = FunctionTemplate::New(env->isolate(),
                                                                 New);
     constructor->InstanceTemplate()->SetInternalFieldCount(1);
@@ -286,6 +283,10 @@ class ProcessWrap : public HandleWrap {
 };
 
 
-}  // namespace node
+extern "C" void node_builtin_process_wrap_init(Environment* env,
+                                               Local<Object> target) {
+  ProcessWrap::Initialize(env, target);
+}
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(process_wrap, node::ProcessWrap::Initialize)
+
+}  // namespace node

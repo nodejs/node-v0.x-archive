@@ -61,8 +61,6 @@
 namespace node {
 namespace Buffer {
 
-using v8::ArrayBuffer;
-using v8::Context;
 using v8::EscapableHandleScope;
 using v8::Function;
 using v8::FunctionCallbackInfo;
@@ -683,10 +681,8 @@ void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Initialize(Handle<Object> target,
-                Handle<Value> unused,
-                Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
+extern "C" void node_builtin_buffer_init(Environment* env,
+                                         Local<Object> target) {
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "setupBufferJS"),
               FunctionTemplate::New(env->isolate(), SetupBufferJS)
                   ->GetFunction());
@@ -695,5 +691,3 @@ void Initialize(Handle<Object> target,
 
 }  // namespace Buffer
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(buffer, node::Buffer::Initialize)

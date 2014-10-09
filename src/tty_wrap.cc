@@ -34,7 +34,6 @@
 namespace node {
 
 using v8::Array;
-using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -48,11 +47,7 @@ using v8::String;
 using v8::Value;
 
 
-void TTYWrap::Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
-
+void TTYWrap::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "TTY"));
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -188,6 +183,11 @@ TTYWrap::TTYWrap(Environment* env, Handle<Object> object, int fd, bool readable)
   uv_tty_init(env->event_loop(), &handle_, fd, readable);
 }
 
-}  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(tty_wrap, node::TTYWrap::Initialize)
+extern "C" void node_builtin_tty_wrap_init(Environment* env,
+                                           Local<Object> target) {
+  TTYWrap::Initialize(env, target);
+}
+
+
+}  // namespace node

@@ -66,11 +66,7 @@ Local<Object> TCPWrap::Instantiate(Environment* env) {
 }
 
 
-void TCPWrap::Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
-
+void TCPWrap::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "TCP"));
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -494,6 +490,10 @@ Local<Object> AddressToJS(Environment* env,
 }
 
 
-}  // namespace node
+extern "C" void node_builtin_tcp_wrap_init(Environment* env,
+                                           Local<Object> target) {
+  TCPWrap::Initialize(env, target);
+}
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(tcp_wrap, node::TCPWrap::Initialize)
+
+}  // namespace node

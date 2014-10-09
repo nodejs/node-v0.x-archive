@@ -70,11 +70,7 @@ Local<Object> PipeWrap::Instantiate(Environment* env) {
 }
 
 
-void PipeWrap::Initialize(Handle<Object> target,
-                          Handle<Value> unused,
-                          Handle<Context> context) {
-  Environment* env = Environment::GetCurrent(context);
-
+void PipeWrap::Initialize(Environment* env, Local<Object> target) {
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe"));
   t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -300,6 +296,9 @@ void PipeWrap::Connect(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-}  // namespace node
+extern "C" void node_builtin_pipe_wrap_init(Environment* env,
+                                            Local<Object> target) {
+  PipeWrap::Initialize(env, target);
+}
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(pipe_wrap, node::PipeWrap::Initialize)
+}  // namespace node

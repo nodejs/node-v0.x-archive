@@ -20,7 +20,6 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "node.h"
-#include "node_file.h"
 #include "node_buffer.h"
 #include "node_internals.h"
 #include "node_stat_watcher.h"
@@ -1114,12 +1113,7 @@ void FSInitialize(const FunctionCallbackInfo<Value>& args) {
   env->set_fs_stats_constructor_function(stats_constructor);
 }
 
-void InitFs(Handle<Object> target,
-            Handle<Value> unused,
-            Handle<Context> context,
-            void* priv) {
-  Environment* env = Environment::GetCurrent(context);
-
+extern "C" void node_builtin_fs_init(Environment* env, Local<Object> target) {
   // Function which creates a new Stats object.
   target->Set(
       FIXED_ONE_BYTE_STRING(env->isolate(), "FSInitialize"),
@@ -1160,5 +1154,3 @@ void InitFs(Handle<Object> target,
 }
 
 }  // end namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(fs, node::InitFs)

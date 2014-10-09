@@ -5092,14 +5092,11 @@ void SetEngine(const FunctionCallbackInfo<Value>& args) {
 
 
 // FIXME(bnoordhuis) Handle global init correctly.
-void InitCrypto(Handle<Object> target,
-                Handle<Value> unused,
-                Handle<Context> context,
-                void* priv) {
+extern "C" void node_builtin_crypto_init(Environment* env,
+                                         Local<Object> target) {
   static uv_once_t init_once = UV_ONCE_INIT;
   uv_once(&init_once, InitCryptoOnce);
 
-  Environment* env = Environment::GetCurrent(context);
   SecureContext::Initialize(env, target);
   Connection::Initialize(env, target);
   CipherBase::Initialize(env, target);
@@ -5134,5 +5131,3 @@ void InitCrypto(Handle<Object> target,
 
 }  // namespace crypto
 }  // namespace node
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(crypto, node::crypto::InitCrypto)

@@ -1,6 +1,7 @@
 {
   'variables': {
     'v8_use_snapshot%': 'true',
+    'node_component%': 'executable',
     'node_use_dtrace%': 'false',
     'node_use_etw%': 'false',
     'node_use_perfctr%': 'false',
@@ -73,7 +74,7 @@
   'targets': [
     {
       'target_name': 'node',
-      'type': 'executable',
+      'type': '<(node_component)',
 
       'dependencies': [
         'node_js2c#host',
@@ -97,7 +98,6 @@
         'src/node_file.cc',
         'src/node_http_parser.cc',
         'src/node_javascript.cc',
-        'src/node_main.cc',
         'src/node_os.cc',
         'src/node_v8.cc',
         'src/node_stat_watcher.cc',
@@ -126,8 +126,6 @@
         'src/node.h',
         'src/node_buffer.h',
         'src/node_constants.h',
-        'src/node_file.h',
-        'src/node_http_parser.h',
         'src/node_internals.h',
         'src/node_javascript.h',
         'src/node_root_certs.h',
@@ -164,6 +162,10 @@
       ],
 
       'conditions': [
+        [ 'node_component=="executable"', {
+          'sources': [ 'src/node_main.cc' ],
+        }],
+
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [

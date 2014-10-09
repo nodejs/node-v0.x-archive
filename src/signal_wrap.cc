@@ -43,10 +43,7 @@ using v8::Value;
 
 class SignalWrap : public HandleWrap {
  public:
-  static void Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
-    Environment* env = Environment::GetCurrent(context);
+  static void Initialize(Environment* env, Local<Object> target) {
     Local<FunctionTemplate> constructor = FunctionTemplate::New(env->isolate(),
                                                                 New);
     constructor->InstanceTemplate()->SetInternalFieldCount(1);
@@ -118,7 +115,10 @@ class SignalWrap : public HandleWrap {
 };
 
 
+extern "C" void node_builtin_signal_wrap_init(Environment* env,
+                                              Local<Object> target) {
+  SignalWrap::Initialize(env, target);
+}
+
+
 }  // namespace node
-
-
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(signal_wrap, node::SignalWrap::Initialize)
