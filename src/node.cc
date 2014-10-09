@@ -2946,6 +2946,13 @@ static void PrintHelp() {
          "  --trace-deprecation  show stack traces on deprecations\n"
          "  --v8-options         print v8 command line options\n"
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
+         "  --debug              enable remote debugging on port 5858\n"
+         "                       useful for long-running scripts\n"
+         "  --debug-brk          enable remote debugging on port 5858\n"
+         "                       and break on first line. Useful for\n"
+         "                       short-running scripts\n"
+         "  debug                run the script and start a command\n"
+         "                       line debugger\n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
