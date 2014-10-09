@@ -84,6 +84,12 @@ site, set the NODE_DEBUG environment variable:
         at Object.<anonymous> (/path/to/script.js:5:1)
         <etc.>
 
+## fs.CreateConfiguredFSObject(options)
+
+Creates and returns a new fs object with the specified options set. The valid options
+are:
+* `throwSafe` to prevent the error creation when the non-existent file is stat-ed
+
 
 ## fs.rename(oldPath, newPath, callback)
 
@@ -174,6 +180,10 @@ Asynchronous stat(2). The callback gets two arguments `(err, stats)` where
 `stats` is a [fs.Stats](#fs_class_fs_stats) object.  See the [fs.Stats](#fs_class_fs_stats)
 section below for more information.
 
+Setting the throwSafe fs option to true (see [fs.CreateConfiguredFSObject](#fs_createconfiguredfsobject_options))
+prevents the error creation. If the call fails, the first parameter of the callback will be true.
+This does not prevent the errors when the path contains the null character.
+
 ## fs.lstat(path, callback)
 
 Asynchronous lstat(2). The callback gets two arguments `(err, stats)` where
@@ -190,6 +200,10 @@ the file to be stat-ed is specified by the file descriptor `fd`.
 ## fs.statSync(path)
 
 Synchronous stat(2). Returns an instance of `fs.Stats`.
+
+Setting the throwSafe fs option to true (see [fs.CreateConfiguredFSObject](#fs_createconfiguredfsobject_options))
+prevents the error creation. If the call fails `fs.statSync` returns `false`.
+This does not prevent the errors when the path contains the null character.
 
 ## fs.lstatSync(path)
 
