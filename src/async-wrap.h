@@ -65,6 +65,8 @@ class AsyncWrap : public BaseObject {
 
   inline bool has_async_listener();
 
+  inline uint64_t id() const;
+
   inline uint32_t provider_type() const;
 
   // Only call these within a valid HandleScope.
@@ -79,6 +81,15 @@ class AsyncWrap : public BaseObject {
                                             v8::Handle<v8::Value>* argv);
 
  private:
+  struct ScopedExposeId {
+   public:
+    inline explicit ScopedExposeId(AsyncWrap* wrap);
+    inline ~ScopedExposeId();
+   private:
+    double* const uv_context_id_pointer_;
+    const double previous_value_;
+  };
+
   inline AsyncWrap();
 
   // TODO(trevnorris): BURN IN FIRE! Remove this as soon as a suitable
@@ -90,6 +101,7 @@ class AsyncWrap : public BaseObject {
 
   uint32_t async_flags_;
   uint32_t provider_type_;
+  const uint64_t id_;
 };
 
 }  // namespace node

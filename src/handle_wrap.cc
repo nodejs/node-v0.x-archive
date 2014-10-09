@@ -32,11 +32,15 @@
 namespace node {
 
 using v8::Context;
+using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::Handle;
 using v8::HandleScope;
 using v8::Local;
+using v8::Number;
 using v8::Object;
+using v8::TryCatch;
+using v8::Undefined;
 using v8::Value;
 
 // defined in node.cc
@@ -114,6 +118,7 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   HandleWrap* wrap = static_cast<HandleWrap*>(handle->data);
   Environment* env = wrap->env();
   HandleScope scope(env->isolate());
+  Context::Scope context_scope(env->context());
 
   // The wrap object should still be there.
   assert(wrap->persistent().IsEmpty() == false);
@@ -121,8 +126,6 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   // But the handle pointer should be gone.
   assert(wrap->handle__ == NULL);
 
-  HandleScope handle_scope(env->isolate());
-  Context::Scope context_scope(env->context());
   Local<Object> object = wrap->object();
 
   if (wrap->flags_ & kCloseCallback) {
@@ -131,6 +134,19 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
 
   object->SetAlignedPointerInInternalField(0, NULL);
   wrap->persistent().Reset();
+
+  Local<Function> handle_close_callback = env->handle_close_callback();
+  if (handle_close_callback.IsEmpty() == false) {
+    Local<Value> arg = Number::New(env->isolate(),
+                                   static_cast<double>(wrap->id()));
+    TryCatch try_catch;
+    handle_close_callback->Call(Undefined(env->isolate()), 1, &arg);
+    if (try_catch.HasCaught()) {
+      FatalException(env->isolate(), try_catch);
+      UNREACHABLE();
+    }
+  }
+
   delete wrap;
 }
 

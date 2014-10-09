@@ -213,6 +213,8 @@ inline Environment::Environment(v8::Local<v8::Context> context)
       using_smalloc_alloc_cb_(false),
       using_domains_(false),
       printed_error_(false),
+      unique_id_(0),
+      uv_context_id_(0),
       context_(context->GetIsolate(), context) {
   // We'll be creating new objects so make sure we've entered the context.
   v8::HandleScope handle_scope(isolate());
@@ -235,6 +237,10 @@ inline Environment::~Environment() {
 
 inline void Environment::Dispose() {
   delete this;
+}
+
+inline uint64_t Environment::NewUniqueId() {
+  return ++unique_id_;
 }
 
 inline v8::Isolate* Environment::isolate() const {
@@ -325,6 +331,10 @@ inline bool Environment::printed_error() const {
 
 inline void Environment::set_printed_error(bool value) {
   printed_error_ = value;
+}
+
+inline double* Environment::uv_context_id_pointer() {
+  return &uv_context_id_;
 }
 
 inline Environment* Environment::from_cares_timer_handle(uv_timer_t* handle) {

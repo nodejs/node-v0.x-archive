@@ -116,6 +116,7 @@ using v8::TryCatch;
 using v8::Uint32;
 using v8::V8;
 using v8::Value;
+using v8::kExternalFloat64Array;
 using v8::kExternalUnsignedIntArray;
 
 // FIXME(bnoordhuis) Make these per-context?
@@ -2276,6 +2277,27 @@ static void ProcessTitleSetter(Local<String> property,
 }
 
 
+static void GetHandleCloseCallback(Local<String>,
+                                   const PropertyCallbackInfo<Value>& info) {
+  Environment* env = Environment::GetCurrent(info.GetIsolate());
+  HandleScope scope(env->isolate());
+  Local<Function> handle_close_callback = env->handle_close_callback();
+  if (handle_close_callback.IsEmpty()) return;
+  info.GetReturnValue().Set(handle_close_callback);
+}
+
+
+
+static void SetHandleCloseCallback(Local<String>,
+                                   Local<Value> value,
+                                   const PropertyCallbackInfo<void>& info) {
+  Environment* env = Environment::GetCurrent(info.GetIsolate());
+  HandleScope scope(env->isolate());
+  env->set_handle_close_callback(
+      value->IsFunction() ? value.As<Function>() : Local<Function>());
+}
+
+
 static void EnvGetter(Local<String> property,
                       const PropertyCallbackInfo<Value>& info) {
   Environment* env = Environment::GetCurrent(info.GetIsolate());
@@ -2594,6 +2616,18 @@ void SetupProcessObject(Environment* env,
   HandleScope scope(env->isolate());
 
   Local<Object> process = env->process_object();
+
+  // Node.js attaches a unique id to libuv handles and requests that is
+  // exposed to JS land as a single-element typed array-ish object.
+  Local<Object> uv_context_id_obj = Object::New(env->isolate());
+  uv_context_id_obj->SetIndexedPropertiesToExternalArrayData(
+      env->uv_context_id_pointer(), kExternalFloat64Array, 1);
+  READONLY_PROPERTY(process, "_uvContextId", uv_context_id_obj);
+
+  process->SetAccessor(
+      FIXED_ONE_BYTE_STRING(env->isolate(), "_uvHandleCloseCallback"),
+      GetHandleCloseCallback,
+      SetHandleCloseCallback);
 
   process->SetAccessor(env->title_string(),
                        ProcessTitleGetter,
