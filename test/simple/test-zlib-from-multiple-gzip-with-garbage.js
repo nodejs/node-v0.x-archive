@@ -19,7 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// test unzipping a file that was created by contactenating multiple gzip
+// test unzipping a file that was created by concatenating multiple gzip
 // streams.
 
 var common = require('../common');
