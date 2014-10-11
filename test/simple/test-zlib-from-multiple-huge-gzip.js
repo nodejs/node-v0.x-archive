@@ -59,9 +59,9 @@ function gzipAppend(data) {
 function writeGzipStream(text, cb) {
   var gzip = zlib.createGzip();
   gzip.on('data', gzipAppend);
-  gzip.write(text, function () {
-    gzip.flush(function () {
-      gzip.end(function () {
+  gzip.write(text, function() {
+    gzip.flush(function() {
+      gzip.end(function() {
         cb();
       });
     });
@@ -69,8 +69,8 @@ function writeGzipStream(text, cb) {
 }
 
 writeGzipStream(generateHugeStream(), function() {
-  writeGzipStream(generateHugeStream(), function () {
-    writeGzipStream(generateHugeStream(), function () {
+  writeGzipStream(generateHugeStream(), function() {
+    writeGzipStream(generateHugeStream(), function() {
       var gunzip = zlib.createGunzip();
       var gunzippedData = new Buffer(3 * HUGE);
       var gunzippedOffset = 0;
@@ -78,14 +78,14 @@ writeGzipStream(generateHugeStream(), function() {
         data.copy(gunzippedData, gunzippedOffset);
         gunzippedOffset += data.length;
       });
-      gunzip.on('end', function () {
+      gunzip.on('end', function() {
         var gunzippedStr = gunzippedData.toString('utf8', 0, gunzippedOffset);
         var originalStr  = originalBuffer.toString('utf8', 0, 3 * HUGE);
 
         assert.equal(gunzippedStr, originalStr);
       });
 
-      gunzip.write(gzipBuffer.slice(0, gzipOffset), 'binary', function () {
+      gunzip.write(gzipBuffer.slice(0, gzipOffset), 'binary', function() {
         gunzip.end();
       });
     });
