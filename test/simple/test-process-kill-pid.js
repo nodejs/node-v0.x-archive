@@ -73,14 +73,14 @@ function kill(tryPid, trySig, expectPid, expectSig) {
 
 kill(0, 'SIGHUP', 0, 1);
 kill(0, undefined, 0, 15);
-kill(String(0), 'SIGHUP', 0, 1);
-kill(String(0), undefined, 0, 15);
+kill('0', 'SIGHUP', 0, 1);
+kill('0', undefined, 0, 15);
 
 // negative numbers are meaningful on unix
 kill(-1, 'SIGHUP', -1, 1);
 kill(-1, undefined, -1, 15);
-kill(String(-1), 'SIGHUP', -1, 1);
-kill(String(-1), undefined, -1, 15);
+kill('-1', 'SIGHUP', -1, 1);
+kill('-1', undefined, -1, 15);
 
 kill(process.pid, 'SIGHUP', process.pid, 1);
 kill(process.pid, undefined, process.pid, 15);
