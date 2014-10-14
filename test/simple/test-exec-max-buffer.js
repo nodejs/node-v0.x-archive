@@ -31,4 +31,7 @@ var cmd = 'echo "hello world"';
 exec(cmd, { maxBuffer: 5 }, function(err, stdout, stderr) {
   assert.ok(err);
   assert.ok(/maxBuffer/.test(err.message));
+  assert.equal(err.killed, true);
+  assert.notStrictEqual(err.code, undefined);
+  assert.notStrictEqual(err.signal, undefined);
 });
