@@ -38,6 +38,14 @@ To create .pfx or .p12, do this:
   - `certfile`: all CA certs concatenated in one file like
     `cat ca1-cert.pem ca2-cert.pem > ca-cert.pem`
 
+## Protocol support
+
+Node.js is compiled without SSL2/SSL3 protocol support by default. It was
+shown by many security specialists that both of these algorithms are insecure
+and could be easily compromised. However, in some situations, it may cause
+problems with legacy clients/servers (such as Internet Explorer 6). If you do
+really wish to use them, please rebuild node.js with `./configure --with-ssl3`.
+
 
 ## Client-initiated renegotiation attack mitigation
 
