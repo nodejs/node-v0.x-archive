@@ -229,6 +229,10 @@ automatically set as a listener for the [secureConnection][] event.  The
     SSL version 3. The possible values depend on your installation of
     OpenSSL and are defined in the constant [SSL_METHODS][].
 
+  - `secureOptions`: Set server options. For example, to disable the SSLv3
+    protocol set the `SSL_OP_NO_SSLv3` flag. See [SSL_CTX_set_options]
+    for all available options.
+
 Here is a simple example echo server:
 
     var tls = require('tls');
@@ -819,3 +823,4 @@ The numeric representation of the local port.
 [ECDHE]: https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman
 [asn1.js]: http://npmjs.org/package/asn1.js
 [OCSP request]: http://en.wikipedia.org/wiki/OCSP_stapling
+[SSL_CTX_set_options]: https://www.openssl.org/docs/ssl/SSL_CTX_set_options.html
