@@ -92,15 +92,6 @@ if defined noprojgen goto msbuild
 
 if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 
-@rem Generate the VS project.
-SETLOCAL
-  if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
-  python configure %i18n_arg% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
-  if errorlevel 1 goto create-msvs-files-failed
-  if not exist node.sln goto create-msvs-files-failed
-  echo Project files generated.
-ENDLOCAL
-
 :msbuild
 @rem Skip project generation if requested.
 if defined nobuild goto sign
@@ -134,6 +125,14 @@ echo Build skipped. To build, this file needs to run from VS cmd prompt.
 goto run
 
 :msbuild-found
+@rem Generate the VS project.
+SETLOCAL
+  python configure %i18n_arg% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
+  if errorlevel 1 goto create-msvs-files-failed
+  if not exist node.sln goto create-msvs-files-failed
+  echo Project files generated.
+ENDLOCAL
+
 @rem Build the sln with msbuild.
 msbuild node.sln /m /t:%target% /p:Configuration=%config% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
