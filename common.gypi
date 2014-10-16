@@ -171,9 +171,15 @@
         'cflags': [ '-pthread', ],
         'ldflags': [ '-pthread' ],
       }],
+      [ 'OS in "linux freebsd openbsd android"', {
+        'cflags_cc': [ '-std=gnu++0x' ],
+      }],
+      [ 'OS in "solaris"', {
+        'cflags_cc': [ '-std=c++0x' ],
+      }],
       [ 'OS in "linux freebsd openbsd solaris android"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
-        'cflags_cc': [ '-fno-rtti', '-fno-exceptions', '-std=gnu++0x' ],
+        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
         'ldflags': [ '-rdynamic' ],
         'target_conditions': [
           ['_type=="static_library"', {
