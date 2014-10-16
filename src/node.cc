@@ -126,7 +126,6 @@ static Persistent<String> enter_symbol;
 static Persistent<String> exit_symbol;
 static Persistent<String> disposed_symbol;
 
-
 static bool print_eval = false;
 static bool force_repl = false;
 static bool trace_deprecation = false;
