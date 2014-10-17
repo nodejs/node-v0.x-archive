@@ -70,7 +70,9 @@ For TCP sockets, `options` argument should be an object which specifies:
 
   - `localPort`: Local port to bind to for network connections.
 
-  - `family` : Version of IP stack. Defaults to `4`.
+  - `family`: Version of IP stack. Defaults to `4`.
+
+  - `resolver`: Function to resolve domain names. Defaults to `dns.lookup`.
 
 For local domain sockets, `options` argument should be an object which
 specifies:
