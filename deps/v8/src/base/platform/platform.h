@@ -29,14 +29,6 @@
 #include "src/base/platform/mutex.h"
 #include "src/base/platform/semaphore.h"
 
-#ifdef __sun
-# ifndef signbit
-namespace std {
-int signbit(double x);
-}
-# endif
-#endif
-
 #if V8_OS_QNX
 #include "src/base/qnx-math.h"
 #endif
