@@ -21,28 +21,34 @@
 
 var common = require('../common');
 var assert = require('assert');
+var dns = require('dns');
 var net = require('net');
 
-var resolver_called = false;
-var connection_ok = false;
+var resolverCalled = false;
+var connectionOK = false;
 
 var server = net.createServer(function(client) {
   client.end();
   server.close();
 });
 
-function simple_resolver(host, options, callback) { // world's worst dns resolver
-  resolver_called = true;
-  callback(false, '127.0.0.1', 4);
+function simpleResolver(host, options, callback) {
+  resolverCalled = true;
+  dns.lookup(host, options, callback);
 }
 
 server.listen(common.PORT, 'localhost', function() {
-  net.connect({port: common.PORT, host: 'localhost', resolver: simple_resolver}).on('connect', function() {
-  	connection_ok = true;
+  var options = {
+    port: common.PORT,
+    host: 'localhost',
+    resolver: simpleResolver
+  };
+  net.connect(options).on('connect', function() {
+    connectionOK = true;
   });
 });
 
 process.on('exit', function() {
-  assert(resolver_called);
-  assert(connection_ok);
+  assert(resolverCalled);
+  assert(connectionOK);
 });
