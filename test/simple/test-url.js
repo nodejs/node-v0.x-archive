@@ -155,30 +155,30 @@ var parseTests = {
 
   // an unexpected invalid char in the hostname.
   'HtTp://x.y.cOm*a/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*a/b/c?d=e#f%20g%3Ch%3Ei',
+    'href': 'http:///b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
-    'host': 'x.y.com',
-    'hostname': 'x.y.com',
-    'pathname': '/*a/b/c',
+    'host': '',
+    'hostname': '',
+    'pathname': '/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*a/b/c?d=e'
+    'path': '/b/c?d=e'
   },
 
   // make sure that we don't accidentally lcast the path parts.
-  'HtTp://x.y.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*A/b/c?d=e#f%20g%3Ch%3Ei',
+  'HtTp://x.y.cOm*A/B/c?d=e#f g<h>i' : {
+    'href': 'http:///B/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
-    'host': 'x.y.com',
-    'hostname': 'x.y.com',
-    'pathname': '/*A/b/c',
+    'host': '',
+    'hostname': '',
+    'pathname': '/B/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*A/b/c?d=e'
+    'path': '/B/c?d=e'
   },
 
   'http://x...y...#p': {
@@ -494,16 +494,16 @@ var parseTests = {
   },
 
   'http://www.Äffchen.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://www.xn--ffchen-9ta.com/*A/b/c?d=e#f%20g%3Ch%3Ei',
+    'href': 'http:///b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
-    'host': 'www.xn--ffchen-9ta.com',
-    'hostname': 'www.xn--ffchen-9ta.com',
-    'pathname': '/*A/b/c',
+    'host': '',
+    'hostname': '',
+    'pathname': '/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*A/b/c?d=e'
+    'path': '/b/c?d=e'
   },
 
   'http://SÉLIER.COM/' : {
