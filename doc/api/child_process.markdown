@@ -300,10 +300,12 @@ child process has any open IPC channels with the parent (i.e `fork()`).
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
   * `env` {Object} Environment key-value pairs
-  * `stdio` {Array|String} Child's stdio configuration. (See below)
+  * `stdio` {Array|String} Child's stdio configuration. (See
+    [below](#child_process_options_stdio))
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
-    for stdio.  (See below)
-  * `detached` {Boolean} The child will be a process group leader.  (See below)
+    for stdio.  (See [below](#child_process_options_customFds))
+  * `detached` {Boolean} The child will be a process group leader.  (See
+    [below](#child_process_options_detached))
   * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
   * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
 * return: {ChildProcess object}
@@ -377,7 +379,16 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
     });
 
 
-The 'stdio' option to `child_process.spawn()` is an array where each
+### options.stdio
+
+As a shorthand, the `stdio` argument may also be one of the following
+strings:
+
+* `'pipe'` - `['pipe', 'pipe', 'pipe']`, this is the default value
+* `'ignore'` - `['ignore', 'ignore', 'ignore']`
+* `'inherit'` - `[process.stdin, process.stdout, process.stderr]` or `[0,1,2]`
+
+Otherwise, the 'stdio' option to `child_process.spawn()` is an array where each
 index corresponds to a fd in the child.  The value is one of the following:
 
 1. `'pipe'` - Create a pipe between the child process and the parent process.
@@ -408,13 +419,6 @@ index corresponds to a fd in the child.  The value is one of the following:
    words, stdin, stdout, and stderr) a pipe is created. For fd 3 and up, the
    default is `'ignore'`.
 
-As a shorthand, the `stdio` argument may also be one of the following
-strings, rather than an array:
-
-* `ignore` - `['ignore', 'ignore', 'ignore']`
-* `pipe` - `['pipe', 'pipe', 'pipe']`
-* `inherit` - `[process.stdin, process.stdout, process.stderr]` or `[0,1,2]`
-
 Example:
 
     var spawn = require('child_process').spawn;
@@ -428,6 +432,8 @@ Example:
     // Open an extra fd=4, to interact with programs present a
     // startd-style interface.
     spawn('prg', [], { stdio: ['pipe', null, null, null, 'pipe'] });
+
+### options.detached
 
 If the `detached` option is set, the child process will be made the leader of a
 new process group.  This makes it possible for the child to continue running 
@@ -456,6 +462,8 @@ When using the `detached` option to start a long-running process, the process
 will not stay running in the background unless it is provided with a `stdio`
 configuration that is not connected to the parent.  If the parent's `stdio` is
 inherited, the child will remain attached to the controlling terminal.
+
+### options.customFds
 
 There is a deprecated option called `customFds` which allows one to specify
 specific file descriptors for the stdio of the child process. This API was
