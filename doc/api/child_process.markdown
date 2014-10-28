@@ -374,18 +374,6 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
     });
 
 
-Example of checking for failed exec:
-
-    var spawn = require('child_process').spawn,
-        child = spawn('bad_command');
-
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', function (data) {
-      if (/^execvp\(\)/.test(data)) {
-        console.log('Failed to start child process.');
-      }
-    });
-
 Note that if spawn receives an empty options object, it will result in
 spawning the process with an empty environment rather than using
 `process.env`. This due to backwards compatibility issues with a deprecated
