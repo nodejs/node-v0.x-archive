@@ -318,7 +318,9 @@ The third argument is used to specify additional options, which defaults to:
     }
 
 `cwd` allows you to specify the working directory from which the process is spawned.
-Use `env` to specify environment variables that will be visible to the new process.
+
+Use `env` to specify environment variables that will be visible to the new
+process, the default is `process.env`.
 
 Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit code:
 
@@ -373,11 +375,6 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
       }
     });
 
-
-Note that if spawn receives an empty options object, it will result in
-spawning the process with an empty environment rather than using
-`process.env`. This due to backwards compatibility issues with a deprecated
-API.
 
 The 'stdio' option to `child_process.spawn()` is an array where each
 index corresponds to a fd in the child.  The value is one of the following:
