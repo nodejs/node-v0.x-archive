@@ -299,10 +299,10 @@ child process has any open IPC channels with the parent (i.e `fork()`).
 * `args` {Array} List of string arguments
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
+  * `env` {Object} Environment key-value pairs
   * `stdio` {Array|String} Child's stdio configuration. (See below)
   * `customFds` {Array} **Deprecated** File descriptors for the child to use
     for stdio.  (See below)
-  * `env` {Object} Environment key-value pairs
   * `detached` {Boolean} The child will be a process group leader.  (See below)
   * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
   * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
@@ -317,7 +317,8 @@ The third argument is used to specify additional options, which defaults to:
       env: process.env
     }
 
-`cwd` allows you to specify the working directory from which the process is spawned.
+Use `cwd` to specify the working directory from which the process is spawned.
+If not given, the default is to inherit the current working directory.
 
 Use `env` to specify environment variables that will be visible to the new
 process, the default is `process.env`.
