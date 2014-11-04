@@ -502,7 +502,7 @@ def configure_node(o):
     o['variables']['gcc_version'] = 10 * cc_version[0] + cc_version[1]
 
   # clang has always supported -fvisibility=hidden, right?
-  if not is_clang and cc_version < (4,7,0):
+  if flavor != 'win' and not is_clang and cc_version < (4,7,0):
     raise Exception(
       'Need at least gcc 4.7 to compile V8, you have {version}'.format(
         version=cc_version))
