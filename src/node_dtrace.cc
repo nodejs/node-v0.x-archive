@@ -331,7 +331,7 @@ void InitDTrace(Environment* env, Handle<Object> target) {
   }
 
 #ifdef HAVE_ETW
-  init_etw();
+  init_etw(env->isolate());
 #endif
 
 #if defined HAVE_DTRACE || defined HAVE_ETW

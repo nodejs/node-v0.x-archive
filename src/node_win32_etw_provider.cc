@@ -125,12 +125,15 @@ void CodeAddressNotification(const JitCodeEvent* jevent) {
 //       event callbacks are received in the same thread. Attempts
 //       to write ETW events in this thread will fail.
 void etw_events_change_async(uv_async_t* handle) {
-  if (events_enabled > 0) {
+  v8::Isolate* isolate = reinterpret_cast<v8::Isolate*>(handle->data);
+
+  assert(isolate);
+  if (events_enabled > 0 && isolate) {
     NODE_V8SYMBOL_RESET();
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventEnumExisting,
                                CodeAddressNotification);
   } else {
-    V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
   }
 }
 
@@ -161,7 +164,9 @@ void NTAPI etw_events_enable_callback(
 }
 
 
-void init_etw() {
+void init_etw(v8::Isolate* isolate) {
+  assert(isolate);
+
   events_enabled = 0;
 
   advapi = LoadLibrary("advapi32.dll");
@@ -172,6 +177,7 @@ void init_etw() {
       GetProcAddress(advapi, "EventUnregister");
     event_write = (EventWriteFunc)GetProcAddress(advapi, "EventWrite");
 
+    dispatch_etw_events_change_async.data = isolate;
     // create async object used to invoke main thread from callback
     uv_async_init(uv_default_loop(),
                   &dispatch_etw_events_change_async,
@@ -189,14 +195,18 @@ void init_etw() {
 }
 
 
-void shutdown_etw() {
+
+void shutdown_etw(v8::Isolate* isolate) {
+  assert(isolate);
+
   if (advapi && event_unregister && node_provider) {
     event_unregister(node_provider);
     node_provider = 0;
   }
 
   events_enabled = 0;
-  V8::SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
+  if (isolate)
+    isolate->SetJitCodeEventHandler(v8::kJitCodeEventDefault, NULL);
 
   if (advapi) {
     FreeLibrary(advapi);

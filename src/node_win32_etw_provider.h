@@ -51,7 +51,7 @@ typedef ULONG (NTAPI *EventWriteFunc)(
   PEVENT_DATA_DESCRIPTOR UserData
 );
 
-void init_etw();
+void init_etw(v8::Isolate* isolate);
 void shutdown_etw();
 
 INLINE void NODE_HTTP_SERVER_REQUEST(node_dtrace_http_server_request_t* req,
