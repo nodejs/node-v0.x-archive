@@ -99,6 +99,15 @@ ENDLOCAL
 @rem Skip project generation if requested.
 if defined nobuild goto sign
 
+@rem Look for Visual Studio 2014
+if not defined VS140COMNTOOLS goto vc-set-2013
+if not exist "%VS140COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2013
+call "%VS140COMNTOOLS%\..\..\vc\vcvarsall.bat"
+if not defined VCINSTALLDIR goto msbuild-not-found
+set GYP_MSVS_VERSION=2013
+goto msbuild-found
+
+:vc-set-2013
 @rem Look for Visual Studio 2013
 if not defined VS120COMNTOOLS goto vc-set-2012
 if not exist "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2012
@@ -129,7 +138,7 @@ goto run
 
 :msbuild-found
 @rem Build the sln with msbuild.
-msbuild node.sln /m /t:%target% /p:Configuration=%config% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild node.sln /m:%NUMBER_OF_PROCESSORS% /p:BuildInParallel=true /toolsversion:14.0 /p:PlatformToolset=v140 /t:%target% /p:Configuration=%config% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
 :sign
