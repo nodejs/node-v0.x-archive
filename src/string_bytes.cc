@@ -277,13 +277,6 @@ bool StringBytes::GetExternalParts(Isolate* isolate,
     *data = ext->data();
     *len = ext->length();
     return true;
-
-  } else if (str->IsExternal()) {
-    const String::ExternalStringResource* ext;
-    ext = str->GetExternalStringResource();
-    *data = reinterpret_cast<const char*>(ext->data());
-    *len = ext->length();
-    return true;
   }
 
   return false;
