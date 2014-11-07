@@ -119,13 +119,20 @@ void uv_once(uv_once_t* guard, void (*callback)(void)) {
 
 
 int uv_thread_join(uv_thread_t *tid) {
-  if (WaitForSingleObject(*tid, INFINITE))
+  int err;
+  HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, *tid);
+  if (thread == NULL)
     return uv_translate_sys_error(GetLastError());
+
+  if (WaitForSingleObject(thread, INFINITE))
+    err = uv_translate_sys_error(GetLastError());
   else {
-    CloseHandle(*tid);
+    err = 0;
     *tid = 0;
-    return 0;
   }
+
+  CloseHandle(thread);
+  return err;
 }
 
 
