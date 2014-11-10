@@ -14,7 +14,7 @@
         'defines': [ 'DEBUG', '_DEBUG' ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'RuntimeLibrary': 1, # static debug
+            'RuntimeLibrary': 3 # MDd
           },
         },
       },
@@ -22,7 +22,7 @@
         'defines': [ 'NDEBUG' ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'RuntimeLibrary': 0, # static release
+            'RuntimeLibrary': 2 # MD
           },
         },
       }

@@ -344,9 +344,9 @@
 
             'conditions': [
               ['OS=="win" and component=="shared_library"', {
-                'RuntimeLibrary': '3',  # /MDd
+                'RuntimeLibrary': 3 # MDd
               }, {
-                'RuntimeLibrary': '1',  # /MTd
+                'RuntimeLibrary': 3 # MDd
               }],
             ],
           },
@@ -409,9 +409,9 @@
                 'StringPooling': 'true',
                 'conditions': [
                   ['OS=="win" and component=="shared_library"', {
-                    'RuntimeLibrary': '2',  #/MD
+                    'RuntimeLibrary': 2 # MD
                   }, {
-                    'RuntimeLibrary': '0',  #/MT
+                    'RuntimeLibrary': 2 # MD
                   }],
                   ['v8_target_arch=="x64"', {
                     # TODO(2207): remove this option once the bug is fixed.
