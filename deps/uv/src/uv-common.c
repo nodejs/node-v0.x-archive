@@ -293,8 +293,10 @@ int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
   ctx->arg = arg;
 
 #ifdef _WIN32
-  *tid = (HANDLE) _beginthreadex(NULL, 0, uv__thread_start, ctx, 0, NULL);
-  err = *tid ? 0 : errno;
+  if (_beginthreadex(NULL, 0, uv__thread_start, ctx, 0, tid))
+    err = 0;
+  else
+    err = errno;
 #else
   err = pthread_create(tid, NULL, uv__thread_start, ctx);
 #endif

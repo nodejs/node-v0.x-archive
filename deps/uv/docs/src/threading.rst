@@ -56,7 +56,7 @@ Threads
 ^^^^^^^
 
 .. c:function:: int uv_thread_create(uv_thread_t* tid, uv_thread_cb entry, void* arg)
-.. c:function:: unsigned long uv_thread_self(void)
+.. c:function:: uv_thread_t uv_thread_self(void)
 .. c:function:: int uv_thread_join(uv_thread_t *tid)
 
 Thread-local storage
