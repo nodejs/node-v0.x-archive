@@ -28,7 +28,8 @@
     "translit": "none",
     "brkfiles": "none",
     "brkdict": "none",
-    "confusables": "none"
+    "confusables": "none",
+    "unit": "none"
   },
   "remove": [
     "cnvalias.icu",
