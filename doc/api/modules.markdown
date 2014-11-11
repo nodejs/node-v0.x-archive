@@ -61,8 +61,7 @@ The module system is implemented in the `require("module")` module.
 
 <!--type=misc-->
 
-When there are circular `require()` calls, a module might not be
-done being executed when it is returned.
+In the case of circular `require()` calls, a module might not be 'done' executing when it is returned.
 
 Consider this situation:
 
@@ -120,7 +119,7 @@ plan accordingly.
 Node has several modules compiled into the binary.  These modules are
 described in greater detail elsewhere in this documentation.
 
-The core modules are defined in node's source in the `lib/` folder.
+The core modules are defined within node's source and are located in the `lib/` folder.
 
 Core modules are always preferentially loaded if their identifier is
 passed to `require()`.  For instance, `require('http')` will always
@@ -131,25 +130,22 @@ return the built in HTTP module, even if there is a file by that name.
 <!--type=misc-->
 
 If the exact filename is not found, then node will attempt to load the
-required filename with the added extension of `.js`, `.json`, and then `.node`.
+required filename with the added extension of `.js`, `.json`, and then `.node`, respectively.
 
 `.js` files are interpreted as JavaScript text files, and `.json` files are
 parsed as JSON text files. `.node` files are interpreted as compiled addon
 modules loaded with `dlopen`.
 
-A module prefixed with `'/'` is an absolute path to the file.  For
+A required module prefixed with `'/'`, is an absolute path to the file.  For
 example, `require('/home/marco/foo.js')` will load the file at
 `/home/marco/foo.js`.
 
-A module prefixed with `'./'` is relative to the file calling `require()`.
-That is, `circle.js` must be in the same directory as `foo.js` for
+A required module prefixed with `'./'` is relative to the file calling `require()`.  That is, `circle.js` must be in the same directory as `foo.js` for
 `require('./circle')` to find it.
 
-Without a leading '/' or './' to indicate a file, the module is either a
-"core module" or is loaded from a `node_modules` folder.
+Without a leading '/' or './' to indicate a required file, node looks first for a "core module" and for a module from `node_modules` folder.
 
-If the given path does not exist, `require()` will throw an Error with its
-`code` property set to `'MODULE_NOT_FOUND'`.
+If the given path to a module does not exist, `require()` will throw an Error with its `code` property set to `'MODULE_NOT_FOUND'`.
 
 ## Loading from `node_modules` Folders
 
