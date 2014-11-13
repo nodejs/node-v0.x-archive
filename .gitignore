@@ -46,6 +46,8 @@ ipch/
 email.md
 deps/v8-*
 deps/icu
+deps/icu*.zip
+deps/icu*.tgz
 ./node_modules
 .svn/
 
