@@ -57,9 +57,11 @@ A collection of all the standard HTTP response status codes, and the
 short description of each.  For example, `http.STATUS_CODES[404] === 'Not
 Found'`.
 
-## http.createServer([requestListener])
+## http.createServer([options][, requestListener])
 
-Returns a new web server object.
+Returns a new web server object. If an `options` object containing valid TLS
+arguments is passed, then a HTTPS server will be returned based on the
+options.
 
 The `requestListener` is a function which is automatically
 added to the `'request'` event.
