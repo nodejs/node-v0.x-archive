@@ -353,6 +353,10 @@ On Linux, positional writes don't work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
+Warning: when using the flag `'w'`, the file is truncated instantly, but
+it may only be written to many event loop ticks later. Any attempt
+to read from the file until then will return no data and no error.
+
 ## fs.openSync(path, flags, [mode])
 
 Synchronous version of `fs.open()`.
@@ -502,6 +506,10 @@ Example:
       if (err) throw err;
       console.log('It\'s saved!');
     });
+
+Warning: when using the default flag `'w'`, the file is truncated instantly, but
+it may only be written to many event loop ticks later. Any attempt
+to read from the file until then will return no data and no error.
 
 ## fs.writeFileSync(filename, data, [options])
 
