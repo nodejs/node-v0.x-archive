@@ -92,8 +92,11 @@ Messages send by `.send(message, [sendHandle])` are obtained using the
 A `Writable Stream` that represents the child process's `stdin`.
 Closing this stream via `end()` often causes the child process to terminate.
 
-If the child stdio streams are shared with the parent, then this will
+If the child was not spawned with `stdio[0]` set to `'pipe'`, then this will
 not be set.
+
+`child.stdin` is shorthand for `child.stdio[0]`. Both properties will refer
+to the same object, or null.
 
 ### child.stdout
 
@@ -101,8 +104,11 @@ not be set.
 
 A `Readable Stream` that represents the child process's `stdout`.
 
-If the child stdio streams are shared with the parent, then this will
+If the child was not spawned with `stdio[1]` set to `'pipe'`, then this will
 not be set.
+
+`child.stdout` is shorthand for `child.stdio[1]`. Both properties will refer
+to the same object, or null.
 
 ### child.stderr
 
@@ -110,8 +116,43 @@ not be set.
 
 A `Readable Stream` that represents the child process's `stderr`.
 
-If the child stdio streams are shared with the parent, then this will
+If the child was not spawned with `stdio[2]` set to `'pipe'`, then this will
 not be set.
+
+`child.stderr` is shorthand for `child.stdio[2]`. Both properties will refer
+to the same object, or null.
+
+### child.stdio
+
+* {Array}
+
+A sparse array of pipes to the child process, corresponding with positions in
+the [stdio](#child_process_options_stdio) option to
+[spawn](#child_process_child_process_spawn_command_args_options) that have been
+set to `'pipe'`.
+Note that streams 0-2 are also available as ChildProcess.stdin,
+ChildProcess.stdout, and ChildProcess.stderr, respectively.
+
+In the following example, only the child's fd `1` is setup as a pipe, so only
+the parent's `child.stdio[1]` is a stream, all other values in the array are
+`null`.
+
+    child = child_process.spawn("ls", {
+        stdio: [
+          0, // use parents stdin for child
+          'pipe', // pipe child's stdout to parent
+          fs.openSync("err.out", "w") // direct child's stderr to a file
+        ]
+    });
+
+    assert.equal(child.stdio[0], null);
+    assert.equal(child.stdio[0], child.stdin);
+
+    assert(child.stdout);
+    assert.equal(child.stdio[1], child.stdout);
+
+    assert.equal(child.stdio[2], null);
+    assert.equal(child.stdio[2], child.stderr);
 
 ### child.pid
 
