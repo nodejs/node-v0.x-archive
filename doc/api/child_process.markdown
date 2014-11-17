@@ -90,7 +90,8 @@ Messages send by `.send(message, [sendHandle])` are obtained using the
 * {Stream object}
 
 A `Writable Stream` that represents the child process's `stdin`.
-Closing this stream via `end()` often causes the child process to terminate.
+If the child is waiting to read all its input, it will not continue until this
+stream has been closed via `end()`.
 
 If the child was not spawned with `stdio[0]` set to `'pipe'`, then this will
 not be set.
