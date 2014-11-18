@@ -19,7 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var crypto = require('crypto');
+try {
+  var crypto = require('crypto');
+} catch (e) {
+  console.log('Skipping test, compiled without crypto support.');
+  return;
+}
+
 var domain = require('domain');
 var assert = require('assert');
 var d = domain.create();
