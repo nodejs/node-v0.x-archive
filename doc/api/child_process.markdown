@@ -597,7 +597,6 @@ leaner than `child_process.exec`. It has the same options.
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
   * `env` {Object} Environment key-value pairs
-  * `encoding` {String} (Default: 'utf8')
   * `execPath` {String} Executable used to create the child process
   * `execArgv` {Array} List of string arguments passed to the executable
     (Default: `process.execArgv`)
