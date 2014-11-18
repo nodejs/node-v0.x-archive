@@ -119,12 +119,24 @@ size_t Length(Handle<Object> obj) {
 
 Local<Object> New(Isolate* isolate, Handle<String> string, enum encoding enc) {
   EscapableHandleScope scope(isolate);
+  Local<String> tmp_string;
 
-  size_t length = StringBytes::Size(isolate, string, enc);
+  if (string->IsExternalAscii()) {
+    const String::ExternalAsciiStringResource* ext;
+    ext = string->GetExternalAsciiStringResource();
+    tmp_string = String::NewFromOneByte(isolate, reinterpret_cast<const uint8_t*>(ext->data()), String::NewStringType::kNormalString, ext->length());
+  } else if (string->IsExternal()) {
+    const String::ExternalStringResource* ext;
+    ext = string->GetExternalStringResource();
+    tmp_string = String::NewFromTwoByte(isolate, ext->data(), String::NewStringType::kNormalString, ext->length());
+  } else {
+    tmp_string = string;
+  }
+  size_t length = StringBytes::Size(isolate, tmp_string, enc);
 
   Local<Object> buf = New(length);
   char* data = Buffer::Data(buf);
-  StringBytes::Write(isolate, data, length, string, enc);
+  StringBytes::Write(isolate, data, length, tmp_string, enc);
 
   return scope.Escape(buf);
 }
