@@ -51,7 +51,11 @@ if (process.argv[2] === 'child') {
   var triggeredProcessUncaughtException = false;
 
   process.on('uncaughtException', function onUncaughtException() {
-    process.send('triggeredProcessUncaughtEx');
+    // The process' uncaughtException event must not be emitted when
+    // an error handler is setup on the top-level domain.
+    // Exiting with exit code of 42 here so that it would assert when
+    // the parent checks the child exit code.
+    process.exit(42);
   });
 
   d.on('error', function() {
@@ -70,12 +74,25 @@ if (process.argv[2] === 'child') {
   });
 
   d.run(function doStuff() {
+    // Throwing from within different types of callbacks as each of them
+    // handles domains differently
     process.nextTick(function () {
-      throw new Error("You should NOT see me");
+      throw new Error("Error from nextTick callback");
     });
+
+    var fs = require('fs');
+    fs.exists('/non/existing/file', function onExists(exists) {
+      throw new Error("Error from fs.exists callback");
+    });
+
+    setImmediate(function onSetImmediate() {
+      throw new Error("Error from setImmediate callback");
+    });
+
+    throw new Error("Error from domain.run callback");
   });
 } else {
-  var fork = require('child_process').fork;
+  var exec = require('child_process').exec;
 
   function testDomainExceptionHandling(cmdLineOption, options) {
     if (typeof cmdLineOption === 'object') {
@@ -83,25 +100,27 @@ if (process.argv[2] === 'child') {
       cmdLineOption = undefined;
     }
 
-    var forkOptions;
-    if (cmdLineOption) {
-      forkOptions = { execArgv: [cmdLineOption] };
-    }
-
     var throwInDomainErrHandlerOpt;
     if (options.throwInDomainErrHandler)
-     throwInDomainErrHandlerOpt = 'throwInDomainErrHandler';
+      throwInDomainErrHandlerOpt = 'throwInDomainErrHandler';
+
+    var cmdToExec = '';
+    if (process.platform !== 'win32') {
+      // Do not create core files, as it can take a lot of disk space on
+      // continuous testing and developers' machines
+      cmdToExec += 'ulimit -c 0 && ';
+    }
 
     var useTryCatchOpt;
     if (options.useTryCatch)
       useTryCatchOpt = 'useTryCatch';
 
-    var child = fork(process.argv[1], [
-                       'child',
-                       throwInDomainErrHandlerOpt,
-                       useTryCatchOpt
-                     ],
-                     forkOptions);
+    cmdToExec +=  process.argv[0] + ' ';
+    cmdToExec += (cmdLineOption ? cmdLineOption : '') + ' ';
+    cmdToExec += process.argv[1] + ' ';
+    cmdToExec += ['child', throwInDomainErrHandlerOpt, useTryCatchOpt].join(' ');
+
+    var child = exec(cmdToExec);
 
     if (child) {
       var childTriggeredOnUncaughtExceptionHandler = false;
@@ -112,46 +131,50 @@ if (process.argv[2] === 'child') {
       });
 
       child.on('exit', function onChildExited(exitCode, signal) {
-        // The process' uncaughtException event must not be emitted when
-        // an error handler is setup on the top-level domain.
-        assert(childTriggeredOnUncaughtExceptionHandler === false,
-               "Process' uncaughtException should not be emitted when " +
-               "an error handler is set on the top-level domain");
-
         // If the top-level domain's error handler does not throw,
         // the process must exit gracefully, whether or not
         // --abort-on-uncaught-exception was passed on the command line
         var expectedExitCode = 0;
-        var expectedSignal = null;
+        // On some platforms with KSH being the default shell (like SmartOS),
+        // when a process aborts, KSH exits with an exit code that is greater
+        // than 256, and thus the exit code emitted with the 'exit' event is
+        // null and the signal is set to SIGABRT. For these platforms only,
+        // and when the test is expected to abort, check the actual signal
+        // with the expected signal instead of the exit code.
+        var expectedSignal;
 
-        // When not throwing errors from the top-level domain error handler
-        // or if throwing them within a try/catch block, the process
-        // should exit gracefully
+        // When throwing errors from the top-level domain error handler
+        // outside of a try/catch block, the process should not exit gracefully
         if (!options.useTryCatch && options.throwInDomainErrHandler) {
           expectedExitCode = 7;
           if (cmdLineOption === '--abort-on-uncaught-exception') {
             // If the top-level domain's error handler throws, and only if
             // --abort-on-uncaught-exception is passed on the command line,
             // the process must abort.
-            expectedExitCode = null;
-            expectedSignal = 'SIGABRT';
+            expectedExitCode = 134;
 
             // On linux, v8 raises SIGTRAP when aborting because
             // the "debug break" flag is on by default
             if (process.platform === 'linux')
-              expectedSignal = 'SIGTRAP';
+              expectedExitCode = 133;
+
+            if (process.platform === 'sunos') {
+              expectedExitCode = null;
+              expectedSignal = 'SIGABRT';
+            }
 
             // On Windows, v8's OS::Abort also triggers a debug breakpoint
             // which makes the process exit with code -2147483645
             if (process.platform === 'win32') {
               expectedExitCode = -2147483645;
-              expectedSignal = null;
             }
           }
         }
 
+        if (expectedSignal)
+          assert.equal(signal, expectedSignal)
+
         assert.equal(exitCode, expectedExitCode);
-        assert.equal(signal, expectedSignal);
       });
     }
   }
@@ -160,6 +183,7 @@ if (process.argv[2] === 'child') {
                               throwInDomainErrHandler: false,
                               useTryCatch: false
                             });
+
   testDomainExceptionHandling('--abort-on-uncaught-exception', {
                               throwInDomainErrHandler: false,
                               useTryCatch: true
@@ -169,6 +193,7 @@ if (process.argv[2] === 'child') {
                               throwInDomainErrHandler: true,
                               useTryCatch: false
                             });
+
   testDomainExceptionHandling('--abort-on-uncaught-exception', {
                               throwInDomainErrHandler: true,
                               useTryCatch: true
@@ -177,10 +202,12 @@ if (process.argv[2] === 'child') {
   testDomainExceptionHandling({
     throwInDomainErrHandler: false
   });
+
   testDomainExceptionHandling({
     throwInDomainErrHandler: false,
     useTryCatch: false
   });
+
   testDomainExceptionHandling({
     throwInDomainErrHandler: true,
     useTryCatch: true
