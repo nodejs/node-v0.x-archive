@@ -12,6 +12,17 @@
   'includes': [ '../../icu_config.gypi' ],
   'targets': [
     {
+      # a target for additional uconfig defines, target only
+      'target_name': 'icu_uconfig_target',
+      'type': 'none',
+      'toolsets': [ 'target' ],
+      'direct_dependent_settings': {
+        'defines': [
+          'UCONFIG_NO_CONVERSION=1',
+        ]
+      },
+    },
+    {
       # a target to hold uconfig defines.
       # for now these are hard coded, but could be defined.
       'target_name': 'icu_uconfig',
@@ -97,19 +108,67 @@
       'sources': [
         '<@(icu_src_i18n)'
       ],
+      'conditions': [
+        [ 'icu_ver_major == 54', { 'sources!': [
+          ## Strip out the following for ICU 54 only.
+          ## add more conditions in the future?
+          ## if your compiler can dead-strip, this will
+          ## make ZERO difference to binary size.
+          ## Made ICU-specific for future-proofing.
+
+          # alphabetic index
+          '../../deps/icu/source/i18n/alphaindex.cpp',
+          # BOCSU
+          # misc
+          '../../deps/icu/source/i18n/dtitvfmt.cpp',
+          '../../deps/icu/source/i18n/dtitvinf.cpp',
+          '../../deps/icu/source/i18n/dtitv_impl.h',
+          '../../deps/icu/source/i18n/quantityformatter.cpp',
+          '../../deps/icu/source/i18n/quantityformatter.h',
+          '../../deps/icu/source/i18n/regexcmp.cpp',
+          '../../deps/icu/source/i18n/regexcmp.h',
+          '../../deps/icu/source/i18n/regexcst.h',
+          '../../deps/icu/source/i18n/regeximp.cpp',
+          '../../deps/icu/source/i18n/regeximp.h',
+          '../../deps/icu/source/i18n/regexst.cpp',
+          '../../deps/icu/source/i18n/regexst.h',
+          '../../deps/icu/source/i18n/regextxt.cpp',
+          '../../deps/icu/source/i18n/regextxt.h',
+          '../../deps/icu/source/i18n/region.cpp',
+          '../../deps/icu/source/i18n/region_impl.h',
+          '../../deps/icu/source/i18n/reldatefmt.cpp',
+          '../../deps/icu/source/i18n/reldatefmt.h',
+          '../../deps/icu/source/i18n/measfmt.h',
+          '../../deps/icu/source/i18n/measfmt.cpp',
+          '../../deps/icu/source/i18n/scientificformathelper.cpp',
+          '../../deps/icu/source/i18n/tmunit.cpp',
+          '../../deps/icu/source/i18n/tmutamt.cpp',
+          '../../deps/icu/source/i18n/tmutfmt.cpp',
+          '../../deps/icu/source/i18n/uregex.cpp',
+          '../../deps/icu/source/i18n/uregexc.cpp',
+          '../../deps/icu/source/i18n/uregion.cpp',
+          '../../deps/icu/source/i18n/uspoof.cpp',
+          '../../deps/icu/source/i18n/uspoof_build.cpp',
+          '../../deps/icu/source/i18n/uspoof_conf.cpp',
+          '../../deps/icu/source/i18n/uspoof_conf.h',
+          '../../deps/icu/source/i18n/uspoof_impl.cpp',
+          '../../deps/icu/source/i18n/uspoof_impl.h',
+          '../../deps/icu/source/i18n/uspoof_wsconf.cpp',
+          '../../deps/icu/source/i18n/uspoof_wsconf.h',
+        ]}]],
       'include_dirs': [
         '../../deps/icu/source/i18n',
       ],
       'defines': [
         'U_I18N_IMPLEMENTATION=1',
       ],
-      'dependencies': [ 'icuucx', 'icu_implementation', 'icu_uconfig' ],
+      'dependencies': [ 'icuucx', 'icu_implementation', 'icu_uconfig', 'icu_uconfig_target' ],
       'direct_dependent_settings': {
         'include_dirs': [
           '../../deps/icu/source/i18n',
         ],
       },
-      'export_dependent_settings': [ 'icuucx' ],
+      'export_dependent_settings': [ 'icuucx', 'icu_uconfig_target' ],
     },
     # This exports actual ICU data
     {
@@ -289,22 +348,42 @@
       'export_dependent_settings': [ 'icuucx', 'icudata' ],
     },
     # This is the 'real' icuuc.
-    # tools can depend on 'icuuc + stubdata'
     {
       'target_name': 'icuucx',
       'type': '<(library)',
-      'dependencies': [ 'icu_implementation', 'icu_uconfig' ],
+      'dependencies': [ 'icu_implementation', 'icu_uconfig', 'icu_uconfig_target' ],
       'toolsets': [ 'target' ],
       'sources': [
-        '<@(icu_src_common)'
+        '<@(icu_src_common)',
       ],
+      'conditions': [
+        [ 'icu_ver_major == 54', { 'sources!': [
+          ## Strip out the following for ICU 54 only.
+          ## add more conditions in the future?
+          ## if your compiler can dead-strip, this will
+          ## make ZERO difference to binary size.
+          ## Made ICU-specific for future-proofing.
+
+          # bidi- not needed (yet!)
+          '../../deps/icu/source/common/ubidi.c',
+          '../../deps/icu/source/common/ubidiimp.h',
+          '../../deps/icu/source/common/ubidiln.c',
+          '../../deps/icu/source/common/ubidiwrt.c',
+          #'../../deps/icu/source/common/ubidi_props.c',
+          #'../../deps/icu/source/common/ubidi_props.h',
+          #'../../deps/icu/source/common/ubidi_props_data.h',
+          # and the callers
+          '../../deps/icu/source/common/ushape.cpp',
+          '../../deps/icu/source/common/usprep.cpp',
+          '../../deps/icu/source/common/uts46.cpp',
+        ]}]],
       'include_dirs': [
         '../../deps/icu/source/common',
       ],
       'defines': [
         'U_COMMON_IMPLEMENTATION=1',
       ],
-      'export_dependent_settings': [ 'icu_uconfig' ],
+      'export_dependent_settings': [ 'icu_uconfig', 'icu_uconfig_target' ],
       'direct_dependent_settings': {
         'include_dirs': [
           '../../deps/icu/source/common',
