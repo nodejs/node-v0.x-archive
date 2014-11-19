@@ -24,7 +24,8 @@
 var common = require('../common');
 var assert = require('assert');
 
-assert(typeof externalizeString === 'function', 'Run this test with --expose_externalize_string.');
+assert(typeof externalizeString === 'function',
+  'Run this test with --expose_externalize_string.');
 
 var str = '中';
 var buf = new Buffer(str);

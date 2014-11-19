@@ -305,12 +305,14 @@ size_t StringBytes::Write(Isolate* isolate,
   CHECK(val->IsString() == true);
   Local<String> str = val.As<String>();
   bool is_extern_ascii = is_extern && str->IsExternalAscii();
-  if (is_extern) {
-    if (is_extern_ascii) {
-      str = String::NewFromOneByte(isolate, reinterpret_cast<const uint8_t*>(data), String::NewStringType::kNormalString, len);
-    } else {
-      str = String::NewFromTwoByte(isolate, reinterpret_cast<const uint16_t*>(data), String::NewStringType::kNormalString, len);
-    }
+  if (is_extern_ascii) {
+    str = String::NewFromOneByte(isolate,
+      reinterpret_cast<const uint8_t*>(data),
+      String::kNormalString, len);
+  } else if (is_extern) {
+    str = String::NewFromTwoByte(isolate,
+      reinterpret_cast<const uint16_t*>(data),
+      String::kNormalString, len);
   }
   len = len < buflen ? len : buflen;
 
@@ -456,12 +458,14 @@ size_t StringBytes::Size(Isolate* isolate,
 
   Local<String> str = val->ToString();
   bool is_extern_ascii = is_extern && str->IsExternalAscii();
-  if (is_extern) {
-    if (is_extern_ascii) {
-      str = String::NewFromOneByte(isolate, reinterpret_cast<const uint8_t*>(data), String::NewStringType::kNormalString, data_size);
-    } else {
-      str = String::NewFromTwoByte(isolate, reinterpret_cast<const uint16_t*>(data), String::NewStringType::kNormalString, data_size);
-    }
+  if (is_extern_ascii) {
+    str = String::NewFromOneByte(isolate,
+      reinterpret_cast<const uint8_t*>(data),
+      String::kNormalString, data_size);
+  } else if (is_extern) {
+    str = String::NewFromTwoByte(isolate,
+      reinterpret_cast<const uint16_t*>(data),
+      String::kNormalString, data_size);
   }
 
   switch (encoding) {

@@ -124,11 +124,17 @@ Local<Object> New(Isolate* isolate, Handle<String> string, enum encoding enc) {
   if (string->IsExternalAscii()) {
     const String::ExternalAsciiStringResource* ext;
     ext = string->GetExternalAsciiStringResource();
-    tmp_string = String::NewFromOneByte(isolate, reinterpret_cast<const uint8_t*>(ext->data()), String::NewStringType::kNormalString, ext->length());
+    tmp_string = String::NewFromOneByte(isolate,
+      reinterpret_cast<const uint8_t*>(ext->data()),
+      String::kNormalString,
+      ext->length());
   } else if (string->IsExternal()) {
     const String::ExternalStringResource* ext;
     ext = string->GetExternalStringResource();
-    tmp_string = String::NewFromTwoByte(isolate, ext->data(), String::NewStringType::kNormalString, ext->length());
+    tmp_string = String::NewFromTwoByte(isolate,
+      ext->data(),
+      String::kNormalString,
+      ext->length());
   } else {
     tmp_string = string;
   }
