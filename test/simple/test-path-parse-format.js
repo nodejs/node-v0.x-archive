@@ -92,9 +92,7 @@ function check(path, paths) {
   paths.forEach(function(element, index, array) {
     var output = path.parse(element);
     assert.strictEqual(path.format(output), element);
-    if (output.dir) {
-      assert.strictEqual(output.dir, path.dirname(element));
-    }
+    assert.strictEqual(output.dir, output.dir ? path.dirname(element) : '');
     assert.strictEqual(output.base, path.basename(element));
     assert.strictEqual(output.ext, path.extname(element));
   });
