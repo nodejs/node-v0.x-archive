@@ -30,7 +30,8 @@ var winPaths = [
   // unc
   '\\\\server\\share\\file_path',
   '\\\\server two\\shared folder\\file path.zip',
-  '\\\\teela\\admin$\\system32'
+  '\\\\teela\\admin$\\system32',
+  '\\\\?\\UNC\\server\\share'
 
 ];
 
@@ -42,23 +43,50 @@ var unixPaths = [
   'user/dir/another File.zip'
 ];
 
+var errors = [
+  {method: 'parse', input: [null], message: /Parameter 'pathString' must be a string, not/},
+  {method: 'parse', input: [{}], message: /Parameter 'pathString' must be a string, not object/},
+  {method: 'parse', input: [true], message: /Parameter 'pathString' must be a string, not boolean/},
+  {method: 'parse', input: [1], message: /Parameter 'pathString' must be a string, not number/},
+  {method: 'parse', input: [], message: /Parameter 'pathString' must be a string, not undefined/},
+  // {method: 'parse', input: [''], message: /Invalid path/}, // omitted because it's hard to trigger!
+  {method: 'format', input: [null], message: /Parameter 'pathObject' must be an object, not/},
+  {method: 'format', input: [''], message: /Parameter 'pathObject' must be an object, not string/},
+  {method: 'format', input: [true], message: /Parameter 'pathObject' must be an object, not boolean/},
+  {method: 'format', input: [1], message: /Parameter 'pathObject' must be an object, not number/},
+  {method: 'format', input: [{root: true}], message: /'pathObject.root' must be a string or undefined, not boolean/},
+  {method: 'format', input: [{root: 12}], message: /'pathObject.root' must be a string or undefined, not number/},
+];
+
 check(path.win32, winPaths);
 check(path.posix, unixPaths);
+checkErrors(path.win32);
+checkErrors(path.posix);
+
+function checkErrors(path) {
+  errors.forEach(function(errorCase) {
+    try {
+      path[errorCase.method].apply(path, errorCase.input);
+    } catch(err) {
+      assert.ok(err instanceof TypeError);
+      assert.ok(
+        errorCase.message.test(err.message),
+        'expected ' + errorCase.message + ' to match ' + err.message
+      );
+      return;
+    }
+
+    assert.fail('should have thrown');
+  });
+}
+
 
 function check(path, paths) {
   paths.forEach(function(element, index, array) {
-    var count = index + 1;
-    console.log(count + ': `' + element + '`');
     var output = path.parse(element);
-    var keys = Object.keys(output);
-    var values = [];
-    for (var i = 0; i < Object.keys(output).length; i++) {
-      values.push(output[keys[i]]);
-    }
-
     assert.strictEqual(path.format(path.parse(element)), element);
     assert.strictEqual(path.parse(element).dir, path.dirname(element));
     assert.strictEqual(path.parse(element).base, path.basename(element));
     assert.strictEqual(path.parse(element).ext, path.extname(element));
-  })
+  });
 }

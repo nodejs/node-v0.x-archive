@@ -202,7 +202,7 @@ An example on Windows:
     // returns
     ['C:\Windows\system32', 'C:\Windows', 'C:\Program Files\nodejs\']
 
-## path.parse
+## path.parse(pathString)
 
 Returns an object from a path string.
 
@@ -230,7 +230,7 @@ An example on Windows:
         name : "index"
     }
 
-## path.format
+## path.format(pathObject)
 
 Returns a path string from an object, the opposite of `path.parse` above.
 
