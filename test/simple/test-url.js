@@ -1085,7 +1085,7 @@ var formatTests = {
 
   // `#`,`?` in path
   '/path/to/%%23%3F+=&.txt?foo=theA1#bar' : {
-    href : '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
+    href: '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
     pathname: '/path/to/%#?+=&.txt',
     query: {
       foo: 'theA1'
@@ -1095,7 +1095,7 @@ var formatTests = {
 
   // `#`,`?` in path + `#` in query
   '/path/to/%%23%3F+=&.txt?foo=the%231#bar' : {
-    href : '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
+    href: '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
     pathname: '/path/to/%#?+=&.txt',
     query: {
       foo: 'the#1'
@@ -1110,7 +1110,7 @@ var formatTests = {
     hostname: 'ex.com',
     hash: '#frag',
     search: '?abc=the#1?&foo=bar',
-    pathname: '/foo?100%m#r',
+    pathname: '/foo?100%m#r'
   },
 
   // `?` and `#` in search only
@@ -1120,7 +1120,16 @@ var formatTests = {
     hostname: 'ex.com',
     hash: '#frag',
     search: '?abc=the#1?&foo=bar',
-    pathname: '/fooA100%mBr',
+    pathname: '/fooA100%mBr'
+  },
+
+  // only for path rather than pathname
+  'http://github.com/joyent/node#js': {
+    href: 'http://github.com/joyent/node#js',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js',
+    path: '/joyent/node'
   }
 };
 for (var u in formatTests) {
