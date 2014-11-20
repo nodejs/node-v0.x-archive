@@ -601,5 +601,5 @@ Returns true if input is a version 6 IP address, otherwise returns false.
 [EventEmitter]: events.html#events_class_events_eventemitter
 ['listening']: #net_event_listening
 [server.getConnections()]: #net_server_getconnections_callback
-[Readable Stream]: stream.html#stream_readable_stream
+[Readable Stream]: stream.markdown#class-streamreadable
 [stream.setEncoding()]: stream.html#stream_stream_setencoding_encoding
