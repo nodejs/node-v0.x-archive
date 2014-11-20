@@ -91,7 +91,6 @@ function checkErrors(path) {
 function check(path, paths) {
   paths.forEach(function(element, index, array) {
     var output = path.parse(element);
-    console.log(element, output, path.format(output))
     assert.strictEqual(path.format(output), element);
     if (output.dir) {
       assert.strictEqual(output.dir, path.dirname(element));
