@@ -26,6 +26,9 @@ var winPaths = [
   'C:\\path\\dir\\index.html',
   'C:\\another_path\\DIR\\1\\2\\33\\index',
   'another_path\\DIR with spaces\\1\\2\\33\\index',
+  '\\foo\\C:',
+  'file',
+  '.\\file',
 
   // unc
   '\\\\server\\share\\file_path',
@@ -40,7 +43,11 @@ var unixPaths = [
   '/home/user/a dir/another File.zip',
   '/home/user/a dir//another&File.',
   '/home/user/a$$$dir//another File.zip',
-  'user/dir/another File.zip'
+  'user/dir/another File.zip',
+  'file',
+  '.\\file',
+  './file',
+  'C:\\foo'
 ];
 
 var errors = [
@@ -84,9 +91,12 @@ function checkErrors(path) {
 function check(path, paths) {
   paths.forEach(function(element, index, array) {
     var output = path.parse(element);
-    assert.strictEqual(path.format(path.parse(element)), element);
-    assert.strictEqual(path.parse(element).dir, path.dirname(element));
-    assert.strictEqual(path.parse(element).base, path.basename(element));
-    assert.strictEqual(path.parse(element).ext, path.extname(element));
+    console.log(element, output, path.format(output))
+    assert.strictEqual(path.format(output), element);
+    if (output.dir) {
+      assert.strictEqual(output.dir, path.dirname(element));
+    }
+    assert.strictEqual(output.base, path.basename(element));
+    assert.strictEqual(output.ext, path.extname(element));
   });
 }
