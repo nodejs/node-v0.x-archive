@@ -1123,14 +1123,74 @@ var formatTests = {
     pathname: '/fooA100%mBr'
   },
 
-  // only for path rather than pathname
-  'http://github.com/joyent/node#js': {
-    href: 'http://github.com/joyent/node#js',
+  // path
+  'http://github.com/joyent/node#js1': {
+    href: 'http://github.com/joyent/node#js1',
     protocol: 'http:',
     hostname: 'github.com',
-    hash: '#js',
+    hash: '#js1',
     path: '/joyent/node'
+  },
+
+  // pathname vs. path, path wins
+  'http://github.com/joyent/node2#js1': {
+    href: 'http://github.com/joyent/node2#js1',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js1',
+    path: '/joyent/node2',
+    pathname: '/joyent/node'
+  },
+
+  // pathname with query/search
+  'http://github.com/joyent/node?foo=bar#js2': {
+    href: 'http://github.com/joyent/node?foo=bar#js2',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js2',
+    path: '/joyent/node?foo=bar'
+  },
+
+  // path vs. query, path wins
+  'http://github.com/joyent/node?foo=bar2#js3': {
+    href: 'http://github.com/joyent/node?foo=bar2#js3',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js3',
+    path: '/joyent/node?foo=bar2',
+    query: {foo: 'bar'}
+  },
+
+  // path vs. search, path wins
+  'http://github.com/joyent/node?foo=bar3#js4': {
+    href: 'http://github.com/joyent/node?foo=bar3#js4',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js4',
+    path: '/joyent/node?foo=bar3',
+    search: '?foo=bar'
+  },
+
+  // path is present without ? vs. query given
+  'http://github.com/joyent/node#js5': {
+    href: 'http://github.com/joyent/node#js5',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js5',
+    path: '/joyent/node',
+    query: {foo: 'bar'}
+  },
+
+  // path is present without ? vs. search given
+  'http://github.com/joyent/node#js6': {
+    href: 'http://github.com/joyent/node#js6',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js6',
+    path: '/joyent/node',
+    search: '?foo=bar'
   }
+
 };
 for (var u in formatTests) {
   var expect = formatTests[u].href;
