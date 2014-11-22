@@ -21,36 +21,26 @@
 
 var common = require('../common');
 var assert = require('assert');
+var dns = require('dns');
+var domain = require('domain');
 
-common.debug('load test-module-loading-error.js');
+var methods = [
+  'resolve4',
+  'resolve6',
+  'resolveCname',
+  'resolveMx',
+  'resolveNs',
+  'resolveTxt',
+  'resolveSrv',
+  'resolveNaptr',
+  'resolveSoa'
+]
 
-var error_desc = {
-  win32: '%1 is not a valid Win32 application',
-  linux: 'file too short',
-  sunos: 'unknown file type'
-};
-
-var dlerror_msg = error_desc[process.platform];
-
-if (!dlerror_msg) {
-  console.error('Skipping test, platform not supported.');
-  process.exit();
-}
-
-try {
-  require('../fixtures/module-loading-error.node');
-} catch (e) {
-  assert.notEqual(e.toString().indexOf(dlerror_msg), -1);
-}
-
-try {
-  require();
-} catch (e) {
-  assert.notEqual(e.toString().indexOf('missing path'), -1);
-}
-
-try {
-  require({});
-} catch (e) {
-  assert.notEqual(e.toString().indexOf('path must be a string'), -1);
-}
+methods.forEach(function(method) {
+  var d = domain.create();
+  d.run(function() {
+    dns[method]('google.com', function() {
+      assert.strictEqual(process.domain, d, method + ' retains domain')
+    });
+  });
+});
