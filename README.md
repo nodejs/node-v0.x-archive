@@ -152,17 +152,29 @@ pkg-config --modversion icu-i18n && ./configure --with-intl=system-icu
 
 #### Build with a specific ICU:
 
-First: Unpack latest ICU to `deps/icu`
-  [icu4c-**##.#**-src.tgz](http://icu-project.org/download) (or `.zip`)
-  as `deps/icu` (You'll have: `deps/icu/source/...`)
+You can find other ICU releases at [icu4c-**##.#**-src.tgz](http://icu-project.org/download) (or `.zip`)
 
-Unix/Macintosh:
+Unix/Macintosh: from an already-unpacked ICU
 
 ```sh
-./configure --with-intl=full-icu
+./configure --with-intl=full-icu --with-icu-source=/path/to/icu
 ```
 
-Windows:
+Unix/Macintosh: from a local ICU tarball
+
+```sh
+./configure --with-intl=full-icu --with-icu-source=/path/to/icu.tgz
+```
+
+Unix/Macintosh: from a tarball URL
+
+```sh
+./configure --with-intl=full-icu --with-icu-source=http://url/to/icu.tgz
+```
+
+Windows: first unpack latest ICU to `deps/icu`
+  [icu4c-**##.#**-src.tgz](http://icu-project.org/download) (or `.zip`)
+  as `deps/icu` (You'll have: `deps/icu/source/...`) 
 
 ```sh
 vcbuild full-icu

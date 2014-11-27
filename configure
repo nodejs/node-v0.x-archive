@@ -251,6 +251,11 @@ parser.add_option('--with-intl',
     dest='with_intl',
     help='Intl mode: none, full-icu, small-icu (default is none)')
 
+parser.add_option('--with-icu-source',
+    action='store',
+    dest='with_icu_source',
+    help='Intl mode: optional local path to icu/ dir, or path/URL of icu source archive.')
+
 parser.add_option('--with-perfctr',
     action='store_true',
     dest='with_perfctr',
@@ -760,6 +765,7 @@ def configure_intl(o):
   o['variables']['icu_small'] = b(False)
 
   with_intl = options.with_intl
+  with_icu_source = options.with_icu_source
   have_icu_path = bool(options.with_icu_path)
   if have_icu_path and with_intl:
     print 'Error: Cannot specify both --with-icu-path and --with-intl'
@@ -807,9 +813,45 @@ def configure_intl(o):
   icu_full_path = os.path.join(icu_parent_path, 'icu')
   icu_small_path = os.path.join(icu_parent_path, 'icu-small')
   icu_small_tag = os.path.join(icu_full_path, 'is-small-icu.txt')
+  icu_tmp_path = os.path.join(icu_parent_path, 'icu-tmp')
 
-  ## Use (or not) an embedded small-icu.
-  if with_intl == 'small-icu':
+  ## Has the user specified an ICU source path?
+  if with_icu_source:
+    if os.path.isdir(icu_full_path):
+      print 'Deleting old ICU source: %s' % (icu_full_path)
+      shutil.rmtree(icu_full_path)
+    # now, what path was given?
+    if os.path.isdir(with_icu_source):
+      # it's a path. Copy it.
+      print '%s -> %s' % (with_icu_source, icu_full_path)
+      shutil.copytree(with_icu_source, icu_full_path)
+    else:
+      # could be file or URL. Set up temporary area
+      if os.path.isdir(icu_tmp_path):
+        shutil.rmtree(icu_tmp_path)
+      os.mkdir(icu_tmp_path)
+      icu_tarball = None
+      if os.path.isfile(with_icu_source):
+        # it's a file. Try to unpack it.
+        icu_tarball = with_icu_source
+      else:
+        # Can we download it?
+        local = os.path.join(icu_tmp_path, with_icu_source.split('/')[-1])  # local part
+        icu_tarball = nodedownload.retrievefile(with_icu_source, local)
+      # continue with "icu_tarball"
+      nodedownload.unpack(icu_tarball, icu_tmp_path)
+      # Did it unpack correctly? Should contain 'icu'
+      tmp_icu = os.path.join(icu_tmp_path, 'icu')
+      if os.path.isdir(tmp_icu):
+        os.rename(tmp_icu, icu_full_path)
+        shutil.rmtree(icu_tmp_path)
+      else:
+        print ' Error: --with-icu-source=%s did not result in an "icu" dir.' % with_icu_source
+        shutil.rmtree(icu_tmp_path)
+        sys.exit(1)
+      
+  elif with_intl == 'small-icu':
+    ## Use (or not) an embedded small-icu.
     if not os.path.isdir(icu_full_path) and os.path.isdir(icu_small_path):
       # deps/small-icu -> deps/icu
       print 'Copying small ICU %s to %s' % (icu_small_path, icu_full_path)
@@ -817,6 +859,7 @@ def configure_intl(o):
     #else:
     #  print 'Not copying %s to %s' % (icu_small_path, icu_full_path)
   elif os.path.isfile(icu_small_tag):
+    ## Not small ICU nor custom path. Delete the old deps/icu
     print 'deleting small-icu %s for --with-intl=%s' % (icu_full_path, with_intl)
     shutil.rmtree(icu_full_path)
 
