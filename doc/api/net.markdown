@@ -354,13 +354,16 @@ buffer. Returns `false` if all or part of the data was queued in user memory.
 The optional `callback` parameter will be executed when the data is finally
 written out - this may not be immediately.
 
-### socket.end([data], [encoding])
+### socket.end([data], [encoding], [callback])
 
 Half-closes the socket. i.e., it sends a FIN packet. It is possible the
 server will still send some data.
 
 If `data` is specified, it is equivalent to calling
 `socket.write(data, encoding)` followed by `socket.end()`.
+
+If supplied, the `callback` parameter will be attached as a listener for
+the `finish` event of the stream.
 
 ### socket.destroy()
 
