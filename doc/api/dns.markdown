@@ -193,9 +193,10 @@ in `nsswitch.conf(5)` and/or `resolv.conf(5)`, but be careful that changing
 these files will change the behavior of all other programs running on the same
 operating system.
 
-It is implemented as a synchronous call to `getaddrinfo(3)` that runs on
-libuv's threadpool. Because libuv's threadpool has a fixed size, it means that
-if for whatever reason the call to `getaddrinfo(3)` takes a long time, other
+Though the call will be asynchronous from JavaScript's perspective, it is
+implemented as a synchronous call to `getaddrinfo(3)` that runs on libuv's
+threadpool. Because libuv's threadpool has a fixed size, it means that if for
+whatever reason the call to `getaddrinfo(3)` takes a long time, other
 operations that could run on libuv's threadpool (such as filesystem
 operations) will experience degraded performance. In order to mitigate this
 issue, one potential solution is to increase the size of libuv's threadpool by
