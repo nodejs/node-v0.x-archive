@@ -2114,7 +2114,11 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   modlist_addon = mp;
 
   if (mp->nm_register_func != NULL) {
-    mp->nm_register_func(mp->init, exports, module, env->context(), mp->nm_priv);
+    mp->nm_register_func(mp->init,
+                         exports,
+                         module,
+                         env->context(),
+                         mp->nm_priv);
   } else {
     env->ThrowError("Module has no declared entry point.");
     return;
