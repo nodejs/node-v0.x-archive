@@ -14,3 +14,9 @@ for (i in signatures) {
   addon = require('./build/Release/' + name);
   assert.ok(addon.initialized);
 }
+
+// for the fun of it... (feel free to drop this if the dlopen is not portable)
+require('./build/Release/init_void');
+var init_void_test = require('./build/Release/init_void_tester');
+assert.ok(init_void_test.initialized)
+assert.ok(init_void_test.initVoid)
