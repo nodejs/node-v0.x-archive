@@ -2229,10 +2229,14 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
   node_module* mod = get_builtin_module(*module_v);
   if (mod != NULL) {
     exports = Object::New(env->isolate());
-    // Internal bindings don't have a "module" object, only exports.
     assert(mod->nm_register_func != NULL);
+    // Internal bindings don't have a "module" object, only exports.
     Local<Object> noModule = Undefined(env->isolate()).As<Object>();
-    mod->nm_register_func(mod->init, exports, noModule, env->context(), mod->nm_priv);
+    mod->nm_register_func(mod->init,
+                          exports,
+                          noModule,
+                          env->context(),
+                          mod->nm_priv);
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "constants")) {
     exports = Object::New(env->isolate());
