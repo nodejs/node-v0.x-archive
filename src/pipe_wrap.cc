@@ -70,9 +70,7 @@ Local<Object> PipeWrap::Instantiate(Environment* env) {
 }
 
 
-void PipeWrap::Initialize(Handle<Object> target,
-                          Handle<Value> unused,
-                          Handle<Context> context) {
+void PipeWrap::Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
@@ -302,4 +300,4 @@ void PipeWrap::Connect(const FunctionCallbackInfo<Value>& args) {
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(pipe_wrap, node::PipeWrap::Initialize)
+NODE_MODULE_BUILTIN(pipe_wrap, node::PipeWrap::Initialize)

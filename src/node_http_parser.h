@@ -28,10 +28,7 @@
 
 namespace node {
 
-void InitHttpParser(v8::Handle<v8::Object> target,
-                    v8::Handle<v8::Value> unused,
-                    v8::Handle<v8::Context> context,
-                    void* priv);
+void InitHttpParser(v8::Handle<v8::Object> target, v8::Handle<v8::Context> context);
 
 }  // namespace node
 

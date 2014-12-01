@@ -2231,9 +2231,8 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
     exports = Object::New(env->isolate());
     // Internal bindings don't have a "module" object, only exports.
     assert(mod->nm_register_func != NULL);
-    Local<Value> unused = Undefined(env->isolate());
-    mod->nm_register_func(mod->init, exports, unused,
-      env->context(), mod->nm_priv);
+    Local<Object> noModule = Undefined(env->isolate()).As<Object>();
+    mod->nm_register_func(mod->init, exports, noModule, env->context(), mod->nm_priv);
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "constants")) {
     exports = Object::New(env->isolate());
