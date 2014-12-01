@@ -41,7 +41,7 @@ void Method(const FunctionCallbackInfo<Value>& args) {
 }
 
 void init(Handle<Object> exports) {
-  NODE_SET_METHOD(target, "method", Method);
+  NODE_SET_METHOD(exports, "method", Method);
 }
 
 NODE_MODULE(binding, init);
