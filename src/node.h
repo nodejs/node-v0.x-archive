@@ -340,7 +340,7 @@ const char *signo_string(int errorno);
 typedef void (*addon_register_func)(
     void * init,
     v8::Handle<v8::Object> exports,
-    v8::Handle<v8::Value> module,
+    v8::Handle<v8::Object> module,
     v8::Handle<v8::Context> context,
     void * priv);
 
@@ -351,10 +351,10 @@ namespace detail {
 template <typename T> struct OptionalInitArg;
 
 template <>
-struct OptionalInitArg<v8::Handle<v8::Value> > {
+struct OptionalInitArg<v8::Handle<v8::Object> > {
   inline
-  v8::Handle<v8::Value>
-  operator()(v8::Handle<v8::Value> module,
+  v8::Handle<v8::Object>
+  operator()(v8::Handle<v8::Object> module,
              v8::Handle<v8::Context> context,
              void * priv) {
     return module;
@@ -365,7 +365,7 @@ template <>
 struct OptionalInitArg<v8::Handle<v8::Context> > {
   inline
   v8::Handle<v8::Context>
-  operator()(v8::Handle<v8::Value> module,
+  operator()(v8::Handle<v8::Object> module,
              v8::Handle<v8::Context> context,
              void * priv) {
     return context;
@@ -376,7 +376,7 @@ template <>
 struct OptionalInitArg<void*> {
   inline
   void*
-  operator()(v8::Handle<v8::Value> module,
+  operator()(v8::Handle<v8::Object> module,
              v8::Handle<v8::Context> context,
              void * priv) {
     return priv;
@@ -396,7 +396,7 @@ struct AddonInitAdapter<void (*)()> {
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Value> module,
+                v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
     init_func init(reinterpret_cast<init_func>(f));
@@ -412,7 +412,7 @@ struct AddonInitAdapter<void (*)(A0)> {
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Value> module,
+                v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
     init_func init(reinterpret_cast<init_func>(f));
@@ -428,7 +428,7 @@ struct AddonInitAdapter<void (*)(A0, A1)> {
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Value> module,
+                v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
     OptionalInitArg<A1> a1;
@@ -445,7 +445,7 @@ struct AddonInitAdapter<void (*)(A0, A1, A2)> {
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Value> module,
+                v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
     OptionalInitArg<A1> a1;
@@ -463,7 +463,7 @@ struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Value> module,
+                v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
     OptionalInitArg<A1> a1;
@@ -551,7 +551,7 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 #define NODE_MODULE_CONTEXT_AWARE(modname, initfunc)                  \
   NODE_MODULE_X(modname, initfunc, NULL, 0)
 
-#define NODE_MODULE_CONTEXT_AWARE_BUILTIN(modname, initfunc)          \
+#define NODE_MODULE_BUILTIN(modname, initfunc)          \
   NODE_MODULE_X(modname, initfunc, NULL, NM_F_BUILTIN)
 
 /*

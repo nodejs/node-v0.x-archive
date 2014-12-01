@@ -32,7 +32,6 @@ class TCPWrap : public StreamWrap {
  public:
   static v8::Local<v8::Object> Instantiate(Environment* env, AsyncWrap* parent);
   static void Initialize(v8::Handle<v8::Object> target,
-                         v8::Handle<v8::Value> unused,
                          v8::Handle<v8::Context> context);
 
   uv_tcp_t* UVHandle();

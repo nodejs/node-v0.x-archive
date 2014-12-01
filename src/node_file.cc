@@ -1130,10 +1130,7 @@ void FSInitialize(const FunctionCallbackInfo<Value>& args) {
   env->set_fs_stats_constructor_function(stats_constructor);
 }
 
-void InitFs(Handle<Object> target,
-            Handle<Value> unused,
-            Handle<Context> context,
-            void* priv) {
+void InitFs(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   // Function which creates a new Stats object.
@@ -1185,4 +1182,4 @@ void InitFs(Handle<Object> target,
 
 }  // end namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(fs, node::InitFs)
+NODE_MODULE_BUILTIN(fs, node::InitFs)

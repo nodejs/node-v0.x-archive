@@ -83,9 +83,7 @@ Local<Object> TCPWrap::Instantiate(Environment* env, AsyncWrap* parent) {
 }
 
 
-void TCPWrap::Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
+void TCPWrap::Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
@@ -526,4 +524,4 @@ Local<Object> AddressToJS(Environment* env,
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(tcp_wrap, node::TCPWrap::Initialize)
+NODE_MODULE_BUILTIN(tcp_wrap, node::TCPWrap::Initialize)
