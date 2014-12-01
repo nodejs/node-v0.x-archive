@@ -64,8 +64,10 @@ enum node_zlib_mode {
 };
 
 
-void InitZlib(v8::Handle<v8::Object> target);
-
+void InitZlib(Handle<Object> target,
+              Handle<Value> unused,
+              Handle<Context> context,
+              void* priv);
 
 /**
  * Deflate/Inflate

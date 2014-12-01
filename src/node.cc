@@ -2113,10 +2113,8 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   mp->nm_link = modlist_addon;
   modlist_addon = mp;
 
-  if (mp->nm_context_register_func != NULL) {
-    mp->nm_context_register_func(exports, module, env->context(), mp->nm_priv);
-  } else if (mp->nm_register_func != NULL) {
-    mp->nm_register_func(exports, module, mp->nm_priv);
+  if (mp->nm_register_func != NULL) {
+    mp->nm_register_func(mp->init, exports, module, env->context(), mp->nm_priv);
   } else {
     env->ThrowError("Module has no declared entry point.");
     return;
@@ -2228,10 +2226,9 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
   if (mod != NULL) {
     exports = Object::New(env->isolate());
     // Internal bindings don't have a "module" object, only exports.
-    assert(mod->nm_register_func == NULL);
-    assert(mod->nm_context_register_func != NULL);
+    assert(mod->nm_register_func != NULL);
     Local<Value> unused = Undefined(env->isolate());
-    mod->nm_context_register_func(exports, unused,
+    mod->nm_register_func(mod->init, exports, unused,
       env->context(), mod->nm_priv);
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "constants")) {
