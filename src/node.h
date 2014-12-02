@@ -335,33 +335,33 @@ template <typename T> struct OptionalInitArg;
 
 template <>
 struct OptionalInitArg<v8::Handle<v8::Object> > {
-  inline
+  static inline
   v8::Handle<v8::Object>
-  operator()(v8::Handle<v8::Object> module,
-             v8::Handle<v8::Context> context,
-             void * priv) {
+  pick(v8::Handle<v8::Object> module,
+       v8::Handle<v8::Context> context,
+       void * priv) {
     return module;
   }
 };
 
 template <>
 struct OptionalInitArg<v8::Handle<v8::Context> > {
-  inline
+  static inline
   v8::Handle<v8::Context>
-  operator()(v8::Handle<v8::Object> module,
-             v8::Handle<v8::Context> context,
-             void * priv) {
+  pick(v8::Handle<v8::Object> module,
+       v8::Handle<v8::Context> context,
+       void * priv) {
     return context;
   }
 };
 
 template <>
 struct OptionalInitArg<void*> {
-  inline
+  static inline
   void*
-  operator()(v8::Handle<v8::Object> module,
-             v8::Handle<v8::Context> context,
-             void * priv) {
+  pick(v8::Handle<v8::Object> module,
+       v8::Handle<v8::Context> context,
+       void * priv) {
     return priv;
   }
 };
@@ -386,7 +386,7 @@ struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, Args...)> {
                 void * priv) {
     init_func init(reinterpret_cast<init_func>(f));
     init(exports,
-         OptionalInitArg<Args>()(module, context, priv)...);
+         OptionalInitArg<Args>::pick(module, context, priv)...);
   }
 };
 
@@ -435,9 +435,9 @@ struct AddonInitAdapter<void (*)(A0, A1)> {
                 v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
-    OptionalInitArg<A1> a1;
     init_func init(reinterpret_cast<init_func>(f));
-    init(exports, a1(module, context, priv));
+    init(exports,
+         OptionalInitArg<A1>::pick(module, context, priv));
   }
 };
 
@@ -452,10 +452,10 @@ struct AddonInitAdapter<void (*)(A0, A1, A2)> {
                 v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
-    OptionalInitArg<A1> a1;
-    OptionalInitArg<A2> a2;
     init_func init(reinterpret_cast<init_func>(f));
-    init(exports, a1(module, context, priv), a2(module, context, priv));
+    init(exports,
+         OptionalInitArg<A1>::pick(module, context, priv),
+         OptionalInitArg<A2>::pick(module, context, priv));
   }
 };
 
@@ -470,14 +470,11 @@ struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
                 v8::Handle<v8::Object> module,
                 v8::Handle<v8::Context> context,
                 void * priv) {
-    OptionalInitArg<A1> a1;
-    OptionalInitArg<A2> a2;
-    OptionalInitArg<A3> a3;
     init_func init(reinterpret_cast<init_func>(f));
     init(exports,
-         a1(module, context, priv),
-         a2(module, context, priv),
-         a3(module, context, priv));
+         OptionalInitArg<A1>::pick(module, context, priv),
+         OptionalInitArg<A2>::pick(module, context, priv),
+         OptionalInitArg<A3>::pick(module, context, priv));
   }
 };
 
