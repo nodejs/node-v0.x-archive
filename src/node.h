@@ -388,7 +388,7 @@ struct OptionalInitArg<void*> {
 // signature.
 template <typename F> struct AddonInitAdapter;
 
-#if __cplusplus > 199711L  // C++11  
+#if __cplusplus > 199711L  // C++11
 
 template <typename... Args>
 struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, Args...)> {
@@ -498,7 +498,7 @@ struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
   }
 };
 
-#endif // pre C++11
+#endif  // pre C++11
 
 // utility function to capture the type F
 template <typename F>
