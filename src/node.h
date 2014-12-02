@@ -371,6 +371,27 @@ struct OptionalInitArg<void*> {
 // signature.
 template <typename F> struct AddonInitAdapter;
 
+#if __cplusplus > 199711L  // C++11  
+
+template <typename... Args>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, Args...)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, Args...);
+
+  static inline
+  void
+  registerAddon(void * f,
+                v8::Handle<v8::Object> exports,
+                v8::Handle<v8::Object> module,
+                v8::Handle<v8::Context> context,
+                void * priv) {
+    init_func init(reinterpret_cast<init_func>(f));
+    init(exports,
+         OptionalInitArg<Args>()(module, context, priv)...);
+  }
+};
+
+#else  // pre C++11
+
 template <>
 struct AddonInitAdapter<void (*)()> {
   typedef void (*init_func)();
@@ -459,6 +480,8 @@ struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
          a3(module, context, priv));
   }
 };
+
+#endif // pre C++11
 
 // utility function to capture the type F
 template <typename F>
