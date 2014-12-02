@@ -20,43 +20,22 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var common = require('../common');
-var net = require('net');
 var assert = require('assert');
+var timers = require('timers');
 
-// Verify that non numeric delays throw
 var noop = function() {};
-var s = new net.Socket();
+var obj = {};
 var invalidDelays = ['100', true, false, undefined, null, '', {}, noop, []];
 var validDelays = [-1, 0, 1, Infinity, -Infinity, NaN, 0.5, -0.5];
 
 for (var i = 0; i < invalidDelays.length; i++) {
   assert.throws(function() {
-    s.setTimeout(invalidDelays[i], noop);
+    timers.enroll(obj, invalidDelays[i]);
   }, TypeError);
 }
 
 for (var i = 0; i < validDelays.length; i++) {
   assert.doesNotThrow(function() {
-    s.setTimeout(validDelays[i], noop);
+    timers.enroll(obj, validDelays[i]);
   });
 }
-
-var timedout = false;
-
-var server = net.Server();
-server.listen(common.PORT, function() {
-  var socket = net.createConnection(common.PORT);
-  socket.setTimeout(100, function() {
-    timedout = true;
-    socket.destroy();
-    server.close();
-    clearTimeout(timer);
-  });
-  var timer = setTimeout(function() {
-    process.exit(1);
-  }, 200);
-});
-
-process.on('exit', function() {
-  assert.ok(timedout);
-});
