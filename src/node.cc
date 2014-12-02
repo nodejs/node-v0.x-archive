@@ -2044,7 +2044,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   modlist_addon = mp;
 
   if (mp->nm_register_func != NULL) {
-    mp->nm_register_func(mp->init,
+    mp->nm_register_func(mp->nm_init,
                          exports,
                          module,
                          env->context(),
@@ -2162,7 +2162,7 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
     assert(mod->nm_register_func != NULL);
     // Internal bindings don't have a "module" object, only exports.
     Local<Object> noModule = Undefined(env->isolate()).As<Object>();
-    mod->nm_register_func(mod->init,
+    mod->nm_register_func(mod->nm_init,
                           exports,
                           noModule,
                           env->context(),

@@ -515,7 +515,7 @@ struct node_module {
   void* nm_dso_handle;
   const char* nm_filename;
   node::addon_register_func nm_register_func;
-  void * init;
+  void * nm_init;
   const char* nm_modname;
   void* nm_priv;
   struct node_module* nm_link;
