@@ -2117,8 +2117,7 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
     mp->nm_register_func(mp->nm_init,
                          exports,
                          module,
-                         env->context(),
-                         mp->nm_priv);
+                         env->context());
   } else {
     env->ThrowError("Module has no declared entry point.");
     return;
@@ -2235,8 +2234,7 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
     mod->nm_register_func(mod->nm_init,
                           exports,
                           noModule,
-                          env->context(),
-                          mod->nm_priv);
+                          env->context());
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "constants")) {
     exports = Object::New(env->isolate());

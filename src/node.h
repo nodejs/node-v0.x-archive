@@ -324,8 +324,7 @@ typedef void (*addon_register_func)(
     void * init,
     v8::Handle<v8::Object> exports,
     v8::Handle<v8::Object> module,
-    v8::Handle<v8::Context> context,
-    void * priv);
+    v8::Handle<v8::Context> context);
 
 namespace detail {
 
@@ -337,9 +336,7 @@ template <>
 struct OptionalInitArg<v8::Handle<v8::Object> > {
   static inline
   v8::Handle<v8::Object>
-  pick(v8::Handle<v8::Object> module,
-       v8::Handle<v8::Context> context,
-       void * priv) {
+  pick(v8::Handle<v8::Object> module, v8::Handle<v8::Context> context) {
     return module;
   }
 };
@@ -348,21 +345,8 @@ template <>
 struct OptionalInitArg<v8::Handle<v8::Context> > {
   static inline
   v8::Handle<v8::Context>
-  pick(v8::Handle<v8::Object> module,
-       v8::Handle<v8::Context> context,
-       void * priv) {
+  pick(v8::Handle<v8::Object> module, v8::Handle<v8::Context> context) {
     return context;
-  }
-};
-
-template <>
-struct OptionalInitArg<void*> {
-  static inline
-  void*
-  pick(v8::Handle<v8::Object> module,
-       v8::Handle<v8::Context> context,
-       void * priv) {
-    return priv;
   }
 };
 
@@ -382,99 +366,58 @@ struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, Args...)> {
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
                 v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
+                v8::Handle<v8::Context> context) {
     init_func init(reinterpret_cast<init_func>(f));
-    init(exports,
-         OptionalInitArg<Args>::pick(module, context, priv)...);
+    init(exports, OptionalInitArg<Args>::pick(module, context)...);
   }
 };
 
 #else  // pre C++11
 
 template <>
-struct AddonInitAdapter<void (*)()> {
-  typedef void (*init_func)();
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>);
 
   static inline
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
                 v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
-    init_func init(reinterpret_cast<init_func>(f));
-    init();
-  }
-};
-
-template <typename A0>
-struct AddonInitAdapter<void (*)(A0)> {
-  typedef void (*init_func)(A0);
-
-  static inline
-  void
-  registerAddon(void * f,
-                v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
+                v8::Handle<v8::Context> context) {
     init_func init(reinterpret_cast<init_func>(f));
     init(exports);
   }
 };
 
-template <typename A0, typename A1>
-struct AddonInitAdapter<void (*)(A0, A1)> {
-  typedef void (*init_func)(A0, A1);
+template <typename OptArg0>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, OptArg0)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, OptArg0);
 
   static inline
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
                 v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
+                v8::Handle<v8::Context> context) {
     init_func init(reinterpret_cast<init_func>(f));
-    init(exports,
-         OptionalInitArg<A1>::pick(module, context, priv));
+    init(exports, OptionalInitArg<OptArg0>::pick(module, context));
   }
 };
 
-template <typename A0, typename A1, typename A2>
-struct AddonInitAdapter<void (*)(A0, A1, A2)> {
-  typedef void (*init_func)(A0, A1, A2);
+template <typename OptArg0, typename OptArg1>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, OptArg0, OptArg1)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, OptArg0, OptArg1);
 
   static inline
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
                 v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
+                v8::Handle<v8::Context> context) {
     init_func init(reinterpret_cast<init_func>(f));
     init(exports,
-         OptionalInitArg<A1>::pick(module, context, priv),
-         OptionalInitArg<A2>::pick(module, context, priv));
-  }
-};
-
-template <typename A0, typename A1, typename A2, typename A3>
-struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
-  typedef void (*init_func)(A0, A1, A2, A3);
-
-  static inline
-  void
-  registerAddon(void * f,
-                v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
-    init_func init(reinterpret_cast<init_func>(f));
-    init(exports,
-         OptionalInitArg<A1>::pick(module, context, priv),
-         OptionalInitArg<A2>::pick(module, context, priv),
-         OptionalInitArg<A3>::pick(module, context, priv));
+         OptionalInitArg<OptArg0>::pick(module, context),
+         OptionalInitArg<OptArg1>::pick(module, context));
   }
 };
 
@@ -499,7 +442,6 @@ struct node_module {
   node::addon_register_func nm_register_func;
   void * nm_init;
   const char* nm_modname;
-  void* nm_priv;
   struct node_module* nm_link;
 };
 
@@ -515,45 +457,44 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 
 #if defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
-#define NODE_C_CTOR(fn)                                               \
-  static void __cdecl fn(void);                                       \
-  __declspec(dllexport, allocate(".CRT$XCU"))                         \
-      void (__cdecl*fn ## _)(void) = fn;                              \
+#define NODE_C_CTOR(fn)                                    \
+  static void __cdecl fn(void);                            \
+  __declspec(dllexport, allocate(".CRT$XCU"))              \
+      void (__cdecl*fn ## _)(void) = fn;                   \
   static void __cdecl fn(void)
 #else
-#define NODE_C_CTOR(fn)                                               \
-  static void fn(void) __attribute__((constructor));                  \
+#define NODE_C_CTOR(fn)                                    \
+  static void fn(void) __attribute__((constructor));       \
   static void fn(void)
 #endif
 
-#define NODE_MODULE_X(modname, initfunc, priv, flags)                 \
-  extern "C" {                                                        \
-    static node::node_module _module =                                \
-    {                                                                 \
-      NODE_MODULE_VERSION,                                            \
-      flags,                                                          \
-      NULL,                                                           \
-      __FILE__,                                                       \
-      node::detail::selectAddonRegisterFunction(initfunc),            \
-      reinterpret_cast<void*>(initfunc),                              \
-      NODE_STRINGIFY(modname),                                        \
-      priv,                                                           \
-      NULL                                                            \
-    };                                                                \
-    NODE_C_CTOR(_register_ ## modname) {                              \
-      node_module_register(&_module);                                 \
-    }                                                                 \
+#define NODE_MODULE_X(modname, initfunc, flags)            \
+  extern "C" {                                             \
+    static node::node_module _module =                     \
+    {                                                      \
+      NODE_MODULE_VERSION,                                 \
+      flags,                                               \
+      NULL,                                                \
+      __FILE__,                                            \
+      node::detail::selectAddonRegisterFunction(initfunc), \
+      reinterpret_cast<void*>(initfunc),                   \
+      NODE_STRINGIFY(modname),                             \
+      NULL                                                 \
+    };                                                     \
+    NODE_C_CTOR(_register_ ## modname) {                   \
+      node_module_register(&_module);                      \
+    }                                                      \
   }
 
-#define NODE_MODULE(modname, initfunc)                                \
-  NODE_MODULE_X(modname, initfunc, NULL, 0)
+#define NODE_MODULE(modname, initfunc)                     \
+  NODE_MODULE_X(modname, initfunc, 0)
 
 // TODO(agnat): deprecate
-#define NODE_MODULE_CONTEXT_AWARE(modname, initfunc)                  \
-  NODE_MODULE_X(modname, initfunc, NULL, 0)
+#define NODE_MODULE_CONTEXT_AWARE(modname, initfunc)       \
+  NODE_MODULE_X(modname, initfunc, 0)
 
-#define NODE_MODULE_BUILTIN(modname, initfunc)          \
-  NODE_MODULE_X(modname, initfunc, NULL, NM_F_BUILTIN)
+#define NODE_MODULE_BUILTIN(modname, initfunc)             \
+  NODE_MODULE_X(modname, initfunc, NM_F_BUILTIN)
 
 /*
  * For backward compatibility in add-on modules.
