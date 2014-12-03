@@ -36,7 +36,6 @@ var options = {
 var server = https.createServer(options, assert.fail);
 
 server.setTimeout(50, function() {
-  cleartext.destroy();
   server.close();
 });
 
