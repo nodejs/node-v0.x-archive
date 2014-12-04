@@ -93,7 +93,7 @@ process.nextTick(function() {
   setTimeout(function() {
     currentMsg = 'setTimeout - simple';
     throw new Error(currentMsg);
-  });
+  }, 10);
   expectCaught++;
 
   setImmediate(function() {
@@ -106,7 +106,7 @@ process.nextTick(function() {
     clearInterval(b);
     currentMsg = 'setInterval - simple';
     throw new Error(currentMsg);
-  });
+  }, 10);
   expectCaught++;
 
   process.nextTick(function() {
@@ -135,7 +135,7 @@ process.nextTick(function() {
           clearInterval(b);
           currentMsg = 'setInterval - nested';
           throw new Error(currentMsg);
-        });
+        }, 10);
         expectCaught++;
         currentMsg = 'setImmediate - nested';
         throw new Error(currentMsg);
@@ -148,11 +148,11 @@ process.nextTick(function() {
     setTimeout(function() {
       currentMsg = 'setTimeout2 - nested';
       throw new Error(currentMsg);
-    });
+    }, 10);
     expectCaught++;
     currentMsg = 'setTimeout - nested';
     throw new Error(currentMsg);
-  });
+  }, 10);
   expectCaught++;
 
   removeListener(listener);
@@ -204,9 +204,9 @@ process.nextTick(function() {
           });
           expectCaught++;
         });
-      });
+      }, 10);
     });
-  });
+  }, 10);
 
   removeListener(listener);
 });

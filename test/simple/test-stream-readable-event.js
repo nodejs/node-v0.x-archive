@@ -46,7 +46,7 @@ var Readable = require('stream').Readable;
     r.on('readable', function() {
       caughtReadable = true;
     });
-  });
+  }, 10);
 
   process.on('exit', function() {
     // we're testing what we think we are
@@ -80,7 +80,7 @@ var Readable = require('stream').Readable;
     r.on('readable', function() {
       caughtReadable = true;
     });
-  });
+  }, 10);
 
   process.on('exit', function() {
     // we're testing what we think we are
@@ -114,7 +114,7 @@ var Readable = require('stream').Readable;
     r.on('readable', function() {
       caughtReadable = true;
     });
-  });
+  }, 10);
 
   process.on('exit', function() {
     // we're testing what we think we are

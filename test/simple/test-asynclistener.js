@@ -54,18 +54,18 @@ process.nextTick(function() {
 
   var b = setInterval(function() {
     clearInterval(b);
-  });
+  }, 10);
   expectAsync++;
 
   var c = setInterval(function() {
     clearInterval(c);
-  });
+  }, 10);
   expectAsync++;
 
-  setTimeout(function() { });
+  setTimeout(function() { }, 10);
   expectAsync++;
 
-  setTimeout(function() { });
+  setTimeout(function() { }, 10);
   expectAsync++;
 
   process.nextTick(function() { });
@@ -101,7 +101,7 @@ process.nextTick(function() {
         var i = setInterval(function() {
           if (--interval <= 0)
             clearInterval(i);
-        });
+        }, 10);
         expectAsync++;
       });
       expectAsync++;
@@ -113,7 +113,7 @@ process.nextTick(function() {
         expectAsync++;
       });
       expectAsync++;
-    });
+    }, 10);
     expectAsync++;
   });
   expectAsync++;
@@ -130,7 +130,7 @@ process.nextTick(function() {
   setTimeout(function() {
     process.nextTick(function() { });
     expectAsync += 2;
-  });
+  }, 10);
   expectAsync += 2;
 
   removeListener(listener);
@@ -148,7 +148,7 @@ process.nextTick(function() {
   setImmediate(function() {
     fs.stat('random again', function(err, stat) { });
     expectAsync++;
-  });
+  }, 10);
   expectAsync++;
 
   removeListener(listener);

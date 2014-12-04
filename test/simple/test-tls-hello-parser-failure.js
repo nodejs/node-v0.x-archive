@@ -44,7 +44,7 @@ var server = tls.createServer(options, function(c) {
 
   var writeAgain = setTimeout(function() {
     client.write(bonkers);
-  });
+  }, 10);
 
   client.on('error', function(err) {
     if (!once) {

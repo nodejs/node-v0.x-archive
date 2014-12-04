@@ -61,11 +61,11 @@ function test1() {
         setTimeout(r.read.bind(r, 0), 50);
         return setTimeout(function() {
           return r.push(new Buffer(0));
-        });
+        }, 10);
       case 5:
         return setTimeout(function() {
           return r.push(buf);
-        });
+        }, 10);
       default:
         throw new Error('unreachable');
     }

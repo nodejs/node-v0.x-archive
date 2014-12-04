@@ -34,7 +34,7 @@ chunk.fill('x');
 r._read = function(n) {
   setTimeout(function() {
     r.push(--nChunks === 0 ? null : chunk);
-  });
+  }, 10);
 };
 
 var readAll = false;

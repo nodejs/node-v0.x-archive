@@ -36,7 +36,7 @@ test._read = function(size) {
   var chunk = chunks[n++];
   setTimeout(function() {
     test.push(chunk === undefined ? null : chunk);
-  });
+  }, 10);
 };
 
 test.on('end', thrower);
@@ -51,7 +51,7 @@ test.on('readable', function() {
   if (res) {
     bytesread += res.length;
     console.error('br=%d len=%d', bytesread, len);
-    setTimeout(next);
+    setTimeout(next, 10);
   }
   test.read(0);
 });

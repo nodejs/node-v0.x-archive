@@ -49,4 +49,4 @@ child.on('close', function(c) {
 
 setTimeout(function() {
   child.stdin.end('console.log(process.pid)');
-});
+}, 10);

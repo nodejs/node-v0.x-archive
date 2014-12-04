@@ -76,7 +76,7 @@ function runTest(highWaterMark, objectMode, produce) {
   w._write = function(chunk, encoding, cb) {
     console.log('_write', chunk);
     written.push(chunk);
-    setTimeout(cb);
+    setTimeout(cb, 10);
   };
 
   w.on('finish', function() {

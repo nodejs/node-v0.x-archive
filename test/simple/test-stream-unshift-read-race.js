@@ -62,7 +62,7 @@ r._read = function(n) {
         pos += n;
         r.push(c);
         if (c === null) pushError();
-      });
+      }, 10);
     }
   }
 };

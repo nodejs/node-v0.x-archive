@@ -44,7 +44,7 @@ child.stdout.once('data', function() {
   child.stdin.write('var throws = 0;');
   child.stdin.write('process.on("exit",function(){console.log(throws)});');
   child.stdin.write('function thrower(){console.log("THROW",throws++);XXX};');
-  child.stdin.write('setTimeout(thrower);""\n');
+  child.stdin.write('setTimeout(thrower, 0);""\n');
 
   setTimeout(fsTest, 50);
   function fsTest() {
@@ -61,9 +61,9 @@ child.stdout.once('data', function() {
                       '    e.on("x", thrower);\n' +
                       '    setTimeout(function() {\n' +
                       '      e.emit("x");\n' +
-                      '    });\n' +
+                      '    }, 0);\n' +
                       '  });\n' +
-                      '});"";\n');
+                      '}, 0);"";\n');
 
     setTimeout(child.stdin.end.bind(child.stdin), 200);
   }

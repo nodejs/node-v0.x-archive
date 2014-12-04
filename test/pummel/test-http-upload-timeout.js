@@ -56,7 +56,7 @@ server.listen(common.PORT, '127.0.0.1', function() {
       });
 
       function ping() {
-        var nextPing = (Math.random() * 900).toFixed();
+        var nextPing = (Math.random() * 900).toFixed() >>> 0;
         if (nextPing > 600) {
           request.end();
           return;

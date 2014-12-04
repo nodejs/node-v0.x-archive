@@ -83,4 +83,4 @@ setTimeout(function() {
     assert(writableFinished);
     console.log('ok');
   });
-});
+}, 10);
