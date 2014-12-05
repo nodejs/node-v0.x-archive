@@ -1,7 +1,7 @@
 { 'target_defaults': { 'defines': ['NODE_TEST_ADDON_NAME=>(_target_name)']}
 , 'targets':
   [ { 'target_name': 'init_exports'
-    , 'sources': ['init_exports.cc']
+    , 'sources'    : ['init_exports.cc']
     }
   , { 'target_name': 'init_exports_module'
     , 'sources'    : ['init_exports_module.cc']
@@ -20,12 +20,6 @@
     }
   , { 'target_name': 'init_exports_module_context_private'
     , 'sources'    : ['init_exports_module_context_private.cc']
-    }
-  , { 'target_name': 'init_void'
-    , 'sources'    : ['init_void.cc']
-    }
-  , { 'target_name': 'init_void_tester'
-    , 'sources'    : ['init_void_tester.cc']
     }
   ]
 }
