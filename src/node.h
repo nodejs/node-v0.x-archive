@@ -388,48 +388,11 @@ struct OptionalInitArg<void*> {
 // signature.
 template <typename F> struct AddonInitAdapter;
 
-#if __cplusplus > 199711L  // C++11
-
-template <typename... Args>
-struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, Args...)> {
-  typedef void (*init_func)(v8::Handle<v8::Object>, Args...);
-
-  static inline
-  void
-  registerAddon(void * f,
-                v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
-    init_func init(reinterpret_cast<init_func>(f));
-    init(exports,
-         OptionalInitArg<Args>::pick(module, context, priv)...);
-  }
-};
-
-#else  // pre C++11
-
 template <>
-struct AddonInitAdapter<void (*)()> {
-  typedef void (*init_func)();
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>);
 
-  static inline
-  void
-  registerAddon(void * f,
-                v8::Handle<v8::Object> exports,
-                v8::Handle<v8::Object> module,
-                v8::Handle<v8::Context> context,
-                void * priv) {
-    init_func init(reinterpret_cast<init_func>(f));
-    init();
-  }
-};
-
-template <typename A0>
-struct AddonInitAdapter<void (*)(A0)> {
-  typedef void (*init_func)(A0);
-
-  static inline
+  static
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
@@ -441,11 +404,11 @@ struct AddonInitAdapter<void (*)(A0)> {
   }
 };
 
-template <typename A0, typename A1>
-struct AddonInitAdapter<void (*)(A0, A1)> {
-  typedef void (*init_func)(A0, A1);
+template <typename A1>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, A1)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, A1);
 
-  static inline
+  static
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
@@ -458,11 +421,11 @@ struct AddonInitAdapter<void (*)(A0, A1)> {
   }
 };
 
-template <typename A0, typename A1, typename A2>
-struct AddonInitAdapter<void (*)(A0, A1, A2)> {
-  typedef void (*init_func)(A0, A1, A2);
+template <typename A1, typename A2>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, A1, A2)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, A1, A2);
 
-  static inline
+  static
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
@@ -476,11 +439,11 @@ struct AddonInitAdapter<void (*)(A0, A1, A2)> {
   }
 };
 
-template <typename A0, typename A1, typename A2, typename A3>
-struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
-  typedef void (*init_func)(A0, A1, A2, A3);
+template <typename A1, typename A2, typename A3>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, A1, A2, A3)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, A1, A2, A3);
 
-  static inline
+  static
   void
   registerAddon(void * f,
                 v8::Handle<v8::Object> exports,
@@ -494,8 +457,6 @@ struct AddonInitAdapter<void (*)(A0, A1, A2, A3)> {
          OptionalInitArg<A3>::pick(module, context, priv));
   }
 };
-
-#endif  // pre C++11
 
 // utility function to capture the type F
 template <typename F>
@@ -515,7 +476,7 @@ struct node_module {
   void* nm_dso_handle;
   const char* nm_filename;
   node::addon_register_func nm_register_func;
-  void * nm_init;
+  void* nm_init;
   const char* nm_modname;
   void* nm_priv;
   struct node_module* nm_link;
@@ -571,7 +532,7 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
 #define NODE_MODULE_CONTEXT_AWARE(modname, initfunc)                  \
   NODE_MODULE_X(modname, initfunc, NULL, 0)
 
-#define NODE_MODULE_BUILTIN(modname, initfunc)          \
+#define NODE_MODULE_BUILTIN(modname, initfunc)                        \
   NODE_MODULE_X(modname, initfunc, NULL, NM_F_BUILTIN)
 
 /*
