@@ -317,17 +317,138 @@ NODE_DEPRECATED("Use WinapiErrnoException(isolate, ...)",
 
 const char *signo_string(int errorno);
 
-
+// NOTE(agnat): This is the updated version of the addon register function. We
+// no longer distinguish between context aware and unaware modules. It's all
+// the same...
 typedef void (*addon_register_func)(
+    void * init,
     v8::Handle<v8::Object> exports,
-    v8::Handle<v8::Value> module,
-    void* priv);
-
-typedef void (*addon_context_register_func)(
-    v8::Handle<v8::Object> exports,
-    v8::Handle<v8::Value> module,
+    v8::Handle<v8::Object> module,
     v8::Handle<v8::Context> context,
-    void* priv);
+    void * priv);
+
+namespace detail {
+
+// used to select the optional arguments of the init function.
+// don't like it to much, but it'll do...
+template <typename T> struct OptionalInitArg;
+
+template <>
+struct OptionalInitArg<v8::Handle<v8::Object> > {
+  static inline
+  v8::Handle<v8::Object>
+  pick(v8::Handle<v8::Object> module,
+       v8::Handle<v8::Context> context,
+       void * priv) {
+    return module;
+  }
+};
+
+template <>
+struct OptionalInitArg<v8::Handle<v8::Context> > {
+  static inline
+  v8::Handle<v8::Context>
+  pick(v8::Handle<v8::Object> module,
+       v8::Handle<v8::Context> context,
+       void * priv) {
+    return context;
+  }
+};
+
+template <>
+struct OptionalInitArg<void*> {
+  static inline
+  void*
+  pick(v8::Handle<v8::Object> module,
+       v8::Handle<v8::Context> context,
+       void * priv) {
+    return priv;
+  }
+};
+
+// AddonInitAdapter takes the type of the init function as an argument.
+// The implementation of registerAddon is selected based on the functions
+// signature.
+template <typename F> struct AddonInitAdapter;
+
+template <>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>);
+
+  static
+  void
+  registerAddon(void * f,
+                v8::Handle<v8::Object> exports,
+                v8::Handle<v8::Object> module,
+                v8::Handle<v8::Context> context,
+                void * priv) {
+    init_func init(reinterpret_cast<init_func>(f));
+    init(exports);
+  }
+};
+
+template <typename A1>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, A1)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, A1);
+
+  static
+  void
+  registerAddon(void * f,
+                v8::Handle<v8::Object> exports,
+                v8::Handle<v8::Object> module,
+                v8::Handle<v8::Context> context,
+                void * priv) {
+    init_func init(reinterpret_cast<init_func>(f));
+    init(exports,
+         OptionalInitArg<A1>::pick(module, context, priv));
+  }
+};
+
+template <typename A1, typename A2>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, A1, A2)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, A1, A2);
+
+  static
+  void
+  registerAddon(void * f,
+                v8::Handle<v8::Object> exports,
+                v8::Handle<v8::Object> module,
+                v8::Handle<v8::Context> context,
+                void * priv) {
+    init_func init(reinterpret_cast<init_func>(f));
+    init(exports,
+         OptionalInitArg<A1>::pick(module, context, priv),
+         OptionalInitArg<A2>::pick(module, context, priv));
+  }
+};
+
+template <typename A1, typename A2, typename A3>
+struct AddonInitAdapter<void (*)(v8::Handle<v8::Object>, A1, A2, A3)> {
+  typedef void (*init_func)(v8::Handle<v8::Object>, A1, A2, A3);
+
+  static
+  void
+  registerAddon(void * f,
+                v8::Handle<v8::Object> exports,
+                v8::Handle<v8::Object> module,
+                v8::Handle<v8::Context> context,
+                void * priv) {
+    init_func init(reinterpret_cast<init_func>(f));
+    init(exports,
+         OptionalInitArg<A1>::pick(module, context, priv),
+         OptionalInitArg<A2>::pick(module, context, priv),
+         OptionalInitArg<A3>::pick(module, context, priv));
+  }
+};
+
+// utility function to capture the type F
+template <typename F>
+addon_register_func
+selectAddonRegisterFunction(F f) {
+  return AddonInitAdapter<F>::registerAddon;
+}
+
+}  // end of namespace detail
 
 #define NM_F_BUILTIN 0x01
 
@@ -337,7 +458,7 @@ struct node_module {
   void* nm_dso_handle;
   const char* nm_filename;
   node::addon_register_func nm_register_func;
-  node::addon_context_register_func nm_context_register_func;
+  void* nm_init;
   const char* nm_modname;
   void* nm_priv;
   struct node_module* nm_link;
@@ -366,7 +487,7 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
   static void fn(void)
 #endif
 
-#define NODE_MODULE_X(modname, regfunc, priv, flags)                  \
+#define NODE_MODULE_X(modname, initfunc, priv, flags)                 \
   extern "C" {                                                        \
     static node::node_module _module =                                \
     {                                                                 \
@@ -374,8 +495,8 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
       flags,                                                          \
       NULL,                                                           \
       __FILE__,                                                       \
-      (node::addon_register_func) (regfunc),                          \
-      NULL,                                                           \
+      node::detail::selectAddonRegisterFunction(initfunc),            \
+      reinterpret_cast<void*>(initfunc),                              \
       NODE_STRINGIFY(modname),                                        \
       priv,                                                           \
       NULL                                                            \
@@ -385,33 +506,15 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
     }                                                                 \
   }
 
-#define NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, priv, flags)    \
-  extern "C" {                                                        \
-    static node::node_module _module =                                \
-    {                                                                 \
-      NODE_MODULE_VERSION,                                            \
-      flags,                                                          \
-      NULL,                                                           \
-      __FILE__,                                                       \
-      NULL,                                                           \
-      (node::addon_context_register_func) (regfunc),                  \
-      NODE_STRINGIFY(modname),                                        \
-      priv,                                                           \
-      NULL                                                            \
-    };                                                                \
-    NODE_C_CTOR(_register_ ## modname) {                              \
-      node_module_register(&_module);                                 \
-    }                                                                 \
-  }
+#define NODE_MODULE(modname, initfunc)                                \
+  NODE_MODULE_X(modname, initfunc, NULL, 0)
 
-#define NODE_MODULE(modname, regfunc)                                 \
-  NODE_MODULE_X(modname, regfunc, NULL, 0)
+// TODO(agnat): deprecate
+#define NODE_MODULE_CONTEXT_AWARE(modname, initfunc)                  \
+  NODE_MODULE_X(modname, initfunc, NULL, 0)
 
-#define NODE_MODULE_CONTEXT_AWARE(modname, regfunc)                   \
-  NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, NULL, 0)
-
-#define NODE_MODULE_CONTEXT_AWARE_BUILTIN(modname, regfunc)           \
-  NODE_MODULE_CONTEXT_AWARE_X(modname, regfunc, NULL, NM_F_BUILTIN)   \
+#define NODE_MODULE_BUILTIN(modname, initfunc)                        \
+  NODE_MODULE_X(modname, initfunc, NULL, NM_F_BUILTIN)
 
 /*
  * For backward compatibility in add-on modules.

@@ -43,9 +43,7 @@ using v8::Value;
 
 class SignalWrap : public HandleWrap {
  public:
-  static void Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
+  static void Initialize(Handle<Object> target, Handle<Context> context) {
     Environment* env = Environment::GetCurrent(context);
     Local<FunctionTemplate> constructor = FunctionTemplate::New(env->isolate(),
                                                                 New);
@@ -121,4 +119,4 @@ class SignalWrap : public HandleWrap {
 }  // namespace node
 
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(signal_wrap, node::SignalWrap::Initialize)
+NODE_MODULE_BUILTIN(signal_wrap, node::SignalWrap::Initialize)

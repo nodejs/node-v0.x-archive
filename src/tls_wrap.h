@@ -47,7 +47,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
                      public AsyncWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target,
-                         v8::Handle<v8::Value> unused,
                          v8::Handle<v8::Context> context);
 
   const char* Error();

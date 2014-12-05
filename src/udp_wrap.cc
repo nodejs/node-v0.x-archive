@@ -86,9 +86,7 @@ UDPWrap::~UDPWrap() {
 }
 
 
-void UDPWrap::Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
+void UDPWrap::Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
@@ -443,4 +441,4 @@ uv_udp_t* UDPWrap::UVHandle() {
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(udp_wrap, node::UDPWrap::Initialize)
+NODE_MODULE_BUILTIN(udp_wrap, node::UDPWrap::Initialize)

@@ -807,9 +807,7 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 
 
-void TLSCallbacks::Initialize(Handle<Object> target,
-                              Handle<Value> unused,
-                              Handle<Context> context) {
+void TLSCallbacks::Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   NODE_SET_METHOD(target, "wrap", TLSCallbacks::Wrap);
@@ -840,4 +838,4 @@ void TLSCallbacks::Initialize(Handle<Object> target,
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(tls_wrap, node::TLSCallbacks::Initialize)
+NODE_MODULE_BUILTIN(tls_wrap, node::TLSCallbacks::Initialize)
