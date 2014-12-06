@@ -111,25 +111,20 @@ inline v8::Isolate* Environment::IsolateData::isolate() const {
   return isolate_;
 }
 
-inline Environment::AsyncListener::AsyncListener() {
-  for (int i = 0; i < kFieldsCount; ++i)
-    fields_[i] = 0;
+inline Environment::AsyncHooks::AsyncHooks() {
+  for (int i = 0; i < kFieldsCount; i++) fields_[i] = 0;
 }
 
-inline uint32_t* Environment::AsyncListener::fields() {
+inline uint32_t* Environment::AsyncHooks::fields() {
   return fields_;
 }
 
-inline int Environment::AsyncListener::fields_count() const {
+inline int Environment::AsyncHooks::fields_count() const {
   return kFieldsCount;
 }
 
-inline bool Environment::AsyncListener::has_listener() const {
-  return fields_[kHasListener] > 0;
-}
-
-inline uint32_t Environment::AsyncListener::watched_providers() const {
-  return fields_[kWatchedProviders];
+inline bool Environment::AsyncHooks::call_init_hook() {
+  return fields_[kCallInitHook] != 0;
 }
 
 inline Environment::DomainFlag::DomainFlag() {
@@ -264,14 +259,9 @@ inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
 
-inline bool Environment::has_async_listener() const {
+inline bool Environment::call_async_init_hook() const {
   // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return const_cast<Environment*>(this)->async_listener()->has_listener();
-}
-
-inline uint32_t Environment::watched_providers() const {
-  // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return const_cast<Environment*>(this)->async_listener()->watched_providers();
+  return const_cast<Environment*>(this)->async_hooks()->call_init_hook();
 }
 
 inline bool Environment::in_domain() const {
@@ -325,8 +315,8 @@ inline uv_loop_t* Environment::event_loop() const {
   return isolate_data()->event_loop();
 }
 
-inline Environment::AsyncListener* Environment::async_listener() {
-  return &async_listener_count_;
+inline Environment::AsyncHooks* Environment::async_hooks() {
+  return &async_hooks_;
 }
 
 inline Environment::DomainFlag* Environment::domain_flag() {

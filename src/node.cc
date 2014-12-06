@@ -909,32 +909,6 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
 #endif
 
 
-void SetupAsyncListener(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-
-  assert(args[0]->IsObject());
-  assert(args[1]->IsFunction());
-  assert(args[2]->IsFunction());
-  assert(args[3]->IsFunction());
-
-  env->set_async_listener_run_function(args[1].As<Function>());
-  env->set_async_listener_load_function(args[2].As<Function>());
-  env->set_async_listener_unload_function(args[3].As<Function>());
-
-  Local<Object> async_listener_flag_obj = args[0].As<Object>();
-  Environment::AsyncListener* async_listener = env->async_listener();
-  async_listener_flag_obj->SetIndexedPropertiesToExternalArrayData(
-      async_listener->fields(),
-      kExternalUint32Array,
-      async_listener->fields_count());
-
-  // Do a little housekeeping.
-  env->process_object()->Delete(
-      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupAsyncListener"));
-}
-
-
 void SetupDomainUse(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
@@ -1004,150 +978,78 @@ void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-Handle<Value> MakeDomainCallback(Environment* env,
-                                 Handle<Value> recv,
-                                 const Handle<Function> callback,
-                                 int argc,
-                                 Handle<Value> argv[]) {
-  // If you hit this assertion, you forgot to enter the v8::Context first.
-  assert(env->context() == env->isolate()->GetCurrentContext());
-
-  Local<Object> process = env->process_object();
-  Local<Object> object, domain;
-  Local<Value> domain_v;
-
-  TryCatch try_catch;
-  try_catch.SetVerbose(true);
-
-  bool has_async_queue = false;
-
-  if (recv->IsObject()) {
-    object = recv.As<Object>();
-    // TODO(trevnorris): This is sucky for performance. Fix it.
-    has_async_queue = object->Has(env->async_queue_string());
-    if (has_async_queue) {
-      env->async_listener_load_function()->Call(process, 1, &recv);
-
-      if (try_catch.HasCaught())
-        return Undefined(env->isolate());
-    }
-  }
-
-  bool has_domain = false;
-
-  if (!object.IsEmpty()) {
-    domain_v = object->Get(env->domain_string());
-    has_domain = domain_v->IsObject();
-    if (has_domain) {
-      domain = domain_v.As<Object>();
-
-      if (domain->Get(env->disposed_string())->IsTrue()) {
-        // domain has been disposed of.
-        return Undefined(env->isolate());
-      }
-
-      Local<Function> enter = domain->Get(env->enter_string()).As<Function>();
-      if (enter->IsFunction()) {
-        enter->Call(domain, 0, NULL);
-        if (try_catch.HasCaught())
-          return Undefined(env->isolate());
-      }
-    }
-  }
-
-  Local<Value> ret = callback->Call(recv, argc, argv);
-
-  if (try_catch.HasCaught()) {
-    return Undefined(env->isolate());
-  }
-
-  if (has_domain) {
-    Local<Function> exit = domain->Get(env->exit_string()).As<Function>();
-    if (exit->IsFunction()) {
-      exit->Call(domain, 0, NULL);
-      if (try_catch.HasCaught())
-        return Undefined(env->isolate());
-    }
-  }
-
-  if (has_async_queue) {
-    env->async_listener_unload_function()->Call(process, 1, &recv);
-
-    if (try_catch.HasCaught())
-      return Undefined(env->isolate());
-  }
-
-  Environment::TickInfo* tick_info = env->tick_info();
-
-  if (tick_info->last_threw() == 1) {
-    tick_info->set_last_threw(0);
-    return ret;
-  }
-
-  if (tick_info->in_tick()) {
-    return ret;
-  }
-
-  if (tick_info->length() == 0) {
-    env->isolate()->RunMicrotasks();
-  }
-
-  if (tick_info->length() == 0) {
-    tick_info->set_index(0);
-    return ret;
-  }
-
-  tick_info->set_in_tick(true);
-
-  env->tick_callback_function()->Call(process, 0, NULL);
-
-  tick_info->set_in_tick(false);
-
-  if (try_catch.HasCaught()) {
-    tick_info->set_last_threw(true);
-    return Undefined(env->isolate());
-  }
-
-  return ret;
-}
-
-
 Handle<Value> MakeCallback(Environment* env,
                            Handle<Value> recv,
                            const Handle<Function> callback,
                            int argc,
                            Handle<Value> argv[]) {
-  if (env->using_domains())
-    return MakeDomainCallback(env, recv, callback, argc, argv);
-
   // If you hit this assertion, you forgot to enter the v8::Context first.
-  assert(env->context() == env->isolate()->GetCurrentContext());
+  CHECK(env->context() == env->isolate()->GetCurrentContext());
 
   Local<Object> process = env->process_object();
+  Local<Object> object, domain;
+  bool has_async_queue = false;
+  bool has_domain = false;
+
+  if (recv->IsObject()) {
+    object = recv.As<Object>();
+    Local<Value> async_queue_v = object->Get(env->async_queue_string());
+    if (async_queue_v->IsObject())
+      has_async_queue = true;
+  }
+
+  if (env->using_domains()) {
+    CHECK(recv->IsObject());
+    Local<Value> domain_v = object->Get(env->domain_string());
+    has_domain = domain_v->IsObject();
+    if (has_domain) {
+      domain = domain_v.As<Object>();
+      if (domain->Get(env->disposed_string())->IsTrue())
+        return Undefined(env->isolate());
+    }
+  }
 
   TryCatch try_catch;
   try_catch.SetVerbose(true);
 
-  // TODO(trevnorris): This is sucky for performance. Fix it.
-  bool has_async_queue =
-      recv->IsObject() && recv.As<Object>()->Has(env->async_queue_string());
+  if (has_domain) {
+    Local<Value> enter_v = domain->Get(env->enter_string());
+    if (enter_v->IsFunction()) {
+      enter_v.As<Function>()->Call(domain, 0, NULL);
+      if (try_catch.HasCaught())
+        return Undefined(env->isolate());
+    }
+  }
+
   if (has_async_queue) {
-    env->async_listener_load_function()->Call(process, 1, &recv);
+    try_catch.SetVerbose(false);
+    env->async_hooks_pre_function()->Call(object, 0, NULL);
     if (try_catch.HasCaught())
-      return Undefined(env->isolate());
+      FatalError("node:;MakeCallback", "pre hook threw");
+    try_catch.SetVerbose(true);
   }
 
   Local<Value> ret = callback->Call(recv, argc, argv);
 
-  if (try_catch.HasCaught()) {
-    return Undefined(env->isolate());
+  if (has_async_queue) {
+    try_catch.SetVerbose(false);
+    env->async_hooks_post_function()->Call(object, 0, NULL);
+    if (try_catch.HasCaught())
+      FatalError("node::MakeCallback", "post hook threw");
+    try_catch.SetVerbose(true);
   }
 
-  if (has_async_queue) {
-    env->async_listener_unload_function()->Call(process, 1, &recv);
+  if (has_domain) {
+    Local<Value> exit_v = domain->Get(env->exit_string());
+    if (exit_v->IsFunction()) {
+      exit_v.As<Function>()->Call(domain, 0, NULL);
+      if (try_catch.HasCaught())
+        return Undefined(env->isolate());
+    }
+  }
 
-    if (try_catch.HasCaught())
-      return Undefined(env->isolate());
+  if (try_catch.HasCaught()) {
+    return Undefined(env->isolate());
   }
 
   Environment::TickInfo* tick_info = env->tick_info();
@@ -1187,10 +1089,9 @@ Handle<Value> MakeCallback(Environment* env,
                            uint32_t index,
                            int argc,
                            Handle<Value> argv[]) {
-  Local<Function> callback = recv->Get(index).As<Function>();
-  assert(callback->IsFunction());
-
-  return MakeCallback(env, recv.As<Value>(), callback, argc, argv);
+  Local<Value> cb_v = recv->Get(index);
+  CHECK(cb_v->IsFunction());
+  return MakeCallback(env, recv.As<Value>(), cb_v.As<Function>(), argc, argv);
 }
 
 
@@ -1199,9 +1100,9 @@ Handle<Value> MakeCallback(Environment* env,
                            Handle<String> symbol,
                            int argc,
                            Handle<Value> argv[]) {
-  Local<Function> callback = recv->Get(symbol).As<Function>();
-  assert(callback->IsFunction());
-  return MakeCallback(env, recv.As<Value>(), callback, argc, argv);
+  Local<Value> cb_v = recv->Get(symbol);
+  CHECK(cb_v->IsFunction());
+  return MakeCallback(env, recv.As<Value>(), cb_v.As<Function>(), argc, argv);
 }
 
 
@@ -1255,20 +1156,6 @@ Handle<Value> MakeCallback(Isolate* isolate,
   return handle_scope.Escape(Local<Value>::New(
         isolate,
         MakeCallback(env, recv.As<Value>(), callback, argc, argv)));
-}
-
-
-Handle<Value> MakeDomainCallback(Handle<Object> recv,
-                                 Handle<Function> callback,
-                                 int argc,
-                                 Handle<Value> argv[]) {
-  Local<Context> context = recv->CreationContext();
-  Environment* env = Environment::GetCurrent(context);
-  Context::Scope context_scope(context);
-  EscapableHandleScope handle_scope(env->isolate());
-  return handle_scope.Escape(Local<Value>::New(
-      env->isolate(),
-      MakeDomainCallback(env, recv, callback, argc, argv)));
 }
 
 
@@ -2880,7 +2767,6 @@ void SetupProcessObject(Environment* env,
   NODE_SET_METHOD(process, "binding", Binding);
   NODE_SET_METHOD(process, "_linkedBinding", LinkedBinding);
 
-  NODE_SET_METHOD(process, "_setupAsyncListener", SetupAsyncListener);
   NODE_SET_METHOD(process, "_setupNextTick", SetupNextTick);
   NODE_SET_METHOD(process, "_setupDomainUse", SetupDomainUse);
 

@@ -64,8 +64,8 @@ namespace node {
   V(address_string, "address")                                                \
   V(args_string, "args")                                                      \
   V(argv_string, "argv")                                                      \
-  V(async_queue_string, "_asyncQueue")                                        \
   V(async, "async")                                                           \
+  V(async_queue_string, "_asyncQueue")                                        \
   V(atime_string, "atime")                                                    \
   V(birthtime_string, "birthtime")                                            \
   V(blksize_string, "blksize")                                                \
@@ -250,9 +250,9 @@ namespace node {
   V(zero_return_string, "ZERO_RETURN")                                        \
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
-  V(async_listener_run_function, v8::Function)                                \
-  V(async_listener_load_function, v8::Function)                               \
-  V(async_listener_unload_function, v8::Function)                             \
+  V(async_hooks_init_function, v8::Function)                                  \
+  V(async_hooks_pre_function, v8::Function)                                   \
+  V(async_hooks_post_function, v8::Function)                                  \
   V(binding_cache_object, v8::Object)                                         \
   V(buffer_constructor_function, v8::Function)                                \
   V(context, v8::Context)                                                     \
@@ -286,26 +286,25 @@ RB_HEAD(ares_task_list, ares_task_t);
 
 class Environment {
  public:
-  class AsyncListener {
+  class AsyncHooks {
    public:
     inline uint32_t* fields();
     inline int fields_count() const;
-    inline bool has_listener() const;
-    inline uint32_t watched_providers() const;
+    inline bool call_init_hook();
 
    private:
     friend class Environment;  // So we can call the constructor.
-    inline AsyncListener();
+    inline AsyncHooks();
 
     enum Fields {
-      kHasListener,
-      kWatchedProviders,
+      // Set this to not zero if the init hook should be called.
+      kCallInitHook,
       kFieldsCount
     };
 
     uint32_t fields_[kFieldsCount];
 
-    DISALLOW_COPY_AND_ASSIGN(AsyncListener);
+    DISALLOW_COPY_AND_ASSIGN(AsyncHooks);
   };
 
   class DomainFlag {
@@ -395,7 +394,7 @@ class Environment {
 
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
-  inline bool has_async_listener() const;
+  inline bool call_async_init_hook() const;
   inline bool in_domain() const;
   inline uint32_t watched_providers() const;
 
@@ -415,7 +414,7 @@ class Environment {
                                     void *arg);
   inline void FinishHandleCleanup(uv_handle_t* handle);
 
-  inline AsyncListener* async_listener();
+  inline AsyncHooks* async_hooks();
   inline DomainFlag* domain_flag();
   inline TickInfo* tick_info();
 
@@ -492,7 +491,7 @@ class Environment {
   uv_idle_t immediate_idle_handle_;
   uv_prepare_t idle_prepare_handle_;
   uv_check_t idle_check_handle_;
-  AsyncListener async_listener_count_;
+  AsyncHooks async_hooks_;
   DomainFlag domain_flag_;
   TickInfo tick_info_;
   uv_timer_t cares_timer_handle_;

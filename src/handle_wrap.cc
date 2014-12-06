@@ -90,13 +90,14 @@ void HandleWrap::Close(const FunctionCallbackInfo<Value>& args) {
 HandleWrap::HandleWrap(Environment* env,
                        Handle<Object> object,
                        uv_handle_t* handle,
-                       AsyncWrap::ProviderType provider)
-    : AsyncWrap(env, object, provider),
+                       AsyncWrap::ProviderType provider,
+                       AsyncWrap* parent)
+    : AsyncWrap(env, object, provider, parent),
       flags_(0),
       handle__(handle) {
   handle__->data = this;
   HandleScope scope(env->isolate());
-  Wrap<HandleWrap>(object, this);
+  Wrap(object, this);
   QUEUE_INSERT_TAIL(env->handle_wrap_queue(), &handle_wrap_queue_);
 }
 
