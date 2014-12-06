@@ -121,7 +121,6 @@ class StreamWrapCallbacks {
 class StreamWrap : public HandleWrap {
  public:
   static void Initialize(v8::Handle<v8::Object> target,
-                         v8::Handle<v8::Value> unused,
                          v8::Handle<v8::Context> context);
 
   void OverrideCallbacks(StreamWrapCallbacks* callbacks, bool gc) {

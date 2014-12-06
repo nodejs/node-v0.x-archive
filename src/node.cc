@@ -2213,13 +2213,12 @@ static void LinkedBinding(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> exports = Object::New(env->isolate());
 
-  if (mod->nm_context_register_func != NULL) {
-    mod->nm_context_register_func(exports,
-                                  module,
-                                  env->context(),
-                                  mod->nm_priv);
-  } else if (mod->nm_register_func != NULL) {
-    mod->nm_register_func(exports, module, mod->nm_priv);
+  if (mod->nm_register_func != NULL) {
+    mod->nm_register_func(mod->nm_init,
+                          exports,
+                          Undefined(env->isolate()).As<Object>(),
+                          env->context(),
+                          mod->nm_priv);
   } else {
     return env->ThrowError("Linked module has no declared entry point.");
   }

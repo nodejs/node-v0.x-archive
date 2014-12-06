@@ -57,9 +57,7 @@ using v8::Undefined;
 using v8::Value;
 
 
-void StreamWrap::Initialize(Handle<Object> target,
-                         Handle<Value> unused,
-                         Handle<Context> context) {
+void StreamWrap::Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   Local<FunctionTemplate> sw =
@@ -773,4 +771,4 @@ int StreamWrapCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(stream_wrap, node::StreamWrap::Initialize)
+NODE_MODULE_BUILTIN(stream_wrap, node::StreamWrap::Initialize)
