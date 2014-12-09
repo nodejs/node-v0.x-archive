@@ -161,9 +161,13 @@ Class for creating cryptographic hmac content.
 
 Returned by `crypto.createHmac`.
 
-### hmac.update(data)
+### hmac.update(data, [input_encoding])
 
-Update the hmac content with the given `data`.  This can be called
+Update the hmac content with the given `data`, the encoding of which
+is given in `input_encoding` and can be `'utf8'`, `'ascii'` or
+`'binary'`.  If no encoding is provided and the input is a string an
+encoding of `'binary'` is enforced. If `data` is a `Buffer` then
+`input_encoding` is ignored.  This can be called
 many times with new data as it is streamed.
 
 ### hmac.digest([encoding])
