@@ -44,7 +44,7 @@ setTimeout(function() {
     gotEnd = true;
   });
   stream.resume();
-});
+}, 10);
 
 process.on('exit', function() {
   assert(gotEnd);

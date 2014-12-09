@@ -34,7 +34,7 @@ var server = http.createServer(function(req, res) {
       return setTimeout(function() {
         req.socket.destroy();
         server.emit('requestDone');
-      });
+      }, 10);
 
     case '/2':
       return process.nextTick(function() {
@@ -48,7 +48,7 @@ var server = http.createServer(function(req, res) {
       return setTimeout(function() {
         res.end('world!');
         server.emit('requestDone');
-      });
+      }, 10);
 
     default:
       res.destroy();

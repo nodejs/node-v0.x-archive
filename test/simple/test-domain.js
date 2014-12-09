@@ -159,8 +159,8 @@ d.run(function() {
           // pretty common error.
           console.log(stat.isDirectory());
         });
-      });
-    });
+      }, 10);
+    }, 10);
   });
 });
 expectCaught++;
@@ -171,7 +171,7 @@ expectCaught++;
 d.run(function() {
   setTimeout(function() {
     throw new Error('implicit timer');
-  });
+  }, 10);
 });
 expectCaught++;
 

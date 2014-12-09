@@ -44,7 +44,7 @@ server.listen(common.PORT, function() {
       res.pause();
       setTimeout(function() {
         res.resume();
-      });
+      }, 100);
     });
 
     res.on('end', function() {

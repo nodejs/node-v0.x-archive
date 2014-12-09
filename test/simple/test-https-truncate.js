@@ -69,6 +69,6 @@ function test(res) {
   res.on('data', function(chunk) {
     bytes += chunk.length;
     this.pause();
-    setTimeout(this.resume.bind(this));
+    setTimeout(this.resume.bind(this), 100);
   });
 }

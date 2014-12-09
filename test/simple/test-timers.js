@@ -23,21 +23,6 @@ var common = require('../common');
 var assert = require('assert');
 
 var inputs = [
-  undefined,
-  null,
-  true,
-  false,
-  '',
-  [],
-  {},
-  NaN,
-  +Infinity,
-  -Infinity,
-  (1.0 / 0.0),      // sanity check
-  parseFloat('x'),  // NaN
-  -10,
-  -1,
-  -0.5,
   -0.0,
   0,
   0.0,

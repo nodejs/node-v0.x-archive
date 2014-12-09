@@ -79,7 +79,7 @@ var Stream = require('stream').Stream;
         w.emit('error', new Error('fail'));
       });
       didTest = true;
-    });
+    }, 10);
   };
 
   w.on('error', myOnError);
@@ -113,7 +113,7 @@ var Stream = require('stream').Stream;
       assert(removed);
       w.emit('error', new Error('fail'));
       didTest = true;
-    });
+    }, 10);
   };
 
   w.on('error', myOnError);

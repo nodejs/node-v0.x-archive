@@ -36,7 +36,7 @@ var intervalHandler = setInterval(function () {
   clearInterval(intervalHandler);
 
   intervalThis = this;
-});
+}, 10);
 
 var intervalArgsHandler = setInterval(function () {
   clearInterval(intervalArgsHandler);
@@ -46,7 +46,7 @@ var intervalArgsHandler = setInterval(function () {
 
 var timeoutHandler = setTimeout(function () {
   timeoutThis = this;
-});
+}, 10);
 
 var timeoutArgsHandler = setTimeout(function () {
   timeoutArgsThis = this;

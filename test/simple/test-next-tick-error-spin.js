@@ -65,5 +65,5 @@ if (process.argv[2] !== 'child') {
     //process.stdout.close();
     //process.stderr.close();
     process.exit(0);
-  });
+  }, 10);
 }

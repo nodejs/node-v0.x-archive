@@ -349,7 +349,7 @@ test('dont end while writing', function(t) {
     setTimeout(function() {
       this.writing = false;
       cb();
-    });
+    }, 10);
   };
   w.on('finish', function() {
     assert(wrote);

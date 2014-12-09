@@ -134,5 +134,5 @@ function end() {
   writer.end(stream.read());
   setTimeout(function() {
     assert(ended);
-  });
+  }, 10);
 }

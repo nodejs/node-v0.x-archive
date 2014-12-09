@@ -37,7 +37,7 @@ r._read = function(n) {
   if (reads === 0) {
     setTimeout(function() {
       r.push(str);
-    });
+    }, 10);
     reads++;
   } else if (reads === 1) {
     var ret = r.push(str);

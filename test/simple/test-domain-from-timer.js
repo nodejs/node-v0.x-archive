@@ -36,4 +36,4 @@ setTimeout(function() {
       assert.equal(process.domain, d);
     });
   });
-});
+}, 10);

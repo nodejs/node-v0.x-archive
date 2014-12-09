@@ -70,7 +70,7 @@ function push() {
 
   console.error('   push #%d', pushes);
   if (r.push(new Buffer(PUSHSIZE)))
-    setTimeout(push);
+    setTimeout(push, 10);
 }
 
 // start the flow
