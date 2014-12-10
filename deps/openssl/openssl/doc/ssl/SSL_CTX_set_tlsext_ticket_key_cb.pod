@@ -110,7 +110,7 @@ Session resumption shortcuts the TLS so that the client certificate
 negiotation don't occur. It makes up for this by storing client certificate
 an all other negotiated state information encrypted within the ticket. In a
 resumed session the applications will have all this state information available
-exactly as if a full negiotation had occured.
+exactly as if a full negiotation had occurred.
 
 If an attacker can obtain the key used to encrypt a session ticket, they can
 obtain the master secret for any ticket using that key and decrypt any traffic
