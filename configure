@@ -912,4 +912,4 @@ else:
 
 gyp_args += args
 
-subprocess.call(gyp_args)
+sys.exit(subprocess.call(gyp_args))
