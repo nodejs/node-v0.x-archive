@@ -29,34 +29,51 @@ if (enablei18n === undefined) {
 
 var haveIntl = ( global.Intl != undefined );
 
+function haveLocale(loc) {
+    var locs = process.config.variables.icu_locales.split(',');
+    if ( locs.indexOf(loc) !== -1 ) {
+	return true;
+    } else {
+	return false;
+    }
+}
+
 if (!haveIntl) {
     assert.equal(enablei18n, false, '"Intl" object is NOT present but v8_enable_i18n_support is ' + enablei18n);
     console.log('Skipping Intl tests because Intl object not present.');
 } else {
     assert.equal(enablei18n, true, '"Intl" object is present but v8_enable_i18n_support is ' + enablei18n + '. Is this test out of date?');
 
-    // Check with toLocaleString
+    // check with a Formatter
     var date0 = new Date(0);
     var GMT = 'Etc/GMT';
     var optsGMT = {timeZone: GMT};
-    var localeString0 = date0.toLocaleString(['en'], optsGMT);
     var expectString0 = '1/1/1970, 12:00:00 AM';  // epoch
-    assert.equal(localeString0, expectString0);
 
-    // check with a Formatter
     var dtf = new Intl.DateTimeFormat(['en'], {timeZone: GMT, month: 'short', year: '2-digit'});
-    var localeString1 = dtf.format(date0);
-    assert.equal(localeString1, 'Jan 70');
 
-    // number format
-    assert.equal(new Intl.NumberFormat(['en']).format(12345.67890), '12,345.679');
+    if ( !process.config.variables.icu_locales  // if no list specified or..
+	 || haveLocale('en') ) {                // list contains 'en' then continue
 
-    var coll = new Intl.Collator(['en'],{sensitivity:'base',ignorePunctuation:true});
-    
-    assert.equal(coll.compare('blackbird', 'black-bird'), 0, 'ignore punctuation failed');
-
-    assert.equal(coll.compare('blackbird', 'red-bird'), -1, 'compare less failed');
-    assert.equal(coll.compare('bluebird', 'blackbird'), 1, 'compare greater failed');
-    assert.equal(coll.compare('Bluebird', 'bluebird'), 0, 'ignore case failed');
-    assert.equal(coll.compare('\ufb03', 'ffi'), 0, 'ffi ligature (contraction) failed');
+	// Check with toLocaleString
+	var localeString1 = dtf.format(date0);
+	assert.equal(localeString1, 'Jan 70');
+	
+	var localeString0 = date0.toLocaleString(['en'], optsGMT);
+	assert.equal(localeString0, expectString0);
+	
+	// number format
+	assert.equal(new Intl.NumberFormat(['en']).format(12345.67890), '12,345.679');
+	
+	var coll = new Intl.Collator(['en'],{sensitivity:'base',ignorePunctuation:true});
+	
+	assert.equal(coll.compare('blackbird', 'black-bird'), 0, 'ignore punctuation failed');
+	
+	assert.equal(coll.compare('blackbird', 'red-bird'), -1, 'compare less failed');
+	assert.equal(coll.compare('bluebird', 'blackbird'), 1, 'compare greater failed');
+	assert.equal(coll.compare('Bluebird', 'bluebird'), 0, 'ignore case failed');
+	assert.equal(coll.compare('\ufb03', 'ffi'), 0, 'ffi ligature (contraction) failed');
+    } else {
+	console.log('Skipping detailed Intl tests because English is not listed as supported.');
+    }
 }

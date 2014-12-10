@@ -214,7 +214,8 @@
                               '-T', '../../out/icutmp',
                               '-F', 'icu_small.json',
                               '-O', 'icudt<(icu_ver_major)<(icu_endianness).dat',
-                              '-v' ],
+                              '-v',
+                              '-L', '<(icu_locales)'],
                 },
                 {
                   # build final .dat -> .obj
@@ -294,7 +295,8 @@
                               '-T', '<(SHARED_INTERMEDIATE_DIR)/icutmp',
                               '-F', 'icu_small.json',
                               '-O', 'icudt<(icu_ver_major)<(icu_endianness).dat',
-                              '-v' ],
+                              '-v',
+                              '-L', '<(icu_locales)'],
                 }, {
                   # rename to get the final entrypoint name right
                    'action_name': 'rename',

@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import sys
 import shutil
+import string
 
 CC = os.environ.get('CC', 'cc')
 
@@ -245,6 +246,11 @@ parser.add_option('--with-icu-path',
     action='store',
     dest='with_icu_path',
     help='Path to icu.gyp (ICU i18n, Chromium version only.)')
+
+parser.add_option('--with-icu-locales',
+    action='store',
+    dest='with_icu_locales',
+    help='Comma-separated list of locales for "small-icu". Default: "root,en". "root" is assumed.')
 
 parser.add_option('--with-intl',
     action='store',
@@ -777,8 +783,13 @@ def configure_intl(o):
     o['variables']['icu_gyp_path'] = options.with_icu_path
     return
   # --with-intl=<with_intl>
+  # set the default
   if with_intl is None:
     with_intl = 'none'  # The default mode of Intl
+  # sanity check localelist
+  if options.with_icu_locales and (with_intl != 'small-icu'):
+    print 'Error: --with-icu-locales only makes sense with --with-intl=small-icu'
+    sys.exit(1)
   if with_intl == 'none' or with_intl is None:
     o['variables']['v8_enable_i18n_support'] = 0
     return  # no Intl
@@ -786,6 +797,12 @@ def configure_intl(o):
     # small ICU (English only)
     o['variables']['v8_enable_i18n_support'] = 1
     o['variables']['icu_small'] = b(True)
+    with_icu_locales = options.with_icu_locales
+    if not with_icu_locales:
+      with_icu_locales = 'root,en'
+    locs = set(with_icu_locales.split(','))
+    locs.add('root')  # must have root
+    o['variables']['icu_locales'] = string.join(locs,',')
   elif with_intl == 'full-icu':
     # full ICU
     o['variables']['v8_enable_i18n_support'] = 1
