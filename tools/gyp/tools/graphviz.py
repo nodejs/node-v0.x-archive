@@ -27,6 +27,10 @@ def LoadEdges(filename, targets):
   edges = json.load(file)
   file.close()
 
+  if len(targets) == 0:
+    # all edges
+    return edges
+
   # Copy out only the edges we're interested in from the full edge list.
   target_edges = {}
   to_visit = targets[:]
@@ -84,11 +88,6 @@ def WriteGraph(edges):
 
 
 def main():
-  if len(sys.argv) < 2:
-    print >>sys.stderr, __doc__
-    print >>sys.stderr
-    print >>sys.stderr, 'usage: %s target1 target2...' % (sys.argv[0])
-    return 1
 
   edges = LoadEdges('dump.json', sys.argv[1:])
 
