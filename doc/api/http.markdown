@@ -203,6 +203,16 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#net_server_listen_handle_callback).
 
+### server.listen([callback])
+
+* `callback` {Function}
+
+Begin accepting connections on a random port. In order to get the assigned port number you must use `server.address().port`. The port is only available when the ['listening'](net.html#event_listening_) event is triggered.
+
+This function is asynchronous. The last parameter `callback` will be added as
+a listener for the ['listening'](net.html#event_listening_) event.
+See also [net.Server.listen()](net.html#net_server_listen_handle_callback).
+
 ### server.close([callback])
 
 Stops the server from accepting new connections.  See [net.Server.close()][].
