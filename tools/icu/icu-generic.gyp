@@ -214,13 +214,13 @@
                   # trim down ICU
                   'action_name': 'icutrim',
                   'inputs': [ '<(icu_data_in)', 'icu_small.json' ],
-                  'outputs': [ '../../out/icutmp/icudt<(icu_ver_major)<(icu_endianness).dat' ],
+                  'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/icutmp/icudt<(icu_ver_major)<(icu_endianness).dat' ],
                   'action': [ 'python',
                               'icutrim.py',
                               '-P', '../../<(CONFIGURATION_NAME)',
                               '-D', '<(icu_data_in)',
                               '--delete-tmp',
-                              '-T', '../../out/icutmp',
+                              '-T', '<(SHARED_INTERMEDIATE_DIR)/icutmp',
                               '-F', 'icu_small.json',
                               '-O', 'icudt<(icu_ver_major)<(icu_endianness).dat',
                               '-v',
@@ -229,18 +229,18 @@
                 {
                   # build final .dat -> .obj
                   'action_name': 'genccode',
-                  'inputs': [ '../../out/icutmp/icudt<(icu_ver_major)<(icu_endianness).dat' ],
-                  'outputs': [ '../../out/icudt<(icu_ver_major)<(icu_endianness)_dat.obj' ],
+                  'inputs': [ '<(SHARED_INTERMEDIATE_DIR)/icutmp/icudt<(icu_ver_major)<(icu_endianness).dat' ],
+                  'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/icudt<(icu_ver_major)<(icu_endianness)_dat.obj' ],
                   'action': [ '../../<(CONFIGURATION_NAME)/genccode',
                               '-o',
-                              '-d', '../../out/',
+                              '-d', '<(SHARED_INTERMEDIATE_DIR)/',
                               '-n', 'icudata',
                               '-e', 'icusmdt<(icu_ver_major)',
                               '<@(_inputs)' ],
                 },
               ],
               # This file contains the small ICU data.
-              'sources': [ '../../out/icudt<(icu_ver_major)<(icu_endianness)_dat.obj' ],
+              'sources': [ '<(SHARED_INTERMEDIATE_DIR)/icudt<(icu_ver_major)<(icu_endianness)_dat.obj' ],
             } ] ], #end of OS==win and icu_small == true
         }, { # OS != win
           'conditions': [
