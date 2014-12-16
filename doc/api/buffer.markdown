@@ -259,12 +259,10 @@ the same as the `otherBuffer` in sort order.
 * `sourceStart` Number, Optional, Default: 0
 * `sourceEnd` Number, Optional, Default: `buffer.length`
 
-Does copy between buffers. The source and target regions can be overlapped.
-`targetStart` and `sourceStart` default to `0`.
-`sourceEnd` defaults to `buffer.length`.
-
-All values passed that are `undefined`/`NaN` or are out of bounds are set equal
-to their respective defaults.
+Copies data from a region of this buffer to a region in the target buffer even 
+if the target memory region overlaps with the source. If not specified or passed 
+as `undefined`/`NaN`, the `targetStart` and `sourceStart` parameters default 
+to `0` and `sourceEnd` defaults to `buffer.length`.
 
 Example: build two Buffers, then copy `buf1` from byte 16 through byte 19
 into `buf2`, starting at the 8th byte in `buf2`.
@@ -282,6 +280,19 @@ into `buf2`, starting at the 8th byte in `buf2`.
 
     // !!!!!!!!qrst!!!!!!!!!!!!!
 
+Example: Build a single buffer, then copy data from one region to an overlapping
+region in the same buffer
+
+    buf = new Buffer(26);
+
+    for (var i = 0 ; i < 26 ; i++) {
+      buf[i] = i + 97; // 97 is ASCII a
+    }
+
+    buf.copy(buf, 0, 4, 10);
+    console.log(buf.toString('ascii'));
+
+    // efghijghijklmnopqrstuvwxyz
 
 ### buf.slice([start], [end])
 
