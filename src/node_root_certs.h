@@ -1,6 +1,6 @@
 /* tools/../src/node_root_certs.h -- Bundle of CA Root Certificates
  *
- * Certificate data from Mozilla as of: Sat Nov  9 22:37:55 2013
+ * Certificate data from Mozilla as of: Sat Dec 29 20:03:40 2012
  *
  * This is a bundle of X.509 certificates of public Certificate Authorities
  * (CA). These were automatically extracted from Mozilla's root certificates
