@@ -122,11 +122,6 @@
               '../../deps/icu/source/i18n/alphaindex.cpp',
               # BOCSU
               # misc
-              '../../deps/icu/source/i18n/dtitvfmt.cpp',
-              '../../deps/icu/source/i18n/dtitvinf.cpp',
-              '../../deps/icu/source/i18n/dtitv_impl.h',
-              '../../deps/icu/source/i18n/quantityformatter.cpp',
-              '../../deps/icu/source/i18n/quantityformatter.h',
               '../../deps/icu/source/i18n/regexcmp.cpp',
               '../../deps/icu/source/i18n/regexcmp.h',
               '../../deps/icu/source/i18n/regexcst.h',
@@ -139,9 +134,7 @@
               '../../deps/icu/source/i18n/region.cpp',
               '../../deps/icu/source/i18n/region_impl.h',
               '../../deps/icu/source/i18n/reldatefmt.cpp',
-              '../../deps/icu/source/i18n/reldatefmt.h',
-              '../../deps/icu/source/i18n/measfmt.h',
-              '../../deps/icu/source/i18n/measfmt.cpp',
+              '../../deps/icu/source/i18n/reldatefmt.h'
               '../../deps/icu/source/i18n/scientificformathelper.cpp',
               '../../deps/icu/source/i18n/tmunit.cpp',
               '../../deps/icu/source/i18n/tmutamt.cpp',
@@ -395,13 +388,18 @@
           '../../deps/icu/source/common/ushape.cpp',
           '../../deps/icu/source/common/usprep.cpp',
           '../../deps/icu/source/common/uts46.cpp',
-        ]}]],
+        ]}],
+        [ 'OS == "solaris"', { 'defines': [
+          '_XOPEN_SOURCE_EXTENDED=0',
+        ]}],
+      ],
       'include_dirs': [
         '../../deps/icu/source/common',
       ],
       'defines': [
         'U_COMMON_IMPLEMENTATION=1',
       ],
+      'cflags_c': ['-std=c99'],
       'export_dependent_settings': [ 'icu_uconfig', 'icu_uconfig_target' ],
       'direct_dependent_settings': {
         'include_dirs': [
@@ -429,6 +427,12 @@
         '<@(icu_src_io)',
         '<@(icu_src_stubdata)',
       ],
+      'sources!': [
+        '../../deps/icu/source/tools/toolutil/udbgutil.cpp',
+        '../../deps/icu/source/tools/toolutil/udbgutil.h',
+        '../../deps/icu/source/tools/toolutil/dbgutil.cpp',
+        '../../deps/icu/source/tools/toolutil/dbgutil.h',
+      ],
       'include_dirs': [
         '../../deps/icu/source/common',
         '../../deps/icu/source/i18n',
@@ -441,6 +445,12 @@
         'U_IO_IMPLEMENTATION=1',
         'U_TOOLUTIL_IMPLEMENTATION=1',
         #'DEBUG=0', # http://bugs.icu-project.org/trac/ticket/10977
+      ],
+      'cflags_c': ['-std=c99'],
+      'conditions': [
+        ['OS == "solaris"', {
+          'defines': [ '_XOPEN_SOURCE_EXTENDED=0' ]
+        }]
       ],
       'direct_dependent_settings': {
         'include_dirs': [
