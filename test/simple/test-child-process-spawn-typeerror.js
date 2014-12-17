@@ -68,7 +68,7 @@ assert.doesNotThrow(function() { execFile(empty, n, o); });
 assert.doesNotThrow(function() { execFile(empty, a, n); });
 
 assert.throws(function() { spawn(cmd, s); }, TypeError);
-assert.doesNotThrow(function() { spawn(cmd, a, s); }, TypeError);
+assert.throws(function() { spawn(cmd, a, s); }, TypeError);
 
 assert.throws(function() { spawn(cmd, n); }, invalidArgsMsg);
 assert.throws(function() { spawn(cmd, true); }, invalidArgsMsg);
@@ -125,12 +125,6 @@ assert.doesNotThrow(function() { fork(empty); });
 assert.doesNotThrow(function() { fork(empty, a); });
 assert.doesNotThrow(function() { fork(empty, a, o); });
 assert.doesNotThrow(function() { fork(empty, o); });
-
-// Variants of undefined as explicit 'no argument' at a position
-assert.doesNotThrow(function() { execFile(empty, u, o); });
-assert.doesNotThrow(function() { execFile(empty, a, u); });
-assert.doesNotThrow(function() { execFile(empty, n, o); });
-assert.doesNotThrow(function() { execFile(empty, a, n); });
 
 assert.throws(function() { fork(empty, s); }, TypeError);
 assert.doesNotThrow(function() { fork(empty, a, s); }, TypeError);
