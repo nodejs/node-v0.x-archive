@@ -164,7 +164,8 @@ If a client connection emits an 'error' event - it will forwarded here.
 
 Begin accepting connections on the specified port and hostname.  If the
 hostname is omitted, the server will accept connections directed to any
-IPv4 address (`INADDR_ANY`).
+IPv4 address (`INADDR_ANY`). If port is an empty value (0, '0', null or
+undefined), an ephemeral (random) port will be used.
 
 To listen to a unix socket, supply a filename instead of port and hostname.
 
@@ -207,9 +208,10 @@ See also [net.Server.listen()](net.html#net_server_listen_handle_callback).
 
 * `callback` {Function}
 
-Begin accepting connections on a random port. In order to get the assigned port
-number you must use `server.address().port`, which is not available until the
-['listening'](net.html#event_listening_) event has been emitted.
+Begin accepting connections on an ephemeral port, randomly selected. In order
+to get the assigned port number you must use `server.address().port`, which is
+not available until the ['listening'](net.html#event_listening_) event has been
+emitted.
 
 This function is asynchronous. `callback` will be added as a listener for the
 ['listening'](net.html#event_listening_) event. See also
