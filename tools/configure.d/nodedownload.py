@@ -6,10 +6,12 @@ import hashlib
 import sys
 import zipfile
 import tarfile
+import fpformat
+import contextlib
 
 def formatSize(amt):
     """Format a size as a string in MB"""
-    return "{:.1f}".format(amt / 1024000.)
+    return fpformat.fix(amt / 1024000., 1)
 
 def spin(c):
     """print out a spinner based on 'c'"""
@@ -60,7 +62,7 @@ def unpack(packedfile, parent_path):
     """Unpack packedfile into parent_path. Assumes .zip. Returns parent_path"""
     packedsuffix = packedfile.lower().split('.')[-1]  # .zip, .tgz etc
     if zipfile.is_zipfile(packedfile):
-        with zipfile.ZipFile(packedfile, 'r') as icuzip:
+        with contextlib.closing(zipfile.ZipFile(packedfile, 'r')) as icuzip:
             print ' Extracting zipfile: %s' % packedfile
             icuzip.extractall(parent_path)
             return parent_path
