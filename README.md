@@ -91,19 +91,19 @@ enabled by default.
 #### "small" (English only) support
 
 This option will build with "small" (English only) support, but
-the full `Intl` (ECMA-402) APIs. It will download the ICU library
-as needed.
+the full `Intl` (ECMA-402) APIs.  With `--download=all` it will
+download the ICU library as needed.
 
 Unix/Macintosh:
 
 ```sh
-./configure --with-intl=small-icu
+./configure --with-intl=small-icu --download=all
 ```
 
 Windows:
 
 ```sh
-vcbuild small-icu
+vcbuild small-icu download-all
 ```
 
 The `small-icu` mode builds
@@ -114,18 +114,19 @@ with English-only data. You can add full data at runtime.
 
 #### Build with full ICU support (all locales supported by ICU):
 
-*Note*, this may download ICU if you don't have an ICU in `deps/icu`
+With the `--download=all`, this may download ICU if you don't
+have an ICU in `deps/icu`.
 
 Unix/Macintosh:
 
 ```sh
-./configure --with-intl=full-icu
+./configure --with-intl=full-icu --download=all
 ```
 
 Windows:
 
 ```sh
-vcbuild full-icu
+vcbuild full-icu download-all
 ```
 
 #### Build with no Intl support `:-(`

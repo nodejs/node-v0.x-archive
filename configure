@@ -242,6 +242,11 @@ parser.add_option('--with-etw',
     dest='with_etw',
     help='build with ETW (default is true on Windows)')
 
+parser.add_option('--download',
+    action='store',
+    dest='download_list',
+    help=nodedownload.help())
+
 parser.add_option('--with-icu-path',
     action='store',
     dest='with_icu_path',
@@ -310,6 +315,8 @@ parser.add_option('--xcode',
 
 (options, args) = parser.parse_args()
 
+# set up auto-download list
+auto_downloads = nodedownload.parse(options.download_list)
 
 def b(value):
   """Returns the string 'true' if value is truthy, 'false' otherwise."""
@@ -743,7 +750,8 @@ def configure_intl(o):
       local = url.split('/')[-1]
       targetfile = os.path.join(root_dir, 'deps', local)
       if not os.path.isfile(targetfile):
-        nodedownload.retrievefile(url, targetfile)
+        if nodedownload.candownload(auto_downloads, "icu"):
+          nodedownload.retrievefile(url, targetfile)
       else:
         print ' Re-using existing %s' % targetfile
       if os.path.isfile(targetfile):
