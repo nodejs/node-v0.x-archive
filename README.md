@@ -131,6 +131,7 @@ vcbuild full-icu
 #### Build with no Intl support `:-(`
 
 The `Intl` object will not be available.
+This is the default at present, so this option is not normally needed.
 
 Unix/Macintosh:
 
@@ -152,18 +153,21 @@ pkg-config --modversion icu-i18n && ./configure --with-intl=system-icu
 
 #### Build with a specific ICU:
 
-You can find other ICU releases at [icu4c-**##.#**-src.tgz](http://icu-project.org/download) (or `.zip`)
+You can find other ICU releases at
+[the ICU homepage](http://icu-project.org/download).
+Download the file named something like `icu4c-**##.#**-src.tgz` (or
+`.zip`).
 
 Unix/Macintosh: from an already-unpacked ICU
 
 ```sh
-./configure --with-intl=full-icu --with-icu-source=/path/to/icu
+./configure --with-intl=[small-icu,full-icu] --with-icu-source=/path/to/icu
 ```
 
 Unix/Macintosh: from a local ICU tarball
 
 ```sh
-./configure --with-intl=full-icu --with-icu-source=/path/to/icu.tgz
+./configure --with-intl=[small-icu,full-icu] --with-icu-source=/path/to/icu.tgz
 ```
 
 Unix/Macintosh: from a tarball URL
@@ -174,7 +178,7 @@ Unix/Macintosh: from a tarball URL
 
 Windows: first unpack latest ICU to `deps/icu`
   [icu4c-**##.#**-src.tgz](http://icu-project.org/download) (or `.zip`)
-  as `deps/icu` (You'll have: `deps/icu/source/...`) 
+  as `deps/icu` (You'll have: `deps/icu/source/...`)
 
 ```sh
 vcbuild full-icu

@@ -14,8 +14,7 @@ def formatSize(amt):
     return fpformat.fix(amt / 1024000., 1)
 
 def spin(c):
-    """print out a spinner based on 'c'"""
-#    spin = "\\|/-"
+    """print out an ASCII 'spinner' based on the value of counter 'c'"""
     spin = ".:|'"
     return (spin[c % len(spin)])
 
@@ -53,14 +52,8 @@ def md5sum(targetfile):
         chunk = f.read(1024)
     return digest.hexdigest()
 
-def unpackWithMode(opener, packedfile, parent_path, mode):
-    with opener(packedfile, mode) as icuzip:
-        print ' Extracting source file: %s' % packedfile
-        icuzip.extractall(parent_path)
-
 def unpack(packedfile, parent_path):
-    """Unpack packedfile into parent_path. Assumes .zip. Returns parent_path"""
-    packedsuffix = packedfile.lower().split('.')[-1]  # .zip, .tgz etc
+    """Unpacks packedfile into parent_path. Assumes .zip. Returns parent_path"""
     if zipfile.is_zipfile(packedfile):
         with contextlib.closing(zipfile.ZipFile(packedfile, 'r')) as icuzip:
             print ' Extracting zipfile: %s' % packedfile
@@ -72,4 +65,5 @@ def unpack(packedfile, parent_path):
             icuzip.extractall(parent_path)
             return parent_path
     else:
+        packedsuffix = packedfile.lower().split('.')[-1]  # .zip, .tgz etc
         raise Exception('Error: Don\'t know how to unpack %s with extension %s' % (packedfile, packedsuffix))

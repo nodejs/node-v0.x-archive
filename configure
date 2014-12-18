@@ -826,13 +826,21 @@ def configure_intl(o):
   # Note: non-ICU implementations could use other 'with_intl'
   # values.
 
+  # this is just the 'deps' dir. Used for unpacking.
   icu_parent_path = os.path.join(root_dir, 'deps')
+
+  # The full path to the ICU source directory.
   icu_full_path = os.path.join(icu_parent_path, 'icu')
-  icu_small_path = os.path.join(icu_parent_path, 'icu-small')
-  icu_small_tag = os.path.join(icu_full_path, 'is-small-icu.txt')
+
+  # icu-tmp is used to download and unpack the ICU tarball.
   icu_tmp_path = os.path.join(icu_parent_path, 'icu-tmp')
 
-  ## Has the user specified an ICU source path?
+  # --with-icu-source processing
+  # first, check that they didn't pass --with-icu-source=deps/icu
+  if with_icu_source and os.path.abspath(icu_full_path) == os.path.abspath(with_icu_source):
+    print 'Ignoring redundant --with-icu-source=%s' % (with_icu_source)
+    with_icu_source = None
+  # if with_icu_source is still set, try to use it.
   if with_icu_source:
     if os.path.isdir(icu_full_path):
       print 'Deleting old ICU source: %s' % (icu_full_path)
@@ -843,7 +851,8 @@ def configure_intl(o):
       print '%s -> %s' % (with_icu_source, icu_full_path)
       shutil.copytree(with_icu_source, icu_full_path)
     else:
-      # could be file or URL. Set up temporary area
+      # could be file or URL.
+      # Set up temporary area
       if os.path.isdir(icu_tmp_path):
         shutil.rmtree(icu_tmp_path)
       os.mkdir(icu_tmp_path)
@@ -866,19 +875,6 @@ def configure_intl(o):
         print ' Error: --with-icu-source=%s did not result in an "icu" dir.' % with_icu_source
         shutil.rmtree(icu_tmp_path)
         sys.exit(1)
-      
-  elif with_intl == 'small-icu':
-    ## Use (or not) an embedded small-icu.
-    if not os.path.isdir(icu_full_path) and os.path.isdir(icu_small_path):
-      # deps/small-icu -> deps/icu
-      print 'Copying small ICU %s to %s' % (icu_small_path, icu_full_path)
-      shutil.copytree(icu_small_path, icu_full_path)
-    #else:
-    #  print 'Not copying %s to %s' % (icu_small_path, icu_full_path)
-  elif os.path.isfile(icu_small_tag):
-    ## Not small ICU nor custom path. Delete the old deps/icu
-    print 'deleting small-icu %s for --with-intl=%s' % (icu_full_path, with_intl)
-    shutil.rmtree(icu_full_path)
 
   # ICU mode. (icu-generic.gyp)
   byteorder = sys.byteorder
