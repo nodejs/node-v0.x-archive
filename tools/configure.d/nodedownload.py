@@ -67,3 +67,61 @@ def unpack(packedfile, parent_path):
     else:
         packedsuffix = packedfile.lower().split('.')[-1]  # .zip, .tgz etc
         raise Exception('Error: Don\'t know how to unpack %s with extension %s' % (packedfile, packedsuffix))
+
+# List of possible "--download=" types.
+download_types = set(['icu'])
+
+# Default options for --download.
+download_default = "none"
+
+def help():
+  """This function calculates the '--help' text for '--download'."""
+  return """Select which packages may be auto-downloaded.
+valid values are: none, all, %s. (default is "%s").""" % (", ".join(download_types), download_default)
+
+def set2dict(keys, value=None):
+  """Convert some keys (iterable) to a dict."""
+  return dict((key, value) for (key) in keys)
+
+def parse(opt):
+  """This function parses the options to --download and returns a set such as { icu: true }, etc. """
+  if not opt:
+    opt = download_default
+
+  theOpts = set(opt.split(','))
+
+  if 'all' in theOpts:
+    # all on
+    return set2dict(download_types, True)
+  elif 'none' in theOpts:
+    # all off
+    return set2dict(download_types, False)
+
+  # OK. Now, process each of the opts.
+  theRet = set2dict(download_types, False)
+  for anOpt in opt.split(','):
+    if not anOpt or anOpt == "":
+      # ignore stray commas, etc.
+      continue
+    elif anOpt is 'all':
+      # all on
+      theRet = dict((key, True) for (key) in download_types)
+    else:
+      # turn this one on
+      if anOpt in download_types:
+        theRet[anOpt] = True
+      else:
+        # future proof: ignore unknown types
+        print 'Warning: ignoring unknown --download= type "%s"' % anOpt
+  # all done
+  return theRet
+
+def candownload(auto_downloads, package):
+  if not (package in auto_downloads.keys()):
+    raise Exception('Internal error: "%s" is not in the --downloads list. Check nodedownload.py' % package)
+  if auto_downloads[package]:
+    return True
+  else:
+    print """Warning: Not downloading package "%s". You could pass "--download=all"
+    (Windows: "download-all") to try auto-downloading it.""" % package
+    return False
