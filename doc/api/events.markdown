@@ -120,4 +120,4 @@ if `listener` is in the list returned by `emitter.listeners(event)`.
 * `listener` {Function} The event handler function
 
 This event is emitted any time someone removes a listener.  It is unspecified
-if `listener` is in the list returned by `emitter.listeners(event)`.
+if `listener` is not in the list returned by `emitter.listeners(event)`.
