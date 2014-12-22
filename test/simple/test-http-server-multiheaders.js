@@ -36,6 +36,8 @@ var srv = http.createServer(function(req, res) {
   assert.equal(req.headers['x-bar'], 'banjo, bango');
   assert.equal(req.headers['sec-websocket-protocol'], 'chat, share');
   assert.equal(req.headers['sec-websocket-extensions'], 'foo; 1, bar; 2, baz');
+  assert.equal(req.headers['link'], '<http://example.org/1>, <http://example.org/2>, <http://example.org/3>');
+  assert.equal(req.headers['prefer'], 'wait=100, respond-async, handling=lenient');
 
   res.writeHead(200, {'Content-Type' : 'text/plain'});
   res.end('EOF');
@@ -68,7 +70,13 @@ srv.listen(common.PORT, function() {
       ['sec-websocket-protocol', 'share'],
       ['sec-websocket-extensions', 'foo; 1'],
       ['sec-websocket-extensions', 'bar; 2'],
-      ['sec-websocket-extensions', 'baz']
+      ['sec-websocket-extensions', 'baz'],
+      ['link', '<http://example.org/1>'],
+      ['Link', '<http://example.org/2>'],
+      ['LINK', '<http://example.org/3>'],
+      ['prefer', 'wait=100'],
+      ['Prefer', 'respond-async'],
+      ['PREFER', 'handling=lenient']
     ]
   });
 });
