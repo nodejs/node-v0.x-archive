@@ -127,5 +127,5 @@ the listener may not yet have been added to the array of listeners for the `even
 * `event` {String} The event name
 * `listener` {Function} The event handler function
 
-This event is emitted any time someone removes a listener.  It is unspecified
-if `listener` is in the list returned by `emitter.listeners(event)`.
+This event is emitted any time someone removes a listener.  When this event is triggered,
+the listener may not yet have been removed from the array of listeners for the `event`.
