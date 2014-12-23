@@ -168,8 +168,8 @@ If the port is omitted, an ephemeral port will be used. In order to get the
 assigned port number you must use `server.address().port`, which is not
 available until the ['listening'][] event has been emitted.
 
-If the hostname is omitted, the server will accept connections directed to
-any IPv4 address (`INADDR_ANY`).
+If the hostname is omitted or `0.0.0.0`, the server will accept connections
+directed to any host IP address.
 
 To listen to a unix socket, supply a filename instead of port and hostname.
 
@@ -207,7 +207,6 @@ Listening on a file descriptor is not supported on Windows.
 This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#net_server_listen_handle_callback).
-
 
 ### server.close([callback])
 
