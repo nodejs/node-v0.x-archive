@@ -160,12 +160,16 @@ If a client connection emits an 'error' event - it will forwarded here.
 `socket` is the `net.Socket` object that the error originated from.
 
 
-### server.listen(port, [hostname], [backlog], [callback])
+### server.listen([port], [hostname], [backlog], [callback])
 
-Begin accepting connections on the specified port and hostname.  If the
-hostname is omitted, the server will accept connections directed to any
-IPv4 address (`INADDR_ANY`). If port is an empty value (0, '0', null or
-undefined), an ephemeral (random) port will be used.
+Begin accepting connections on the specified port and hostname.
+
+If the port is omitted, an ephemeral port will be used. In order to get the
+assigned port number you must use `server.address().port`, which is not
+available until the ['listening'][] event has been emitted.
+
+If the hostname is omitted, the server will accept connections directed to
+any IPv4 address (`INADDR_ANY`).
 
 To listen to a unix socket, supply a filename instead of port and hostname.
 
@@ -204,18 +208,6 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'](net.html#event_listening_) event.
 See also [net.Server.listen()](net.html#net_server_listen_handle_callback).
 
-### server.listen([callback])
-
-* `callback` {Function}
-
-Begin accepting connections on an ephemeral port, randomly selected. In order
-to get the assigned port number you must use `server.address().port`, which is
-not available until the ['listening'](net.html#event_listening_) event has been
-emitted.
-
-This function is asynchronous. `callback` will be added as a listener for the
-['listening'](net.html#event_listening_) event. See also
-[net.Server.listen()](net.html#net_server_listen_handle_callback).
 
 ### server.close([callback])
 
