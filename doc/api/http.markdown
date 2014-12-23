@@ -160,11 +160,16 @@ If a client connection emits an 'error' event - it will forwarded here.
 `socket` is the `net.Socket` object that the error originated from.
 
 
-### server.listen(port, [hostname], [backlog], [callback])
+### server.listen([port], [hostname], [backlog], [callback])
 
-Begin accepting connections on the specified port and hostname.  If the
-hostname is omitted, the server will accept connections directed to any
-IPv4 address (`INADDR_ANY`).
+Begin accepting connections on the specified port and hostname.
+
+If the port is omitted, an ephemeral port will be used. In order to get the
+assigned port number you must use `server.address().port`, which is not
+available until the ['listening'][] event has been emitted.
+
+If the hostname is omitted or `0.0.0.0`, the server will accept connections
+directed to any host IP address.
 
 To listen to a unix socket, supply a filename instead of port and hostname.
 
