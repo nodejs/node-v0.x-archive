@@ -767,6 +767,8 @@
     var addListener = process.addListener;
     var removeListener = process.removeListener;
 
+    process.on('removeListener', function() {});
+
     function isSignal(event) {
       return event.slice(0, 3) === 'SIG' &&
              startup.lazyConstants().hasOwnProperty(event);
