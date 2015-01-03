@@ -367,7 +367,9 @@ void TLSCallbacks::EncOutCb(TLSCallbacks* callbacks, int status) {
   }
 
   // Commit
-  NodeBIO::FromBIO(callbacks->enc_out_)->Read(NULL, callbacks->write_size_);
+  if (callbacks->enc_out_) {
+	NodeBIO::FromBIO(callbacks->enc_out_)->Read(NULL, callbacks->write_size_);
+  }
 
   // Try writing more data
   callbacks->write_size_ = 0;
