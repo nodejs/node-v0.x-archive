@@ -237,3 +237,19 @@ qs.unescape = function (str) {
 };
 assert.deepEqual(qs.parse('foo=bor'), {f__: 'b_r'});
 qs.unescape = prevUnescape;
+
+// test using options object and omitnull
+function testOptionsObjectAndOmitNull() {
+  var a = qs.parse('a&b=',{omitnull:true});
+  assert.equal(a.a, undefined);
+  assert.equal(a.b, '');
+  assert.equal('a&b=',qs.stringify(a, {omitnull:true}));
+ }
+ testOptionsObjectAndOmitNull();
+
+ function testArrayInput() {
+  assert.equal('0=1&1=2', qs.stringify([1,2]) );
+  assert.equal('z=1&z=2', qs.stringify([1,2], {name:'z'}) );
+  assert.equal('z=1&z', qs.stringify([1,null], {name:'z',omitnull:true}) );
+ }
+ testArrayInput();
