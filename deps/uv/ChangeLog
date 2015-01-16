@@ -1,4 +1,265 @@
-2014.08.08, Version 0.11.28 (Unstable)
+2014.12.10, Version 1.0.2 (Stable), eec671f0059953505f9a3c9aeb7f9f31466dd7cd
+
+Changes since version 1.0.1:
+
+* linux: fix sigmask size arg in epoll_pwait() call (Ben Noordhuis)
+
+* linux: handle O_NONBLOCK != SOCK_NONBLOCK case (Helge Deller)
+
+* doc: fix spelling (Joey Geralnik)
+
+* unix, windows: fix typos in comments (Joey Geralnik)
+
+* test: canonicalize test runner path (Ben Noordhuis)
+
+* test: fix compilation warnings (Saúl Ibarra Corretgé)
+
+* test: skip tty test if detected width and height are 0 (Saúl Ibarra Corretgé)
+
+* doc: update README with IRC channel (Saúl Ibarra Corretgé)
+
+* Revert "unix: use cfmakeraw() for setting raw TTY mode" (Ben Noordhuis)
+
+* doc: document how to get result of uv_fs_mkdtemp (Tim Caswell)
+
+* unix: add flag for blocking SIGPROF during poll (Ben Noordhuis)
+
+* unix, windows: add uv_loop_configure() function (Ben Noordhuis)
+
+* win: keep a reference to AFD_POLL_INFO in cancel poll (Marc Schlaich)
+
+* test: raise fd limit for OSX select test (Saúl Ibarra Corretgé)
+
+* unix: remove overzealous assert in uv_read_stop (Saúl Ibarra Corretgé)
+
+* unix: reset the reading flag when a stream gets EOF (Saúl Ibarra Corretgé)
+
+* unix: stop reading if an error is produced (Saúl Ibarra Corretgé)
+
+* cleanup: remove all dead assignments (Maciej Małecki)
+
+* linux: return early if we have no interfaces (Maciej Małecki)
+
+* cleanup: remove a dead increment (Maciej Małecki)
+
+
+2014.12.10, Version 0.10.30 (Stable), 5a63f5e9546dca482eeebc3054139b21f509f21f
+
+Changes since version 0.10.29:
+
+* linux: fix sigmask size arg in epoll_pwait() call (Ben Noordhuis)
+
+* linux: handle O_NONBLOCK != SOCK_NONBLOCK case (Helge Deller)
+
+* doc: update project links (Ben Noordhuis)
+
+* windows: fix compilation of tests (Marc Schlaich)
+
+* unix: add flag for blocking SIGPROF during poll (Ben Noordhuis)
+
+* unix, windows: add uv_loop_configure() function (Ben Noordhuis)
+
+* win: keep a reference to AFD_POLL_INFO in cancel poll (Marc Schlaich)
+
+
+2014.11.27, Version 1.0.1 (Stable), 0a8e81374e861d425b56c45c8599595d848911d2
+
+Changes since version 1.0.0:
+
+* readme: remove Rust from users (Elijah Andrews)
+
+* doc,build,include: update project links (Ben Noordhuis)
+
+* doc: fix typo: Strcutures -> Structures (Michael Ira Krufky)
+
+* unix: fix processing process handles queue (Saúl Ibarra Corretgé)
+
+* win: replace non-ansi characters in source file (Bert Belder)
+
+
+2014.11.21, Version 1.0.0 (Stable), feb2a9e6947d892f449b2770c4090f7d8c88381b
+
+Changes since version 1.0.0-rc2:
+
+* doc: fix git/svn url for gyp repo in README (Emmanuel Odeke)
+
+* windows: fix fs_read with nbufs > 1 and offset (Unknown W. Brackets)
+
+* win: add missing IP_ADAPTER_UNICAST_ADDRESS_LH definition for MinGW
+  (huxingyi)
+
+* doc: mention homebrew in README (Mikhail Mukovnikov)
+
+* doc: add learnuv workshop to README (Thorsten Lorenz)
+
+* doc: fix parameter name in uv_fs_access (Saúl Ibarra Corretgé)
+
+* unix: use cfmakeraw() for setting raw TTY mode (Yuri D'Elia)
+
+* win: fix uv_thread_self() (Alexis Campailla)
+
+* build: add x32 support to gyp build (Ben Noordhuis)
+
+* build: remove dtrace probes (Ben Noordhuis)
+
+* doc: fix link in misc.rst (Manos Nikolaidis)
+
+* mailmap: remove duplicated entries (Saúl Ibarra Corretgé)
+
+* gyp: fix comment regarding version info location (Saúl Ibarra Corretgé)
+
+
+2014.10.21, Version 1.0.0-rc2 (Pre-release)
+
+Changes since version 1.0.0-rc1:
+
+* build: add missing fixtures to distribution tarball (Rob Adams)
+
+* doc: update references to current stable branch (Zachary Newman)
+
+* fs: fix readdir on empty directory (Fedor Indutny)
+
+* fs: rename uv_fs_readdir to uv_fs_scandir (Saúl Ibarra Corretgé)
+
+* doc: document uv_alloc_cb (Saúl Ibarra Corretgé)
+
+* doc: add migration guide from version 0.10 (Saúl Ibarra Corretgé)
+
+* build: add DragonFly BSD support in autotools (Robin Hahling)
+
+* doc: document missing stream related structures (Saúl Ibarra Corretgé)
+
+* doc: clarify uv_loop_t.data field lifetime (Saúl Ibarra Corretgé)
+
+* doc: add documentation for missing functions and structures (Saúl Ibarra
+  Corretgé)
+
+* doc: fix punctuation and grammar in README (Jeff Widman)
+
+* windows: return libuv error codes in uv_poll_init() (cjihrig)
+
+* unix, windows: add uv_fs_access() (cjihrig)
+
+* windows: fix netmask detection (Alexis Campailla)
+
+* unix, windows: don't include null byte in uv_cwd size (Saúl Ibarra Corretgé)
+
+* unix, windows: add uv_thread_equal (Tomasz Kołodziejski)
+
+* windows: fix fs_write with nbufs > 1 and offset (Unknown W. Brackets)
+
+
+2014.10.21, Version 0.10.29 (Stable), 2d728542d3790183417f8f122a110693cd85db14
+
+Changes since version 0.10.28:
+
+* darwin: allocate enough space for select() hack (Fedor Indutny)
+
+* linux: try epoll_pwait if epoll_wait is missing (Michael Hudson-Doyle)
+
+* windows: map ERROR_INVALID_DRIVE to UV_ENOENT (Saúl Ibarra Corretgé)
+
+
+2014.09.18, Version 1.0.0-rc1 (Unstable), 0c28bbf7b42882853d1799ab96ff68b07f7f8d49
+
+Changes since version 0.11.29:
+
+* windows: improve timer precision (Alexis Campailla)
+
+* build, gyp: set xcode flags (Recep ASLANTAS)
+
+* ignore: include m4 files which are created manually (Recep ASLANTAS)
+
+* build: add m4 for feature/flag-testing (Recep ASLANTAS)
+
+* ignore: ignore Xcode project and workspace files (Recep ASLANTAS)
+
+* unix: fix warnings about dollar symbol usage in identifiers (Recep ASLANTAS)
+
+* unix: fix warnings when loading functions with dlsym (Recep ASLANTAS)
+
+* linux: try epoll_pwait if epoll_wait is missing (Michael Hudson-Doyle)
+
+* test: add test for closing and recreating default loop (Saúl Ibarra Corretgé)
+
+* windows: properly close the default loop (Saúl Ibarra Corretgé)
+
+* version: add ability to specify a version suffix (Saúl Ibarra Corretgé)
+
+* doc: add API documentation (Saúl Ibarra Corretgé)
+
+* test: don't close connection on write error (Trevor Norris)
+
+* windows: further simplify the code for timers (Saúl Ibarra Corretgé)
+
+* gyp: remove UNLIMITED_SELECT from dependent define (Fedor Indutny)
+
+* darwin: allocate enough space for select() hack (Fedor Indutny)
+
+* unix, windows: don't allow a NULL callback on timers (Saúl Ibarra Corretgé)
+
+* windows: simplify code in uv_timer_again (Saúl Ibarra Corretgé)
+
+* test: use less requests on tcp-write-queue-order (Saúl Ibarra Corretgé)
+
+* unix: stop child process watcher after last one exits (Saúl Ibarra Corretgé)
+
+* unix: simplify how process handle queue is managed (Saúl Ibarra Corretgé)
+
+* windows: remove duplicated field (mattn)
+
+* core: add a reserved field to uv_handle_t and uv_req_t (Saúl Ibarra Corretgé)
+
+* windows: fix buffer leak after failed udp send (Bert Belder)
+
+* windows: make sure sockets and handles are reset on close (Saúl Ibarra Corretgé)
+
+* unix, windows: add uv_fileno (Saúl Ibarra Corretgé)
+
+* build: use same CFLAGS in autotools build as in gyp (Saúl Ibarra Corretgé)
+
+* build: remove unneeded define in uv.gyp (Saúl Ibarra Corretgé)
+
+* test: fix watcher_cross_stop on Windows (Saúl Ibarra Corretgé)
+
+* unix, windows: move includes for EAI constants (Saúl Ibarra Corretgé)
+
+* unix: fix exposing EAI_* glibc-isms (Saúl Ibarra Corretgé)
+
+* unix: fix tcp write after bad connect freezing (Andrius Bentkus)
+
+
+2014.08.20, Version 0.11.29 (Unstable), 35451fed830807095bbae8ef981af004a4b9259e
+
+Changes since version 0.11.28:
+
+* windows: make uv_read_stop immediately stop reading (Jameson Nash)
+
+* windows: fix uv__getaddrinfo_translate_error (Alexis Campailla)
+
+* netbsd: fix build (Saúl Ibarra Corretgé)
+
+* unix, windows: add uv_recv_buffer_size and uv_send_buffer_size (Andrius
+  Bentkus)
+
+* windows: add support for UNC paths on uv_spawn (Paul Goldsmith)
+
+* windows: replace use of inet_addr with uv_inet_pton (Saúl Ibarra Corretgé)
+
+* unix: replace some asserts with returning errors (Andrius Bentkus)
+
+* windows: use OpenBSD implementation for uv_fs_mkdtemp (Pavel Platto)
+
+* windows: fix GetNameInfoW error handling (Alexis Campailla)
+
+* fs: introduce uv_readdir_next() and report types (Fedor Indutny)
+
+* fs: extend reported types in uv_fs_readdir_next (Saúl Ibarra Corretgé)
+
+* unix: read on stream even when UV__POLLHUP set. (Julien Gilli)
+
+
+2014.08.08, Version 0.11.28 (Unstable), fc9e2a0bc487b299c0cd3b2c9a23aeb554b5d8d1
 
 Changes since version 0.11.27:
 
@@ -85,6 +346,20 @@ Changes since version 0.11.26:
   Kelman)
 
 * windows: relay TCP bind errors via ipc (Alexis Campailla)
+
+
+2014.07.32, Version 0.10.28 (Stable), 9c14b616f5fb84bfd7d45707bab4bbb85894443e
+
+Changes since version 0.10.27:
+
+* windows: fix handling closed socket while poll handle is closing (Saúl Ibarra
+  Corretgé)
+
+* unix: return system error on EAI_SYSTEM (Saúl Ibarra Corretgé)
+
+* unix: fix bogus structure field name (Saúl Ibarra Corretgé)
+
+* darwin: invoke `mach_timebase_info` only once (Fedor Indutny)
 
 
 2014.06.28, Version 0.11.26 (Unstable), 115281a1058c4034d5c5ccedacb667fe3f6327ea

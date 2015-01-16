@@ -161,10 +161,6 @@ Start a package
 
 Stop a package
 
-### npm-submodule(1)
-
-Add a package as a git submodule
-
 ### npm-tag(1)
 
 Tag a published version
@@ -325,10 +321,6 @@ Start a package
 
 Stop a package
 
-### npm-submodule(3)
-
-Add a package as a git submodule
-
 ### npm-tag(3)
 
 Tag a published version
@@ -408,6 +400,10 @@ Index of all npm documentation
 ### npm-registry(7)
 
 The JavaScript Package Registry
+
+### npm-scope(7)
+
+Scoped packages
 
 ### npm-scripts(7)
 

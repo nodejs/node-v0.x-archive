@@ -10,45 +10,48 @@ var path = require("path")
   , registry = npm.registry
   , deprCheck = require("../utils/depr-check.js")
   , inflight = require("inflight")
-  , locker = require("../utils/locker.js")
-  , lock = locker.lock
-  , unlock = locker.unlock
-  , maybeGithub = require("./maybe-github.js")
   , addRemoteTarball = require("./add-remote-tarball.js")
+  , cachedPackageRoot = require("./cached-package-root.js")
+  , mapToRegistry = require("../utils/map-to-registry.js")
 
 
 module.exports = addNamed
 
-var NAME_PREFIX = "addName:"
+function getOnceFromRegistry (name, from, next, done) {
+  mapToRegistry(name, npm.config, function (er, uri) {
+    if (er) return done(er)
+
+    var key = "registry:" + uri
+    next = inflight(key, next)
+    if (!next) return log.verbose(from, key, "already in flight; waiting")
+    else log.verbose(from, key, "not in flight; fetching")
+
+    registry.get(uri, null, next)
+  })
+}
+
 function addNamed (name, version, data, cb_) {
   assert(typeof name === "string", "must have module name")
   assert(typeof cb_ === "function", "must have callback")
 
-  log.verbose("addNamed", [name, version])
-
   var key = name + "@" + version
+  log.verbose("addNamed", key)
+
   function cb (er, data) {
     if (data && !data._fromGithub) data._from = key
-    unlock(key, function () { cb_(er, data) })
+    cb_(er, data)
   }
 
-  cb_ = inflight(NAME_PREFIX + key, cb_)
-
-  if (!cb_) return
-
-  log.verbose("addNamed", [semver.valid(version), semver.validRange(version)])
-  lock(key, function (er) {
-    if (er) return cb(er)
-
-    var fn = ( semver.valid(version, true) ? addNameVersion
-             : semver.validRange(version, true) ? addNameRange
-             : addNameTag
-             )
-    fn(name, version, data, cb)
-  })
+  log.silly("addNamed", "semver.valid", semver.valid(version))
+  log.silly("addNamed", "semver.validRange", semver.validRange(version))
+  var fn = ( semver.valid(version, true) ? addNameVersion
+           : semver.validRange(version, true) ? addNameRange
+           : addNameTag
+           )
+  fn(name, version, data, cb)
 }
 
-function addNameTag (name, tag, data, cb_) {
+function addNameTag (name, tag, data, cb) {
   log.info("addNameTag", [name, tag])
   var explicit = true
   if (!tag) {
@@ -56,21 +59,14 @@ function addNameTag (name, tag, data, cb_) {
     tag = npm.config.get("tag")
   }
 
-  function cb(er, data) {
-    // might be username/project
-    // in that case, try it as a github url.
-    if (er && tag.split("/").length === 2) {
-      return maybeGithub(tag, er, cb_)
-    }
-    return cb_(er, data)
-  }
+  getOnceFromRegistry(name, "addNameTag", next, cb)
 
-  var uri = url.resolve(npm.config.get("registry"), name)
-  registry.get(uri, null, function (er, data, json, resp) {
-    if (!er) {
-      er = errorResponse(name, resp)
-    }
+  function next (er, data, json, resp) {
+    if (!er) er = errorResponse(name, resp)
     if (er) return cb(er)
+
+    log.silly("addNameTag", "next cb for", name, "with tag", tag)
+
     engineFilter(data)
     if (data["dist-tags"] && data["dist-tags"][tag]
         && data.versions[data["dist-tags"][tag]]) {
@@ -83,7 +79,7 @@ function addNameTag (name, tag, data, cb_) {
 
     er = installTargetsError(tag, data)
     return cb(er)
-  })
+  }
 }
 
 function engineFilter (data) {
@@ -114,22 +110,24 @@ function addNameVersion (name, v, data, cb) {
     response = null
     return next()
   }
-  var uri = url.resolve(npm.config.get("registry"), name)
-  registry.get(uri, null, function (er, d, json, resp) {
+
+  getOnceFromRegistry(name, "addNameVersion", setData, cb)
+
+  function setData (er, d, json, resp) {
     if (!er) {
       er = errorResponse(name, resp)
     }
     if (er) return cb(er)
     data = d && d.versions[ver]
     if (!data) {
-      er = new Error('version not found: ' + name + '@' + ver)
+      er = new Error("version not found: "+name+"@"+ver)
       er.package = name
       er.statusCode = 404
       return cb(er)
     }
     response = resp
     next()
-  })
+  }
 
   function next () {
     deprCheck(data)
@@ -145,18 +143,27 @@ function addNameVersion (name, v, data, cb) {
     }
 
     // we got cached data, so let's see if we have a tarball.
-    var pkgroot = path.join(npm.cache, name, ver)
+    var pkgroot = cachedPackageRoot({name : name, version : ver})
     var pkgtgz = path.join(pkgroot, "package.tgz")
     var pkgjson = path.join(pkgroot, "package", "package.json")
     fs.stat(pkgtgz, function (er) {
       if (!er) {
         readJson(pkgjson, function (er, data) {
-          er = needName(er, data)
-          er = needVersion(er, data)
-          if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR")
-            return cb(er)
+          if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
+
+          if (data) {
+            if (!data.name) return cb(new Error("No name provided"))
+            if (!data.version) return cb(new Error("No version provided"))
+
+            // check the SHA of the package we have, to ensure it wasn't installed
+            // from somewhere other than the registry (eg, a fork)
+            if (data._shasum && dist.shasum && data._shasum !== dist.shasum) {
+              return fetchit()
+            }
+          }
+
           if (er) return fetchit()
-          return cb(null, data)
+            else return cb(null, data)
         })
       } else return fetchit()
     })
@@ -166,10 +173,9 @@ function addNameVersion (name, v, data, cb) {
         return cb(new Error("Cannot fetch: "+dist.tarball))
       }
 
-      // use the same protocol as the registry.
-      // https registry --> https tarballs, but
-      // only if they're the same hostname, or else
-      // detached tarballs may not work.
+      // Use the same protocol as the registry.  https registry --> https
+      // tarballs, but only if they're the same hostname, or else detached
+      // tarballs may not work.
       var tb = url.parse(dist.tarball)
       var rp = url.parse(npm.config.get("registry"))
       if (tb.hostname === rp.hostname
@@ -179,8 +185,8 @@ function addNameVersion (name, v, data, cb) {
       }
       tb = url.format(tb)
 
-      // only add non-shasum'ed packages if --forced.
-      // only ancient things would lack this for good reasons nowadays.
+      // Only add non-shasum'ed packages if --forced. Only ancient things
+      // would lack this for good reasons nowadays.
       if (!dist.shasum && !npm.config.get("force")) {
         return cb(new Error("package lacks shasum: " + data._id))
       }
@@ -192,20 +198,23 @@ function addNameVersion (name, v, data, cb) {
 function addNameRange (name, range, data, cb) {
   range = semver.validRange(range, true)
   if (range === null) return cb(new Error(
-    "Invalid version range: "+range))
+    "Invalid version range: " + range
+  ))
 
   log.silly("addNameRange", {name:name, range:range, hasData:!!data})
 
   if (data) return next()
-  var uri = url.resolve(npm.config.get("registry"), name)
-  registry.get(uri, null, function (er, d, json, resp) {
+
+  getOnceFromRegistry(name, "addNameRange", setData, cb)
+
+  function setData (er, d, json, resp) {
     if (!er) {
       er = errorResponse(name, resp)
     }
     if (er) return cb(er)
     data = d
     next()
-  })
+  }
 
   function next () {
     log.silly( "addNameRange", "number 2"
@@ -263,16 +272,4 @@ function errorResponse (name, response) {
     er.pkgid = name
   }
   return er
-}
-
-function needName(er, data) {
-  return er ? er
-       : (data && !data.name) ? new Error("No name provided")
-       : null
-}
-
-function needVersion(er, data) {
-  return er ? er
-       : (data && !data.version) ? new Error("No version provided")
-       : null
 }

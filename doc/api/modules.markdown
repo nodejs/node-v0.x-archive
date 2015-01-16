@@ -61,8 +61,8 @@ The module system is implemented in the `require("module")` module.
 
 <!--type=misc-->
 
-When there are circular `require()` calls, a module might not be
-done being executed when it is returned.
+When there are circular `require()` calls, a module might not have finished
+executing when it is returned.
 
 Consider this situation:
 
@@ -93,7 +93,7 @@ Consider this situation:
 
 When `main.js` loads `a.js`, then `a.js` in turn loads `b.js`.  At that
 point, `b.js` tries to load `a.js`.  In order to prevent an infinite
-loop an **unfinished copy** of the `a.js` exports object is returned to the
+loop, an **unfinished copy** of the `a.js` exports object is returned to the
 `b.js` module.  `b.js` then finishes loading, and its `exports` object is
 provided to the `a.js` module.
 
@@ -175,6 +175,12 @@ this order:
 This allows programs to localize their dependencies, so that they do not
 clash.
 
+You can require specific files or sub modules distributed with a module by
+including a path suffix after the module name. For instance
+`require('example-module/path/to/file')` would resolve `path/to/file`
+relative to where `example-module` is located. The suffixed path follows the
+same module resolution semantics.
+
 ## Folders as Modules
 
 <!--type=misc-->
@@ -248,7 +254,7 @@ a global but rather local to each module.
 * {Object}
 
 The `module.exports` object is created by the Module system. Sometimes this is not
-acceptable; many want their module to be an instance of some class. To do this
+acceptable; many want their module to be an instance of some class. To do this,
 assign the desired export object to `module.exports`. Note that assigning the
 desired object to `exports` will simply rebind the local `exports` variable,
 which is probably not what you want to do.

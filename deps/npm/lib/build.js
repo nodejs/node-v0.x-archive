@@ -19,6 +19,8 @@ var npm = require("./npm.js")
   , cmdShim = require("cmd-shim")
   , cmdShimIfExists = cmdShim.ifExists
   , asyncMap = require("slide").asyncMap
+  , ini = require("ini")
+  , writeFile = require("write-file-atomic")
 
 module.exports = build
 build.usage = "npm build <folder>\n(this is plumbing)"
@@ -41,6 +43,7 @@ function build (args, global, didPre, didRB, cb) {
 
 function build_ (global, didPre, didRB) { return function (folder, cb) {
   folder = path.resolve(folder)
+  if (build._didBuild[folder]) log.error("build", "already built", folder)
   build._didBuild[folder] = true
   log.info("build", folder)
   readJson(path.resolve(folder, "package.json"), function (er, pkg) {
@@ -48,7 +51,7 @@ function build_ (global, didPre, didRB) { return function (folder, cb) {
     chain
       ( [ !didPre && [lifecycle, pkg, "preinstall", folder]
         , [linkStuff, pkg, folder, global, didRB]
-        , pkg.name === "npm" && [writeBuiltinConf, folder]
+        , [writeBuiltinConf, pkg, folder]
         , didPre !== build._noLC && [lifecycle, pkg, "install", folder]
         , didPre !== build._noLC && [lifecycle, pkg, "postinstall", folder]
         , didPre !== build._noLC
@@ -58,14 +61,21 @@ function build_ (global, didPre, didRB) { return function (folder, cb) {
   })
 }}
 
-function writeBuiltinConf (folder, cb) {
-  // the builtin config is "sticky". Any time npm installs itself,
-  // it puts its builtin config file there, as well.
-  if (!npm.config.usingBuiltin
-      || folder !== path.dirname(__dirname)) {
+function writeBuiltinConf (pkg, folder, cb) {
+  // the builtin config is "sticky". Any time npm installs
+  // itself globally, it puts its builtin config file there
+  var parent = path.dirname(folder)
+  var dir = npm.globalDir
+
+  if (pkg.name !== "npm" ||
+      !npm.config.get("global") ||
+      !npm.config.usingBuiltin ||
+      dir !== parent) {
     return cb()
   }
-  npm.config.save("builtin", cb)
+
+  var data = ini.stringify(npm.config.sources.builtin.data)
+  writeFile(path.resolve(folder, "npmrc"), data, cb)
 }
 
 function linkStuff (pkg, folder, global, didRB, cb) {
@@ -75,7 +85,7 @@ function linkStuff (pkg, folder, global, didRB, cb) {
   // if it's global, and folder is in {prefix}/node_modules,
   // then bins are in {prefix}/bin
   // otherwise, then bins are in folder/../.bin
-  var parent = path.dirname(folder)
+  var parent = pkg.name[0] === "@" ? path.dirname(path.dirname(folder)) : path.dirname(folder)
     , gnm = global && npm.globalDir
     , gtop = parent === gnm
 
@@ -95,7 +105,7 @@ function linkStuff (pkg, folder, global, didRB, cb) {
 function shouldWarn(pkg, folder, global, cb) {
   var parent = path.dirname(folder)
     , top = parent === npm.dir
-    , cwd = process.cwd()
+    , cwd = npm.localPrefix
 
   readJson(path.resolve(cwd, "package.json"), function(er, topPkg) {
     if (er) return cb(er)

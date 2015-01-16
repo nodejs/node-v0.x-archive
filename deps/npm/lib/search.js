@@ -1,10 +1,10 @@
 
 module.exports = exports = search
 
-var url = require("url")
-  , npm = require("./npm.js")
+var npm = require("./npm.js")
   , registry = npm.registry
   , columnify = require('columnify')
+  , mapToRegistry = require("./utils/map-to-registry.js")
 
 search.usage = "npm search [some search terms ...]"
 
@@ -63,10 +63,13 @@ function getFilteredData (staleness, args, notArgs, cb) {
     follow  : true,
     staleOk : true
   }
-  var uri = url.resolve(npm.config.get("registry"), "-/all")
-  registry.get(uri, opts, function (er, data) {
+  mapToRegistry("-/all", npm.config, function (er, uri) {
     if (er) return cb(er)
-    return cb(null, filter(data, args, notArgs))
+
+    registry.get(uri, opts, function (er, data) {
+      if (er) return cb(er)
+      return cb(null, filter(data, args, notArgs))
+    })
   })
 }
 
@@ -215,7 +218,7 @@ function addColorMarker (str, arg, i) {
 
   if (arg.charAt(0) === "/") {
     //arg = arg.replace(/\/$/, "")
-    return str.replace( new RegExp(arg.substr(1, arg.length - 1), "gi")
+    return str.replace( new RegExp(arg.substr(1, arg.length - 2), "gi")
                       , function (bit) { return markStart + bit + markEnd } )
 
   }

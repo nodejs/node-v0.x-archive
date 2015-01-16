@@ -19,31 +19,18 @@
  * IN THE SOFTWARE.
  */
 
-/* Expose glibc-specific EAI_* error codes. Needs to be defined before we
- * include any headers.
- */
-#ifndef _GNU_SOURCE
-# define _GNU_SOURCE
-#endif
-
 #include "uv.h"
 #include "uv-common.h"
 
 #include <stdio.h>
 #include <assert.h>
+#include <stdarg.h>
 #include <stddef.h> /* NULL */
 #include <stdlib.h> /* malloc */
 #include <string.h> /* memset */
 
 #if !defined(_WIN32)
 # include <net/if.h> /* if_nametoindex */
-#endif
-
-/* EAI_* constants. */
-#if !defined(_WIN32)
-# include <sys/types.h>
-# include <sys/socket.h>
-# include <netdb.h>
 #endif
 
 #define XX(uc, lc) case UV_##uc: return sizeof(uv_##lc##_t);
@@ -271,64 +258,6 @@ int uv_udp_recv_stop(uv_udp_t* handle) {
 }
 
 
-struct thread_ctx {
-  void (*entry)(void* arg);
-  void* arg;
-};
-
-
-#ifdef _WIN32
-static UINT __stdcall uv__thread_start(void* arg)
-#else
-static void* uv__thread_start(void *arg)
-#endif
-{
-  struct thread_ctx *ctx_p;
-  struct thread_ctx ctx;
-
-  ctx_p = arg;
-  ctx = *ctx_p;
-  free(ctx_p);
-  ctx.entry(ctx.arg);
-
-  return 0;
-}
-
-
-int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
-  struct thread_ctx* ctx;
-  int err;
-
-  ctx = malloc(sizeof(*ctx));
-  if (ctx == NULL)
-    return UV_ENOMEM;
-
-  ctx->entry = entry;
-  ctx->arg = arg;
-
-#ifdef _WIN32
-  *tid = (HANDLE) _beginthreadex(NULL, 0, uv__thread_start, ctx, 0, NULL);
-  err = *tid ? 0 : errno;
-#else
-  err = pthread_create(tid, NULL, uv__thread_start, ctx);
-#endif
-
-  if (err)
-    free(ctx);
-
-  return err ? -1 : 0;
-}
-
-
-unsigned long uv_thread_self(void) {
-#ifdef _WIN32
-  return (unsigned long) GetCurrentThreadId();
-#else
-  return (unsigned long) pthread_self();
-#endif
-}
-
-
 void uv_walk(uv_loop_t* loop, uv_walk_cb walk_cb, void* arg) {
   QUEUE* q;
   uv_handle_t* h;
@@ -410,62 +339,6 @@ uint64_t uv_now(const uv_loop_t* loop) {
 }
 
 
-int uv__getaddrinfo_translate_error(int sys_err) {
-  switch (sys_err) {
-  case 0: return 0;
-#if defined(EAI_ADDRFAMILY)
-  case EAI_ADDRFAMILY: return UV_EAI_ADDRFAMILY;
-#endif
-#if defined(EAI_AGAIN)
-  case EAI_AGAIN: return UV_EAI_AGAIN;
-#endif
-#if defined(EAI_BADFLAGS)
-  case EAI_BADFLAGS: return UV_EAI_BADFLAGS;
-#endif
-#if defined(EAI_BADHINTS)
-  case EAI_BADHINTS: return UV_EAI_BADHINTS;
-#endif
-#if defined(EAI_CANCELED)
-  case EAI_CANCELED: return UV_EAI_CANCELED;
-#endif
-#if defined(EAI_FAIL)
-  case EAI_FAIL: return UV_EAI_FAIL;
-#endif
-#if defined(EAI_FAMILY)
-  case EAI_FAMILY: return UV_EAI_FAMILY;
-#endif
-#if defined(EAI_MEMORY)
-  case EAI_MEMORY: return UV_EAI_MEMORY;
-#endif
-#if defined(EAI_NODATA)
-  case EAI_NODATA: return UV_EAI_NODATA;
-#endif
-#if defined(EAI_NONAME)
-# if !defined(EAI_NODATA) || EAI_NODATA != EAI_NONAME
-  case EAI_NONAME: return UV_EAI_NONAME;
-# endif
-#endif
-#if defined(EAI_OVERFLOW)
-  case EAI_OVERFLOW: return UV_EAI_OVERFLOW;
-#endif
-#if defined(EAI_PROTOCOL)
-  case EAI_PROTOCOL: return UV_EAI_PROTOCOL;
-#endif
-#if defined(EAI_SERVICE)
-  case EAI_SERVICE: return UV_EAI_SERVICE;
-#endif
-#if defined(EAI_SOCKTYPE)
-  case EAI_SOCKTYPE: return UV_EAI_SOCKTYPE;
-#endif
-#if defined(EAI_SYSTEM)
-  case EAI_SYSTEM: return -errno;
-#endif
-  }
-  assert(!"unknown EAI_* error code");
-  abort();
-  return 0;  /* Pacify compiler. */
-}
-
 
 size_t uv__count_bufs(const uv_buf_t bufs[], unsigned int nbufs) {
   unsigned int i;
@@ -478,6 +351,13 @@ size_t uv__count_bufs(const uv_buf_t bufs[], unsigned int nbufs) {
   return bytes;
 }
 
+int uv_recv_buffer_size(uv_handle_t* handle, int* value) {
+  return uv__socket_sockopt(handle, SO_RCVBUF, value);
+}
+
+int uv_send_buffer_size(uv_handle_t* handle, int *value) {
+  return uv__socket_sockopt(handle, SO_SNDBUF, value);
+}
 
 int uv_fs_event_getpath(uv_fs_event_t* handle, char* buf, size_t* len) {
   size_t required_len;
@@ -497,4 +377,82 @@ int uv_fs_event_getpath(uv_fs_event_t* handle, char* buf, size_t* len) {
   *len = required_len;
 
   return 0;
+}
+
+
+void uv__fs_scandir_cleanup(uv_fs_t* req) {
+  uv__dirent_t** dents;
+
+  dents = req->ptr;
+  if (req->nbufs > 0 && req->nbufs != (unsigned int) req->result)
+    req->nbufs--;
+  for (; req->nbufs < (unsigned int) req->result; req->nbufs++)
+    free(dents[req->nbufs]);
+}
+
+
+int uv_fs_scandir_next(uv_fs_t* req, uv_dirent_t* ent) {
+  uv__dirent_t** dents;
+  uv__dirent_t* dent;
+
+  dents = req->ptr;
+
+  /* Free previous entity */
+  if (req->nbufs > 0)
+    free(dents[req->nbufs - 1]);
+
+  /* End was already reached */
+  if (req->nbufs == (unsigned int) req->result) {
+    free(dents);
+    req->ptr = NULL;
+    return UV_EOF;
+  }
+
+  dent = dents[req->nbufs++];
+
+  ent->name = dent->d_name;
+#ifdef HAVE_DIRENT_TYPES
+  switch (dent->d_type) {
+    case UV__DT_DIR:
+      ent->type = UV_DIRENT_DIR;
+      break;
+    case UV__DT_FILE:
+      ent->type = UV_DIRENT_FILE;
+      break;
+    case UV__DT_LINK:
+      ent->type = UV_DIRENT_LINK;
+      break;
+    case UV__DT_FIFO:
+      ent->type = UV_DIRENT_FIFO;
+      break;
+    case UV__DT_SOCKET:
+      ent->type = UV_DIRENT_SOCKET;
+      break;
+    case UV__DT_CHAR:
+      ent->type = UV_DIRENT_CHAR;
+      break;
+    case UV__DT_BLOCK:
+      ent->type = UV_DIRENT_BLOCK;
+      break;
+    default:
+      ent->type = UV_DIRENT_UNKNOWN;
+  }
+#else
+  ent->type = UV_DIRENT_UNKNOWN;
+#endif
+
+  return 0;
+}
+
+
+int uv_loop_configure(uv_loop_t* loop, uv_loop_option option, ...) {
+  va_list ap;
+  int err;
+
+  va_start(ap, option);
+  /* Any platform-agnostic options should be handled here. */
+  err = uv__loop_configure(loop, option, ap);
+  va_end(ap);
+
+  return err;
 }

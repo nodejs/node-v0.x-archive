@@ -163,6 +163,33 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
   uv__make_close_pending(handle);
 }
 
+int uv__socket_sockopt(uv_handle_t* handle, int optname, int* value) {
+  int r;
+  int fd;
+  socklen_t len;
+
+  if (handle == NULL || value == NULL)
+    return -EINVAL;
+
+  if (handle->type == UV_TCP || handle->type == UV_NAMED_PIPE)
+    fd = uv__stream_fd((uv_stream_t*) handle);
+  else if (handle->type == UV_UDP)
+    fd = ((uv_udp_t *) handle)->io_watcher.fd;
+  else
+    return -ENOTSUP;
+
+  len = sizeof(*value);
+
+  if (*value == 0)
+    r = getsockopt(fd, SOL_SOCKET, optname, value, &len);
+  else
+    r = setsockopt(fd, SOL_SOCKET, optname, (const void*) value, len);
+
+  if (r < 0)
+    return -errno;
+
+  return 0;
+}
 
 void uv__make_close_pending(uv_handle_t* handle) {
   assert(handle->flags & UV_CLOSING);
@@ -283,8 +310,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     uv__update_time(loop);
 
   while (r != 0 && loop->stop_flag == 0) {
-    UV_TICK_START(loop, mode);
-
     uv__update_time(loop);
     uv__run_timers(loop);
     uv__run_pending(loop);
@@ -300,7 +325,7 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     uv__run_closing_handles(loop);
 
     if (mode == UV_RUN_ONCE) {
-      /* UV_RUN_ONCE implies forward progess: at least one callback must have
+      /* UV_RUN_ONCE implies forward progress: at least one callback must have
        * been invoked when it returns. uv__io_poll() can return without doing
        * I/O (meaning: no callbacks) when its timeout expires - which means we
        * have pending timers that satisfy the forward progress constraint.
@@ -313,7 +338,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     }
 
     r = uv__loop_alive(loop);
-    UV_TICK_STOP(loop, mode);
 
     if (mode & (UV_RUN_ONCE | UV_RUN_NOWAIT))
       break;
@@ -610,7 +634,7 @@ int uv_cwd(char* buffer, size_t* size) {
   if (getcwd(buffer, *size) == NULL)
     return -errno;
 
-  *size = strlen(buffer) + 1;
+  *size = strlen(buffer);
   return 0;
 }
 
@@ -632,6 +656,36 @@ void uv_disable_stdio_inheritance(void) {
   for (fd = 0; ; fd++)
     if (uv__cloexec(fd, 1) && fd > 15)
       break;
+}
+
+
+int uv_fileno(const uv_handle_t* handle, uv_os_fd_t* fd) {
+  int fd_out;
+
+  switch (handle->type) {
+  case UV_TCP:
+  case UV_NAMED_PIPE:
+  case UV_TTY:
+    fd_out = uv__stream_fd((uv_stream_t*) handle);
+    break;
+
+  case UV_UDP:
+    fd_out = ((uv_udp_t *) handle)->io_watcher.fd;
+    break;
+
+  case UV_POLL:
+    fd_out = ((uv_poll_t *) handle)->io_watcher.fd;
+    break;
+
+  default:
+    return -EINVAL;
+  }
+
+  if (uv__is_closing(handle) || fd_out == -1)
+    return -EBADF;
+
+  *fd = fd_out;
+  return 0;
 }
 
 

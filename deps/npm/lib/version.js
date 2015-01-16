@@ -6,6 +6,7 @@ var exec = require("child_process").execFile
   , semver = require("semver")
   , path = require("path")
   , fs = require("graceful-fs")
+  , writeFileAtomic = require("write-file-atomic")
   , chain = require("slide").chain
   , log = require("npmlog")
   , which = require("which")
@@ -23,7 +24,7 @@ version.usage = "npm version [<newversion> | major | minor | patch | prerelease 
 function version (args, silent, cb_) {
   if (typeof cb_ !== "function") cb_ = silent, silent = false
   if (args.length > 1) return cb_(version.usage)
-  fs.readFile(path.join(process.cwd(), "package.json"), function (er, data) {
+  fs.readFile(path.join(npm.localPrefix, "package.json"), function (er, data) {
     if (!args.length) {
       var v = {}
       Object.keys(process.versions).forEach(function (k) {
@@ -63,7 +64,7 @@ function version (args, silent, cb_) {
     if (data.version === newVer) return cb_(new Error("Version not changed"))
     data.version = newVer
 
-    fs.stat(path.join(process.cwd(), ".git"), function (er, s) {
+    fs.stat(path.join(npm.localPrefix, ".git"), function (er, s) {
       function cb (er) {
         if (!er && !silent) console.log("v" + newVer)
         cb_(er)
@@ -83,6 +84,15 @@ function checkGit (data, cb) {
 
   // check for git
   git.whichAndExec(args, options, function (er, stdout) {
+    if (er && er.code === "ENOGIT") {
+      log.warn(
+        "version",
+        "This is a Git checkout, but the git command was not found.",
+        "npm could not create a Git tag for this release!"
+      )
+      return write(data, cb)
+    }
+
     var lines = stdout.trim().split("\n").filter(function (line) {
       return line.trim() && !line.match(/^\?\? /)
     }).map(function (line) {
@@ -111,7 +121,7 @@ function checkGit (data, cb) {
 }
 
 function write (data, cb) {
-  fs.writeFile( path.join(process.cwd(), "package.json")
+  writeFileAtomic( path.join(npm.localPrefix, "package.json")
               , new Buffer(JSON.stringify(data, null, 2) + "\n")
               , cb )
 }

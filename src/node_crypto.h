@@ -60,6 +60,10 @@
 #endif  // !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_set_tlsext_status_cb)
 
 namespace node {
+
+extern bool SSL2_ENABLE;
+extern bool SSL3_ENABLE;
+
 namespace crypto {
 
 extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
@@ -105,6 +109,8 @@ class SecureContext : public BaseObject {
   static void LoadPKCS12(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void CtxGetter(v8::Local<v8::String> property,
+                        const v8::PropertyCallbackInfo<v8::Value>& info);
 
   template <bool primary>
   static void GetCertificate(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -188,7 +194,7 @@ class SSLWrap {
   inline bool is_waiting_new_session() const { return new_session_wait_; }
 
  protected:
-  static void InitNPN(SecureContext* sc, Base* base);
+  static void InitNPN(SecureContext* sc);
   static void AddMethods(Environment* env, v8::Handle<v8::FunctionTemplate> t);
 
   static SSL_SESSION* GetSessionCallback(SSL* s,
@@ -237,6 +243,8 @@ class SSLWrap {
                                      void* arg);
 #endif  // OPENSSL_NPN_NEGOTIATED
   static int TLSExtStatusCallback(SSL* s, void* arg);
+  static void SSLGetter(v8::Local<v8::String> property,
+                        const v8::PropertyCallbackInfo<v8::Value>& info);
 
   inline Environment* ssl_env() const {
     return env_;

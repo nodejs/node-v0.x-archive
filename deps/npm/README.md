@@ -16,15 +16,15 @@ and prior, clone the git repo and dig through the old tags and branches.
 
 ## Super Easy Install
 
-npm comes with node now.
+npm comes with [node](http://nodejs.org/download/) now.
 
 ### Windows Computers
 
-Get the MSI.  npm is in it.
+[Get the MSI](http://nodejs.org/download/).  npm is in it.
 
 ### Apple Macintosh Computers
 
-Get the pkg.  npm is in it.
+[Get the pkg](http://nodejs.org/download/).  npm is in it.
 
 ### Other Sorts of Unices
 
@@ -154,7 +154,7 @@ use npm itself to do.
         if (er) return commandFailed(er)
         // command succeeded, and data might have some info
       })
-      npm.on("log", function (message) { .... })
+      npm.registry.log.on("log", function (message) { .... })
     })
 
 The `load` function takes an object hash of the command-line configs.

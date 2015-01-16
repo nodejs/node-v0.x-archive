@@ -10,14 +10,14 @@ Secure Socket Layer: encrypted stream communication.
 TLS/SSL is a public/private key infrastructure. Each client and each
 server must have a private key. A private key is created like this:
 
-    openssl genrsa -out ryans-key.pem 1024
+    openssl genrsa -out ryans-key.pem 2048
 
 All servers and some clients need to have a certificate. Certificates are public
 keys signed by a Certificate Authority or self-signed. The first step to
 getting a certificate is to create a "Certificate Signing Request" (CSR)
 file. This is done with:
 
-    openssl req -new -key ryans-key.pem -out ryans-csr.pem
+    openssl req -new -sha256 -key ryans-key.pem -out ryans-csr.pem
 
 To create a self-signed certificate with the CSR, do this:
 
@@ -38,6 +38,40 @@ To create .pfx or .p12, do this:
   - `certfile`: all CA certs concatenated in one file like
     `cat ca1-cert.pem ca2-cert.pem > ca-cert.pem`
 
+## Protocol support
+
+Node.js is compiled with SSLv2 and SSLv3 protocol support by default, but these
+protocols are **disabled**. They are considered insecure and could be easily
+compromised as was shown by [CVE-2014-3566][]. However, in some situations, it
+may cause problems with legacy clients/servers (such as Internet Explorer 6).
+If you wish to enable SSLv2 or SSLv3, run node with the `--enable-ssl2` or
+`--enable-ssl3` flag respectively.  In future versions of Node.js SSLv2 and
+SSLv3 will not be compiled in by default.
+
+There is a way to force node into using SSLv3 or SSLv2 only mode by explicitly
+specifying `secureProtocol` to `'SSLv3_method'` or `'SSLv2_method'`.
+
+The default protocol method Node.js uses is `SSLv23_method` which would be more
+accurately named `AutoNegotiate_method`. This method will try and negotiate
+from the highest level down to whatever the client supports.  To provide a
+secure default, Node.js (since v0.10.33) explicitly disables the use of SSLv3
+and SSLv2 by setting the `secureOptions` to be
+`SSL_OP_NO_SSLv3|SSL_OP_NO_SSLv2` (again, unless you have passed
+`--enable-ssl3`, or `--enable-ssl2`, or `SSLv3_method` as `secureProtocol`).
+
+If you have set `secureOptions` to anything, we will not override your
+options.
+
+The ramifications of this behavior change:
+
+ * If your application is behaving as a secure server, clients who are `SSLv3`
+only will now not be able to appropriately negotiate a connection and will be
+refused. In this case your server will emit a `clientError` event. The error
+message will include `'wrong version number'`.
+ * If your application is behaving as a secure client and communicating with a
+server that doesn't support methods more secure than SSLv3 then your connection
+won't be able to negotiate and will fail. In this case your client will emit a
+an `error` event. The error message will include `'wrong version number'`.
 
 ## Client-initiated renegotiation attack mitigation
 
@@ -111,7 +145,7 @@ Example:
     console.log(ciphers); // ['AES128-SHA', 'AES256-SHA', ...]
 
 
-## tls.createServer(options, [secureConnectionListener])
+## tls.createServer(options[, secureConnectionListener])
 
 Creates a new [tls.Server][].  The `connectionListener` argument is
 automatically set as a listener for the [secureConnection][] event.  The
@@ -221,13 +255,17 @@ automatically set as a listener for the [secureConnection][] event.  The
 
     NOTE: Automatically shared between `cluster` module workers.
 
-  - `sessionIdContext`: A string containing a opaque identifier for session
+  - `sessionIdContext`: A string containing an opaque identifier for session
     resumption. If `requestCert` is `true`, the default is MD5 hash value
     generated from command-line. Otherwise, the default is not provided.
 
   - `secureProtocol`: The SSL method to use, e.g. `SSLv3_method` to force
     SSL version 3. The possible values depend on your installation of
     OpenSSL and are defined in the constant [SSL_METHODS][].
+
+  - `secureOptions`: Set server options. For example, to disable the SSLv3
+    protocol set the `SSL_OP_NO_SSLv3` flag. See [SSL_CTX_set_options]
+    for all available options.
 
 Here is a simple example echo server:
 
@@ -285,8 +323,8 @@ You can test this server by connecting to it with `openssl s_client`:
     openssl s_client -connect 127.0.0.1:8000
 
 
-## tls.connect(options, [callback])
-## tls.connect(port, [host], [options], [callback])
+## tls.connect(options[, callback])
+## tls.connect(port[, host][, options][, callback])
 
 Creates a new client connection to the given `port` and `host` (old API) or
 `options.port` and `options.host`. (If `host` is omitted, it defaults to
@@ -428,8 +466,6 @@ Construct a new TLSSocket object from existing TCP socket.
 
 ## tls.createSecureContext(details)
 
-Stability: 0 - Deprecated. Use tls.createSecureContext instead.
-
 Creates a credentials object, with the optional details being a
 dictionary with keys:
 
@@ -455,9 +491,7 @@ publicly trusted list of CAs as given in
 <http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
 
 
-## tls.createSecurePair([context], [isServer], [requestCert], [rejectUnauthorized])
-
-    Stability: 0 - Deprecated. Use tls.TLSSocket instead.
+## tls.createSecurePair([context][, isServer][, requestCert][, rejectUnauthorized])
 
 Creates a new secure pair object with two streams, one of which reads/writes
 encrypted data, and one reads/writes cleartext data.
@@ -505,7 +539,7 @@ connections using TLS or SSL.
 `function (tlsSocket) {}`
 
 This event is emitted after a new connection has been successfully
-handshaked. The argument is a instance of [tls.TLSSocket][]. It has all the
+handshaked. The argument is an instance of [tls.TLSSocket][]. It has all the
 common stream methods and events.
 
 `socket.authorized` is a boolean value which indicates if the
@@ -594,7 +628,7 @@ NOTE: you may want to use some npm module like [asn1.js] to parse the
 certificates.
 
 
-### server.listen(port, [host], [callback])
+### server.listen(port[, host][, callback])
 
 Begin accepting connections on the specified `port` and `host`.  If the
 `host` is omitted, the server will accept connections directed to any
@@ -819,3 +853,5 @@ The numeric representation of the local port.
 [ECDHE]: https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman
 [asn1.js]: http://npmjs.org/package/asn1.js
 [OCSP request]: http://en.wikipedia.org/wiki/OCSP_stapling
+[SSL_CTX_set_options]: https://www.openssl.org/docs/ssl/SSL_CTX_set_options.html
+[CVE-2014-3566]: https://access.redhat.com/articles/1232123

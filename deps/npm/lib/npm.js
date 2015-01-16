@@ -16,7 +16,7 @@ require('child-process-close')
 
 var EventEmitter = require("events").EventEmitter
   , npm = module.exports = new EventEmitter()
-  , npmconf = require("npmconf")
+  , npmconf = require("./config/core.js")
   , log = require("npmlog")
   , fs = require("graceful-fs")
   , path = require("path")
@@ -46,16 +46,6 @@ try {
   var j = JSON.parse(fs.readFileSync(
     path.join(__dirname, "../package.json"))+"")
   npm.version = j.version
-  npm.nodeVersionRequired = j.engines.node
-  if (!semver.satisfies(pv, j.engines.node)) {
-    log.warn("unsupported version", [""
-            ,"npm requires node version: "+j.engines.node
-            ,"And you have: "+pv
-            ,"which is not satisfactory."
-            ,""
-            ,"Bad things will likely happen.  You have been warned."
-            ,""].join("\n"))
-  }
 } catch (ex) {
   try {
     log.info("error reading version", ex)
@@ -109,7 +99,6 @@ var commandCache = {}
               , "update"
               , "outdated"
               , "prune"
-              , "submodule"
               , "pack"
               , "dedupe"
 
@@ -153,6 +142,7 @@ var commandCache = {}
               ]
   , plumbing = [ "build"
                , "unbuild"
+               , "isntall"
                , "xmas"
                , "substack"
                , "visnup"
@@ -433,11 +423,7 @@ Object.defineProperty(npm, "cache",
   })
 
 var tmpFolder
-var crypto = require("crypto")
-var rand = crypto.randomBytes(6)
-                 .toString("base64")
-                 .replace(/\//g, '_')
-                 .replace(/\+/, '-')
+var rand = require("crypto").randomBytes(4).toString("hex")
 Object.defineProperty(npm, "tmp",
   { get : function () {
       if (!tmpFolder) tmpFolder = "npm-" + process.pid + "-" + rand

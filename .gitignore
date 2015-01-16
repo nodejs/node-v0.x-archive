@@ -15,6 +15,7 @@ node_g
 .benchmark_reports
 /.project
 /.cproject
+icu_config.gypi
 
 /out
 
@@ -45,6 +46,10 @@ ipch/
 /test/addons/doc-*/
 email.md
 deps/v8-*
+deps/icu
+deps/icu*.zip
+deps/icu*.tgz
+deps/icu-tmp
 ./node_modules
 .svn/
 
@@ -67,3 +72,4 @@ deps/zlib/zlib.target.mk
 
 # test artifacts
 tools/faketime
+icu_config.gypi

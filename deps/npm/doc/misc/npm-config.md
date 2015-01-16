@@ -50,6 +50,7 @@ The following shorthands are parsed on the command-line:
 * `-dd`, `--verbose`: `--loglevel verbose`
 * `-ddd`: `--loglevel silly`
 * `-g`: `--global`
+* `-C`: `--prefix`
 * `-l`: `--long`
 * `-m`: `--message`
 * `-p`, `--porcelain`: `--parseable`
@@ -253,12 +254,6 @@ set.
 
 The command to run for `npm edit` or `npm config edit`.
 
-### email
-
-The email of the logged-in user.
-
-Set by the `npm adduser` command.  Should not be set explicitly.
-
 ### engine-strict
 
 * Default: false
@@ -389,33 +384,41 @@ documentation for the
 [init-package-json](https://github.com/isaacs/init-package-json) module
 for more information, or npm-init(1).
 
-### init.author.name
+### init-author-name
 
 * Default: ""
 * Type: String
 
 The value `npm init` should use by default for the package author's name.
 
-### init.author.email
+### init-author-email
 
 * Default: ""
 * Type: String
 
 The value `npm init` should use by default for the package author's email.
 
-### init.author.url
+### init-author-url
 
 * Default: ""
 * Type: String
 
 The value `npm init` should use by default for the package author's homepage.
 
-### init.license
+### init-license
 
 * Default: "ISC"
 * Type: String
 
 The value `npm init` should use by default for the package license.
+
+### init-version
+
+* Default: "0.0.0"
+* Type: semver
+
+The value that `npm init` should use by default for the package
+version number, if not already set in package.json.
 
 ### json
 
@@ -461,15 +464,15 @@ to the npm registry.  Must be IPv4 in versions of Node prior to 0.12.
 
 ### loglevel
 
-* Default: "http"
+* Default: "warn"
 * Type: String
-* Values: "silent", "win", "error", "warn", "http", "info", "verbose", "silly"
+* Values: "silent", "error", "warn", "http", "info", "verbose", "silly"
 
 What level of logs to report.  On failure, *all* logs are written to
 `npm-debug.log` in the current working directory.
 
 Any logs of a higher level than the setting are shown.
-The default is "http", which shows http, warn, and error output.
+The default is "warn", which shows warn and error output.
 
 ### logstream
 
@@ -507,7 +510,7 @@ Any "%s" in the message will be replaced with the version number.
 * Default: process.version
 * Type: semver or false
 
-The node version to use when checking package's "engines" hash.
+The node version to use when checking a package's `engines` map.
 
 ### npat
 
@@ -529,7 +532,7 @@ usage.
 * Default: true
 * Type: Boolean
 
-Attempt to install packages in the `optionalDependencies` hash.  Note
+Attempt to install packages in the `optionalDependencies` object.  Note
 that if these packages fail to install, the overall installation
 process is not aborted.
 
@@ -607,8 +610,8 @@ Remove failed installs.
 
 Save installed packages to a package.json file as dependencies.
 
-When used with the `npm rm` command, it removes it from the dependencies
-hash.
+When used with the `npm rm` command, it removes it from the `dependencies`
+object.
 
 Only works if there is already a package.json file present.
 
@@ -629,10 +632,10 @@ bundledDependencies list.
 * Default: false
 * Type: Boolean
 
-Save installed packages to a package.json file as devDependencies.
+Save installed packages to a package.json file as `devDependencies`.
 
 When used with the `npm rm` command, it removes it from the
-devDependencies hash.
+`devDependencies` object.
 
 Only works if there is already a package.json file present.
 
@@ -654,7 +657,7 @@ Save installed packages to a package.json file as
 optionalDependencies.
 
 When used with the `npm rm` command, it removes it from the
-devDependencies hash.
+`devDependencies` object.
 
 Only works if there is already a package.json file present.
 
@@ -663,13 +666,24 @@ Only works if there is already a package.json file present.
 * Default: '^'
 * Type: String
 
-Configure how versions of packages installed to a package.json file via 
+Configure how versions of packages installed to a package.json file via
 `--save` or `--save-dev` get prefixed.
 
 For example if a package has version `1.2.3`, by default it's version is
-set to `^1.2.3` which allows minor upgrades for that package, but after  
+set to `^1.2.3` which allows minor upgrades for that package, but after
 `npm config set save-prefix='~'` it would be set to `~1.2.3` which only allows
 patch upgrades.
+
+### scope
+
+* Default: ""
+* Type: String
+
+Associate an operation with a scope for a scoped registry. Useful when logging
+in to a private registry for the first time:
+`npm login --scope=@organization --registry=registry.organization.com`, which
+will cause `@organization` to be mapped to the registry for future installation
+of packages specified according to the pattern `@organization/package`.
 
 ### searchopts
 
@@ -794,13 +808,6 @@ instead of complete help when doing `npm-help(1)`.
 
 The UID to set to when running package scripts as root.
 
-### username
-
-* Default: null
-* Type: String
-
-The username on the npm registry.  Set with `npm adduser`
-
 ### userconfig
 
 * Default: ~/.npmrc
@@ -841,8 +848,8 @@ Only relevant when specified explicitly on the command line.
 * Default: false
 * Type: boolean
 
-If true, output the npm version as well as node's `process.versions`
-hash, and exit successfully.
+If true, output the npm version as well as node's `process.versions` map, and
+exit successfully.
 
 Only relevant when specified explicitly on the command line.
 

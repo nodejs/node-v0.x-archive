@@ -46,6 +46,8 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
                      public StreamWrapCallbacks,
                      public AsyncWrap {
  public:
+  ~TLSCallbacks();
+
   static void Initialize(v8::Handle<v8::Object> target,
                          v8::Handle<v8::Value> unused,
                          v8::Handle<v8::Context> context);
@@ -72,6 +74,12 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
  protected:
   static const int kClearOutChunkSize = 1024;
 
+  // Maximum number of bytes for hello parser
+  static const int kMaxHelloLength = 16384;
+
+  // Usual ServerHello + Certificate size
+  static const int kInitialClientBufferLength = 4096;
+
   // Maximum number of buffers passed to uv_write()
   static const int kSimultaneousBufferCount = 10;
 
@@ -94,7 +102,6 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
                Kind kind,
                v8::Handle<v8::Object> sc,
                StreamWrapCallbacks* old);
-  ~TLSCallbacks();
 
   static void SSLInfoCallback(const SSL* ssl_, int where, int ret);
   void InitSSL();

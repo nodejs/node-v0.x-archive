@@ -78,7 +78,8 @@ TLSCallbacks::TLSCallbacks(Environment* env,
       error_(NULL),
       cycle_depth_(0),
       eof_(false) {
-  node::Wrap<TLSCallbacks>(object(), this);
+  node::Wrap(object(), this);
+  MakeWeak(this);
 
   // Initialize queue for clearIn writes
   QUEUE_INIT(&write_item_queue_);
@@ -186,11 +187,13 @@ void TLSCallbacks::InitSSL() {
   }
 #endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 
-  InitNPN(sc_, this);
+  InitNPN(sc_);
 
   if (is_server()) {
     SSL_set_accept_state(ssl_);
   } else if (is_client()) {
+    // Enough space for server response (hello, cert)
+    NodeBIO::FromBIO(enc_in_)->set_initial(kInitialClientBufferLength);
     SSL_set_connect_state(ssl_);
   } else {
     // Unexpected
@@ -253,6 +256,7 @@ void TLSCallbacks::Receive(const FunctionCallbackInfo<Value>& args) {
     wrap->DoAlloc(reinterpret_cast<uv_handle_t*>(stream), len, &buf);
     size_t copy = buf.len > len ? len : buf.len;
     memcpy(buf.base, data, copy);
+    buf.len = copy;
     wrap->DoRead(stream, buf.len, &buf, UV_UNKNOWN_HANDLE);
 
     data += copy;
@@ -443,6 +447,10 @@ void TLSCallbacks::ClearOut() {
   if (!hello_parser_.IsEnded())
     return;
 
+  // No reads after EOF
+  if (eof_)
+    return;
+
   HandleScope handle_scope(env()->isolate());
   Context::Scope context_scope(env()->context());
 
@@ -471,6 +479,10 @@ void TLSCallbacks::ClearOut() {
   if (read == -1) {
     int err;
     Local<Value> arg = GetSSLError(read, &err, NULL);
+
+    // Ignore ZERO_RETURN after EOF, it is basically not a error
+    if (err == SSL_ERROR_ZERO_RETURN && eof_)
+      return;
 
     if (!arg.IsEmpty()) {
       // When TLS Alert are stored in wbio,
@@ -614,8 +626,9 @@ void TLSCallbacks::AfterWrite(WriteWrap* w) {
 void TLSCallbacks::DoAlloc(uv_handle_t* handle,
                            size_t suggested_size,
                            uv_buf_t* buf) {
-  buf->base = NodeBIO::FromBIO(enc_in_)->PeekWritable(&suggested_size);
-  buf->len = suggested_size;
+  size_t size = 0;
+  buf->base = NodeBIO::FromBIO(enc_in_)->PeekWritable(&size);
+  buf->len = size;
 }
 
 
@@ -719,6 +732,7 @@ void TLSCallbacks::EnableHelloParser(const FunctionCallbackInfo<Value>& args) {
 
   TLSCallbacks* wrap = Unwrap<TLSCallbacks>(args.Holder());
 
+  NodeBIO::FromBIO(wrap->enc_in_)->set_initial(kMaxHelloLength);
   wrap->hello_parser_.Start(SSLWrap<TLSCallbacks>::OnClientHello,
                             OnClientHelloParseEnd,
                             wrap);
@@ -800,7 +814,7 @@ int TLSCallbacks::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
   p->sni_context_.Reset(env->isolate(), ctx);
 
   SecureContext* sc = Unwrap<SecureContext>(ctx.As<Object>());
-  InitNPN(sc, p);
+  InitNPN(sc);
   SSL_set_SSL_CTX(s, sc->ctx_);
   return SSL_TLSEXT_ERR_OK;
 }

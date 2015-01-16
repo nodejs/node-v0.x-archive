@@ -1,14 +1,4 @@
 {
-  'variables': {
-    'uv_use_dtrace%': 'false',
-    # uv_parent_path is the relative path to libuv in the parent project
-    # this is only relevant when dtrace is enabled and libuv is a child project
-    # as it's necessary to correctly locate the object files for post
-    # processing.
-    # XXX gyp is quite sensitive about paths with double / they don't normalize
-    'uv_parent_path': '/',
-  },
-
   'target_defaults': {
     'conditions': [
       ['OS != "win"', {
@@ -26,6 +16,30 @@
         ],
       }],
     ],
+    'xcode_settings': {
+        'conditions': [
+          [ 'clang==1', {
+            'WARNING_CFLAGS': [
+              '-Wall',
+              '-Wextra',
+              '-Wno-unused-parameter',
+              '-Wno-dollar-in-identifier-extension'
+            ]}, {
+           'WARNING_CFLAGS': [
+             '-Wall',
+             '-Wextra',
+             '-Wno-unused-parameter'
+          ]}
+        ]
+      ],
+      'OTHER_LDFLAGS': [
+      ],
+      'OTHER_CFLAGS': [
+        '-g',
+        '--std=gnu89',
+        '-pedantic'
+      ],
+    }
   },
 
   'targets': [
@@ -53,9 +67,6 @@
           }],
         ],
       },
-      'defines': [
-        'HAVE_CONFIG_H'
-      ],
       'sources': [
         'common.gypi',
         'include/uv.h',
@@ -178,8 +189,8 @@
             ['uv_library=="shared_library" and OS!="mac"', {
               'link_settings': {
                 # Must correspond with UV_VERSION_MAJOR and UV_VERSION_MINOR
-                # in src/version.c
-                'libraries': [ '-Wl,-soname,libuv.so.0.11' ],
+                # in include/uv-version.h
+                'libraries': [ '-Wl,-soname,libuv.so.1.0' ],
               },
             }],
           ],
@@ -195,6 +206,7 @@
           ],
           'defines': [
             '_DARWIN_USE_64_BIT_INODE=1',
+            '_DARWIN_UNLIMITED_SELECT=1',
           ]
         }],
         [ 'OS!="mac"', {
@@ -274,20 +286,6 @@
         ['uv_library=="shared_library"', {
           'defines': [ 'BUILDING_UV_SHARED=1' ]
         }],
-        # FIXME(bnoordhuis or tjfontaine) Unify this, it's extremely ugly.
-        ['uv_use_dtrace=="true"', {
-          'defines': [ 'HAVE_DTRACE=1' ],
-          'dependencies': [ 'uv_dtrace_header' ],
-          'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)' ],
-          'conditions': [
-            [ 'OS not in "mac linux"', {
-              'sources': [ 'src/unix/dtrace.c' ],
-            }],
-            [ 'OS=="linux"', {
-              'sources': [ '<(SHARED_INTERMEDIATE_DIR)/dtrace.o' ]
-            }],
-          ],
-        }],
       ]
     },
 
@@ -312,6 +310,7 @@
         'test/test-close-order.c',
         'test/test-connection-fail.c',
         'test/test-cwd-and-chdir.c',
+        'test/test-default-loop-close.c',
         'test/test-delayed-accept.c',
         'test/test-error.c',
         'test/test-embed.c',
@@ -324,6 +323,7 @@
         'test/test-getaddrinfo.c',
         'test/test-getnameinfo.c',
         'test/test-getsockname.c',
+        'test/test-handle-fileno.c',
         'test/test-hrtime.c',
         'test/test-idle.c',
         'test/test-ip6-addr.c',
@@ -346,6 +346,7 @@
         'test/test-pipe-getsockname.c',
         'test/test-pipe-sendmsg.c',
         'test/test-pipe-server-close.c',
+        'test/test-pipe-close-stdout-read-stdin.c',
         'test/test-platform-output.c',
         'test/test-poll.c',
         'test/test-poll-close.c',
@@ -360,6 +361,7 @@
         'test/test-shutdown-twice.c',
         'test/test-signal.c',
         'test/test-signal-multiple-loops.c',
+        'test/test-socket-buffer-size.c',
         'test/test-spawn.c',
         'test/test-fs-poll.c',
         'test/test-stdio-over-pipes.c',
@@ -376,6 +378,7 @@
         'test/test-tcp-connect6-error.c',
         'test/test-tcp-open.c',
         'test/test-tcp-write-to-half-open-connection.c',
+        'test/test-tcp-write-after-connect.c',
         'test/test-tcp-writealot.c',
         'test/test-tcp-try-write.c',
         'test/test-tcp-unexpected-read.c',
@@ -383,6 +386,7 @@
         'test/test-tcp-write-queue-order.c',
         'test/test-threadpool.c',
         'test/test-threadpool-cancel.c',
+        'test/test-thread-equal.c',
         'test/test-mutexes.c',
         'test/test-thread.c',
         'test/test-barrier.c',
@@ -398,6 +402,7 @@
         'test/test-udp-options.c',
         'test/test-udp-send-and-recv.c',
         'test/test-udp-send-immediate.c',
+        'test/test-udp-send-unreachable.c',
         'test/test-udp-multicast-join.c',
         'test/test-udp-multicast-join6.c',
         'test/test-dlerror.c',
@@ -493,60 +498,5 @@
         },
       },
     },
-
-    {
-      'target_name': 'uv_dtrace_header',
-      'type': 'none',
-      'conditions': [
-        [ 'uv_use_dtrace=="true"', {
-          'actions': [
-            {
-              'action_name': 'uv_dtrace_header',
-              'inputs': [ 'src/unix/uv-dtrace.d' ],
-              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/uv-dtrace.h' ],
-              'action': [ 'dtrace', '-h', '-xnolibs', '-s', '<@(_inputs)',
-                '-o', '<@(_outputs)' ],
-            },
-          ],
-        }],
-      ],
-    },
-
-    # FIXME(bnoordhuis or tjfontaine) Unify this, it's extremely ugly.
-    {
-      'target_name': 'uv_dtrace_provider',
-      'type': 'none',
-      'conditions': [
-        [ 'uv_use_dtrace=="true" and OS not in "mac linux"', {
-          'actions': [
-            {
-              'action_name': 'uv_dtrace_o',
-              'inputs': [
-                'src/unix/uv-dtrace.d',
-                '<(PRODUCT_DIR)/obj.target/libuv<(uv_parent_path)src/unix/core.o',
-              ],
-              'outputs': [
-                '<(PRODUCT_DIR)/obj.target/libuv<(uv_parent_path)src/unix/dtrace.o',
-              ],
-              'action': [ 'dtrace', '-G', '-xnolibs', '-s', '<@(_inputs)',
-                '-o', '<@(_outputs)' ]
-            }
-          ]
-        }],
-        [ 'uv_use_dtrace=="true" and OS=="linux"', {
-          'actions': [
-            {
-              'action_name': 'uv_dtrace_o',
-              'inputs': [ 'src/unix/uv-dtrace.d' ],
-              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/dtrace.o' ],
-              'action': [
-                'dtrace', '-C', '-G', '-s', '<@(_inputs)', '-o', '<@(_outputs)'
-              ],
-            }
-          ]
-        }],
-      ]
-    },
-
   ]
 }

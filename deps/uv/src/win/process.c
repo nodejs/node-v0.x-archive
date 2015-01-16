@@ -171,8 +171,10 @@ static WCHAR* search_path_join_test(const WCHAR* dir,
                                     size_t cwd_len) {
   WCHAR *result, *result_pos;
   DWORD attrs;
-
-  if (dir_len >= 1 && (dir[0] == L'/' || dir[0] == L'\\')) {
+  if (dir_len > 2 && dir[0] == L'\\' && dir[1] == L'\\') {
+    /* It's a UNC path so ignore cwd */
+    cwd_len = 0;
+  } else if (dir_len >= 1 && (dir[0] == L'/' || dir[0] == L'\\')) {
     /* It's a full path without drive letter, use cwd's drive letter only */
     cwd_len = 2;
   } else if (dir_len >= 2 && dir[1] == L':' &&
@@ -331,7 +333,11 @@ static WCHAR* path_search_walk_ext(const WCHAR *dir,
  *   file that is not readable/executable; if the spawn fails it will not
  *   continue searching.
  *
- * TODO: correctly interpret UNC paths
+ * UNC path support: we are dealing with UNC paths in both the path and the
+ * filename. This is a deviation from what cmd.exe does (it does not let you
+ * start a program by specifying an UNC path on the command line) but this is
+ * really a pointless restriction.
+ *
  */
 static WCHAR* search_path(const WCHAR *file,
                             WCHAR *cwd,
@@ -794,10 +800,8 @@ int make_program_env(char* env_block[], WCHAR** dst_ptr) {
       i++;
     } else {
       /* copy var from env_block */
-      DWORD r;
       len = wcslen(*ptr_copy) + 1;
-      r = wmemcpy_s(ptr, (env_len - (ptr - dst)), *ptr_copy, len);
-      assert(!r);
+      wmemcpy(ptr, *ptr_copy, len);
       ptr_copy++;
       if (cmp == 0)
         i++;
@@ -1059,7 +1063,7 @@ int uv_spawn(uv_loop_t* loop,
 
   if (options->flags & UV_PROCESS_DETACHED) {
     /* Note that we're not setting the CREATE_BREAKAWAY_FROM_JOB flag. That
-     * means that libuv might not let you create a fully deamonized process
+     * means that libuv might not let you create a fully daemonized process
      * when run under job control. However the type of job control that libuv
      * itself creates doesn't trickle down to subprocesses so they can still
      * daemonize.
@@ -1137,7 +1141,7 @@ int uv_spawn(uv_loop_t* loop,
   assert(!err);
 
   /* Make the handle active. It will remain active until the exit callback */
-  /* iis made or the handle is closed, whichever happens first. */
+  /* is made or the handle is closed, whichever happens first. */
   uv__handle_start(process);
 
   /* Cleanup, whether we succeeded or failed. */
@@ -1173,7 +1177,7 @@ static int uv__kill(HANDLE process_handle, int signum) {
         return 0;
 
       /* If the process already exited before TerminateProcess was called, */
-      /* TerminateProcess will fail with ERROR_ACESS_DENIED. */
+      /* TerminateProcess will fail with ERROR_ACCESS_DENIED. */
       err = GetLastError();
       if (err == ERROR_ACCESS_DENIED &&
           GetExitCodeProcess(process_handle, &status) &&

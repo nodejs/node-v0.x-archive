@@ -143,7 +143,12 @@ enum {
   UV_TCP_NODELAY          = 0x400,  /* Disable Nagle. */
   UV_TCP_KEEPALIVE        = 0x800,  /* Turn on keep-alive. */
   UV_TCP_SINGLE_ACCEPT    = 0x1000, /* Only accept() when idle. */
-  UV_HANDLE_IPV6          = 0x2000  /* Handle is bound to a IPv6 socket. */
+  UV_HANDLE_IPV6          = 0x10000 /* Handle is bound to a IPv6 socket. */
+};
+
+/* loop flags */
+enum {
+  UV_LOOP_BLOCK_SIGPROF = 1
 };
 
 typedef enum {
@@ -305,13 +310,5 @@ UV_UNUSED(static char* uv__basename_r(const char* path)) {
 
   return s + 1;
 }
-
-
-#ifdef HAVE_DTRACE
-#include "uv-dtrace.h"
-#else
-#define UV_TICK_START(arg0, arg1)
-#define UV_TICK_STOP(arg0, arg1)
-#endif
 
 #endif /* UV_UNIX_INTERNAL_H_ */

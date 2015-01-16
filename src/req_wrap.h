@@ -31,20 +31,17 @@
 
 namespace node {
 
-// defined in node.cc
-extern QUEUE req_wrap_queue;
-
 template <typename T>
 class ReqWrap : public AsyncWrap {
  public:
   ReqWrap(Environment* env,
           v8::Handle<v8::Object> object,
-          AsyncWrap::ProviderType provider = AsyncWrap::PROVIDER_REQWRAP)
-      : AsyncWrap(env, object, AsyncWrap::PROVIDER_REQWRAP) {
+          AsyncWrap::ProviderType provider)
+      : AsyncWrap(env, object, provider) {
     if (env->in_domain())
       object->Set(env->domain_string(), env->domain_array()->Get(0));
 
-    QUEUE_INSERT_TAIL(&req_wrap_queue, &req_wrap_queue_);
+    QUEUE_INSERT_TAIL(env->req_wrap_queue(), &req_wrap_queue_);
   }
 
 

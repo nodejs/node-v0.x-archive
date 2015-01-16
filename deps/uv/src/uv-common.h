@@ -28,6 +28,7 @@
 #define UV_COMMON_H_
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stddef.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
@@ -58,6 +59,8 @@ enum {
 # define UV__HANDLE_REF       0x20
 # define UV__HANDLE_CLOSING   0x01
 #endif
+
+int uv__loop_configure(uv_loop_t* loop, uv_loop_option option, va_list ap);
 
 int uv__tcp_bind(uv_tcp_t* tcp,
                  const struct sockaddr* addr,
@@ -106,6 +109,10 @@ void uv__work_submit(uv_loop_t* loop,
 void uv__work_done(uv_async_t* handle);
 
 size_t uv__count_bufs(const uv_buf_t bufs[], unsigned int nbufs);
+
+int uv__socket_sockopt(uv_handle_t* handle, int optname, int* value);
+
+void uv__fs_scandir_cleanup(uv_fs_t* req);
 
 #define uv__has_active_reqs(loop)                                             \
   (QUEUE_EMPTY(&(loop)->active_reqs) == 0)

@@ -172,7 +172,7 @@ emulation with `process.kill()`, and `child_process.kill()`:
 
 ## process.stdout
 
-A `Writable Stream` to `stdout`.
+A `Writable Stream` to `stdout` (on fd `1`).
 
 Example: the definition of `console.log`
 
@@ -181,7 +181,8 @@ Example: the definition of `console.log`
     };
 
 `process.stderr` and `process.stdout` are unlike other streams in Node in
-that writes to them are usually blocking.
+that they cannot be closed (`end()` will throw), they never emit the `finish`
+event and that writes are usually blocking.
 
 - They are blocking in the case that they refer to regular files or TTY file
   descriptors.
@@ -206,10 +207,11 @@ See [the tty docs](tty.html#tty_tty) for more information.
 
 ## process.stderr
 
-A writable stream to stderr.
+A writable stream to stderr (on fd `2`).
 
 `process.stderr` and `process.stdout` are unlike other streams in Node in
-that writes to them are usually blocking.
+that they cannot be closed (`end()` will throw), they never emit the `finish`
+event and that writes are usually blocking.
 
 - They are blocking in the case that they refer to regular files or TTY file
   descriptors.
@@ -220,7 +222,7 @@ that writes to them are usually blocking.
 
 ## process.stdin
 
-A `Readable Stream` for stdin. 
+A `Readable Stream` for stdin (on fd `0`).
 
 Example of opening standard input and listening for both events:
 
@@ -539,7 +541,7 @@ An example of the possible output looks like:
          target_arch: 'x64',
          v8_use_snapshot: 'true' } }
 
-## process.kill(pid, [signal])
+## process.kill(pid[, signal])
 
 Send a signal to a process. `pid` is the process id and `signal` is the
 string describing the signal to send.  Signal names are strings like
@@ -706,7 +708,7 @@ Sets or reads the process's file mode creation mask. Child processes inherit
 the mask from the parent process. Returns the old mask if `mask` argument is
 given, otherwise returns the current mask.
 
-    var oldmask, newmask = 0644;
+    var oldmask, newmask = 0022;
 
     oldmask = process.umask(newmask);
     console.log('Changed umask from: ' + oldmask.toString(8) +

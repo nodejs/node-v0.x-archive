@@ -45,6 +45,30 @@ var parseTests = {
     href: 'http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch'
   },
 
+  'http:\\\\evil-phisher\\foo.html?json="\\"foo\\""#h\\a\\s\\h': {
+    protocol: 'http:',
+    slashes: true,
+    host: 'evil-phisher',
+    hostname: 'evil-phisher',
+    pathname: '/foo.html',
+    search: '?json=%22%5C%22foo%5C%22%22',
+    query: 'json=%22%5C%22foo%5C%22%22',
+    path: '/foo.html?json=%22%5C%22foo%5C%22%22',
+    hash: '#h%5Ca%5Cs%5Ch',
+    href: 'http://evil-phisher/foo.html?json=%22%5C%22foo%5C%22%22#h%5Ca%5Cs%5Ch'
+  },
+
+  'http:\\\\evil-phisher\\foo.html#h\\a\\s\\h?blarg': {
+    protocol: 'http:',
+    slashes: true,
+    host: 'evil-phisher',
+    hostname: 'evil-phisher',
+    pathname: '/foo.html',
+    path: '/foo.html',
+    hash: '#h%5Ca%5Cs%5Ch?blarg',
+    href: 'http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch?blarg'
+  },
+
 
   'http:\\\\evil-phisher\\foo.html': {
     protocol: 'http:',
@@ -153,32 +177,44 @@ var parseTests = {
     'path': '/Y'
   },
 
+  // + not an invalid host character
+  // per https://url.spec.whatwg.org/#host-parsing
+  'http://x.y.com+a/b/c' : {
+    'href': 'http://x.y.com+a/b/c',
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'x.y.com+a',
+    'hostname': 'x.y.com+a',
+    'pathname': '/b/c',
+    'path': '/b/c'
+  },
+
   // an unexpected invalid char in the hostname.
-  'HtTp://x.y.cOm*a/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*a/b/c?d=e#f%20g%3Ch%3Ei',
+  'HtTp://x.y.cOm;a/b/c?d=e#f g<h>i' : {
+    'href': 'http://x.y.com/;a/b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.y.com',
     'hostname': 'x.y.com',
-    'pathname': '/*a/b/c',
+    'pathname': ';a/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*a/b/c?d=e'
+    'path': ';a/b/c?d=e'
   },
 
   // make sure that we don't accidentally lcast the path parts.
-  'HtTp://x.y.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*A/b/c?d=e#f%20g%3Ch%3Ei',
+  'HtTp://x.y.cOm;A/b/c?d=e#f g<h>i' : {
+    'href': 'http://x.y.com/;A/b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.y.com',
     'hostname': 'x.y.com',
-    'pathname': '/*A/b/c',
+    'pathname': ';A/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*A/b/c?d=e'
+    'path': ';A/b/c?d=e'
   },
 
   'http://x...y...#p': {
@@ -493,17 +529,17 @@ var parseTests = {
     'path': '/'
   },
 
-  'http://www.Äffchen.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://www.xn--ffchen-9ta.com/*A/b/c?d=e#f%20g%3Ch%3Ei',
+  'http://www.Äffchen.cOm;A/b/c?d=e#f g<h>i' : {
+    'href': 'http://www.xn--ffchen-9ta.com/;A/b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
     'host': 'www.xn--ffchen-9ta.com',
     'hostname': 'www.xn--ffchen-9ta.com',
-    'pathname': '/*A/b/c',
+    'pathname': ';A/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*A/b/c?d=e'
+    'path': ';A/b/c?d=e'
   },
 
   'http://SÉLIER.COM/' : {
@@ -868,6 +904,20 @@ var parseTestsWithQueryString = {
     'pathname': '/',
     'path': '/'
   },
+  '/example': {
+    protocol: null,
+    slashes: null,
+    auth: null,
+    host: null,
+    port: null,
+    hostname: null,
+    hash: null,
+    search: '',
+    query: {},
+    pathname: '/example',
+    path: '/example',
+    href: '/example'
+  },
   '/example?query=value':{
     protocol: null,
     slashes: null,
@@ -1047,7 +1097,7 @@ var formatTests = {
 
   // `#`,`?` in path
   '/path/to/%%23%3F+=&.txt?foo=theA1#bar' : {
-    href : '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
+    href: '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
     pathname: '/path/to/%#?+=&.txt',
     query: {
       foo: 'theA1'
@@ -1057,7 +1107,7 @@ var formatTests = {
 
   // `#`,`?` in path + `#` in query
   '/path/to/%%23%3F+=&.txt?foo=the%231#bar' : {
-    href : '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
+    href: '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
     pathname: '/path/to/%#?+=&.txt',
     query: {
       foo: 'the#1'
@@ -1072,7 +1122,7 @@ var formatTests = {
     hostname: 'ex.com',
     hash: '#frag',
     search: '?abc=the#1?&foo=bar',
-    pathname: '/foo?100%m#r',
+    pathname: '/foo?100%m#r'
   },
 
   // `?` and `#` in search only
@@ -1082,8 +1132,77 @@ var formatTests = {
     hostname: 'ex.com',
     hash: '#frag',
     search: '?abc=the#1?&foo=bar',
-    pathname: '/fooA100%mBr',
+    pathname: '/fooA100%mBr'
+  },
+
+  // path
+  'http://github.com/joyent/node#js1': {
+    href: 'http://github.com/joyent/node#js1',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js1',
+    path: '/joyent/node'
+  },
+
+  // pathname vs. path, path wins
+  'http://github.com/joyent/node2#js1': {
+    href: 'http://github.com/joyent/node2#js1',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js1',
+    path: '/joyent/node2',
+    pathname: '/joyent/node'
+  },
+
+  // pathname with query/search
+  'http://github.com/joyent/node?foo=bar#js2': {
+    href: 'http://github.com/joyent/node?foo=bar#js2',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js2',
+    path: '/joyent/node?foo=bar'
+  },
+
+  // path vs. query, path wins
+  'http://github.com/joyent/node?foo=bar2#js3': {
+    href: 'http://github.com/joyent/node?foo=bar2#js3',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js3',
+    path: '/joyent/node?foo=bar2',
+    query: {foo: 'bar'}
+  },
+
+  // path vs. search, path wins
+  'http://github.com/joyent/node?foo=bar3#js4': {
+    href: 'http://github.com/joyent/node?foo=bar3#js4',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js4',
+    path: '/joyent/node?foo=bar3',
+    search: '?foo=bar'
+  },
+
+  // path is present without ? vs. query given
+  'http://github.com/joyent/node#js5': {
+    href: 'http://github.com/joyent/node#js5',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js5',
+    path: '/joyent/node',
+    query: {foo: 'bar'}
+  },
+
+  // path is present without ? vs. search given
+  'http://github.com/joyent/node#js6': {
+    href: 'http://github.com/joyent/node#js6',
+    protocol: 'http:',
+    hostname: 'github.com',
+    hash: '#js6',
+    path: '/joyent/node',
+    search: '?foo=bar'
   }
+
 };
 for (var u in formatTests) {
   var expect = formatTests[u].href;
