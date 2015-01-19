@@ -289,6 +289,11 @@ testAssertionMessage({a: undefined, b: null}, '{"a":"undefined","b":null}');
 testAssertionMessage({a: NaN, b: Infinity, c: -Infinity},
     '{"a":"NaN","b":"Infinity","c":"-Infinity"}');
 
+// # 8696
+var a = {};
+a.b = a;
+testAssertionMessage(a, '{"b":"[Circular]"}');
+
 // #2893
 try {
   assert.throws(function () {
