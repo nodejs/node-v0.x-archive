@@ -374,7 +374,20 @@ CPU::CPU() : stepping_(0),
       char* processor = cpu_info.ExtractField("Processor");
       if (HasListItem(processor, "(v6l)")) {
         architecture_ = 6;
-      }
+      } else {
+        // Due to changes in Linux kernel, there is a scenario
+        // where the "Processor" field no longer contains the
+        // processor architecture. The workaround for this issue
+        // is to inspect the "model name" field.
+        //
+        // See: https://github.com/joyent/node/issues/8589
+        // See: https://code.google.com/p/v8/issues/detail?id=3112
+        delete[] processor;
+        processor = cpu_info.ExtractField("model name");
+        if (HasListItem(processor, "(v6l)")) {
+          architecture_ = 6;
+        }
+      }  
       delete[] processor;
     }
   }
