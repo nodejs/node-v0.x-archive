@@ -9,11 +9,27 @@ Parsed URL objects have some or all of the following fields, depending on
 whether or not they exist in the URL string. Any parts that are not in the URL
 string will not be in the parsed object. Examples are shown for the URL
 
-`'http://user:pass@host.com:8080/p/a/t/h?query=string#hash'`
+`'http://user:pass@host.com:65535/p/a/t/h?query=string#hash'`:
+
+```
++-----------------------------------------------------------------------------------+
+| href                                                                              |
++----------+--+-----------+--------------------+-----------------------------+------+
+| protocol |* | auth      | host               | path                        | hash |
+|          |  |           +-------------+------+----------+------------------+      |
+|          |  |           | hostname    | port | pathname | search           |      |
+|          |  |           |             |      |          +-+----------------+      |
+|          |  |           |             |      |          | | query          |      |
+" http:     //   user:pass@some.host.com:65535 /path/name ? search=1&continues#hash "
+|          |  |           |             |      |          | |                |      |
++----------+--+-----------+-------------+------+----------+-+----------------+------+
+(all spaces in the "" line should be ignored -- they're purely for formatting)
+*: given by "slashes" key
+```
 
 * `href`: The full URL that was originally parsed. Both the protocol and host are lowercased.
 
-    Example: `'http://user:pass@host.com:8080/p/a/t/h?query=string#hash'`
+    Example: `'http://user:pass@host.com:65535/p/a/t/h?query=string#hash'`
 
 * `protocol`: The request protocol, lowercased.
 
@@ -26,7 +42,7 @@ string will not be in the parsed object. Examples are shown for the URL
 * `host`: The full lowercased host portion of the URL, including port
   information.
 
-    Example: `'host.com:8080'`
+    Example: `'host.com:65535'`
 
 * `auth`: The authentication information portion of a URL.
 
@@ -38,7 +54,7 @@ string will not be in the parsed object. Examples are shown for the URL
 
 * `port`: The port number portion of the host.
 
-    Example: `'8080'`
+    Example: `'65535'`
 
 * `pathname`: The path section of the URL, that comes after the host and
   before the query, including the initial slash if present.
@@ -98,7 +114,8 @@ Here's how the formatting process works:
 * `port` will only be used if `host` is absent.
 * `host` will be used in place of `hostname` and `port`
 * `pathname` is treated the same with or without the leading `/` (slash).
-* `path` is treated the same with `pathname` but able to contain `query` as well.
+* `path` if given, must specify the full path (including the query) without disagreeing
+with `search`, `query`, or `pathname`. If these keys disagree, an error will be thrown.
 * `search` will be used in place of `query`.
   * It is treated the same with or without the leading `?` (question mark)
 * `query` (object; see `querystring`) will only be used if `search` is absent.
