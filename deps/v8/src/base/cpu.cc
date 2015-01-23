@@ -365,25 +365,23 @@ CPU::CPU() : stepping_(0),
     //
     // See http://code.google.com/p/android/issues/detail?id=10812
     //
-    // We try to correct this by looking at the 'elf_format'
+    // We try to correct this by looking at the 'elf_platform'
     // field reported by the 'Processor' field, which is of the
     // form of "(v7l)" for an ARMv7-based CPU, and "(v6l)" for
     // an ARMv6-one. For example, the Raspberry Pi is one popular
     // ARMv6 device that reports architecture 7.
+	// NOTE: the 'elf_platform' moved to the model name field in 
+	// Linux v3.8, so we check that first
     if (architecture_ == 7) {
-      char* processor = cpu_info.ExtractField("Processor");
+      char* processor = cpu_info.ExtractField("model name");
       if (HasListItem(processor, "(v6l)")) {
         architecture_ = 6;
       } else {
-        // Due to changes in Linux kernel, there is a scenario
-        // where the "Processor" field no longer contains the
-        // processor architecture. The workaround for this issue
-        // is to inspect the "model name" field.
-        //
-        // See: https://github.com/joyent/node/issues/8589
-        // See: https://code.google.com/p/v8/issues/detail?id=3112
+        // prior to Linux v3.8 'elf_platform' was found in the
+        // "Processor" field, we check this second for backward 
+        //compatibility
         delete[] processor;
-        processor = cpu_info.ExtractField("model name");
+        processor = cpu_info.ExtractField("Processor");
         if (HasListItem(processor, "(v6l)")) {
           architecture_ = 6;
         }
