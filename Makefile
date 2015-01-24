@@ -306,11 +306,11 @@ $(PKG): release-only
 	rm -rf $(PKGDIR)
 	rm -rf out/deps out/Release
 	$(PYTHON) ./configure --download=all --with-intl=small-icu \
-		--without-snapshot --dest-cpu=ia32 --tag=$(TAG)
+		--dest-cpu=ia32 --tag=$(TAG)
 	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)/32
 	rm -rf out/deps out/Release
 	$(PYTHON) ./configure --download=all --with-intl=small-icu \
-		--without-snapshot --dest-cpu=x64 --tag=$(TAG)
+		--dest-cpu=x64 --tag=$(TAG)
 	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)
 	SIGN="$(APP_SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
 	lipo $(PKGDIR)/32/usr/local/bin/node \
@@ -343,7 +343,7 @@ $(BINARYTAR): release-only
 	rm -rf $(BINARYNAME)
 	rm -rf out/deps out/Release
 	$(PYTHON) ./configure --prefix=/ --download=all --with-intl=small-icu \
-		--without-snapshot --dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
+		--dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=$(BINARYNAME) V=$(V) PORTABLE=1
 	cp README.md $(BINARYNAME)
 	cp LICENSE $(BINARYNAME)
@@ -356,7 +356,7 @@ binary: $(BINARYTAR)
 
 $(PKGSRC): release-only
 	rm -rf dist out
-	$(PYTHON) configure --prefix=/ --without-snapshot --download=all \
+	$(PYTHON) configure --prefix=/ --download=all \
 		--with-intl=small-icu --dest-cpu=$(DESTCPU) --tag=$(TAG) \
 		$(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=dist
