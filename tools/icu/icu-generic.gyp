@@ -19,6 +19,10 @@
       'direct_dependent_settings': {
         'defines': [
           'UCONFIG_NO_CONVERSION=1',
+          'UCONFIG_NO_LEGACY_CONVERSION=1',
+          'UCONFIG_NO_IDNA=1',
+          'UCONFIG_NO_TRANSLITERATION=1',
+          'UCONFIG_NO_REGULAR_EXPRESSIONS=1',
         ]
       },
     },
@@ -30,12 +34,8 @@
       'toolsets': [ 'host', 'target' ],
       'direct_dependent_settings': {
         'defines': [
-          'UCONFIG_NO_LEGACY_CONVERSION=1',
-          'UCONFIG_NO_IDNA=1',
-          'UCONFIG_NO_TRANSLITERATION=1',
-          'UCONFIG_NO_SERVICE=1',
-          'UCONFIG_NO_REGULAR_EXPRESSIONS=1',
           'U_ENABLE_DYLOAD=0',
+          'UCONFIG_NO_SERVICE=1',
           'U_STATIC_IMPLEMENTATION=1',
           # Don't need std::string in API.
           # Also, problematic: <http://bugs.icu-project.org/trac/ticket/11333>
