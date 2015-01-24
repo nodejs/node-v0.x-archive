@@ -69,6 +69,7 @@ if /i "%1"=="small-icu"     set i18n_arg=%1&goto arg-ok
 if /i "%1"=="full-icu"      set i18n_arg=%1&goto arg-ok
 if /i "%1"=="intl-none"     set i18n_arg=%1&goto arg-ok
 if /i "%1"=="download-all"  set download_arg="--download=all"&goto arg-ok
+if /i "%1"=="download-icu"  set download_arg="--download=icu"&goto arg-ok
 
 echo Warning: ignoring invalid command line option `%1`.
 
@@ -237,7 +238,7 @@ python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --noj
 goto exit
 
 :help
-echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [small-icu/full-icu/intl-none] [nobuild] [nosign] [x86/x64] [download-all]
+echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [small-icu/full-icu/intl-none] [nobuild] [nosign] [x86/x64] [download-all/download-icu]
 echo Examples:
 echo   vcbuild.bat                : builds release build
 echo   vcbuild.bat debug          : builds debug build
