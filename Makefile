@@ -151,15 +151,17 @@ test-debugger: all
 test-npm: node
 	rm -rf npm-cache npm-tmp npm-prefix
 	mkdir npm-cache npm-tmp npm-prefix
-	cd deps/npm ; npm_config_cache="$(shell pwd)/npm-cache" \
+	cd deps/npm ; export PATH="$(shell pwd):/bin:/usr/bin" ; \
+	     npm_config_cache="$(shell pwd)/npm-cache" \
 	     npm_config_prefix="$(shell pwd)/npm-prefix" \
 	     npm_config_tmp="$(shell pwd)/npm-tmp" \
-	     ../../node cli.js install
-	cd deps/npm ; npm_config_cache="$(shell pwd)/npm-cache" \
+	     node cli.js install
+	cd deps/npm ; export PATH="$(shell pwd):/bin:/usr/bin" ; \
+	     npm_config_cache="$(shell pwd)/npm-cache" \
 	     npm_config_prefix="$(shell pwd)/npm-prefix" \
 	     npm_config_tmp="$(shell pwd)/npm-tmp" \
-	     ../../node cli.js run-script test-all && \
-	     ../../node cli.js prune --prod && \
+	     node cli.js run-script test-all && \
+	     node cli.js prune --prod && \
 	     cd ../.. && \
 	     rm -rf npm-cache npm-tmp npm-prefix
 
