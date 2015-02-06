@@ -235,7 +235,7 @@ static ssize_t V8_OFF_STRING_LENGTH;
 	(V8_CONSTANT_OPTIONAL | V8_CONSTANT_HASFALLBACK | \
 	((maj) << V8_CONSTANT_MAJORSHIFT) | ((min) << V8_CONSTANT_MINORSHIFT))
 
-#define V8_CONSTANT_REMOVED_SINCE(maj, min) \
+#define	V8_CONSTANT_REMOVED_SINCE(maj, min) \
 	(V8_CONSTANT_REMOVED | \
 	((maj) << V8_CONSTANT_MAJORSHIFT) | ((min) << V8_CONSTANT_MINORSHIFT))
 
@@ -300,7 +300,7 @@ static v8_constant_t v8_constants[] = {
 	{ &V8_ISSHARED_SHIFT,		"v8dbg_isshared_shift",
 	    V8_CONSTANT_FALLBACK(3, 11), 0 },
 	{ &V8_PROP_IDX_FIRST,		"v8dbg_prop_idx_first"		},
-	{ &V8_PROP_TYPE_FIELD,		"v8dbg_prop_type_field"     	},
+	{ &V8_PROP_TYPE_FIELD,		"v8dbg_prop_type_field"		},
 	{ &V8_PROP_TYPE_MASK,		"v8dbg_prop_type_mask"		},
 	{ &V8_PROP_IDX_CONTENT,		"v8dbg_prop_idx_content",
 	    V8_CONSTANT_OPTIONAL },
@@ -497,9 +497,9 @@ static int jsobj_print_jsdate(uintptr_t, jsobj_print_t *);
  */
 static int
 v8_version_older(uintptr_t v8_major, uintptr_t v8_minor, uint32_t flags) {
-	return 	v8_major < V8_CONSTANT_MAJOR(flags) ||
-	        (v8_major == V8_CONSTANT_MAJOR(flags) &&
-	         v8_minor < V8_CONSTANT_MINOR(flags));
+	return (v8_major < V8_CONSTANT_MAJOR(flags) ||
+	    (v8_major == V8_CONSTANT_MAJOR(flags) &&
+	    v8_minor < V8_CONSTANT_MINOR(flags)));
 }
 
 /*
@@ -550,7 +550,7 @@ autoconfigure(v8_cfg_t *cfgp)
 
 		if (!(cnp->v8c_flags & V8_CONSTANT_OPTIONAL) &&
 		    (!(cnp->v8c_flags & V8_CONSTANT_REMOVED) ||
-		     v8_version_older(v8_major, v8_minor, cnp->v8c_flags))) {
+		    v8_version_older(v8_major, v8_minor, cnp->v8c_flags))) {
 			mdb_warn("failed to read \"%s\"", cnp->v8c_symbol);
 			failed++;
 			continue;
@@ -1072,12 +1072,12 @@ conf_field_lookup(const char *klass, const char *field)
 static int
 heap_offset(const char *klass, const char *field, ssize_t *offp)
 {
-       v8_field_t *flp;
+	v8_field_t *flp;
 
-       flp = conf_field_lookup(klass, field);
+	flp = conf_field_lookup(klass, field);
 
-	   if (flp == NULL)
-			   return (-1);
+	if (flp == NULL)
+		return (-1);
 
 	*offp = V8_OFF_HEAP(flp->v8f_offset);
 	return (0);
