@@ -82,7 +82,7 @@ OBJS += src/ares_platform.o
 
 LDFLAGS += -lws2_32.lib -liphlpapi.lib
 else # else a posix system
-CFLAGS += -g --std=gnu89 -pedantic
+CFLAGS += --std=gnu89 -pedantic
 CFLAGS += -Wall -Wextra -Wno-unused-parameter
 CFLAGS += -D_LARGEFILE_SOURCE
 CFLAGS += -D_FILE_OFFSET_BITS=64
