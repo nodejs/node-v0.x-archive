@@ -58,8 +58,7 @@ class UDPWrap: public HandleWrap {
   uv_udp_t* UVHandle();
 
  private:
-  UDPWrap(Environment* env, v8::Handle<v8::Object> object, AsyncWrap* parent);
-  virtual ~UDPWrap();
+  UDPWrap(Environment* env, v8::Handle<v8::Object> object);
 
   static void DoBind(const v8::FunctionCallbackInfo<v8::Value>& args,
                      int family);

@@ -45,11 +45,11 @@ class ReqWrap : public AsyncWrap {
   }
 
 
-  ~ReqWrap() {
+  ~ReqWrap() override {
     QUEUE_REMOVE(&req_wrap_queue_);
     // Assert that someone has called Dispatched()
-    assert(req_.data == this);
-    assert(!persistent().IsEmpty());
+    CHECK_EQ(req_.data, this);
+    CHECK_EQ(false, persistent().IsEmpty());
     persistent().Reset();
   }
 

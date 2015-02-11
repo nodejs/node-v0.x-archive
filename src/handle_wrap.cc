@@ -41,12 +41,9 @@ using v8::Value;
 
 
 void HandleWrap::Ref(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   HandleWrap* wrap = Unwrap<HandleWrap>(args.Holder());
 
-  if (wrap != NULL && wrap->handle__ != NULL) {
+  if (IsAlive(wrap)) {
     uv_ref(wrap->handle__);
     wrap->flags_ &= ~kUnref;
   }
@@ -54,12 +51,9 @@ void HandleWrap::Ref(const FunctionCallbackInfo<Value>& args) {
 
 
 void HandleWrap::Unref(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   HandleWrap* wrap = Unwrap<HandleWrap>(args.Holder());
 
-  if (wrap != NULL && wrap->handle__ != NULL) {
+  if (IsAlive(wrap)) {
     uv_unref(wrap->handle__);
     wrap->flags_ |= kUnref;
   }
@@ -67,18 +61,17 @@ void HandleWrap::Unref(const FunctionCallbackInfo<Value>& args) {
 
 
 void HandleWrap::Close(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   HandleWrap* wrap = Unwrap<HandleWrap>(args.Holder());
 
   // guard against uninitialized handle or double close
-  if (wrap == NULL || wrap->handle__ == NULL)
+  if (!IsAlive(wrap))
     return;
 
-  assert(!wrap->persistent().IsEmpty());
+  CHECK_EQ(false, wrap->persistent().IsEmpty());
   uv_close(wrap->handle__, OnClose);
-  wrap->handle__ = NULL;
+  wrap->handle__ = nullptr;
 
   if (args[0]->IsFunction()) {
     wrap->object()->Set(env->close_string(), args[0]);
@@ -103,7 +96,7 @@ HandleWrap::HandleWrap(Environment* env,
 
 
 HandleWrap::~HandleWrap() {
-  assert(persistent().IsEmpty());
+  CHECK(persistent().IsEmpty());
   QUEUE_REMOVE(&handle_wrap_queue_);
 }
 
@@ -114,20 +107,20 @@ void HandleWrap::OnClose(uv_handle_t* handle) {
   HandleScope scope(env->isolate());
 
   // The wrap object should still be there.
-  assert(wrap->persistent().IsEmpty() == false);
+  CHECK_EQ(wrap->persistent().IsEmpty(), false);
 
   // But the handle pointer should be gone.
-  assert(wrap->handle__ == NULL);
+  CHECK_EQ(wrap->handle__, nullptr);
 
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
   Local<Object> object = wrap->object();
 
   if (wrap->flags_ & kCloseCallback) {
-    wrap->MakeCallback(env->close_string(), 0, NULL);
+    wrap->MakeCallback(env->close_string(), 0, nullptr);
   }
 
-  object->SetAlignedPointerInInternalField(0, NULL);
+  object->SetAlignedPointerInInternalField(0, nullptr);
   wrap->persistent().Reset();
   delete wrap;
 }

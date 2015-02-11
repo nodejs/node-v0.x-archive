@@ -26,6 +26,7 @@
 #include "node_http_parser.h"
 #include "node_javascript.h"
 #include "node_version.h"
+#include "node_v8_platform.h"
 
 #if defined HAVE_PERFCTR
 #include "node_counters.h"
@@ -57,7 +58,6 @@
 #include "v8-profiler.h"
 #include "zlib.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <limits.h>  // PATH_MAX
 #include <locale.h>
@@ -126,7 +126,7 @@ static bool print_eval = false;
 static bool force_repl = false;
 static bool trace_deprecation = false;
 static bool throw_deprecation = false;
-static const char* eval_string = NULL;
+static const char* eval_string = nullptr;
 static bool use_debug_agent = false;
 static bool debug_wait_connect = false;
 static int debug_port = 5858;
@@ -139,7 +139,7 @@ static node_module* modlist_addon;
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
 // Path to ICU data (for i18n / Intl)
-static const char* icu_data_dir = NULL;
+static const char* icu_data_dir = nullptr;
 #endif
 
 // used by C++ modules as well
@@ -150,7 +150,7 @@ static double prog_start_time;
 static bool debugger_running;
 static uv_async_t dispatch_debug_messages_async;
 
-static Isolate* node_isolate = NULL;
+static Isolate* node_isolate = nullptr;
 
 int WRITE_UTF8_FLAGS = v8::String::HINT_MANY_WRITES_EXPECTED |
                        v8::String::NO_NULL_TERMINATION;
@@ -161,14 +161,13 @@ class ArrayBufferAllocator : public ArrayBuffer::Allocator {
   // the process.
   static const size_t kMaxLength = 0x3fffffff;
   static ArrayBufferAllocator the_singleton;
-  virtual ~ArrayBufferAllocator() {}
-  virtual void* Allocate(size_t length);
-  virtual void* AllocateUninitialized(size_t length);
-  virtual void Free(void* data, size_t length);
+  virtual ~ArrayBufferAllocator() = default;
+  virtual void* Allocate(size_t length) override;
+  virtual void* AllocateUninitialized(size_t length) override;
+  virtual void Free(void* data, size_t length) override;
  private:
-  ArrayBufferAllocator() {}
-  ArrayBufferAllocator(const ArrayBufferAllocator&);
-  void operator=(const ArrayBufferAllocator&);
+  ArrayBufferAllocator() = default;
+  DISALLOW_COPY_AND_ASSIGN(ArrayBufferAllocator);
 };
 
 ArrayBufferAllocator ArrayBufferAllocator::the_singleton;
@@ -176,7 +175,7 @@ ArrayBufferAllocator ArrayBufferAllocator::the_singleton;
 
 void* ArrayBufferAllocator::Allocate(size_t length) {
   if (length > kMaxLength)
-    return NULL;
+    return nullptr;
   char* data = new char[length];
   memset(data, 0, length);
   return data;
@@ -185,7 +184,7 @@ void* ArrayBufferAllocator::Allocate(size_t length) {
 
 void* ArrayBufferAllocator::AllocateUninitialized(size_t length) {
   if (length > kMaxLength)
-    return NULL;
+    return nullptr;
   return new char[length];
 }
 
@@ -205,7 +204,7 @@ static void CheckImmediate(uv_check_t* handle) {
 
 static void IdleImmediateDummy(uv_idle_t* handle) {
   // Do nothing. Only for maintaining event loop.
-  // TODO(bnoordhuis) Maybe make libuv accept NULL idle callbacks.
+  // TODO(bnoordhuis) Maybe make libuv accept nullptr idle callbacks.
 }
 
 
@@ -737,7 +736,7 @@ Local<Value> ErrnoException(Isolate* isolate,
 
   Local<Value> e;
   Local<String> estring = OneByteString(env->isolate(), errno_string(errorno));
-  if (msg == NULL || msg[0] == '\0') {
+  if (msg == nullptr || msg[0] == '\0') {
     msg = strerror(errorno);
   }
   Local<String> message = OneByteString(env->isolate(), msg);
@@ -762,11 +761,11 @@ Local<Value> ErrnoException(Isolate* isolate,
   obj->Set(env->errno_string(), Integer::New(env->isolate(), errorno));
   obj->Set(env->code_string(), estring);
 
-  if (path != NULL) {
+  if (path != nullptr) {
     obj->Set(env->path_string(), String::NewFromUtf8(env->isolate(), path));
   }
 
-  if (syscall != NULL) {
+  if (syscall != nullptr) {
     obj->Set(env->syscall_string(), OneByteString(env->isolate(), syscall));
   }
 
@@ -825,11 +824,11 @@ Local<Value> UVException(Isolate* isolate,
   obj->Set(env->errno_string(), Integer::New(env->isolate(), errorno));
   obj->Set(env->code_string(), estring);
 
-  if (path != NULL) {
+  if (path != nullptr) {
     obj->Set(env->path_string(), path_str);
   }
 
-  if (syscall != NULL) {
+  if (syscall != nullptr) {
     obj->Set(env->syscall_string(), OneByteString(env->isolate(), syscall));
   }
 
@@ -837,15 +836,25 @@ Local<Value> UVException(Isolate* isolate,
 }
 
 
+// Look up environment variable unless running as setuid root.
+inline const char* secure_getenv(const char* key) {
+#ifndef _WIN32
+  if (getuid() != geteuid() || getgid() != getegid())
+    return nullptr;
+#endif
+  return getenv(key);
+}
+
+
 #ifdef _WIN32
 // Does about the same as strerror(),
 // but supports all windows error messages
 static const char *winapi_strerror(const int errorno, bool* must_free) {
-  char *errmsg = NULL;
+  char *errmsg = nullptr;
 
   FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-      FORMAT_MESSAGE_IGNORE_INSERTS, NULL, errorno,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, NULL);
+      FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, errorno,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&errmsg, 0, nullptr);
 
   if (errmsg) {
     *must_free = true;
@@ -893,11 +902,11 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
   Local<Object> obj = e->ToObject();
   obj->Set(env->errno_string(), Integer::New(isolate, errorno));
 
-  if (path != NULL) {
+  if (path != nullptr) {
     obj->Set(env->path_string(), String::NewFromUtf8(isolate, path));
   }
 
-  if (syscall != NULL) {
+  if (syscall != nullptr) {
     obj->Set(env->syscall_string(), OneByteString(isolate, syscall));
   }
 
@@ -909,8 +918,33 @@ Local<Value> WinapiErrnoException(Isolate* isolate,
 #endif
 
 
+void SetupAsyncListener(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  CHECK(args[0]->IsObject());
+  CHECK(args[1]->IsFunction());
+  CHECK(args[2]->IsFunction());
+  CHECK(args[3]->IsFunction());
+
+  env->set_async_listener_run_function(args[1].As<Function>());
+  env->set_async_listener_load_function(args[2].As<Function>());
+  env->set_async_listener_unload_function(args[3].As<Function>());
+
+  Local<Object> async_listener_flag_obj = args[0].As<Object>();
+  Environment::AsyncListener* async_listener = env->async_listener();
+  async_listener_flag_obj->SetIndexedPropertiesToExternalArrayData(
+      async_listener->fields(),
+      kExternalUint32Array,
+      async_listener->fields_count());
+
+  // Do a little housekeeping.
+  env->process_object()->Delete(
+      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupAsyncListener"));
+}
+
+
 void SetupDomainUse(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (env->using_domains())
     return;
@@ -931,8 +965,8 @@ void SetupDomainUse(const FunctionCallbackInfo<Value>& args) {
   process_object->Set(env->tick_callback_string(), tick_callback_function);
   env->set_tick_callback_function(tick_callback_function);
 
-  assert(args[0]->IsArray());
-  assert(args[1]->IsObject());
+  CHECK(args[0]->IsArray());
+  CHECK(args[1]->IsObject());
 
   env->set_domain_array(args[0].As<Array>());
 
@@ -954,12 +988,11 @@ void RunMicrotasks(const FunctionCallbackInfo<Value>& args) {
 
 
 void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
 
-  assert(args[0]->IsObject());
-  assert(args[1]->IsFunction());
-  assert(args[2]->IsObject());
+  CHECK(args[0]->IsObject());
+  CHECK(args[1]->IsFunction());
+  CHECK(args[2]->IsObject());
 
   // Values use to cross communicate with processNextTick.
   Local<Object> tick_info_obj = args[0].As<Object>();
@@ -970,7 +1003,7 @@ void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
 
   env->set_tick_callback_function(args[1].As<Function>());
 
-  NODE_SET_METHOD(args[2].As<Object>(), "runMicrotasks", RunMicrotasks);
+  env->SetMethod(args[2].As<Object>(), "runMicrotasks", RunMicrotasks);
 
   // Do a little housekeeping.
   env->process_object()->Delete(
@@ -984,7 +1017,7 @@ Handle<Value> MakeCallback(Environment* env,
                            int argc,
                            Handle<Value> argv[]) {
   // If you hit this assertion, you forgot to enter the v8::Context first.
-  CHECK(env->context() == env->isolate()->GetCurrentContext());
+  CHECK_EQ(env->context(), env->isolate()->GetCurrentContext());
 
   Local<Object> process = env->process_object();
   Local<Object> object, domain;
@@ -1006,6 +1039,14 @@ Handle<Value> MakeCallback(Environment* env,
       domain = domain_v.As<Object>();
       if (domain->Get(env->disposed_string())->IsTrue())
         return Undefined(env->isolate());
+      }
+
+      Local<Function> enter = domain->Get(env->enter_string()).As<Function>();
+      if (enter->IsFunction()) {
+        enter->Call(domain, 0, nullptr);
+        if (try_catch.HasCaught())
+          return Undefined(env->isolate());
+      }
     }
   }
 
@@ -1013,9 +1054,9 @@ Handle<Value> MakeCallback(Environment* env,
   try_catch.SetVerbose(true);
 
   if (has_domain) {
-    Local<Value> enter_v = domain->Get(env->enter_string());
-    if (enter_v->IsFunction()) {
-      enter_v.As<Function>()->Call(domain, 0, NULL);
+    Local<Function> exit = domain->Get(env->exit_string()).As<Function>();
+    if (exit->IsFunction()) {
+      exit->Call(domain, 0, nullptr);
       if (try_catch.HasCaught())
         return Undefined(env->isolate());
     }
@@ -1029,7 +1070,49 @@ Handle<Value> MakeCallback(Environment* env,
     try_catch.SetVerbose(true);
   }
 
-  Local<Value> ret = callback->Call(recv, argc, argv);
+  if (tick_info->in_tick()) {
+    return ret;
+  }
+
+  if (tick_info->length() == 0) {
+    env->isolate()->RunMicrotasks();
+  }
+
+  if (tick_info->length() == 0) {
+    tick_info->set_index(0);
+    return ret;
+  }
+
+  tick_info->set_in_tick(true);
+
+  env->tick_callback_function()->Call(process, 0, nullptr);
+
+  tick_info->set_in_tick(false);
+
+  if (try_catch.HasCaught()) {
+    tick_info->set_last_threw(true);
+    return Undefined(env->isolate());
+  }
+
+  return ret;
+}
+
+
+Handle<Value> MakeCallback(Environment* env,
+                           Handle<Value> recv,
+                           const Handle<Function> callback,
+                           int argc,
+                           Handle<Value> argv[]) {
+  if (env->using_domains())
+    return MakeDomainCallback(env, recv, callback, argc, argv);
+
+  // If you hit this assertion, you forgot to enter the v8::Context first.
+  CHECK_EQ(env->context(), env->isolate()->GetCurrentContext());
+
+  Local<Object> process = env->process_object();
+
+  TryCatch try_catch;
+  try_catch.SetVerbose(true);
 
   if (has_async_queue) {
     try_catch.SetVerbose(false);
@@ -1070,7 +1153,7 @@ Handle<Value> MakeCallback(Environment* env,
   tick_info->set_in_tick(true);
 
   // process nextTicks after call
-  env->tick_callback_function()->Call(process, 0, NULL);
+  env->tick_callback_function()->Call(process, 0, nullptr);
 
   tick_info->set_in_tick(false);
 
@@ -1089,9 +1172,10 @@ Handle<Value> MakeCallback(Environment* env,
                            uint32_t index,
                            int argc,
                            Handle<Value> argv[]) {
-  Local<Value> cb_v = recv->Get(index);
-  CHECK(cb_v->IsFunction());
-  return MakeCallback(env, recv.As<Value>(), cb_v.As<Function>(), argc, argv);
+  Local<Function> callback = recv->Get(index).As<Function>();
+  CHECK(callback->IsFunction());
+
+  return MakeCallback(env, recv.As<Value>(), callback, argc, argv);
 }
 
 
@@ -1100,9 +1184,9 @@ Handle<Value> MakeCallback(Environment* env,
                            Handle<String> symbol,
                            int argc,
                            Handle<Value> argv[]) {
-  Local<Value> cb_v = recv->Get(symbol);
-  CHECK(cb_v->IsFunction());
-  return MakeCallback(env, recv.As<Value>(), cb_v.As<Function>(), argc, argv);
+  Local<Function> callback = recv->Get(symbol).As<Function>();
+  CHECK(callback->IsFunction());
+  return MakeCallback(env, recv.As<Value>(), callback, argc, argv);
 }
 
 
@@ -1227,16 +1311,12 @@ ssize_t DecodeBytes(Isolate* isolate,
   if (val->IsArray()) {
     fprintf(stderr, "'raw' encoding (array of integers) has been removed. "
                     "Use 'binary'.\n");
-    assert(0);
+    UNREACHABLE();
     return -1;
   }
 
   return StringBytes::Size(isolate, val, encoding);
 }
-
-#ifndef MIN
-# define MIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
 
 // Returns number of bytes written.
 ssize_t DecodeWrite(Isolate* isolate,
@@ -1244,7 +1324,7 @@ ssize_t DecodeWrite(Isolate* isolate,
                     size_t buflen,
                     Handle<Value> val,
                     enum encoding encoding) {
-  return StringBytes::Write(isolate, buf, buflen, val, encoding, NULL);
+  return StringBytes::Write(isolate, buf, buflen, val, encoding, nullptr);
 }
 
 void AppendExceptionLine(Environment* env,
@@ -1304,7 +1384,7 @@ void AppendExceptionLine(Environment* env,
                      filename_string,
                      linenum,
                      sourceline_string);
-  assert(off >= 0);
+  CHECK_GE(off, 0);
 
   // Print wavy underline (GetUnderline is deprecated).
   for (int i = 0; i < start; i++) {
@@ -1312,7 +1392,7 @@ void AppendExceptionLine(Environment* env,
         static_cast<size_t>(off) >= sizeof(arrow)) {
       break;
     }
-    assert(static_cast<size_t>(off) < sizeof(arrow));
+    CHECK_LT(static_cast<size_t>(off), sizeof(arrow));
     arrow[off++] = (sourceline_string[i] == '\t') ? '\t' : ' ';
   }
   for (int i = start; i < end; i++) {
@@ -1320,10 +1400,10 @@ void AppendExceptionLine(Environment* env,
         static_cast<size_t>(off) >= sizeof(arrow)) {
       break;
     }
-    assert(static_cast<size_t>(off) < sizeof(arrow));
+    CHECK_LT(static_cast<size_t>(off), sizeof(arrow));
     arrow[off++] = '^';
   }
-  assert(static_cast<size_t>(off - 1) <= sizeof(arrow) - 1);
+  CHECK_LE(static_cast<size_t>(off - 1), sizeof(arrow) - 1);
   arrow[off++] = '\n';
   arrow[off] = '\0';
 
@@ -1439,11 +1519,10 @@ static Local<Value> ExecuteString(Environment* env,
 
 
 static void GetActiveRequests(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   Local<Array> ary = Array::New(args.GetIsolate());
-  QUEUE* q = NULL;
+  QUEUE* q = nullptr;
   int i = 0;
 
   QUEUE_FOREACH(q, env->req_wrap_queue()) {
@@ -1460,11 +1539,10 @@ static void GetActiveRequests(const FunctionCallbackInfo<Value>& args) {
 // Non-static, friend of HandleWrap. Could have been a HandleWrap method but
 // implemented here for consistency with GetActiveRequests().
 void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   Local<Array> ary = Array::New(env->isolate());
-  QUEUE* q = NULL;
+  QUEUE* q = nullptr;
   int i = 0;
 
   Local<String> owner_sym = env->owner_string();
@@ -1490,8 +1568,7 @@ static void Abort(const FunctionCallbackInfo<Value>& args) {
 
 
 static void Chdir(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (args.Length() != 1 || !args[0]->IsString()) {
     // FIXME(bnoordhuis) ThrowTypeError?
@@ -1507,8 +1584,7 @@ static void Chdir(const FunctionCallbackInfo<Value>& args) {
 
 
 static void Cwd(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 #ifdef _WIN32
   /* MAX_PATH is in characters, not bytes. Make sure we have enough headroom. */
   char buf[MAX_PATH * 4];
@@ -1531,8 +1607,7 @@ static void Cwd(const FunctionCallbackInfo<Value>& args) {
 
 
 static void Umask(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
   uint32_t old;
 
   if (args.Length() < 1 || args[0]->IsUndefined()) {
@@ -1577,9 +1652,9 @@ static uid_t uid_by_name(const char* name) {
   char buf[8192];
 
   errno = 0;
-  pp = NULL;
+  pp = nullptr;
 
-  if (getpwnam_r(name, &pwd, buf, sizeof(buf), &pp) == 0 && pp != NULL) {
+  if (getpwnam_r(name, &pwd, buf, sizeof(buf), &pp) == 0 && pp != nullptr) {
     return pp->pw_uid;
   }
 
@@ -1594,9 +1669,10 @@ static char* name_by_uid(uid_t uid) {
   int rc;
 
   errno = 0;
-  pp = NULL;
+  pp = nullptr;
 
-  if ((rc = getpwuid_r(uid, &pwd, buf, sizeof(buf), &pp)) == 0 && pp != NULL) {
+  if ((rc = getpwuid_r(uid, &pwd, buf, sizeof(buf), &pp)) == 0 &&
+      pp != nullptr) {
     return strdup(pp->pw_name);
   }
 
@@ -1604,7 +1680,7 @@ static char* name_by_uid(uid_t uid) {
     errno = ENOENT;
   }
 
-  return NULL;
+  return nullptr;
 }
 
 
@@ -1614,9 +1690,9 @@ static gid_t gid_by_name(const char* name) {
   char buf[8192];
 
   errno = 0;
-  pp = NULL;
+  pp = nullptr;
 
-  if (getgrnam_r(name, &pwd, buf, sizeof(buf), &pp) == 0 && pp != NULL) {
+  if (getgrnam_r(name, &pwd, buf, sizeof(buf), &pp) == 0 && pp != nullptr) {
     return pp->gr_gid;
   }
 
@@ -1632,9 +1708,10 @@ static const char* name_by_gid(gid_t gid) {
   int rc;
 
   errno = 0;
-  pp = NULL;
+  pp = nullptr;
 
-  if ((rc = getgrgid_r(gid, &pwd, buf, sizeof(buf), &pp)) == 0 && pp != NULL) {
+  if ((rc = getgrgid_r(gid, &pwd, buf, sizeof(buf), &pp)) == 0 &&
+      pp != nullptr) {
     return strdup(pp->gr_name);
   }
 
@@ -1642,7 +1719,7 @@ static const char* name_by_gid(gid_t gid) {
     errno = ENOENT;
   }
 
-  return NULL;
+  return nullptr;
 }
 #endif
 
@@ -1680,8 +1757,7 @@ static void GetGid(const FunctionCallbackInfo<Value>& args) {
 
 
 static void SetGid(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
     return env->ThrowTypeError("setgid argument must be a number or a string");
@@ -1700,8 +1776,7 @@ static void SetGid(const FunctionCallbackInfo<Value>& args) {
 
 
 static void SetUid(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
     return env->ThrowTypeError("setuid argument must be a number or a string");
@@ -1720,10 +1795,9 @@ static void SetUid(const FunctionCallbackInfo<Value>& args) {
 
 
 static void GetGroups(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
-  int ngroups = getgroups(0, NULL);
+  int ngroups = getgroups(0, nullptr);
 
   if (ngroups == -1) {
     return env->ThrowErrnoException(errno, "getgroups");
@@ -1759,8 +1833,7 @@ static void GetGroups(const FunctionCallbackInfo<Value>& args) {
 
 
 static void SetGroups(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (!args[0]->IsArray()) {
     return env->ThrowTypeError("argument 1 must be an array");
@@ -1791,8 +1864,7 @@ static void SetGroups(const FunctionCallbackInfo<Value>& args) {
 
 
 static void InitGroups(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (!args[0]->IsUint32() && !args[0]->IsString()) {
     return env->ThrowTypeError("argument 1 must be a number or a string");
@@ -1815,7 +1887,7 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
     must_free = false;
   }
 
-  if (user == NULL) {
+  if (user == nullptr) {
     return env->ThrowError("initgroups user not found");
   }
 
@@ -1842,15 +1914,12 @@ static void InitGroups(const FunctionCallbackInfo<Value>& args) {
 
 
 void Exit(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
   exit(args[0]->Int32Value());
 }
 
 
 static void Uptime(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
   double uptime;
 
   uv_update_time(env->event_loop());
@@ -1861,8 +1930,7 @@ static void Uptime(const FunctionCallbackInfo<Value>& args) {
 
 
 void MemoryUsage(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   size_t rss;
   int err = uv_resident_set_memory(&rss);
@@ -1889,8 +1957,7 @@ void MemoryUsage(const FunctionCallbackInfo<Value>& args) {
 
 
 void Kill(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (args.Length() != 2) {
     return env->ThrowError("Bad argument.");
@@ -1911,8 +1978,7 @@ void Kill(const FunctionCallbackInfo<Value>& args) {
 // and nanoseconds, to avoid any integer overflow possibility.
 // Pass in an Array from a previous hrtime() call to instead get a time diff.
 void Hrtime(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   uint64_t t = uv_hrtime();
 
@@ -1947,9 +2013,7 @@ extern "C" void node_module_register(void* m) {
     mp->nm_link = modlist_linked;
     modlist_linked = mp;
   } else {
-    // Once node::Init was called we can only register dynamic modules.
-    // See DLOpen.
-    assert(modpending == NULL);
+    CHECK_EQ(modpending, nullptr);
     modpending = mp;
   }
 }
@@ -1957,12 +2021,12 @@ extern "C" void node_module_register(void* m) {
 struct node_module* get_builtin_module(const char* name) {
   struct node_module* mp;
 
-  for (mp = modlist_builtin; mp != NULL; mp = mp->nm_link) {
+  for (mp = modlist_builtin; mp != nullptr; mp = mp->nm_link) {
     if (strcmp(mp->nm_modname, name) == 0)
       break;
   }
 
-  assert(mp == NULL || (mp->nm_flags & NM_F_BUILTIN) != 0);
+  CHECK(mp == nullptr || (mp->nm_flags & NM_F_BUILTIN) != 0);
   return (mp);
 }
 
@@ -1987,8 +2051,7 @@ typedef void (UV_DYNAMIC* extInit)(Handle<Object> exports);
 // when two contexts try to load the same shared object. Maybe have a shadow
 // cache that's a plain C list or hash table that's shared across contexts?
 void DLOpen(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
   struct node_module* mp;
   uv_lib_t lib;
 
@@ -2019,9 +2082,9 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
    * module per object is supported.
    */
   mp = modpending;
-  modpending = NULL;
+  modpending = nullptr;
 
-  if (mp == NULL) {
+  if (mp == nullptr) {
     env->ThrowError("Module did not self-register.");
     return;
   }
@@ -2043,9 +2106,9 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   mp->nm_link = modlist_addon;
   modlist_addon = mp;
 
-  if (mp->nm_context_register_func != NULL) {
+  if (mp->nm_context_register_func != nullptr) {
     mp->nm_context_register_func(exports, module, env->context(), mp->nm_priv);
-  } else if (mp->nm_register_func != NULL) {
+  } else if (mp->nm_register_func != nullptr) {
     mp->nm_register_func(exports, module, mp->nm_priv);
   } else {
     env->ThrowError("Module has no declared entry point.");
@@ -2131,8 +2194,7 @@ void OnMessage(Handle<Message> message, Handle<Value> error) {
 
 
 static void Binding(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
 
   Local<String> module = args[0]->ToString();
   node::Utf8Value module_v(module);
@@ -2155,11 +2217,11 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
   modules->Set(l, OneByteString(env->isolate(), buf));
 
   node_module* mod = get_builtin_module(*module_v);
-  if (mod != NULL) {
+  if (mod != nullptr) {
     exports = Object::New(env->isolate());
     // Internal bindings don't have a "module" object, only exports.
-    assert(mod->nm_register_func == NULL);
-    assert(mod->nm_context_register_func != NULL);
+    CHECK_EQ(mod->nm_register_func, nullptr);
+    CHECK_NE(mod->nm_context_register_func, nullptr);
     Local<Value> unused = Undefined(env->isolate());
     mod->nm_context_register_func(exports, unused,
       env->context(), mod->nm_priv);
@@ -2313,7 +2375,7 @@ static void EnvQuery(Local<String> property,
 #else  // _WIN32
   String::Value key(property);
   WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
-  if (GetEnvironmentVariableW(key_ptr, NULL, 0) > 0 ||
+  if (GetEnvironmentVariableW(key_ptr, nullptr, 0) > 0 ||
       GetLastError() == ERROR_SUCCESS) {
     rc = 0;
     if (key_ptr[0] == L'=') {
@@ -2336,16 +2398,16 @@ static void EnvDeleter(Local<String> property,
   bool rc = true;
 #ifdef __POSIX__
   node::Utf8Value key(property);
-  rc = getenv(*key) != NULL;
+  rc = getenv(*key) != nullptr;
   if (rc)
     unsetenv(*key);
 #else
   String::Value key(property);
   WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
-  if (key_ptr[0] == L'=' || !SetEnvironmentVariableW(key_ptr, NULL)) {
+  if (key_ptr[0] == L'=' || !SetEnvironmentVariableW(key_ptr, nullptr)) {
     // Deletion failed. Return true if the key wasn't there in the first place,
     // false if it is still there.
-    rc = GetEnvironmentVariableW(key_ptr, NULL, NULL) == 0 &&
+    rc = GetEnvironmentVariableW(key_ptr, nullptr, 0) == 0 &&
          GetLastError() != ERROR_SUCCESS;
   }
 #endif
@@ -2375,12 +2437,12 @@ static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
   }
 #else  // _WIN32
   WCHAR* environment = GetEnvironmentStringsW();
-  if (environment == NULL)
+  if (environment == nullptr)
     return;  // This should not happen.
   Local<Array> envarr = Array::New(env->isolate());
   WCHAR* p = environment;
   int i = 0;
-  while (*p != NULL) {
+  while (*p) {
     WCHAR *s;
     if (*p == L'=') {
       // If the key starts with '=' it is a hidden environment variable.
@@ -2446,7 +2508,8 @@ static Handle<Object> GetFeatures(Environment* env) {
   obj->Set(env->tls_ocsp_string(), tls_ocsp);
 
   obj->Set(env->tls_string(),
-           Boolean::New(env->isolate(), get_builtin_module("crypto") != NULL));
+           Boolean::New(env->isolate(),
+                        get_builtin_module("crypto") != nullptr));
 
   return scope.Escape(obj);
 }
@@ -2476,7 +2539,6 @@ static void DebugEnd(const FunctionCallbackInfo<Value>& args);
 
 void NeedImmediateCallbackGetter(Local<String> property,
                                  const PropertyCallbackInfo<Value>& info) {
-  HandleScope handle_scope(info.GetIsolate());
   Environment* env = Environment::GetCurrent(info.GetIsolate());
   const uv_check_t* immediate_check_handle = env->immediate_check_handle();
   bool active = uv_is_active(
@@ -2537,15 +2599,13 @@ void StopProfilerIdleNotifier(Environment* env) {
 
 
 void StartProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
   StartProfilerIdleNotifier(env);
 }
 
 
 void StopProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
-  HandleScope handle_scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
   StopProfilerIdleNotifier(env);
 }
 
@@ -2724,51 +2784,51 @@ void SetupProcessObject(Environment* env,
                        DebugPortSetter);
 
   // define various internal methods
-  NODE_SET_METHOD(process,
-                  "_startProfilerIdleNotifier",
-                  StartProfilerIdleNotifier);
-  NODE_SET_METHOD(process,
-                  "_stopProfilerIdleNotifier",
-                  StopProfilerIdleNotifier);
-  NODE_SET_METHOD(process, "_getActiveRequests", GetActiveRequests);
-  NODE_SET_METHOD(process, "_getActiveHandles", GetActiveHandles);
-  NODE_SET_METHOD(process, "reallyExit", Exit);
-  NODE_SET_METHOD(process, "abort", Abort);
-  NODE_SET_METHOD(process, "chdir", Chdir);
-  NODE_SET_METHOD(process, "cwd", Cwd);
+  env->SetMethod(process,
+                 "_startProfilerIdleNotifier",
+                 StartProfilerIdleNotifier);
+  env->SetMethod(process,
+                 "_stopProfilerIdleNotifier",
+                 StopProfilerIdleNotifier);
+  env->SetMethod(process, "_getActiveRequests", GetActiveRequests);
+  env->SetMethod(process, "_getActiveHandles", GetActiveHandles);
+  env->SetMethod(process, "reallyExit", Exit);
+  env->SetMethod(process, "abort", Abort);
+  env->SetMethod(process, "chdir", Chdir);
+  env->SetMethod(process, "cwd", Cwd);
 
-  NODE_SET_METHOD(process, "umask", Umask);
+  env->SetMethod(process, "umask", Umask);
 
 #if defined(__POSIX__) && !defined(__ANDROID__)
-  NODE_SET_METHOD(process, "getuid", GetUid);
-  NODE_SET_METHOD(process, "setuid", SetUid);
+  env->SetMethod(process, "getuid", GetUid);
+  env->SetMethod(process, "setuid", SetUid);
 
-  NODE_SET_METHOD(process, "setgid", SetGid);
-  NODE_SET_METHOD(process, "getgid", GetGid);
+  env->SetMethod(process, "setgid", SetGid);
+  env->SetMethod(process, "getgid", GetGid);
 
-  NODE_SET_METHOD(process, "getgroups", GetGroups);
-  NODE_SET_METHOD(process, "setgroups", SetGroups);
-  NODE_SET_METHOD(process, "initgroups", InitGroups);
+  env->SetMethod(process, "getgroups", GetGroups);
+  env->SetMethod(process, "setgroups", SetGroups);
+  env->SetMethod(process, "initgroups", InitGroups);
 #endif  // __POSIX__ && !defined(__ANDROID__)
 
-  NODE_SET_METHOD(process, "_kill", Kill);
+  env->SetMethod(process, "_kill", Kill);
 
-  NODE_SET_METHOD(process, "_debugProcess", DebugProcess);
-  NODE_SET_METHOD(process, "_debugPause", DebugPause);
-  NODE_SET_METHOD(process, "_debugEnd", DebugEnd);
+  env->SetMethod(process, "_debugProcess", DebugProcess);
+  env->SetMethod(process, "_debugPause", DebugPause);
+  env->SetMethod(process, "_debugEnd", DebugEnd);
 
-  NODE_SET_METHOD(process, "hrtime", Hrtime);
+  env->SetMethod(process, "hrtime", Hrtime);
 
-  NODE_SET_METHOD(process, "dlopen", DLOpen);
+  env->SetMethod(process, "dlopen", DLOpen);
 
-  NODE_SET_METHOD(process, "uptime", Uptime);
-  NODE_SET_METHOD(process, "memoryUsage", MemoryUsage);
+  env->SetMethod(process, "uptime", Uptime);
+  env->SetMethod(process, "memoryUsage", MemoryUsage);
 
-  NODE_SET_METHOD(process, "binding", Binding);
-  NODE_SET_METHOD(process, "_linkedBinding", LinkedBinding);
+  env->SetMethod(process, "binding", Binding);
 
-  NODE_SET_METHOD(process, "_setupNextTick", SetupNextTick);
-  NODE_SET_METHOD(process, "_setupDomainUse", SetupDomainUse);
+  env->SetMethod(process, "_setupAsyncListener", SetupAsyncListener);
+  env->SetMethod(process, "_setupNextTick", SetupNextTick);
+  env->SetMethod(process, "_setupDomainUse", SetupDomainUse);
 
   // pre-set _events object for faster emit checks
   process->Set(env->events_string(), Object::New(env->isolate()));
@@ -2794,12 +2854,8 @@ static void SignalExit(int signo) {
 // when debugging the stream.Writable class or the process.nextTick
 // function, it is useful to bypass JavaScript entirely.
 static void RawDebug(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
-  assert(args.Length() == 1 && args[0]->IsString() &&
-         "must be called with a single string");
-
+  CHECK(args.Length() == 1 && args[0]->IsString() &&
+        "must be called with a single string");
   node::Utf8Value message(args[0]);
   fprintf(stderr, "%s\n", *message);
   fflush(stderr);
@@ -2832,7 +2888,7 @@ void LoadEnvironment(Environment* env) {
     ReportException(env, try_catch);
     exit(10);
   }
-  assert(f_value->IsFunction());
+  CHECK(f_value->IsFunction());
   Local<Function> f = Local<Function>::Cast(f_value);
 
   // Now we call 'f' with the 'process' variable that we've built up with
@@ -2862,7 +2918,7 @@ void LoadEnvironment(Environment* env) {
   // thrown during process startup.
   try_catch.SetVerbose(true);
 
-  NODE_SET_METHOD(env->process_object(), "_rawDebug", RawDebug);
+  env->SetMethod(env->process_object(), "_rawDebug", RawDebug);
 
   Local<Value> arg = env->process_object();
   f->Call(global, 1, &arg);
@@ -2871,7 +2927,7 @@ void LoadEnvironment(Environment* env) {
 static void PrintHelp();
 
 static bool ParseDebugOpt(const char* arg) {
-  const char* port = NULL;
+  const char* port = nullptr;
 
   if (!strcmp(arg, "--debug")) {
     use_debug_agent = true;
@@ -2891,7 +2947,7 @@ static bool ParseDebugOpt(const char* arg) {
     return false;
   }
 
-  if (port != NULL) {
+  if (port != nullptr) {
     debug_port = atoi(port);
     if (debug_port < 1024 || debug_port > 65535) {
       fprintf(stderr, "Debug port must be in range 1024 to 65535.\n");
@@ -2974,9 +3030,9 @@ static void ParseArgs(int* argc,
   const char** new_argv = new const char*[nargs];
 
   for (unsigned int i = 0; i < nargs; ++i) {
-    new_exec_argv[i] = NULL;
-    new_v8_argv[i] = NULL;
-    new_argv[i] = NULL;
+    new_exec_argv[i] = nullptr;
+    new_v8_argv[i] = nullptr;
+    new_argv[i] = nullptr;
   }
 
   // exec_argv starts with the first option, the other two start with argv[0].
@@ -3008,19 +3064,19 @@ static void ParseArgs(int* argc,
                strcmp(arg, "--print") == 0 ||
                strcmp(arg, "-pe") == 0 ||
                strcmp(arg, "-p") == 0) {
-      bool is_eval = strchr(arg, 'e') != NULL;
-      bool is_print = strchr(arg, 'p') != NULL;
+      bool is_eval = strchr(arg, 'e') != nullptr;
+      bool is_print = strchr(arg, 'p') != nullptr;
       print_eval = print_eval || is_print;
       // --eval, -e and -pe always require an argument.
       if (is_eval == true) {
         args_consumed += 1;
         eval_string = argv[index + 1];
-        if (eval_string == NULL) {
+        if (eval_string == nullptr) {
           fprintf(stderr, "%s: %s requires an argument\n", argv[0], arg);
           exit(9);
         }
       } else if ((index + 1 < nargs) &&
-                 argv[index + 1] != NULL &&
+                 argv[index + 1] != nullptr &&
                  argv[index + 1][0] != '-') {
         args_consumed += 1;
         eval_string = argv[index + 1];
@@ -3146,7 +3202,7 @@ static void InstallEarlyDebugSignalHandler() {
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_handler = EarlyDebugSignalHandler;
-  sigaction(SIGUSR1, &sa, NULL);
+  sigaction(SIGUSR1, &sa, nullptr);
 }
 
 
@@ -3165,13 +3221,12 @@ static void RegisterSignalHandler(int signal,
   sa.sa_handler = handler;
   sa.sa_flags = reset_handler ? SA_RESETHAND : 0;
   sigfillset(&sa.sa_mask);
-  CHECK_EQ(sigaction(signal, &sa, NULL), 0);
+  CHECK_EQ(sigaction(signal, &sa, nullptr), 0);
 }
 
 
 void DebugProcess(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (args.Length() != 1) {
     return env->ThrowError("Invalid number of arguments.");
@@ -3229,12 +3284,12 @@ static int RegisterDebugSignalHandler() {
   }
 
   mapping_handle = CreateFileMappingW(INVALID_HANDLE_VALUE,
-                                      NULL,
+                                      nullptr,
                                       PAGE_READWRITE,
                                       0,
                                       sizeof *handler,
                                       mapping_name);
-  if (mapping_handle == NULL) {
+  if (mapping_handle == nullptr) {
     return -1;
   }
 
@@ -3244,7 +3299,7 @@ static int RegisterDebugSignalHandler() {
                     0,
                     0,
                     sizeof *handler));
-  if (handler == NULL) {
+  if (handler == nullptr) {
     CloseHandle(mapping_handle);
     return -1;
   }
@@ -3258,15 +3313,14 @@ static int RegisterDebugSignalHandler() {
 
 
 static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
   Isolate* isolate = args.GetIsolate();
-  Environment* env = Environment::GetCurrent(isolate);
-  HandleScope scope(isolate);
   DWORD pid;
-  HANDLE process = NULL;
-  HANDLE thread = NULL;
-  HANDLE mapping = NULL;
+  HANDLE process = nullptr;
+  HANDLE thread = nullptr;
+  HANDLE mapping = nullptr;
   wchar_t mapping_name[32];
-  LPTHREAD_START_ROUTINE* handler = NULL;
+  LPTHREAD_START_ROUTINE* handler = nullptr;
 
   if (args.Length() != 1) {
     env->ThrowError("Invalid number of arguments.");
@@ -3280,7 +3334,7 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                             PROCESS_VM_READ,
                         FALSE,
                         pid);
-  if (process == NULL) {
+  if (process == nullptr) {
     isolate->ThrowException(
         WinapiErrnoException(isolate, GetLastError(), "OpenProcess"));
     goto out;
@@ -3294,7 +3348,7 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
   }
 
   mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, mapping_name);
-  if (mapping == NULL) {
+  if (mapping == nullptr) {
     isolate->ThrowException(WinapiErrnoException(isolate,
                                              GetLastError(),
                                              "OpenFileMappingW"));
@@ -3307,20 +3361,20 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
                     0,
                     0,
                     sizeof *handler));
-  if (handler == NULL || *handler == NULL) {
+  if (handler == nullptr || *handler == nullptr) {
     isolate->ThrowException(
         WinapiErrnoException(isolate, GetLastError(), "MapViewOfFile"));
     goto out;
   }
 
   thread = CreateRemoteThread(process,
-                              NULL,
+                              nullptr,
                               0,
                               *handler,
-                              NULL,
+                              nullptr,
                               0,
-                              NULL);
-  if (thread == NULL) {
+                              nullptr);
+  if (thread == nullptr) {
     isolate->ThrowException(WinapiErrnoException(isolate,
                                                  GetLastError(),
                                                  "CreateRemoteThread"));
@@ -3336,13 +3390,13 @@ static void DebugProcess(const FunctionCallbackInfo<Value>& args) {
   }
 
  out:
-  if (process != NULL)
+  if (process != nullptr)
     CloseHandle(process);
-  if (thread != NULL)
+  if (thread != nullptr)
     CloseHandle(thread);
-  if (handler != NULL)
+  if (handler != nullptr)
     UnmapViewOfFile(handler);
-  if (mapping != NULL)
+  if (mapping != nullptr)
     CloseHandle(mapping);
 }
 #endif  // _WIN32
@@ -3355,7 +3409,7 @@ static void DebugPause(const FunctionCallbackInfo<Value>& args) {
 
 static void DebugEnd(const FunctionCallbackInfo<Value>& args) {
   if (debugger_running) {
-    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    Environment* env = Environment::GetCurrent(args);
     env->debugger_agent()->Stop();
     debugger_running = false;
   }
@@ -3403,14 +3457,14 @@ void Init(int* argc,
   }
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
-  if (icu_data_dir == NULL) {
+  if (icu_data_dir == nullptr) {
     // if the parameter isn't given, use the env variable.
-    icu_data_dir = getenv("NODE_ICU_DATA");
+    icu_data_dir = secure_getenv("NODE_ICU_DATA");
   }
   // Initialize ICU.
-  // If icu_data_dir is NULL here, it will load the 'minimal' data.
+  // If icu_data_dir is nullptr here, it will load the 'minimal' data.
   if (!i18n::InitializeICUDirectory(icu_data_dir)) {
-    FatalError(NULL, "Could not initialize ICU "
+    FatalError(nullptr, "Could not initialize ICU "
                      "(check NODE_ICU_DATA or --icu-data-dir parameters)");
   }
 #endif
@@ -3423,7 +3477,7 @@ void Init(int* argc,
     fprintf(stderr, "%s: bad option: %s\n", argv[0], v8_argv[i]);
   }
   delete[] v8_argv;
-  v8_argv = NULL;
+  v8_argv = nullptr;
 
   if (v8_argc > 1) {
     exit(9);
@@ -3435,11 +3489,6 @@ void Init(int* argc,
   }
 
   V8::SetArrayBufferAllocator(&ArrayBufferAllocator::the_singleton);
-
-  // Fetch a reference to the main isolate, so we have a reference to it
-  // even when we need it to access it from another (debugger) thread.
-  node_isolate = Isolate::New();
-  Isolate::Scope isolate_scope(node_isolate);
 
 #ifdef __POSIX__
   // Raise the open file descriptor limit.
@@ -3488,7 +3537,7 @@ static AtExitCallback* at_exit_functions_;
 // TODO(bnoordhuis) Turn into per-context event.
 void RunAtExit(Environment* env) {
   AtExitCallback* p = at_exit_functions_;
-  at_exit_functions_ = NULL;
+  at_exit_functions_ = nullptr;
 
   while (p) {
     AtExitCallback* q = p->next_;
@@ -3619,19 +3668,19 @@ Environment* CreateEnvironment(Isolate* isolate,
   env->RegisterHandleCleanup(
       reinterpret_cast<uv_handle_t*>(env->immediate_check_handle()),
       HandleCleanup,
-      NULL);
+      nullptr);
   env->RegisterHandleCleanup(
       reinterpret_cast<uv_handle_t*>(env->immediate_idle_handle()),
       HandleCleanup,
-      NULL);
+      nullptr);
   env->RegisterHandleCleanup(
       reinterpret_cast<uv_handle_t*>(env->idle_prepare_handle()),
       HandleCleanup,
-      NULL);
+      nullptr);
   env->RegisterHandleCleanup(
       reinterpret_cast<uv_handle_t*>(env->idle_check_handle()),
       HandleCleanup,
-      NULL);
+      nullptr);
 
   if (v8_is_profiling) {
     StartProfilerIdleNotifier(env);
@@ -3650,9 +3699,9 @@ Environment* CreateEnvironment(Isolate* isolate,
 
 
 int Start(int argc, char** argv) {
-  const char* replaceInvalid = getenv("NODE_INVALID_UTF8");
+  const char* replaceInvalid = secure_getenv("NODE_INVALID_UTF8");
 
-  if (replaceInvalid == NULL)
+  if (replaceInvalid == nullptr)
     WRITE_UTF8_FLAGS |= String::REPLACE_INVALID_UTF8;
 
 #if !defined(_WIN32)
@@ -3660,7 +3709,7 @@ int Start(int argc, char** argv) {
   InstallEarlyDebugSignalHandler();
 #endif
 
-  assert(argc > 0);
+  CHECK_GT(argc, 0);
 
   // Hack around with the argv pointer. Used for process.title = "blah".
   argv = uv_setup_args(argc, argv);
@@ -3677,9 +3726,14 @@ int Start(int argc, char** argv) {
   V8::SetEntropySource(crypto::EntropySource);
 #endif
 
+  V8::InitializePlatform(new Platform(4));
+
   int code;
   V8::Initialize();
-  node_is_initialized = true;
+
+  // Fetch a reference to the main isolate, so we have a reference to it
+  // even when we need it to access it from another (debugger) thread.
+  node_isolate = Isolate::New();
   {
     Locker locker(node_isolate);
     Isolate::Scope isolate_scope(node_isolate);
@@ -3722,16 +3776,16 @@ int Start(int argc, char** argv) {
     RunAtExit(env);
 
     env->Dispose();
-    env = NULL;
+    env = nullptr;
   }
 
-  CHECK_NE(node_isolate, NULL);
+  CHECK_NE(node_isolate, nullptr);
   node_isolate->Dispose();
-  node_isolate = NULL;
+  node_isolate = nullptr;
   V8::Dispose();
 
   delete[] exec_argv;
-  exec_argv = NULL;
+  exec_argv = nullptr;
 
   return code;
 }

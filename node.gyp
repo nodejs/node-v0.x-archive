@@ -102,6 +102,7 @@
         'src/node_main.cc',
         'src/node_os.cc',
         'src/node_v8.cc',
+        'src/node_v8_platform.cc',
         'src/node_stat_watcher.cc',
         'src/node_watchdog.cc',
         'src/node_zlib.cc',
@@ -369,6 +370,12 @@
             # rather than gyp's preferred "solaris"
             'PLATFORM="sunos"',
           ],
+        }],
+        [ 'OS=="freebsd" or OS=="linux"', {
+          'ldflags': [ '-Wl,-z,noexecstack' ],
+        }],
+        [ 'OS=="sunos"', {
+          'ldflags': [ '-Wl,-M,/usr/lib/ld/map.noexstk' ],
         }],
         [
           'OS in "linux freebsd" and node_shared_v8=="false"', {

@@ -46,28 +46,28 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
                      public StreamWrapCallbacks,
                      public AsyncWrap {
  public:
-  ~TLSCallbacks();
+  ~TLSCallbacks() override;
 
   static void Initialize(v8::Handle<v8::Object> target,
                          v8::Handle<v8::Value> unused,
                          v8::Handle<v8::Context> context);
 
-  const char* Error();
-  int TryWrite(uv_buf_t** bufs, size_t* count);
+  const char* Error() override;
+  int TryWrite(uv_buf_t** bufs, size_t* count) override;
   int DoWrite(WriteWrap* w,
               uv_buf_t* bufs,
               size_t count,
               uv_stream_t* send_handle,
-              uv_write_cb cb);
-  void AfterWrite(WriteWrap* w);
+              uv_write_cb cb) override;
+  void AfterWrite(WriteWrap* w) override;
   void DoAlloc(uv_handle_t* handle,
                size_t suggested_size,
-               uv_buf_t* buf);
+               uv_buf_t* buf) override;
   void DoRead(uv_stream_t* handle,
               ssize_t nread,
               const uv_buf_t* buf,
-              uv_handle_type pending);
-  int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb);
+              uv_handle_type pending) override;
+  int DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) override;
 
   void NewSessionDoneCb();
 
@@ -89,8 +89,8 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
     WriteItem(WriteWrap* w, uv_write_cb cb) : w_(w), cb_(cb) {
     }
     ~WriteItem() {
-      w_ = NULL;
-      cb_ = NULL;
+      w_ = nullptr;
+      cb_ = nullptr;
     }
 
     WriteWrap* w_;

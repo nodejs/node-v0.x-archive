@@ -24,25 +24,39 @@ var domain = require('domain');
 var assert = require('assert');
 var d = domain.create();
 var expect = ['pbkdf2', 'randomBytes', 'pseudoRandomBytes']
+var errors = 0;
+
+process.on('exit', function() {
+  assert.equal(errors, 3);
+});
 
 d.on('error', function (e) {
-  var idx = expect.indexOf(e.message);
-  assert.notEqual(idx, -1, 'we should have error: ' + e.message);
-  expect.splice(idx, 1);
+  assert.equal(e.message, expect.shift());
+  errors += 1;
 });
 
 d.run(function () {
-  crypto.pbkdf2('a', 'b', 1, 8, function () {
-    throw new Error('pbkdf2');
-  });
+  one();
 
-  crypto.randomBytes(4, function () {
-    throw new Error('randomBytes');
-  });
+  function one() {
+    crypto.pbkdf2('a', 'b', 1, 8, function () {
+      two();
+      throw new Error('pbkdf2');
+    });
+  }
 
-  crypto.pseudoRandomBytes(4, function () {
-    throw new Error('pseudoRandomBytes');
-  });
+  function two() {
+    crypto.randomBytes(4, function () {
+      three();
+      throw new Error('randomBytes');
+    });
+  }
+
+  function three() {
+    crypto.pseudoRandomBytes(4, function () {
+      throw new Error('pseudoRandomBytes');
+    });
+  }
 });
 
 process.on('exit', function () {
