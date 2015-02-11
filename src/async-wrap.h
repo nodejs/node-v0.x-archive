@@ -66,7 +66,7 @@ class AsyncWrap : public BaseObject {
                    ProviderType provider,
                    AsyncWrap* parent = NULL);
 
-  inline ~AsyncWrap();
+  inline virtual ~AsyncWrap() override = default;
 
   inline uint32_t provider_type() const;
 

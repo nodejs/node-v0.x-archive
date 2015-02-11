@@ -29,7 +29,6 @@
 #include "v8.h"
 
 #include <string.h>
-#include <assert.h>
 
 #define ALLOC_ID (0xA10C)
 
@@ -136,7 +135,7 @@ void CallbackInfo::WeakCallback(Isolate* isolate, Local<Object> object) {
     CHECK_GT(array_length * array_size, array_length);  // Overflow check.
     array_length *= array_size;
   }
-  object->SetIndexedPropertiesToExternalArrayData(NULL, array_type, 0);
+  object->SetIndexedPropertiesToExternalArrayData(nullptr, array_type, 0);
   int64_t change_in_bytes = -static_cast<int64_t>(array_length + sizeof(*this));
   isolate->AdjustAmountOfExternalAllocatedMemory(change_in_bytes);
   callback_(static_cast<char*>(array_data), hint_);
@@ -172,8 +171,7 @@ size_t ExternalArraySize(enum ExternalArrayType type) {
 
 // copyOnto(source, source_start, dest, dest_start, copy_length)
 void CopyOnto(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   if (!args[0]->IsObject())
     return env->ThrowTypeError("source must be an object");
@@ -249,14 +247,11 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    dest._data = sliceOnto(source, dest, start, end);
 void SliceOnto(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   Local<Object> source = args[0].As<Object>();
   Local<Object> dest = args[1].As<Object>();
 
-  assert(source->HasIndexedPropertiesInExternalArrayData());
-  assert(!dest->HasIndexedPropertiesInExternalArrayData());
+  CHECK(source->HasIndexedPropertiesInExternalArrayData());
+  CHECK_EQ(false, dest->HasIndexedPropertiesInExternalArrayData());
 
   char* source_data = static_cast<char*>(
       source->GetIndexedPropertiesExternalArrayData());
@@ -265,20 +260,20 @@ void SliceOnto(const FunctionCallbackInfo<Value>& args) {
     source->GetIndexedPropertiesExternalArrayDataType();
   size_t source_size = ExternalArraySize(source_type);
 
-  assert(source_size != 0);
+  CHECK_NE(source_size, 0);
 
   size_t start = args[2]->Uint32Value();
   size_t end = args[3]->Uint32Value();
   size_t length = end - start;
 
   if (source_size > 1) {
-    assert(length * source_size >= length);
+    CHECK_GE(length * source_size, length);
     length *= source_size;
   }
 
-  assert(source_data != NULL || length == 0);
-  assert(end <= source_len);
-  assert(start <= end);
+  CHECK(source_data != nullptr || length == 0);
+  CHECK_LE(end, source_len);
+  CHECK_LE(start, end);
 
   dest->SetIndexedPropertiesToExternalArrayData(source_data + start,
                                                 source_type,
@@ -290,8 +285,7 @@ void SliceOnto(const FunctionCallbackInfo<Value>& args) {
 // for internal use:
 //    alloc(obj, n[, type]);
 void Alloc(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   Local<Object> obj = args[0].As<Object>();
 
@@ -308,7 +302,7 @@ void Alloc(const FunctionCallbackInfo<Value>& args) {
   } else {
     array_type = static_cast<ExternalArrayType>(args[2]->Uint32Value());
     size_t type_length = ExternalArraySize(array_type);
-    assert(type_length * length >= length);
+    CHECK_GE(type_length * length, length);
     length *= type_length;
   }
 
@@ -323,14 +317,14 @@ void Alloc(Environment* env,
            enum ExternalArrayType type) {
   size_t type_size = ExternalArraySize(type);
 
-  assert(length <= kMaxLength);
-  assert(type_size > 0);
+  CHECK_LE(length, kMaxLength);
+  CHECK_GT(type_size, 0);
 
   if (length == 0)
-    return Alloc(env, obj, NULL, length, type);
+    return Alloc(env, obj, nullptr, length, type);
 
   char* data = static_cast<char*>(malloc(length));
-  if (data == NULL) {
+  if (data == nullptr) {
     FatalError("node::smalloc::Alloc(v8::Handle<v8::Object>, size_t,"
                " v8::ExternalArrayType)", "Out Of Memory");
   }
@@ -344,7 +338,7 @@ void Alloc(Environment* env,
            char* data,
            size_t length,
            enum ExternalArrayType type) {
-  assert(!obj->HasIndexedPropertiesInExternalArrayData());
+  CHECK_EQ(false, obj->HasIndexedPropertiesInExternalArrayData());
   env->isolate()->AdjustAmountOfExternalAllocatedMemory(length);
   size_t size = length / ExternalArraySize(type);
   obj->SetIndexedPropertiesToExternalArrayData(data, type, size);
@@ -354,7 +348,7 @@ void Alloc(Environment* env,
 
 // for internal use: dispose(obj);
 void AllocDispose(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
   AllocDispose(env, args[0].As<Object>());
 }
 
@@ -378,13 +372,13 @@ void AllocDispose(Environment* env, Handle<Object> obj) {
     obj->GetIndexedPropertiesExternalArrayDataType();
   size_t array_size = ExternalArraySize(array_type);
 
-  assert(array_size > 0);
-  assert(length * array_size >= length);
+  CHECK_GT(array_size, 0);
+  CHECK_GE(length * array_size, length);
 
   length *= array_size;
 
-  if (data != NULL) {
-    obj->SetIndexedPropertiesToExternalArrayData(NULL,
+  if (data != nullptr) {
+    obj->SetIndexedPropertiesToExternalArrayData(nullptr,
                                                  kExternalUint8Array,
                                                  0);
     free(data);
@@ -402,12 +396,12 @@ void Alloc(Environment* env,
            FreeCallback fn,
            void* hint,
            enum ExternalArrayType type) {
-  assert(length <= kMaxLength);
+  CHECK_LE(length, kMaxLength);
 
   size_t type_size = ExternalArraySize(type);
 
-  assert(type_size > 0);
-  assert(length * type_size >= length);
+  CHECK_GT(type_size, 0);
+  CHECK_GE(length * type_size, length);
 
   length *= type_size;
 
@@ -423,7 +417,7 @@ void Alloc(Environment* env,
            FreeCallback fn,
            void* hint,
            enum ExternalArrayType type) {
-  assert(!obj->HasIndexedPropertiesInExternalArrayData());
+  CHECK_EQ(false, obj->HasIndexedPropertiesInExternalArrayData());
   Isolate* isolate = env->isolate();
   HandleScope handle_scope(isolate);
   env->set_using_smalloc_alloc_cb(true);
@@ -436,7 +430,7 @@ void Alloc(Environment* env,
 
 
 void HasExternalData(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
   args.GetReturnValue().Set(args[0]->IsObject() &&
                             HasExternalData(env, args[0].As<Object>()));
 }
@@ -451,8 +445,7 @@ void IsTypedArray(const FunctionCallbackInfo<Value>& args) {
 }
 
 void AllocTruncate(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   Local<Object> obj = args[0].As<Object>();
 
@@ -483,11 +476,11 @@ class RetainedAllocInfo: public RetainedObjectInfo {
  public:
   explicit RetainedAllocInfo(Handle<Value> wrapper);
 
-  virtual void Dispose();
-  virtual bool IsEquivalent(RetainedObjectInfo* other);
-  virtual intptr_t GetHash();
-  virtual const char* GetLabel();
-  virtual intptr_t GetSizeInBytes();
+  virtual void Dispose() override;
+  virtual bool IsEquivalent(RetainedObjectInfo* other) override;
+  virtual intptr_t GetHash() override;
+  virtual const char* GetLabel() override;
+  virtual intptr_t GetSizeInBytes() override;
 
  private:
   static const char label_[];
@@ -542,15 +535,14 @@ void Initialize(Handle<Object> exports,
                 Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
-  NODE_SET_METHOD(exports, "copyOnto", CopyOnto);
-  NODE_SET_METHOD(exports, "sliceOnto", SliceOnto);
+  env->SetMethod(exports, "copyOnto", CopyOnto);
+  env->SetMethod(exports, "sliceOnto", SliceOnto);
 
-  NODE_SET_METHOD(exports, "alloc", Alloc);
-  NODE_SET_METHOD(exports, "dispose", AllocDispose);
-  NODE_SET_METHOD(exports, "truncate", AllocTruncate);
+  env->SetMethod(exports, "alloc", Alloc);
+  env->SetMethod(exports, "dispose", AllocDispose);
+  env->SetMethod(exports, "truncate", AllocTruncate);
 
-  NODE_SET_METHOD(exports, "hasExternalData", HasExternalData);
-  NODE_SET_METHOD(exports, "isTypedArray", IsTypedArray);
+  env->SetMethod(exports, "hasExternalData", HasExternalData);
 
   exports->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kMaxLength"),
                Uint32::NewFromUnsigned(env->isolate(), kMaxLength));

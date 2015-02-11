@@ -61,7 +61,7 @@ consts_misc = [
 
     { 'name': 'StringEncodingMask',     'value': 'kStringEncodingMask' },
     { 'name': 'TwoByteStringTag',       'value': 'kTwoByteStringTag' },
-    { 'name': 'AsciiStringTag',         'value': 'kOneByteStringTag' },
+    { 'name': 'OneByteStringTag',       'value': 'kOneByteStringTag' },
 
     { 'name': 'StringRepresentationMask',
         'value': 'kStringRepresentationMask' },
@@ -311,11 +311,11 @@ def load_objects():
                 #
                 # Mapping string types is more complicated.  Both types and
                 # class names for Strings specify a representation (e.g., Seq,
-                # Cons, External, or Sliced) and an encoding (TwoByte or Ascii),
+                # Cons, External, or Sliced) and an encoding (TwoByte/OneByte),
                 # In the simplest case, both of these are explicit in both
                 # names, as in:
                 #
-                #       EXTERNAL_ASCII_STRING_TYPE => ExternalAsciiString
+                #       EXTERNAL_ONE_BYTE_STRING_TYPE => ExternalOneByteString
                 #
                 # However, either the representation or encoding can be omitted
                 # from the type name, in which case "Seq" and "TwoByte" are
@@ -326,7 +326,7 @@ def load_objects():
                 # Additionally, sometimes the type name has more information
                 # than the class, as in:
                 #
-                #       CONS_ASCII_STRING_TYPE => ConsString
+                #       CONS_ONE_BYTE_STRING_TYPE => ConsString
                 #
                 # To figure this out dynamically, we first check for a
                 # representation and encoding and add them if they're not
@@ -337,19 +337,19 @@ def load_objects():
                         if (cctype.find('Cons') == -1 and
                             cctype.find('External') == -1 and
                             cctype.find('Sliced') == -1):
-                                if (cctype.find('Ascii') != -1):
-                                        cctype = re.sub('AsciiString$',
+                                if (cctype.find('OneByte') != -1):
+                                        cctype = re.sub('OneByteString$',
                                             'SeqOneByteString', cctype);
                                 else:
                                         cctype = re.sub('String$',
                                             'SeqString', cctype);
 
-                        if (cctype.find('Ascii') == -1):
+                        if (cctype.find('OneByte') == -1):
                                 cctype = re.sub('String$', 'TwoByteString',
                                     cctype);
 
                         if (not (cctype in klasses)):
-                                cctype = re.sub('Ascii', '', cctype);
+                                cctype = re.sub('OneByte', '', cctype);
                                 cctype = re.sub('TwoByte', '', cctype);
 
                 #

@@ -21,6 +21,8 @@
 
 #include "node_crypto_bio.h"
 #include "openssl/bio.h"
+#include "util.h"
+#include "util-inl.h"
 #include <string.h>
 
 namespace node {
@@ -35,7 +37,7 @@ const BIO_METHOD NodeBIO::method = {
   NodeBIO::Ctrl,
   NodeBIO::New,
   NodeBIO::Free,
-  NULL
+  nullptr
 };
 
 
@@ -59,13 +61,13 @@ int NodeBIO::New(BIO* bio) {
 
 
 int NodeBIO::Free(BIO* bio) {
-  if (bio == NULL)
+  if (bio == nullptr)
     return 0;
 
   if (bio->shutdown) {
-    if (bio->init && bio->ptr != NULL) {
+    if (bio->init && bio->ptr != nullptr) {
       delete FromBIO(bio);
-      bio->ptr = NULL;
+      bio->ptr = nullptr;
     }
   }
 
@@ -149,7 +151,7 @@ int NodeBIO::Gets(BIO* bio, char* out, int size) {
   if (i < size && i >= 0 && static_cast<size_t>(i) < nbio->Length())
     i++;
 
-  // Shift `i` a bit to NULL-terminate string later
+  // Shift `i` a bit to nullptr-terminate string later
   if (size == i)
     i--;
 
@@ -181,15 +183,15 @@ long NodeBIO::Ctrl(BIO* bio, int cmd, long num, void* ptr) {
       break;
     case BIO_CTRL_INFO:
       ret = nbio->Length();
-      if (ptr != NULL)
-        *reinterpret_cast<void**>(ptr) = NULL;
+      if (ptr != nullptr)
+        *reinterpret_cast<void**>(ptr) = nullptr;
       break;
     case BIO_C_SET_BUF_MEM:
-      assert(0 && "Can't use SET_BUF_MEM_PTR with NodeBIO");
+      CHECK(0 && "Can't use SET_BUF_MEM_PTR with NodeBIO");
       abort();
       break;
     case BIO_C_GET_BUF_MEM_PTR:
-      assert(0 && "Can't use GET_BUF_MEM_PTR with NodeBIO");
+      CHECK(0 && "Can't use GET_BUF_MEM_PTR with NodeBIO");
       ret = 0;
       break;
     case BIO_CTRL_GET_CLOSE:
@@ -244,13 +246,13 @@ size_t NodeBIO::Read(char* out, size_t size) {
   size_t left = size;
 
   while (bytes_read < expected) {
-    assert(read_head_->read_pos_ <= read_head_->write_pos_);
+    CHECK_LE(read_head_->read_pos_, read_head_->write_pos_);
     size_t avail = read_head_->write_pos_ - read_head_->read_pos_;
     if (avail > left)
       avail = left;
 
     // Copy data
-    if (out != NULL)
+    if (out != nullptr)
       memcpy(out + offset, read_head_->data_ + read_head_->read_pos_, avail);
     read_head_->read_pos_ += avail;
 
@@ -261,7 +263,7 @@ size_t NodeBIO::Read(char* out, size_t size) {
 
     TryMoveReadHead();
   }
-  assert(expected == bytes_read);
+  CHECK_EQ(expected, bytes_read);
   length_ -= bytes_read;
 
   // Free all empty buffers, but write_head's child
@@ -272,7 +274,7 @@ size_t NodeBIO::Read(char* out, size_t size) {
 
 
 void NodeBIO::FreeEmpty() {
-  if (write_head_ == NULL)
+  if (write_head_ == nullptr)
     return;
   Buffer* child = write_head_->next_;
   if (child == write_head_ || child == read_head_)
@@ -283,8 +285,8 @@ void NodeBIO::FreeEmpty() {
 
   Buffer* prev = child;
   while (cur != read_head_) {
-    assert(cur != write_head_);
-    assert(cur->write_pos_ == cur->read_pos_);
+    CHECK_NE(cur, write_head_);
+    CHECK_EQ(cur->write_pos_, cur->read_pos_);
 
     Buffer* next = cur->next_;
     delete cur;
@@ -301,7 +303,7 @@ size_t NodeBIO::IndexOf(char delim, size_t limit) {
   Buffer* current = read_head_;
 
   while (bytes_read < max) {
-    assert(current->read_pos_ <= current->write_pos_);
+    CHECK_LE(current->read_pos_, current->write_pos_);
     size_t avail = current->write_pos_ - current->read_pos_;
     if (avail > left)
       avail = left;
@@ -328,7 +330,7 @@ size_t NodeBIO::IndexOf(char delim, size_t limit) {
       current = current->next_;
     }
   }
-  assert(max == bytes_read);
+  CHECK_EQ(max, bytes_read);
 
   return max;
 }
@@ -343,7 +345,7 @@ void NodeBIO::Write(const char* data, size_t size) {
 
   while (left > 0) {
     size_t to_write = left;
-    assert(write_head_->write_pos_ <= write_head_->len_);
+    CHECK_LE(write_head_->write_pos_, write_head_->len_);
     size_t avail = write_head_->len_ - write_head_->write_pos_;
 
     if (to_write > avail)
@@ -359,11 +361,11 @@ void NodeBIO::Write(const char* data, size_t size) {
     offset += to_write;
     length_ += to_write;
     write_head_->write_pos_ += to_write;
-    assert(write_head_->write_pos_ <= write_head_->len_);
+    CHECK_LE(write_head_->write_pos_, write_head_->len_);
 
     // Go to next buffer if there still are some bytes to write
     if (left != 0) {
-      assert(write_head_->write_pos_ == write_head_->len_);
+      CHECK_EQ(write_head_->write_pos_, write_head_->len_);
       TryAllocateForWrite(left);
       write_head_ = write_head_->next_;
 
@@ -372,7 +374,7 @@ void NodeBIO::Write(const char* data, size_t size) {
       TryMoveReadHead();
     }
   }
-  assert(left == 0);
+  CHECK_EQ(left, 0);
 }
 
 
@@ -392,7 +394,7 @@ char* NodeBIO::PeekWritable(size_t* size) {
 void NodeBIO::Commit(size_t size) {
   write_head_->write_pos_ += size;
   length_ += size;
-  assert(write_head_->write_pos_ <= write_head_->len_);
+  CHECK_LE(write_head_->write_pos_, write_head_->len_);
 
   // Allocate new buffer if write head is full,
   // and there're no other place to go
@@ -411,16 +413,16 @@ void NodeBIO::TryAllocateForWrite(size_t hint) {
   Buffer* w = write_head_;
   Buffer* r = read_head_;
   // If write head is full, next buffer is either read head or not empty.
-  if (w == NULL ||
+  if (w == nullptr ||
       (w->write_pos_ == w->len_ &&
        (w->next_ == r || w->next_->write_pos_ != 0))) {
-    size_t len = w == NULL ? initial_ :
+    size_t len = w == nullptr ? initial_ :
                              kThroughputBufferLength;
     if (len < hint)
       len = hint;
     Buffer* next = new Buffer(len);
 
-    if (w == NULL) {
+    if (w == nullptr) {
       next->next_ = next;
       write_head_ = next;
       read_head_ = next;
@@ -433,11 +435,11 @@ void NodeBIO::TryAllocateForWrite(size_t hint) {
 
 
 void NodeBIO::Reset() {
-  if (read_head_ == NULL)
+  if (read_head_ == nullptr)
     return;
 
   while (read_head_->read_pos_ != read_head_->write_pos_) {
-    assert(read_head_->write_pos_ > read_head_->read_pos_);
+    CHECK(read_head_->write_pos_ > read_head_->read_pos_);
 
     length_ -= read_head_->write_pos_ - read_head_->read_pos_;
     read_head_->write_pos_ = 0;
@@ -446,12 +448,12 @@ void NodeBIO::Reset() {
     read_head_ = read_head_->next_;
   }
   write_head_ = read_head_;
-  assert(length_ == 0);
+  CHECK_EQ(length_, 0);
 }
 
 
 NodeBIO::~NodeBIO() {
-  if (read_head_ == NULL)
+  if (read_head_ == nullptr)
     return;
 
   Buffer* current = read_head_;
@@ -461,8 +463,8 @@ NodeBIO::~NodeBIO() {
     current = next;
   } while (current != read_head_);
 
-  read_head_ = NULL;
-  write_head_ = NULL;
+  read_head_ = nullptr;
+  write_head_ = nullptr;
 }
 
 }  // namespace node

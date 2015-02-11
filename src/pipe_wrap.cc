@@ -78,12 +78,11 @@ uv_pipe_t* PipeWrap::UVHandle() {
 
 Local<Object> PipeWrap::Instantiate(Environment* env, AsyncWrap* parent) {
   EscapableHandleScope handle_scope(env->isolate());
-  assert(!env->pipe_constructor_template().IsEmpty());
+  CHECK_EQ(false, env->pipe_constructor_template().IsEmpty());
   Local<Function> constructor = env->pipe_constructor_template()->GetFunction();
-  assert(!constructor.IsEmpty());
-  Local<Value> ptr = External::New(env->isolate(), parent);
-  Local<Object> instance = constructor->NewInstance(1, &ptr);
-  assert(!instance.IsEmpty());
+  CHECK_EQ(false, constructor.IsEmpty());
+  Local<Object> instance = constructor->NewInstance();
+  CHECK_EQ(false, instance.IsEmpty());
   return handle_scope.Escape(instance);
 }
 
@@ -93,7 +92,7 @@ void PipeWrap::Initialize(Handle<Object> target,
                           Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
-  Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
+  Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
   t->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe"));
   t->InstanceTemplate()->SetInternalFieldCount(1);
 
@@ -101,38 +100,34 @@ void PipeWrap::Initialize(Handle<Object> target,
       static_cast<PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
   t->InstanceTemplate()->SetAccessor(env->fd_string(),
                                      StreamWrap::GetFD,
-                                     NULL,
+                                     nullptr,
                                      Handle<Value>(),
                                      v8::DEFAULT,
                                      attributes);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "close", HandleWrap::Close);
-  NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
-  NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
+  env->SetProtoMethod(t, "close", HandleWrap::Close);
+  env->SetProtoMethod(t, "unref", HandleWrap::Unref);
+  env->SetProtoMethod(t, "ref", HandleWrap::Ref);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "setBlocking", StreamWrap::SetBlocking);
+  env->SetProtoMethod(t, "setBlocking", StreamWrap::SetBlocking);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "readStart", StreamWrap::ReadStart);
-  NODE_SET_PROTOTYPE_METHOD(t, "readStop", StreamWrap::ReadStop);
-  NODE_SET_PROTOTYPE_METHOD(t, "shutdown", StreamWrap::Shutdown);
+  env->SetProtoMethod(t, "readStart", StreamWrap::ReadStart);
+  env->SetProtoMethod(t, "readStop", StreamWrap::ReadStop);
+  env->SetProtoMethod(t, "shutdown", StreamWrap::Shutdown);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "writeBuffer", StreamWrap::WriteBuffer);
-  NODE_SET_PROTOTYPE_METHOD(t,
-                            "writeAsciiString",
-                            StreamWrap::WriteAsciiString);
-  NODE_SET_PROTOTYPE_METHOD(t, "writeUtf8String", StreamWrap::WriteUtf8String);
-  NODE_SET_PROTOTYPE_METHOD(t, "writeUcs2String", StreamWrap::WriteUcs2String);
-  NODE_SET_PROTOTYPE_METHOD(t,
-                            "writeBinaryString",
-                            StreamWrap::WriteBinaryString);
+  env->SetProtoMethod(t, "writeBuffer", StreamWrap::WriteBuffer);
+  env->SetProtoMethod(t, "writeAsciiString", StreamWrap::WriteAsciiString);
+  env->SetProtoMethod(t, "writeUtf8String", StreamWrap::WriteUtf8String);
+  env->SetProtoMethod(t, "writeUcs2String", StreamWrap::WriteUcs2String);
+  env->SetProtoMethod(t, "writeBinaryString", StreamWrap::WriteBinaryString);
 
-  NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
-  NODE_SET_PROTOTYPE_METHOD(t, "listen", Listen);
-  NODE_SET_PROTOTYPE_METHOD(t, "connect", Connect);
-  NODE_SET_PROTOTYPE_METHOD(t, "open", Open);
+  env->SetProtoMethod(t, "bind", Bind);
+  env->SetProtoMethod(t, "listen", Listen);
+  env->SetProtoMethod(t, "connect", Connect);
+  env->SetProtoMethod(t, "open", Open);
 
 #ifdef _WIN32
-  NODE_SET_PROTOTYPE_METHOD(t, "setPendingInstances", SetPendingInstances);
+  env->SetProtoMethod(t, "setPendingInstances", SetPendingInstances);
 #endif
 
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe"), t->GetFunction());
@@ -152,14 +147,9 @@ void PipeWrap::New(const FunctionCallbackInfo<Value>& args) {
   // This constructor should not be exposed to public javascript.
   // Therefore we assert that we are not trying to call this as a
   // normal function.
-  assert(args.IsConstructCall());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  if (args[0]->IsExternal()) {
-    void* ptr = args[0].As<External>()->Value();
-    new PipeWrap(env, args.This(), false, static_cast<AsyncWrap*>(ptr));
-  } else {
-    new PipeWrap(env, args.This(), args[0]->IsTrue(), NULL);
-  }
+  CHECK(args.IsConstructCall());
+  Environment* env = Environment::GetCurrent(args);
+  new PipeWrap(env, args.This(), args[0]->IsTrue());
 }
 
 
@@ -173,18 +163,14 @@ PipeWrap::PipeWrap(Environment* env,
                  AsyncWrap::PROVIDER_PIPEWRAP,
                  parent) {
   int r = uv_pipe_init(env->event_loop(), &handle_, ipc);
-  assert(r == 0);  // How do we proxy this error up to javascript?
+  CHECK_EQ(r, 0);  // How do we proxy this error up to javascript?
                    // Suggestion: uv_pipe_init() returns void.
   UpdateWriteQueueSize();
 }
 
 
 void PipeWrap::Bind(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
-
   node::Utf8Value name(args[0]);
   int err = uv_pipe_bind(&wrap->handle_, *name);
   args.GetReturnValue().Set(err);
@@ -193,24 +179,15 @@ void PipeWrap::Bind(const FunctionCallbackInfo<Value>& args) {
 
 #ifdef _WIN32
 void PipeWrap::SetPendingInstances(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
-
   int instances = args[0]->Int32Value();
-
   uv_pipe_pending_instances(&wrap->handle_, instances);
 }
 #endif
 
 
 void PipeWrap::Listen(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
-
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
-
   int backlog = args[0]->Int32Value();
   int err = uv_listen(reinterpret_cast<uv_stream_t*>(&wrap->handle_),
                       backlog,
@@ -222,7 +199,7 @@ void PipeWrap::Listen(const FunctionCallbackInfo<Value>& args) {
 // TODO(bnoordhuis) maybe share with TCPWrap?
 void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   PipeWrap* pipe_wrap = static_cast<PipeWrap*>(handle->data);
-  assert(&pipe_wrap->handle_ == reinterpret_cast<uv_pipe_t*>(handle));
+  CHECK_EQ(&pipe_wrap->handle_, reinterpret_cast<uv_pipe_t*>(handle));
 
   Environment* env = pipe_wrap->env();
   HandleScope handle_scope(env->isolate());
@@ -230,7 +207,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
 
   // We should not be getting this callback if someone as already called
   // uv_close() on the handle.
-  assert(pipe_wrap->persistent().IsEmpty() == false);
+  CHECK_EQ(pipe_wrap->persistent().IsEmpty(), false);
 
   Local<Value> argv[] = {
     Integer::New(env->isolate(), status),
@@ -260,15 +237,15 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
 void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
   PipeConnectWrap* req_wrap = static_cast<PipeConnectWrap*>(req->data);
   PipeWrap* wrap = static_cast<PipeWrap*>(req->handle->data);
-  assert(req_wrap->env() == wrap->env());
+  CHECK_EQ(req_wrap->env(), wrap->env());
   Environment* env = wrap->env();
 
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
 
   // The wrap and request objects should still be there.
-  assert(req_wrap->persistent().IsEmpty() == false);
-  assert(wrap->persistent().IsEmpty() == false);
+  CHECK_EQ(req_wrap->persistent().IsEmpty(), false);
+  CHECK_EQ(wrap->persistent().IsEmpty(), false);
 
   bool readable, writable;
 
@@ -295,8 +272,7 @@ void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
 
 
 void PipeWrap::Open(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
-  HandleScope scope(env->isolate());
+  Environment* env = Environment::GetCurrent(args);
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
 
@@ -310,13 +286,12 @@ void PipeWrap::Open(const FunctionCallbackInfo<Value>& args) {
 
 
 void PipeWrap::Connect(const FunctionCallbackInfo<Value>& args) {
-  HandleScope scope(args.GetIsolate());
-  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  Environment* env = Environment::GetCurrent(args);
 
   PipeWrap* wrap = Unwrap<PipeWrap>(args.Holder());
 
-  assert(args[0]->IsObject());
-  assert(args[1]->IsString());
+  CHECK(args[0]->IsObject());
+  CHECK(args[1]->IsString());
 
   Local<Object> req_wrap_obj = args[0].As<Object>();
   node::Utf8Value name(args[1]);

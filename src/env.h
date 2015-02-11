@@ -379,6 +379,10 @@ class Environment {
 
   static inline Environment* GetCurrent(v8::Isolate* isolate);
   static inline Environment* GetCurrent(v8::Local<v8::Context> context);
+  static inline Environment* GetCurrent(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
+  static inline Environment* GetCurrent(
+      const v8::PropertyCallbackInfo<v8::Value>& info);
 
   // See CreateEnvironment() in src/node.cc.
   static inline Environment* New(v8::Local<v8::Context> context,
@@ -437,18 +441,35 @@ class Environment {
   inline void ThrowTypeError(const char* errmsg);
   inline void ThrowRangeError(const char* errmsg);
   inline void ThrowErrnoException(int errorno,
-                                  const char* syscall = NULL,
-                                  const char* message = NULL,
-                                  const char* path = NULL);
+                                  const char* syscall = nullptr,
+                                  const char* message = nullptr,
+                                  const char* path = nullptr);
   inline void ThrowUVException(int errorno,
-                               const char* syscall = NULL,
-                               const char* message = NULL,
-                               const char* path = NULL);
+                               const char* syscall = nullptr,
+                               const char* message = nullptr,
+                               const char* path = nullptr);
 
   // Convenience methods for contextify
   inline static void ThrowError(v8::Isolate* isolate, const char* errmsg);
   inline static void ThrowTypeError(v8::Isolate* isolate, const char* errmsg);
   inline static void ThrowRangeError(v8::Isolate* isolate, const char* errmsg);
+
+  inline v8::Local<v8::FunctionTemplate>
+      NewFunctionTemplate(v8::FunctionCallback callback,
+                          v8::Local<v8::Signature> signature =
+                              v8::Local<v8::Signature>());
+
+  // Convenience methods for NewFunctionTemplate().
+  inline void SetMethod(v8::Local<v8::Object> that,
+                        const char* name,
+                        v8::FunctionCallback callback);
+  inline void SetProtoMethod(v8::Local<v8::FunctionTemplate> that,
+                             const char* name,
+                             v8::FunctionCallback callback);
+  inline void SetTemplateMethod(v8::Local<v8::FunctionTemplate> that,
+                                const char* name,
+                                v8::FunctionCallback callback);
+
 
   // Strings are shared across shared contexts. The getters simply proxy to
   // the per-isolate primitive.
@@ -507,6 +528,8 @@ class Environment {
   QUEUE req_wrap_queue_;
   QUEUE handle_cleanup_queue_;
   int handle_cleanup_waiting_;
+
+  v8::Persistent<v8::External> external_;
 
 #define V(PropertyName, TypeName)                                             \
   v8::Persistent<TypeName> PropertyName ## _;

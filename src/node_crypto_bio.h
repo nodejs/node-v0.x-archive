@@ -23,7 +23,8 @@
 #define SRC_NODE_CRYPTO_BIO_H_
 
 #include "openssl/bio.h"
-#include <assert.h>
+#include "util.h"
+#include "util-inl.h"
 
 namespace node {
 
@@ -31,8 +32,8 @@ class NodeBIO {
  public:
   NodeBIO() : initial_(kInitialBufferLength),
               length_(0),
-              read_head_(NULL),
-              write_head_(NULL) {
+              read_head_(nullptr),
+              write_head_(nullptr) {
   }
 
   ~NodeBIO();
@@ -88,7 +89,7 @@ class NodeBIO {
   }
 
   static inline NodeBIO* FromBIO(BIO* bio) {
-    assert(bio->ptr != NULL);
+    CHECK_NE(bio->ptr, nullptr);
     return static_cast<NodeBIO*>(bio->ptr);
   }
 
@@ -112,7 +113,7 @@ class NodeBIO {
     explicit Buffer(size_t len) : read_pos_(0),
                                   write_pos_(0),
                                   len_(len),
-                                  next_(NULL) {
+                                  next_(nullptr) {
       data_ = new char[len];
     }
 
