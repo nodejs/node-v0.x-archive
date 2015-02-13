@@ -185,6 +185,7 @@ apidoc_dirs = out/doc out/doc/api/ out/doc/api/assets
 apiassets = $(subst api_assets,api/assets,$(addprefix out/,$(wildcard doc/api_assets/*)))
 
 website_files = \
+	out/doc/flame-graph.png \
 	out/doc/sh_main.js    \
 	out/doc/sh_javascript.min.js
 

@@ -9,6 +9,7 @@
 * [Crypto](crypto.html)
 * [Debugger](debugger.html)
 * [DNS](dns.html)
+* [Dynamic Tracing](dynamic-tracing.html)
 * [Domain](domain.html)
 * [Events](events.html)
 * [File System](fs.html)
