@@ -107,6 +107,8 @@ Synchronous ftruncate(2).
 
 Asynchronous truncate(2). No arguments other than a possible exception are
 given to the completion callback.
+Currently, fs.truncate also accepts a file descriptor as first argument but 
+you should use fs.ftruncate in this case as this fallback may go away.
 
 ## fs.truncateSync(path, len)
 
