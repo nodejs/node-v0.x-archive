@@ -537,9 +537,7 @@ RetainedObjectInfo* WrapperInfo(uint16_t class_id, Handle<Value> wrapper) {
 }
 
 
-void Initialize(Handle<Object> exports,
-                Handle<Value> unused,
-                Handle<Context> context) {
+void Initialize(Handle<Object> exports, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
   NODE_SET_METHOD(exports, "copyOnto", CopyOnto);
@@ -563,4 +561,4 @@ void Initialize(Handle<Object> exports,
 }  // namespace smalloc
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(smalloc, node::smalloc::Initialize)
+NODE_MODULE_BUILTIN(smalloc, node::smalloc::Initialize)

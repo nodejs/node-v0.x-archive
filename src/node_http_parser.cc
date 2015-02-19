@@ -570,10 +570,7 @@ const struct http_parser_settings Parser::settings = {
 };
 
 
-void InitHttpParser(Handle<Object> target,
-                    Handle<Value> unused,
-                    Handle<Context> context,
-                    void* priv) {
+void InitHttpParser(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
   Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(),
                                                     Parser::New);
@@ -613,4 +610,4 @@ void InitHttpParser(Handle<Object> target,
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(http_parser, node::InitHttpParser)
+NODE_MODULE_BUILTIN(http_parser, node::InitHttpParser)

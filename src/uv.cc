@@ -49,9 +49,7 @@ void ErrName(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void Initialize(Handle<Object> target,
-                Handle<Value> unused,
-                Handle<Context> context) {
+void Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "errname"),
               FunctionTemplate::New(env->isolate(), ErrName)->GetFunction());
@@ -66,4 +64,4 @@ void Initialize(Handle<Object> target,
 }  // namespace uv
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(uv, node::uv::Initialize)
+NODE_MODULE_BUILTIN(uv, node::uv::Initialize)

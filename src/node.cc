@@ -2043,10 +2043,12 @@ void DLOpen(const FunctionCallbackInfo<Value>& args) {
   mp->nm_link = modlist_addon;
   modlist_addon = mp;
 
-  if (mp->nm_context_register_func != NULL) {
-    mp->nm_context_register_func(exports, module, env->context(), mp->nm_priv);
-  } else if (mp->nm_register_func != NULL) {
-    mp->nm_register_func(exports, module, mp->nm_priv);
+  if (mp->nm_register_func != NULL) {
+    mp->nm_register_func(mp->nm_init,
+                         exports,
+                         module,
+                         env->context(),
+                         mp->nm_priv);
   } else {
     env->ThrowError("Module has no declared entry point.");
     return;
@@ -2157,12 +2159,14 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
   node_module* mod = get_builtin_module(*module_v);
   if (mod != NULL) {
     exports = Object::New(env->isolate());
+    assert(mod->nm_register_func != NULL);
     // Internal bindings don't have a "module" object, only exports.
-    assert(mod->nm_register_func == NULL);
-    assert(mod->nm_context_register_func != NULL);
-    Local<Value> unused = Undefined(env->isolate());
-    mod->nm_context_register_func(exports, unused,
-      env->context(), mod->nm_priv);
+    Local<Object> noModule = Undefined(env->isolate()).As<Object>();
+    mod->nm_register_func(mod->nm_init,
+                          exports,
+                          noModule,
+                          env->context(),
+                          mod->nm_priv);
     cache->Set(module, exports);
   } else if (!strcmp(*module_v, "constants")) {
     exports = Object::New(env->isolate());
@@ -2209,13 +2213,12 @@ static void LinkedBinding(const FunctionCallbackInfo<Value>& args) {
 
   Local<Object> exports = Object::New(env->isolate());
 
-  if (mod->nm_context_register_func != NULL) {
-    mod->nm_context_register_func(exports,
-                                  module,
-                                  env->context(),
-                                  mod->nm_priv);
-  } else if (mod->nm_register_func != NULL) {
-    mod->nm_register_func(exports, module, mod->nm_priv);
+  if (mod->nm_register_func != NULL) {
+    mod->nm_register_func(mod->nm_init,
+                          exports,
+                          Undefined(env->isolate()).As<Object>(),
+                          env->context(),
+                          mod->nm_priv);
   } else {
     return env->ThrowError("Linked module has no declared entry point.");
   }

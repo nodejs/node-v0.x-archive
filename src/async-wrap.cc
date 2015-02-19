@@ -74,9 +74,7 @@ static void SetupHooks(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-static void Initialize(Handle<Object> target,
-                Handle<Value> unused,
-                Handle<Context> context) {
+static void Initialize(Handle<Object> target, Handle<Context> context) {
   Environment* env = Environment::GetCurrent(context);
   Isolate* isolate = env->isolate();
   HandleScope scope(isolate);
@@ -187,4 +185,4 @@ Handle<Value> AsyncWrap::MakeCallback(const Handle<Function> cb,
 
 }  // namespace node
 
-NODE_MODULE_CONTEXT_AWARE_BUILTIN(async_wrap, node::Initialize)
+NODE_MODULE_BUILTIN(async_wrap, node::Initialize)
