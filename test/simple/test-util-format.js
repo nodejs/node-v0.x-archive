@@ -42,11 +42,13 @@ assert.equal(util.format('%d', 42.0), '42');
 assert.equal(util.format('%d', 42), '42');
 assert.equal(util.format('%s', 42), '42');
 assert.equal(util.format('%j', 42), '42');
+assert.equal(util.format('%t', 42), '42');
 
 assert.equal(util.format('%d', '42.0'), '42');
 assert.equal(util.format('%d', '42'), '42');
 assert.equal(util.format('%s', '42'), '42');
 assert.equal(util.format('%j', '42'), '"42"');
+assert.equal(util.format('%t', '42'), '\'42\'');
 
 assert.equal(util.format('%%s%s', 'foo'), '%sfoo');
 
@@ -65,6 +67,18 @@ assert.equal(util.format('%%%s%%%%', 'hi'), '%hi%%');
   var o = {};
   o.o = o;
   assert.equal(util.format('%j', o), '[Circular]');
+})();
+
+// customInspect
+(function() {
+  var o = {
+    name: 'name',
+    inspect: function()
+    {
+      return 'custom';
+    }
+  };
+  assert.equal(util.format('%t', o), 'custom');
 })();
 
 // Errors
