@@ -143,6 +143,70 @@ try {
 
 try {
   ++expected;
+  fs.linkSync();
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('target'));
+}
+
+try {
+  ++expected;
+  fs.symlinkSync();
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('target'));
+}
+
+try {
+  ++expected;
+  fs.linkSync({});
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('target'));
+}
+
+try {
+  ++expected;
+  fs.symlinkSync({});
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('target'));
+}
+
+try {
+  ++expected;
+  fs.linkSync(existingFile);
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('path'));
+}
+
+try {
+  ++expected;
+  fs.symlinkSync(existingFile);
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('path'));
+}
+
+try {
+  ++expected;
+  fs.linkSync(existingFile, {});
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('path'));
+}
+
+try {
+  ++expected;
+  fs.symlinkSync(existingFile, {});
+} catch (err) {
+  errors.push('link');
+  assert.ok(0 <= err.message.indexOf('path'));
+}
+
+try {
+  ++expected;
   fs.linkSync(fn, 'foo');
 } catch (err) {
   errors.push('link');
