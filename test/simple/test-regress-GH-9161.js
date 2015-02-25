@@ -21,50 +21,25 @@
 
 var common = require('../common');
 var assert = require('assert');
+var path = require('path');
+var fs = require('fs');
+var tmp = common.tmpDir;
+if (!fs.existsSync(tmp)) 
+  fs.mkdirSync(tmp);
+var filename = path.resolve(tmp, 'truncate-file.txt');
 
-var interval_fired = false,
-    timeout_fired = false,
-    unref_interval = false,
-    unref_timer = false,
-    interval, check_unref, checks = 0;
+var success = 0;
 
-var LONG_TIME = 10 * 1000;
-var SHORT_TIME = 100;
-
-setInterval(function() {
-  interval_fired = true;
-}, LONG_TIME).unref();
-
-setTimeout(function() {
-  timeout_fired = true;
-}, LONG_TIME).unref();
-
-interval = setInterval(function() {
-  unref_interval = true;
-  clearInterval(interval);
-}, SHORT_TIME);
-interval.unref();
-
-setTimeout(function() {
-  unref_timer = true;
-}, SHORT_TIME).unref();
-
-check_unref = setInterval(function() {
-  if (checks > 5 || (unref_interval && unref_timer))
-    clearInterval(check_unref);
-  checks += 1;
-}, 100);
-
-// Should not assert on args.Holder()->InternalFieldCount() > 0. See #4261.
-(function() {
-  var t = setInterval(function() {}, 1);
-  process.nextTick(t.unref.bind({}));
-  process.nextTick(t.unref.bind(t));
-})();
+fs.writeFileSync(filename, 'hello world', 'utf8');
+var fd = fs.openSync(filename, 'r+');
+fs.truncate(fd, 5, function(err) {
+  assert.ok(!err);
+  success++;
+});
 
 process.on('exit', function() {
-  assert.strictEqual(interval_fired, false, 'Interval should not fire');
-  assert.strictEqual(timeout_fired, false, 'Timeout should not fire');
-  assert.strictEqual(unref_timer, true, 'An unrefd timeout should still fire');
-  assert.strictEqual(unref_interval, true, 'An unrefd interval should still fire');
+  fs.closeSync(fd);
+  fs.unlinkSync(filename);
+  assert.equal(success, 1);
+  console.log('ok');
 });

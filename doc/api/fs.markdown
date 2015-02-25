@@ -29,7 +29,7 @@ Here is the synchronous version:
 
     var fs = require('fs');
 
-    fs.unlinkSync('/tmp/hello')
+    fs.unlinkSync('/tmp/hello');
     console.log('successfully deleted /tmp/hello');
 
 With the asynchronous methods there is no guaranteed ordering. So the
@@ -106,7 +106,8 @@ Synchronous ftruncate(2).
 ## fs.truncate(path, len, callback)
 
 Asynchronous truncate(2). No arguments other than a possible exception are
-given to the completion callback.
+given to the completion callback. A file descriptor can also be passed as the
+first argument. In this case, `fs.ftruncate()` is called.
 
 ## fs.truncateSync(path, len)
 
