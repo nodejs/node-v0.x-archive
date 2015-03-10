@@ -4,3 +4,4 @@ test-dns                          : PASS,FLAKY
 
 [$system==solaris]
 test-http-dns-fail                : PASS,FLAKY
+test-dgram-multicast-multi-process  : PASS,FLAKY
