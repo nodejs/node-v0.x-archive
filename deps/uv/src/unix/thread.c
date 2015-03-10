@@ -45,7 +45,7 @@ static void* uv__thread_start(void *arg)
 
   ctx_p = arg;
   ctx = *ctx_p;
-  free(ctx_p);
+  uv__free(ctx_p);
   ctx.entry(ctx.arg);
 
   return 0;
@@ -56,7 +56,7 @@ int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
   struct thread_ctx* ctx;
   int err;
 
-  ctx = malloc(sizeof(*ctx));
+  ctx = uv__malloc(sizeof(*ctx));
   if (ctx == NULL)
     return UV_ENOMEM;
 
@@ -66,9 +66,9 @@ int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
   err = pthread_create(tid, NULL, uv__thread_start, ctx);
 
   if (err)
-    free(ctx);
+    uv__free(ctx);
 
-  return err ? -1 : 0;
+  return -err;
 }
 
 
@@ -330,7 +330,7 @@ int uv_cond_init(uv_cond_t* cond) {
   if (err)
     return -err;
 
-#if !defined(__ANDROID__)
+#if !(defined(__ANDROID__) && defined(HAVE_PTHREAD_COND_TIMEDWAIT_MONOTONIC))
   err = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
   if (err)
     goto error2;
@@ -388,7 +388,7 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
   timeout += uv__hrtime(UV_CLOCK_PRECISE);
   ts.tv_sec = timeout / NANOSEC;
   ts.tv_nsec = timeout % NANOSEC;
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) && defined(HAVE_PTHREAD_COND_TIMEDWAIT_MONOTONIC)
   /*
    * The bionic pthread implementation doesn't support CLOCK_MONOTONIC,
    * but has this alternative function instead.

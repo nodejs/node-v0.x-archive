@@ -403,7 +403,7 @@ int uv_fs_event_stop(uv_fs_event_t* handle) {
     uv__io_close(handle->loop, &handle->event_watcher);
   }
 
-  free(handle->path);
+  uv__free(handle->path);
   handle->path = NULL;
 
   uv__close(handle->event_watcher.fd);

@@ -61,7 +61,7 @@
 #define RDWR_BUF_SIZE   4096
 #define EQ(a,b)         (strcmp(a,b) == 0)
 
-int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
+int uv__platform_loop_init(uv_loop_t* loop) {
   loop->fs_fd = -1;
 
   /* Passing maxfd of -1 should mean the limit is determined
@@ -294,7 +294,7 @@ int uv_exepath(char* buffer, size_t* size) {
   int fd;
   char **argv;
 
-  if ((buffer == NULL) || (size == NULL))
+  if (buffer == NULL || size == NULL || *size == 0)
     return -EINVAL;
 
   snprintf(pp, sizeof(pp), "/proc/%lu/psinfo", (unsigned long) getpid());
@@ -550,7 +550,7 @@ static int uv__is_ahafs_mounted(void){
   const char *dev = "/aha";
   char *obj, *stub;
 
-  p = malloc(siz);
+  p = uv__malloc(siz);
   if (p == NULL)
     return -errno;
 
@@ -561,8 +561,8 @@ static int uv__is_ahafs_mounted(void){
   if (rv == 0) {
     /* buffer was not large enough, reallocate to correct size */
     siz = *(int*)p;
-    free(p);
-    p = malloc(siz);
+    uv__free(p);
+    p = uv__malloc(siz);
     if (p == NULL)
       return -errno;
     rv = mntctl(MCTL_QUERY, siz, (char*)p);
@@ -576,7 +576,7 @@ static int uv__is_ahafs_mounted(void){
     stub = vmt2dataptr(vmt, VMT_STUB);      /* mount point */
 
     if (EQ(obj, dev) || EQ(uv__rawname(obj), dev) || EQ(stub, dev)) {
-      free(p);  /* Found a match */
+      uv__free(p);  /* Found a match */
       return 0;
     }
     vmt = (struct vmount *) ((char *) vmt + vmt->vmt_length);
@@ -949,11 +949,11 @@ int uv_fs_event_stop(uv_fs_event_t* handle) {
   uv__handle_stop(handle);
 
   if (uv__path_is_a_directory(handle->path) == 0) {
-    free(handle->dir_filename);
+    uv__free(handle->dir_filename);
     handle->dir_filename = NULL;
   }
 
-  free(handle->path);
+  uv__free(handle->path);
   handle->path = NULL;
   uv__close(handle->event_watcher.fd);
   handle->event_watcher.fd = -1;
@@ -1052,7 +1052,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     return -ENOSYS;
   }
 
-  ps_cpus = (perfstat_cpu_t*) malloc(ncpus * sizeof(perfstat_cpu_t));
+  ps_cpus = (perfstat_cpu_t*) uv__malloc(ncpus * sizeof(perfstat_cpu_t));
   if (!ps_cpus) {
     return -ENOMEM;
   }
@@ -1060,13 +1060,13 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   strcpy(cpu_id.name, FIRST_CPU);
   result = perfstat_cpu(&cpu_id, ps_cpus, sizeof(perfstat_cpu_t), ncpus);
   if (result == -1) {
-    free(ps_cpus);
+    uv__free(ps_cpus);
     return -ENOSYS;
   }
 
-  *cpu_infos = (uv_cpu_info_t*) malloc(ncpus * sizeof(uv_cpu_info_t));
+  *cpu_infos = (uv_cpu_info_t*) uv__malloc(ncpus * sizeof(uv_cpu_info_t));
   if (!*cpu_infos) {
-    free(ps_cpus);
+    uv__free(ps_cpus);
     return -ENOMEM;
   }
 
@@ -1085,7 +1085,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     idx++;
   }
 
-  free(ps_cpus);
+  uv__free(ps_cpus);
   return 0;
 }
 
@@ -1094,10 +1094,10 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
   int i;
 
   for (i = 0; i < count; ++i) {
-    free(cpu_infos[i].model);
+    uv__free(cpu_infos[i].model);
   }
 
-  free(cpu_infos);
+  uv__free(cpu_infos);
 }
 
 
@@ -1119,7 +1119,7 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
     return -ENOSYS;
   }
 
-  ifc.ifc_req = (struct ifreq*)malloc(size);
+  ifc.ifc_req = (struct ifreq*)uv__malloc(size);
   ifc.ifc_len = size;
   if (ioctl(sockfd, SIOCGIFCONF, &ifc) == -1) {
     uv__close(sockfd);
@@ -1153,7 +1153,7 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
 
   /* Alloc the return interface structs */
   *addresses = (uv_interface_address_t*)
-    malloc(*count * sizeof(uv_interface_address_t));
+    uv__malloc(*count * sizeof(uv_interface_address_t));
   if (!(*addresses)) {
     uv__close(sockfd);
     return -ENOMEM;
@@ -1208,26 +1208,33 @@ void uv_free_interface_addresses(uv_interface_address_t* addresses,
   int i;
 
   for (i = 0; i < count; ++i) {
-    free(addresses[i].name);
+    uv__free(addresses[i].name);
   }
 
-  free(addresses);
+  uv__free(addresses);
 }
 
 void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
   struct pollfd* events;
   uintptr_t i;
   uintptr_t nfds;
+  struct poll_ctl pc;
 
   assert(loop->watchers != NULL);
 
   events = (struct pollfd*) loop->watchers[loop->nwatchers];
   nfds = (uintptr_t) loop->watchers[loop->nwatchers + 1];
-  if (events == NULL)
-    return;
 
-  /* Invalidate events with same file descriptor */
-  for (i = 0; i < nfds; i++)
-    if ((int) events[i].fd == fd)
-      events[i].fd = -1;
+  if (events != NULL)
+    /* Invalidate events with same file descriptor */
+    for (i = 0; i < nfds; i++)
+      if ((int) events[i].fd == fd)
+        events[i].fd = -1;
+
+  /* Remove the file descriptor from the poll set */
+  pc.events = 0;
+  pc.cmd = PS_DELETE;
+  pc.fd = fd;
+  if(loop->backend_fd >= 0)
+    pollset_ctl(loop->backend_fd, &pc, 1);
 }

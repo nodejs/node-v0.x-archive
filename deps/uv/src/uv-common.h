@@ -46,6 +46,9 @@
 #define container_of(ptr, type, member) \
   ((type *) ((char *) (ptr) - offsetof(type, member)))
 
+#define STATIC_ASSERT(expr)                                                   \
+  void uv__static_assert(int static_assert_failed[1 - 2 * !(expr)])
+
 #ifndef _WIN32
 enum {
   UV__HANDLE_INTERNAL = 0x8000,
@@ -60,7 +63,13 @@ enum {
 # define UV__HANDLE_CLOSING   0x01
 #endif
 
+void* uv__malloc(size_t size);
+
+void uv__free(void* ptr);
+
 int uv__loop_configure(uv_loop_t* loop, uv_loop_option option, va_list ap);
+
+void uv__loop_close(uv_loop_t* loop);
 
 int uv__tcp_bind(uv_tcp_t* tcp,
                  const struct sockaddr* addr,
