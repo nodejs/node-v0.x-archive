@@ -43,16 +43,6 @@ typedef struct pollfd {
 # define LOCALE_INVARIANT 0x007f
 #endif
 
-#ifndef _malloca
-# if defined(_DEBUG)
-#  define _malloca(size) malloc(size)
-#  define _freea(ptr) free(ptr)
-# else
-#  define _malloca(size) alloca(size)
-#  define _freea(ptr)
-# endif
-#endif
-
 #include <mswsock.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -294,6 +284,7 @@ typedef struct uv__dirent_s {
   char d_name[1];
 } uv__dirent_t;
 
+#define HAVE_DIRENT_TYPES
 #define UV__DT_DIR     UV_DIRENT_DIR
 #define UV__DT_FILE    UV_DIRENT_FILE
 #define UV__DT_LINK    UV_DIRENT_LINK
@@ -365,8 +356,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
     struct {                                                                  \
       OVERLAPPED overlapped;                                                  \
       size_t queued_bytes;                                                    \
-    };                                                                        \
-  };                                                                          \
+    } io;                                                                     \
+  } u;                                                                        \
   struct uv_req_s* next_req;
 
 #define UV_WRITE_PRIVATE_FIELDS                                               \
@@ -418,9 +409,9 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   int activecnt;                                                              \
   uv_read_t read_req;                                                         \
   union {                                                                     \
-    struct { uv_stream_connection_fields };                                   \
-    struct { uv_stream_server_fields     };                                   \
-  };
+    struct { uv_stream_connection_fields } conn;                              \
+    struct { uv_stream_server_fields     } serv;                              \
+  } stream;
 
 #define uv_tcp_server_fields                                                  \
   uv_tcp_accept_t* accept_reqs;                                               \
@@ -436,9 +427,9 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   SOCKET socket;                                                              \
   int delayed_error;                                                          \
   union {                                                                     \
-    struct { uv_tcp_server_fields };                                          \
-    struct { uv_tcp_connection_fields };                                      \
-  };
+    struct { uv_tcp_server_fields } serv;                                     \
+    struct { uv_tcp_connection_fields } conn;                                 \
+  } tcp;
 
 #define UV_UDP_PRIVATE_FIELDS                                                 \
   SOCKET socket;                                                              \
@@ -475,9 +466,9 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   HANDLE handle;                                                              \
   WCHAR* name;                                                                \
   union {                                                                     \
-    struct { uv_pipe_server_fields };                                         \
-    struct { uv_pipe_connection_fields };                                     \
-  };
+    struct { uv_pipe_server_fields } serv;                                    \
+    struct { uv_pipe_connection_fields } conn;                                \
+  } pipe;
 
 /* TODO: put the parser states in an union - TTY handles are always */
 /* half-duplex so read-state can safely overlap write-state. */
@@ -495,7 +486,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
       unsigned char last_key_len;                                             \
       WCHAR last_utf16_high_surrogate;                                        \
       INPUT_RECORD last_input_record;                                         \
-    };                                                                        \
+    } rd;                                                                     \
     struct {                                                                  \
       /* Used for writable TTY handles */                                     \
       /* utf8-to-utf16 conversion state */                                    \
@@ -509,18 +500,15 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
       unsigned short ansi_csi_argv[4];                                        \
       COORD saved_position;                                                   \
       WORD saved_attributes;                                                  \
-    };                                                                        \
-  };
+    } wr;                                                                     \
+  } tty;
 
 #define UV_POLL_PRIVATE_FIELDS                                                \
   SOCKET socket;                                                              \
   /* Used in fast mode */                                                     \
   SOCKET peer_socket;                                                         \
   AFD_POLL_INFO afd_poll_info_1;                                              \
-  union {                                                                     \
-    AFD_POLL_INFO* afd_poll_info_ptr;                                         \
-    AFD_POLL_INFO afd_poll_info;                                              \
-  } afd_poll_info_2;                                                          \
+  AFD_POLL_INFO afd_poll_info_2;                                              \
   /* Used in fast and slow mode. */                                           \
   uv_req_t poll_req_1;                                                        \
   uv_req_t poll_req_2;                                                        \
@@ -568,8 +556,11 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   void* alloc;                                                                \
   WCHAR* node;                                                                \
   WCHAR* service;                                                             \
-  struct addrinfoW* hints;                                                    \
-  struct addrinfoW* res;                                                      \
+  /* The addrinfoW field is used to store a pointer to the hints, and    */   \
+  /* later on to store the result of GetAddrInfoW. The final result will */   \
+  /* be converted to struct addrinfo* and stored in the addrinfo field.  */   \
+  struct addrinfoW* addrinfow;                                                \
+  struct addrinfo* addrinfo;                                                  \
   int retcode;
 
 #define UV_GETNAMEINFO_PRIVATE_FIELDS                                         \
@@ -599,7 +590,7 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
     /* TODO: remove me in 0.9. */                                             \
     WCHAR* pathw;                                                             \
     int fd;                                                                   \
-  };                                                                          \
+  } file;                                                                     \
   union {                                                                     \
     struct {                                                                  \
       int mode;                                                               \
@@ -610,12 +601,12 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
       uv_buf_t* bufs;                                                         \
       int64_t offset;                                                         \
       uv_buf_t bufsml[4];                                                     \
-    };                                                                        \
+    } info;                                                                   \
     struct {                                                                  \
       double atime;                                                           \
       double mtime;                                                           \
-    };                                                                        \
-  };
+    } time;                                                                   \
+  } fs;
 
 #define UV_WORK_PRIVATE_FIELDS                                                \
   struct uv__work work_req;

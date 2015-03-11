@@ -58,7 +58,7 @@
 static char *process_title;
 
 
-int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
+int uv__platform_loop_init(uv_loop_t* loop) {
   return uv__kqueue_init(loop);
 }
 
@@ -75,10 +75,11 @@ uint64_t uv__hrtime(uv_clocktype_t type) {
 
 
 int uv_exepath(char* buffer, size_t* size) {
+  char abspath[PATH_MAX * 2 + 1];
   int mib[4];
-  size_t cb;
+  size_t abspath_size;
 
-  if (buffer == NULL || size == NULL)
+  if (buffer == NULL || size == NULL || *size == 0)
     return -EINVAL;
 
 #ifdef __DragonFly__
@@ -93,10 +94,19 @@ int uv_exepath(char* buffer, size_t* size) {
   mib[3] = -1;
 #endif
 
-  cb = *size;
-  if (sysctl(mib, 4, buffer, &cb, NULL, 0))
+  abspath_size = sizeof abspath;;
+  if (sysctl(mib, 4, abspath, &abspath_size, NULL, 0))
     return -errno;
-  *size = strlen(buffer);
+
+  assert(abspath_size > 0);
+  abspath_size -= 1;
+  *size -= 1;
+
+  if (*size > abspath_size)
+    *size = abspath_size;
+
+  memcpy(buffer, abspath, *size);
+  buffer[*size] = '\0';
 
   return 0;
 }
@@ -149,7 +159,7 @@ char** uv_setup_args(int argc, char** argv) {
 int uv_set_process_title(const char* title) {
   int oid[4];
 
-  if (process_title) free(process_title);
+  if (process_title) uv__free(process_title);
   process_title = strdup(title);
 
   oid[0] = CTL_KERN;
@@ -261,7 +271,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   if (sysctlbyname("hw.ncpu", &numcpus, &size, NULL, 0))
     return -errno;
 
-  *cpu_infos = malloc(numcpus * sizeof(**cpu_infos));
+  *cpu_infos = uv__malloc(numcpus * sizeof(**cpu_infos));
   if (!(*cpu_infos))
     return -ENOMEM;
 
@@ -269,7 +279,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 
   size = sizeof(cpuspeed);
   if (sysctlbyname("hw.clockrate", &cpuspeed, &size, NULL, 0)) {
-    SAVE_ERRNO(free(*cpu_infos));
+    SAVE_ERRNO(uv__free(*cpu_infos));
     return -errno;
   }
 
@@ -278,21 +288,21 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
    */
   size = sizeof(maxcpus);
   if (sysctlbyname(maxcpus_key, &maxcpus, &size, NULL, 0)) {
-    SAVE_ERRNO(free(*cpu_infos));
+    SAVE_ERRNO(uv__free(*cpu_infos));
     return -errno;
   }
 
   size = maxcpus * CPUSTATES * sizeof(long);
 
-  cp_times = malloc(size);
+  cp_times = uv__malloc(size);
   if (cp_times == NULL) {
-    free(*cpu_infos);
+    uv__free(*cpu_infos);
     return -ENOMEM;
   }
 
   if (sysctlbyname(cptimes_key, cp_times, &size, NULL, 0)) {
-    SAVE_ERRNO(free(cp_times));
-    SAVE_ERRNO(free(*cpu_infos));
+    SAVE_ERRNO(uv__free(cp_times));
+    SAVE_ERRNO(uv__free(*cpu_infos));
     return -errno;
   }
 
@@ -311,7 +321,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     cur+=CPUSTATES;
   }
 
-  free(cp_times);
+  uv__free(cp_times);
   return 0;
 }
 
@@ -320,10 +330,10 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
   int i;
 
   for (i = 0; i < count; i++) {
-    free(cpu_infos[i].model);
+    uv__free(cpu_infos[i].model);
   }
 
-  free(cpu_infos);
+  uv__free(cpu_infos);
 }
 
 
@@ -349,7 +359,7 @@ int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
     (*count)++;
   }
 
-  *addresses = malloc(*count * sizeof(**addresses));
+  *addresses = uv__malloc(*count * sizeof(**addresses));
   if (!(*addresses))
     return -ENOMEM;
 
@@ -418,8 +428,8 @@ void uv_free_interface_addresses(uv_interface_address_t* addresses,
   int i;
 
   for (i = 0; i < count; i++) {
-    free(addresses[i].name);
+    uv__free(addresses[i].name);
   }
 
-  free(addresses);
+  uv__free(addresses);
 }

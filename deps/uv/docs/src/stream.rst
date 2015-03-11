@@ -104,7 +104,7 @@ API
 .. c:function:: int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb)
 
     Start listening for incoming connections. `backlog` indicates the number of
-    connections the kernel might queue, same as ``listen(2)``. When a new
+    connections the kernel might queue, same as :man:`listen(2)`. When a new
     incoming connection is received the :c:type:`uv_connection_cb` callback is
     called.
 
@@ -206,12 +206,14 @@ API
         Relying too much on this API is not recommended. It is likely to change
         significantly in the future.
 
-        Currently this only works on Windows and only for
-        :c:type:`uv_pipe_t` handles.
+        Currently only works on Windows for :c:type:`uv_pipe_t` handles.
+        On UNIX platforms, all :c:type:`uv_stream_t` handles are supported.
 
         Also libuv currently makes no ordering guarantee when the blocking mode
         is changed after write requests have already been submitted. Therefore it is
         recommended to set the blocking mode immediately after opening or creating
         the stream.
+
+    .. versionchanged:: 1.4.0 UNIX implementation added.
 
 .. seealso:: The :c:type:`uv_handle_t` API functions also apply.
