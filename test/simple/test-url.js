@@ -873,6 +873,22 @@ var parseTests = {
     pathname: '/:npm/npm',
     path: '/:npm/npm',
     href: 'git+ssh://git@github.com/:npm/npm'
+  },
+  
+  // % is a valid host character in IPv6 link-local addresses
+  'http://[fe80::1%lo0]:51877/': {
+      protocol: 'http:',
+      slashes: true,
+      auth: null,
+      host: '[fe80::1%lo0]:51877',
+      port: 51877,
+      hostname: 'fe80::1%lo0',
+      hash: null,
+      search: null,
+      query: null,
+      pathname: '/',
+      path: '/',
+      href: 'http://[fe80::1%lo0]:51877/' 
   }
 
 };
