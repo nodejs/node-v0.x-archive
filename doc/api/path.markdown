@@ -200,7 +200,7 @@ An example on Windows:
 
     process.env.PATH.split(path.delimiter)
     // returns
-    ['C:\Windows\system32', 'C:\Windows', 'C:\Program Files\nodejs\']
+    ['C:\\Windows\\system32', 'C:\\Windows', 'C:\\Program Files\\nodejs\\']
 
 ## path.parse(pathString)
 
@@ -223,8 +223,8 @@ An example on Windows:
     path.parse('C:\\path\\dir\\index.html')
     // returns
     {
-        root : "C:\",
-        dir : "C:\path\dir",
+        root : "C:\\",
+        dir : "C:\\path\\dir",
         base : "index.html",
         ext : ".html",
         name : "index"
