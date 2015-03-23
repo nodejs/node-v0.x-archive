@@ -397,7 +397,7 @@ class ZCtx : public AsyncWrap {
     ZCtx* ctx = Unwrap<ZCtx>(args.Holder());
 
     int windowBits = args[0]->Uint32Value();
-    assert((windowBits >= 8 && windowBits <= 15) && "invalid windowBits");
+    assert((((ctx->mode_ == GUNZIP || ctx->mode_ == UNZIP || ctx->mode_ == INFLATE || ctx->mode_ == INFLATERAW) && windowBits === 0) || (windowBits >= 8 && windowBits <= 15)) && "invalid windowBits");
 
     int level = args[1]->Int32Value();
     assert((level >= -1 && level <= 9) && "invalid compression level");
@@ -423,8 +423,7 @@ class ZCtx : public AsyncWrap {
       memcpy(dictionary, Buffer::Data(dictionary_), dictionary_len);
     }
 
-    Init(ctx, level, windowBits, memLevel, strategy,
-         dictionary, dictionary_len);
+    Init(ctx, level, windowBits, memLevel, strategy, dictionary, dictionary_len);
     SetDictionary(ctx);
   }
 
