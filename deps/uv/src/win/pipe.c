@@ -1347,7 +1347,7 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
     }
 
     /* Request queued by the kernel. */
-    req->queued_bytes = uv__count_bufs(bufs, nbufs);
+    req->queued_bytes = bufs[0].len;
     handle->write_queue_size += req->queued_bytes;
   } else if (handle->flags & UV_HANDLE_BLOCKING_WRITES) {
     /* Using overlapped IO, but wait for completion before returning */
@@ -1372,12 +1372,13 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
       /* Request completed immediately. */
       req->queued_bytes = 0;
     } else {
-      assert(ipc_header_req != NULL);
       /* Request queued by the kernel. */
-      if (WaitForSingleObject(ipc_header_req->overlapped.hEvent, INFINITE) !=
+      req->queued_bytes = bufs[0].len;
+      handle->write_queue_size += req->queued_bytes;
+      if (WaitForSingleObject(req->overlapped.hEvent, INFINITE) !=
           WAIT_OBJECT_0) {
         err = GetLastError();
-        CloseHandle(ipc_header_req->overlapped.hEvent);
+        CloseHandle(req->overlapped.hEvent);
         return uv_translate_sys_error(err);
       }
     }
@@ -1386,7 +1387,6 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
     REGISTER_HANDLE_REQ(loop, handle, req);
     handle->reqs_pending++;
     handle->write_reqs_pending++;
-    POST_COMPLETION_FOR_REQ(loop, req);
     return 0;
   } else {
     result = WriteFile(handle->handle,
@@ -1404,7 +1404,7 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
       req->queued_bytes = 0;
     } else {
       /* Request queued by the kernel. */
-      req->queued_bytes = uv__count_bufs(bufs, nbufs);
+      req->queued_bytes = bufs[0].len;
       handle->write_queue_size += req->queued_bytes;
     }
 
@@ -1848,7 +1848,7 @@ static void eof_timer_cb(uv_timer_t* timer) {
 
 
 static void eof_timer_destroy(uv_pipe_t* pipe) {
-  assert(pipe->flags && UV_HANDLE_CONNECTION);
+  assert(pipe->flags & UV_HANDLE_CONNECTION);
 
   if (pipe->eof_timer) {
     uv_close((uv_handle_t*) pipe->eof_timer, eof_timer_close_cb);
@@ -1910,7 +1910,7 @@ int uv_pipe_open(uv_pipe_t* pipe, uv_file file) {
 }
 
 
-int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
+static int uv__pipe_getname(const uv_pipe_t* handle, char* buffer, size_t* size) {
   NTSTATUS nt_status;
   IO_STATUS_BLOCK io_status;
   FILE_NAME_INFORMATION tmp_name_info;
@@ -1924,7 +1924,7 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
   name_info = NULL;
 
   if (handle->handle == INVALID_HANDLE_VALUE) {
-    *len = 0;
+    *size = 0;
     return UV_EINVAL;
   }
 
@@ -1939,7 +1939,7 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
     name_size = sizeof(*name_info) + tmp_name_info.FileNameLength;
     name_info = malloc(name_size);
     if (!name_info) {
-      *len = 0;
+      *size = 0;
       err = UV_ENOMEM;
       goto cleanup;
     }
@@ -1952,7 +1952,7 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
   }
 
   if (nt_status != STATUS_SUCCESS) {
-    *len = 0;
+    *size = 0;
     err = uv_translate_sys_error(pRtlNtStatusToDosError(nt_status));
     goto error;
   }
@@ -1967,7 +1967,7 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
   }
 
   if (name_len == 0) {
-    *len = 0;
+    *size = 0;
     err = 0;
     goto error;
   }
@@ -1984,34 +1984,33 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
                                 NULL,
                                 NULL);
   if (!addrlen) {
-    *len = 0;
+    *size = 0;
     err = uv_translate_sys_error(GetLastError());
     goto error;
-  } else if (pipe_prefix_len + addrlen + 1 > *len) {
-    /* "\\\\.\\pipe" + name + '\0' */
-    *len = pipe_prefix_len + addrlen + 1;
+  } else if (pipe_prefix_len + addrlen > *size) {
+    /* "\\\\.\\pipe" + name */
+    *size = pipe_prefix_len + addrlen;
     err = UV_ENOBUFS;
     goto error;
   }
 
-  memcpy(buf, pipe_prefix, pipe_prefix_len);
+  memcpy(buffer, pipe_prefix, pipe_prefix_len);
   addrlen = WideCharToMultiByte(CP_UTF8,
                                 0,
                                 name_buf,
                                 name_len,
-                                buf+pipe_prefix_len,
-                                *len-pipe_prefix_len,
+                                buffer+pipe_prefix_len,
+                                *size-pipe_prefix_len,
                                 NULL,
                                 NULL);
   if (!addrlen) {
-    *len = 0;
+    *size = 0;
     err = uv_translate_sys_error(GetLastError());
     goto error;
   }
 
   addrlen += pipe_prefix_len;
-  buf[addrlen++] = '\0';
-  *len = addrlen;
+  *size = addrlen;
 
   err = 0;
   goto cleanup;
@@ -2029,6 +2028,32 @@ int uv_pipe_pending_count(uv_pipe_t* handle) {
   if (!handle->ipc)
     return 0;
   return handle->pending_ipc_info.queue_len;
+}
+
+
+int uv_pipe_getsockname(const uv_pipe_t* handle, char* buffer, size_t* size) {
+  if (handle->flags & UV_HANDLE_BOUND)
+    return uv__pipe_getname(handle, buffer, size);
+
+  if (handle->flags & UV_HANDLE_CONNECTION ||
+      handle->handle != INVALID_HANDLE_VALUE) {
+    *size = 0;
+    return 0;
+  }
+
+  return UV_EBADF;
+}
+
+
+int uv_pipe_getpeername(const uv_pipe_t* handle, char* buffer, size_t* size) {
+  /* emulate unix behaviour */
+  if (handle->flags & UV_HANDLE_BOUND)
+    return UV_ENOTCONN;
+
+  if (handle->handle != INVALID_HANDLE_VALUE)
+    return uv__pipe_getname(handle, buffer, size);
+
+  return UV_EBADF;
 }
 
 

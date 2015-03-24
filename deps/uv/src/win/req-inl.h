@@ -93,6 +93,17 @@ INLINE static uv_req_t* uv_overlapped_to_req(OVERLAPPED* overlapped) {
 INLINE static void uv_insert_pending_req(uv_loop_t* loop, uv_req_t* req) {
   req->next_req = NULL;
   if (loop->pending_reqs_tail) {
+#ifdef _DEBUG
+    /* Ensure the request is not already in the queue, or the queue
+     * will get corrupted.
+     */
+    uv_req_t* current = loop->pending_reqs_tail;
+    do {
+      assert(req != current);
+      current = current->next_req;
+    } while(current != loop->pending_reqs_tail);
+#endif
+
     req->next_req = loop->pending_reqs_tail->next_req;
     loop->pending_reqs_tail->next_req = req;
     loop->pending_reqs_tail = req;
@@ -130,14 +141,13 @@ INLINE static void uv_insert_pending_req(uv_loop_t* loop, uv_req_t* req) {
   } while (0)
 
 
-INLINE static void uv_process_reqs(uv_loop_t* loop) {
+INLINE static int uv_process_reqs(uv_loop_t* loop) {
   uv_req_t* req;
   uv_req_t* first;
   uv_req_t* next;
 
-  if (loop->pending_reqs_tail == NULL) {
-    return;
-  }
+  if (loop->pending_reqs_tail == NULL)
+    return 0;
 
   first = loop->pending_reqs_tail->next_req;
   next = first;
@@ -207,6 +217,8 @@ INLINE static void uv_process_reqs(uv_loop_t* loop) {
         assert(0);
     }
   }
+
+  return 1;
 }
 
 #endif /* UV_WIN_REQ_INL_H_ */

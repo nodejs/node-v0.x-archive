@@ -301,7 +301,7 @@ int uv__stream_try_select(uv_stream_t* stream, int* fd) {
   if (fds[1] > max_fd)
     max_fd = fds[1];
 
-  sread_sz = (max_fd + NBBY) / NBBY;
+  sread_sz = ROUND_UP(max_fd + 1, sizeof(uint32_t) * NBBY) / NBBY;
   swrite_sz = sread_sz;
 
   s = malloc(sizeof(*s) + sread_sz + swrite_sz);
@@ -375,6 +375,10 @@ failed_malloc:
 
 
 int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
+#if defined(__APPLE__)
+  int enable;
+#endif
+
   assert(fd >= 0);
   stream->flags |= flags;
 
@@ -386,6 +390,15 @@ int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
     if ((stream->flags & UV_TCP_KEEPALIVE) && uv__tcp_keepalive(fd, 1, 60))
       return -errno;
   }
+
+#if defined(__APPLE__)
+  enable = 1;
+  if (setsockopt(fd, SOL_SOCKET, SO_OOBINLINE, &enable, sizeof(enable)) &&
+      errno != ENOTSOCK &&
+      errno != EINVAL) {
+    return -errno;
+  }
+#endif
 
   stream->io_watcher.fd = fd;
 
@@ -1573,5 +1586,8 @@ void uv__stream_close(uv_stream_t* handle) {
 
 
 int uv_stream_set_blocking(uv_stream_t* handle, int blocking) {
-  return UV_ENOSYS;
+  /* Don't need to check the file descriptor, uv__nonblock()
+   * will fail with EBADF if it's not valid.
+   */
+  return uv__nonblock(uv__stream_fd(handle), !blocking);
 }
