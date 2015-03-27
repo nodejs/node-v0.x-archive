@@ -1,0 +1,6 @@
+root {
+
+  TEST  { "ROOT TEST"  }
+  TEST2 { "ROOT %s %d" }
+
+}

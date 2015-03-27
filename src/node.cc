@@ -26,6 +26,7 @@
 #include "node_http_parser.h"
 #include "node_javascript.h"
 #include "node_version.h"
+#include "node_l10n.h"
 
 #if defined HAVE_PERFCTR
 #include "node_counters.h"
@@ -2986,6 +2987,8 @@ static void ParseArgs(int* argc,
   new_v8_argv[0] = argv[0];
   new_argv[0] = argv[0];
 
+  bool print_help = FALSE, eval_fail = FALSE;
+
   unsigned int index = 1;
   while (index < nargs && argv[index][0] == '-') {
     const char* const arg = argv[index];
@@ -3001,8 +3004,8 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--enable-ssl3") == 0) {
       SSL3_ENABLE = true;
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
-      PrintHelp();
-      exit(0);
+      print_help = TRUE;
+      break;
     } else if (strcmp(arg, "--eval") == 0 ||
                strcmp(arg, "-e") == 0 ||
                strcmp(arg, "--print") == 0 ||
@@ -3016,8 +3019,8 @@ static void ParseArgs(int* argc,
         args_consumed += 1;
         eval_string = argv[index + 1];
         if (eval_string == NULL) {
-          fprintf(stderr, "%s: %s requires an argument\n", argv[0], arg);
-          exit(9);
+          eval_fail = TRUE;
+          break;
         }
       } else if ((index + 1 < nargs) &&
                  argv[index + 1] != NULL &&
@@ -3056,6 +3059,31 @@ static void ParseArgs(int* argc,
 
     new_exec_argc += args_consumed;
     index += args_consumed;
+  }
+
+  // Move ICU Initialization here before we init the L10N stuff... so we
+  // can handle PrintHelp and arg errors also...
+  #if defined(NODE_HAVE_I18N_SUPPORT)
+    if (icu_data_dir == NULL) {
+      // if the parameter isn't given, use the env variable.
+      icu_data_dir = getenv("NODE_ICU_DATA");
+    }
+    // Initialize ICU.
+    // If icu_data_dir is NULL here, it will load the 'minimal' data.
+    if (!i18n::InitializeICUDirectory(icu_data_dir)) {
+      FatalError(NULL, "Could not initialize ICU "
+                       "(check NODE_ICU_DATA or --icu-data-dir parameters)");
+    }
+  #endif
+
+  L10N_INIT(NULL, icu_data_dir);
+  if (print_help) {
+    PrintHelp();
+    exit(0);
+  }
+  if (eval_fail) {
+    fprintf(stderr, "node: -e|--eval requires an argument\n");
+    exit(9);
   }
 
   // Copy remaining arguments.
@@ -3402,18 +3430,6 @@ void Init(int* argc,
     }
   }
 
-#if defined(NODE_HAVE_I18N_SUPPORT)
-  if (icu_data_dir == NULL) {
-    // if the parameter isn't given, use the env variable.
-    icu_data_dir = getenv("NODE_ICU_DATA");
-  }
-  // Initialize ICU.
-  // If icu_data_dir is NULL here, it will load the 'minimal' data.
-  if (!i18n::InitializeICUDirectory(icu_data_dir)) {
-    FatalError(NULL, "Could not initialize ICU "
-                     "(check NODE_ICU_DATA or --icu-data-dir parameters)");
-  }
-#endif
   // The const_cast doesn't violate conceptual const-ness.  V8 doesn't modify
   // the argv array or the elements it points to.
   V8::SetFlagsFromCommandLine(&v8_argc, const_cast<char**>(v8_argv), true);

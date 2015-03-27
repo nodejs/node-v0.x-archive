@@ -67,6 +67,7 @@
       'lib/vm.js',
       'lib/zlib.js',
       'deps/debugger-agent/lib/_debugger_agent.js',
+      'lib/_bundle.js'
     ],
   },
 
@@ -118,7 +119,9 @@
         'src/process_wrap.cc',
         'src/udp_wrap.cc',
         'src/uv.cc',
+        'src/node_l10n.cc',
         # headers to make for a more pleasant IDE experience
+        'src/node_l10n.h',
         'src/async-wrap.h',
         'src/async-wrap-inl.h',
         'src/base-object.h',
@@ -179,6 +182,7 @@
           'dependencies': [
             '<(icu_gyp_path):icui18n',
             '<(icu_gyp_path):icuuc',
+            'deps/l10n/l10n.gyp:noderes'
           ],
           'conditions': [
             [ 'icu_small=="true"', {

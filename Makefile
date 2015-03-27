@@ -75,6 +75,7 @@ clean:
 	-rm -rf out/Makefile node node_g out/$(BUILDTYPE)/node blog.html email.md
 	-find out/ -name '*.o' -o -name '*.a' | xargs rm -rf
 	-rm -rf node_modules
+	-rm -rf out/Release/obj/gen/noderestmp
 
 distclean:
 	-rm -rf out
