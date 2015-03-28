@@ -84,6 +84,8 @@ distclean:
 	-rm -rf node_modules
 	-rm -rf deps/icu
 	-rm -rf deps/icu4c*.tgz deps/icu4c*.zip deps/icu-tmp
+	-rm -rf deps/v8/testing/gmock
+	-rm -rf deps/v8/testing/gtest
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
@@ -175,6 +177,26 @@ test-timers:
 
 test-timers-clean:
 	$(MAKE) --directory=tools clean
+
+test-v8:
+	# note: only does a quickcheck
+	deps/v8/tools/run-tests.py --arch=$(ARCH) --mode=release --noi18n \
+	  --no-presubmit --quickcheck --shell-dir=out/Release
+
+test-v8-intl:
+	# note: only does a quickcheck...
+	deps/v8/tools/run-tests.py --arch=$(ARCH) --mode=release --no-presubmit \
+	  --quickcheck --shell-dir=out/Release intl
+
+test-v8-benchmarks:
+	# note: this runs with --download-data so it'll go out and
+	#       fetch the additional bits it needs to run the benchmarks
+	deps/v8/tools/run-tests.py --arch=$(ARCH) --mode=release --download-data \
+	  --no-presubmit --shell-dir=out/Release benchmarks
+
+test-v8-all: test-v8 test-v8-intl test-v8-benchmarks
+	# runs all v8 tests
+
 
 apidoc_sources = $(wildcard doc/api/*.markdown)
 apidocs = $(addprefix out/,$(apidoc_sources:.markdown=.html)) \
