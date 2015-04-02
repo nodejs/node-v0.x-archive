@@ -10,9 +10,13 @@ then
   exit 1
 fi
 
-stability="$(python tools/getstability.py)"
+stability="$(python tools/getnodeversion.py --stability)"
 NODE_STABC="$(tr '[:lower:]' '[:upper:]' <<< ${stability:0:1})${stability:1}"
 NODE_STABL="$stability"
+
+# node_tag is non empty if NODE_TAG is defined in src/node_version.h
+# for instance when releasing a release candidate version
+node_tag="$(python tools/getnodeversion.py --tag)"
 
 echo "Building for $stability"
 
@@ -29,10 +33,16 @@ ssh root@nodejs.org chown -R node:other /home/node/dist/v$(python tools/getnodev
 
 # tag the release
 # should be the same key used to sign the shasums
-git tag -sm "$(bash tools/changelog-head.sh)" v$(python tools/getnodeversion.py)
- 
+if [ "$node_tag" = "" ];
+then
+  git tag -sm "$(bash tools/changelog-head.sh)" v$(python tools/getnodeversion.py)
+else
+  # Do not include the changelog in release candidates tags
+  git tag -sm "$(python tools/getnodeversion.py)" v$(python tools/getnodeversion.py)
+fi
+
 # push to github
-git push git@github.com:joyent/node v$(python tools/getnodeversion.py)-release --tags 
+git push git@github.com:joyent/node v$(python tools/getnodeversion.py --no-tag)-release --tags
 
 # blog post and email
 make email.md
@@ -51,29 +61,37 @@ make email.md
   echo ""
   cat email.md ) > ../node-website/doc/blog/release/v$(python tools/getnodeversion.py).md
 
-if [ "$stability" = "stable" ];
+# Do not go through the process of:
+# - Publishing the API docs to the website.
+# - Updating the stable version number.
+# - Merging changes back to the main branch.
+# When releasing a release candidate version.
+if [ "$node_tag" = "" ];
 then
-  ## this needs to happen here because the website depends on the current node
-  ## node version
-  ## this will get the api docs in the right place
-  make website-upload
-  BRANCH="v$(python tools/getnodeversion.py | sed -E 's#\.[0-9]+$##')"
-  echo $(python tools/getnodeversion.py) > ../node-website/STABLE
-else
-  BRANCH="master"
+  if [ "$stability" = "stable" ];
+  then
+    ## this needs to happen here because the website depends on the current node
+    ## node version
+    ## this will get the api docs in the right place
+    make website-upload
+    BRANCH="v$(python tools/getnodeversion.py | sed -E 's#\.[0-9]+(-[A-Za-z0-9]+)?$##')"
+    echo $(python tools/getnodeversion.py) > ../node-website/STABLE
+  else
+    BRANCH="master"
+  fi
+
+  echo "Merging back into $BRANCH"
+
+  # merge back into mainline stable branch
+  git checkout $BRANCH
+  git merge --no-ff v$(python tools/getnodeversion.py)-release
+
+  # change the version number, set isrelease = 0
+  ## TODO automagic.
+  vim src/node_version.h
+  git commit -am "Now working on "$(python tools/getnodeversion.py)
+
+  git push git@github.com:joyent/node $BRANCH
+
+  echo "Now go do the website stuff"
 fi
-
-echo "Merging back into $BRANCH"
-
-# merge back into mainline stable branch
-git checkout $BRANCH
-git merge --no-ff v$(python tools/getnodeversion.py)-release
- 
-# change the version number, set isrelease = 0
-## TODO automagic.
-vim src/node_version.h
-git commit -am "Now working on "$(python tools/getnodeversion.py)
-
-git push git@github.com:joyent/node $BRANCH
-
-echo "Now go do the website stuff"

@@ -14,6 +14,7 @@
     'node_shared_openssl%': 'false',
     'node_use_mdb%': 'false',
     'node_v8_options%': '',
+    'node_tag%': '',
     'library_files': [
       'src/node.js',
       'lib/_debugger.js',
@@ -163,11 +164,15 @@
         'NODE_WANT_INTERNALS=1',
         'ARCH="<(target_arch)"',
         'PLATFORM="<(OS)"',
-        'NODE_TAG="<(node_tag)"',
         'NODE_V8_OPTIONS="<(node_v8_options)"',
       ],
 
       'conditions': [
+        [ '"<(node_tag)"!=""', {
+          'defines': [
+            'NODE_TAG="<(node_tag)"',
+          ]
+        }],
         [ 'gcc_version<=44', {
           # GCC versions <= 4.4 do not handle the aliasing in the queue
           # implementation, so disable aliasing on these platforms
