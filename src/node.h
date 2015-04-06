@@ -223,9 +223,8 @@ NODE_EXTERN void RunAtExit(Environment* env);
   }                                                                           \
   while (0)
 
-#define NODE_DEFINE_STRING_CONSTANT(target, constant)                         \
+#define NODE_DEFINE_STRING_CONSTANT(isolate, target, constant)                \
   do {                                                                        \
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();                         \
     v8::Local<v8::String> constant_name =                                     \
         v8::String::NewFromUtf8(isolate, #constant);                          \
     v8::Local<v8::String> constant_value =                                    \

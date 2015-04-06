@@ -74,13 +74,13 @@
                                 "DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:"\
                                 "!RC4:!MD5:!aNULL"
 
-#define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES256-SHA384:"                   \
-                                 "DHE-RSA-AES256-SHA384:"                     \
-                                 "ECDHE-RSA-AES256-SHA256:"                   \
-                                 "DHE-RSA-AES256-SHA256:"                     \
-                                 "ECDHE-RSA-AES128-SHA256:"                   \
-                                 "DHE-RSA-AES128-SHA256:"                     \
-                                 "HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:" \
+#define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES256-SHA384:"                    \
+                                 "DHE-RSA-AES256-SHA384:"                      \
+                                 "ECDHE-RSA-AES256-SHA256:"                    \
+                                 "DHE-RSA-AES256-SHA256:"                      \
+                                 "ECDHE-RSA-AES128-SHA256:"                    \
+                                 "DHE-RSA-AES128-SHA256:"                      \
+                                 "HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:"  \
                                  "!PSK:!SRP:!CAMELLIA"
 
 static inline const char * legacy_cipher_list(const char * ver) {
