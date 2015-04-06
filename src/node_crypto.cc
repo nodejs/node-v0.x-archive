@@ -5192,7 +5192,8 @@ void InitCrypto(Handle<Object> target,
 
   NODE_DEFINE_CONSTANT(target, SSL3_ENABLE);
   NODE_DEFINE_CONSTANT(target, SSL2_ENABLE);
-  NODE_DEFINE_STRING_CONSTANT(target, DEFAULT_CIPHER_LIST);
+
+  NODE_DEFINE_STRING_CONSTANT(env->isolate(), target, DEFAULT_CIPHER_LIST);
   NODE_SET_METHOD(target, "getLegacyCiphers", DefaultCiphers);
 }
 
