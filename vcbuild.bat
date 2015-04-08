@@ -38,6 +38,7 @@ set noperfctr_msi_arg=
 set i18n_arg=
 set download_arg=
 set build_release=
+set v8_tests=
 
 :next-arg
 if "%1"=="" goto args-done
@@ -62,6 +63,8 @@ if /i "%1"=="test-message"  set test=test-message&goto arg-ok
 if /i "%1"=="test-gc"       set test=test-gc&set buildnodeweak=1&goto arg-ok
 if /i "%1"=="test-all"      set test=test-all&set buildnodeweak=1&goto arg-ok
 if /i "%1"=="test"          set test=test&goto arg-ok
+if /i "%1"=="test-v8"       set test=test-v8&goto arg-ok
+if /i "%1"=="test-v8-intl"  set test=test-v8-intl&goto arg-ok
 @rem Include small-icu support with MSI installer
 if /i "%1"=="msi"           set msi=1&set licensertf=1&set download_arg="--download=all"&set i18n_arg=small-icu&goto arg-ok
 if /i "%1"=="upload"        set upload=1&goto arg-ok
@@ -71,6 +74,7 @@ if /i "%1"=="full-icu"      set i18n_arg=%1&goto arg-ok
 if /i "%1"=="intl-none"     set i18n_arg=%1&goto arg-ok
 if /i "%1"=="download-all"  set download_arg="--download=all"&goto arg-ok
 if /i "%1"=="build-release" set build_release=1&goto arg-ok
+if /i "%1"=="with-v8-tests" set v8_tests="--with-v8-tests"&goto arg-ok
 
 echo Warning: ignoring invalid command line option `%1`.
 
@@ -111,7 +115,7 @@ if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 @rem Generate the VS project.
 SETLOCAL
   if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
-  python configure %download_arg% %i18n_arg% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
+  python configure %download_arg% %i18n_arg% %v8_tests% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
   echo Project files generated.
@@ -208,6 +212,16 @@ if "%test%"=="test-simple" set test_args=%test_args% simple
 if "%test%"=="test-message" set test_args=%test_args% message
 if "%test%"=="test-gc" set test_args=%test_args% gc
 if "%test%"=="test-all" set test_args=%test_args%
+if "%test%"=="test-v8" goto test-v8
+if "%test%"=="test-v8-intl" goto test-v8-intl
+
+:test-v8
+python deps\v8\tools\run-tests.py --arch=%target_arch% --mode=release --noi18n --no-presubmit --quickcheck --shell-dir=Release
+goto exit
+
+:test-v8-intl
+python deps\v8\tools\run-tests.py --arch=%target_arch% --mode=release --no-presubmit --quickcheck --shell-dir=Release intl
+goto exit
 
 :build-node-weak
 @rem Build node-weak if required
@@ -227,7 +241,7 @@ if "%test%"=="test" goto jslint
 goto exit
 
 :create-msvs-files-failed
-echo Failed to create vc project files. 
+echo Failed to create vc project files.
 goto exit
 
 :upload

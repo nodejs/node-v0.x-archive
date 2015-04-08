@@ -376,6 +376,12 @@
               '-Wl,--whole-archive <(V8_BASE) -Wl,--no-whole-archive',
             ],
         }],
+        [
+          'with_v8_tests==1',
+          {
+            'dependencies': [ 'tools/v8/v8tests.gyp:d8-tests' ]
+          }
+        ]
       ],
       'msvs_settings': {
         'VCLinkerTool': {
