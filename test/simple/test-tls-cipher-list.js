@@ -25,14 +25,11 @@ var tls = require('tls');
 
 function doTest(checklist, env, useswitch) {
   var options;
-  if (env && useswitch === 1) {
-    options = {env:env};
-  }
   var args = ['-e', 'console.log(require(\'tls\').DEFAULT_CIPHERS)'];
 
   switch(useswitch) {
     case 1:
-      // Test --cipher-test
+      // Test --cipher-list
       args.unshift('--cipher-list=' + env);
       break;
     case 2:
