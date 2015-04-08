@@ -584,10 +584,10 @@ supplied, the callback is attached as a listener on the `finish` event.
 Calling [`write()`][] after calling [`end()`][] will raise an error.
 
 ```javascript
-// write 'hello, ' and then end with 'world!'
 var file = fs.createWriteStream('example.txt');
-file.write('hello, ');
-file.end('world!');
+file.end('hello, ');
+file.write('world!');
+// Error: write after end
 // writing more now is not allowed!
 ```
 
