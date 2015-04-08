@@ -118,8 +118,10 @@ SETLOCAL
 ENDLOCAL
 
 :msbuild
-@rem Skip project generation if requested.
+@rem Skip project build if requested.
 if defined nobuild goto sign
+
+if defined VCINSTALLDIR goto msbuild-found
 
 @rem Look for Visual Studio 2013
 if not defined VS120COMNTOOLS goto vc-set-2012
@@ -152,6 +154,7 @@ if "%VCVARS_VER%" NEQ "100" (
   SET VCVARS_VER=100
 )
 if not defined VCINSTALLDIR goto msbuild-not-found
+set GYP_MSVS_VERSION=2010
 goto msbuild-found
 
 :msbuild-not-found
