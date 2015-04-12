@@ -160,7 +160,13 @@ would be to wait a second and then try again. This can be done with
       if (e.code == 'EADDRINUSE') {
         console.log('Address in use, retrying...');
         setTimeout(function () {
-          server.close();
+          try {
+            server.close();//this may throw Error if server not running
+            //fs.unlinkSync(PATH);//this is for Unix domain socket
+          } catch (e) {
+            console.log(e);
+          }
+          
           server.listen(PORT, HOST);
         }, 1000);
       }
