@@ -95,10 +95,13 @@ module.exports = function addRemoteGit (uri, silent, cb) {
       ['config', '--get', 'remote.origin.url'],
       { cwd: cachedRemote, env: gitEnv() },
       function (er, stdout, stderr) {
-        var originURL = stdout.trim()
-        stderr = stderr.trim()
-        log.verbose('addRemoteGit', 'remote.origin.url:', originURL)
+        var originURL
+        if (stdout) {
+          originURL = stdout.trim()
+          log.verbose('addRemoteGit', 'remote.origin.url:', originURL)
+        }
 
+        if (stderr) stderr = stderr.trim()
         if (stderr || er) {
           log.warn('addRemoteGit', 'resetting remote', cachedRemote, 'because of error:', stderr || er)
           return resetRemote(cb)
@@ -354,7 +357,7 @@ function getResolved (uri, treeish) {
   // https://github.com/npm/npm/issues/3224
   var spo = uri.split(parsed.host)
   var spr = resolved.split(parsed.host)
-  if (spo[1].charAt(0) === ':' && spr[1].charAt(0) === '/') {
+  if (spo[1] && spo[1].charAt(0) === ':' && spr[1] && spr[1].charAt(0) === '/') {
     spr[1] = spr[1].slice(1)
   }
   return spr.join(parsed.host)
