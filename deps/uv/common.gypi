@@ -6,8 +6,6 @@
     'uv_library%': 'static_library', # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',  # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
-    'gcc_version%': 'unknown',
-    'clang%': 0,
   },
 
   'target_defaults': {
@@ -143,6 +141,10 @@
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],
           }],
+          [ 'target_arch=="x32"', {
+            'cflags': [ '-mx32' ],
+            'ldflags': [ '-mx32' ],
+          }],
           [ 'OS=="linux"', {
             'cflags': [ '-ansi' ],
           }],
@@ -154,7 +156,7 @@
             'cflags': [ '-pthread' ],
             'ldflags': [ '-pthread' ],
           }],
-          [ 'visibility=="hidden" and (clang==1 or gcc_version >= 40)', {
+          [ 'visibility=="hidden"', {
             'cflags': [ '-fvisibility=hidden' ],
           }],
         ],

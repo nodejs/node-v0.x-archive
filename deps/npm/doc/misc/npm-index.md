@@ -3,7 +3,7 @@ npm-index(7) -- Index of all npm documentation
 
 ### README(1)
 
-node package manager
+a JavaScript package manager
 
 ## Command Line Documentation
 
@@ -11,7 +11,11 @@ Using npm on the command line
 
 ### npm(1)
 
-node package manager
+javascript package manager
+
+### npm-access(1)
+
+Set access level on published packages
 
 ### npm-adduser(1)
 
@@ -53,6 +57,10 @@ Reduce duplication
 
 Deprecate a version of a package
 
+### npm-dist-tag(1)
+
+Modify package distribution tags
+
 ### npm-docs(1)
 
 Docs for a package in a web browser maybe
@@ -84,6 +92,10 @@ Install a package
 ### npm-link(1)
 
 Symlink a package folder
+
+### npm-logout(1)
+
+Log out of the registry
 
 ### npm-ls(1)
 
@@ -123,7 +135,7 @@ Open package repository page in the browser
 
 ### npm-restart(1)
 
-Start a package
+Restart a package
 
 ### npm-rm(1)
 
@@ -160,10 +172,6 @@ Start a package
 ### npm-stop(1)
 
 Stop a package
-
-### npm-submodule(1)
-
-Add a package as a git submodule
 
 ### npm-tag(1)
 
@@ -203,7 +211,7 @@ Using npm in your Node programs
 
 ### npm(3)
 
-node package manager
+javascript package manager
 
 ### npm-bin(3)
 
@@ -299,7 +307,7 @@ Open package repository page in the browser
 
 ### npm-restart(3)
 
-Start a package
+Restart a package
 
 ### npm-root(3)
 
@@ -324,10 +332,6 @@ Start a package
 ### npm-stop(3)
 
 Stop a package
-
-### npm-submodule(3)
-
-Add a package as a git submodule
 
 ### npm-tag(3)
 
@@ -408,6 +412,10 @@ Index of all npm documentation
 ### npm-registry(7)
 
 The JavaScript Package Registry
+
+### npm-scope(7)
+
+Scoped packages
 
 ### npm-scripts(7)
 

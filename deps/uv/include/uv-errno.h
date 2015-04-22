@@ -57,12 +57,6 @@
 # define UV__EACCES (-4092)
 #endif
 
-#if defined(EADDRINFO) && !defined(_WIN32)
-# define UV__EADDRINFO EADDRINFO
-#else
-# define UV__EADDRINFO (-4091)
-#endif
-
 #if defined(EADDRINUSE) && !defined(_WIN32)
 # define UV__EADDRINUSE (-EADDRINUSE)
 #else
@@ -403,6 +397,22 @@
 # define UV__EMLINK (-EMLINK)
 #else
 # define UV__EMLINK (-4032)
+#endif
+
+/* EHOSTDOWN is not visible on BSD-like systems when _POSIX_C_SOURCE is
+ * defined. Fortunately, its value is always 64 so it's possible albeit
+ * icky to hard-code it.
+ */
+#if defined(EHOSTDOWN) && !defined(_WIN32)
+# define UV__EHOSTDOWN (-EHOSTDOWN)
+#elif defined(__APPLE__) || \
+      defined(__DragonFly__) || \
+      defined(__FreeBSD__) || \
+      defined(__NetBSD__) || \
+      defined(__OpenBSD__)
+# define UV__EHOSTDOWN (-64)
+#else
+# define UV__EHOSTDOWN (-4031)
 #endif
 
 #endif /* UV_ERRNO_H_ */

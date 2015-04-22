@@ -78,10 +78,12 @@ clean:
 
 distclean:
 	-rm -rf out
-	-rm -f config.gypi
+	-rm -f config.gypi icu_config.gypi
 	-rm -f config.mk
 	-rm -rf node node_g blog.html email.md
 	-rm -rf node_modules
+	-rm -rf deps/icu
+	-rm -rf deps/icu4c*.tgz deps/icu4c*.zip deps/icu-tmp
 
 test: all
 	$(PYTHON) tools/test.py --mode=release simple message
@@ -147,7 +149,19 @@ test-debugger: all
 	$(PYTHON) tools/test.py debugger
 
 test-npm: node
-	./node deps/npm/test/run.js
+	rm -rf npm-cache npm-tmp npm-prefix
+	mkdir npm-cache npm-tmp npm-prefix
+	cd deps/npm ; npm_config_cache="$(shell pwd)/npm-cache" \
+	     npm_config_prefix="$(shell pwd)/npm-prefix" \
+	     npm_config_tmp="$(shell pwd)/npm-tmp" \
+	     ../../node cli.js install
+	cd deps/npm ; npm_config_cache="$(shell pwd)/npm-cache" \
+	     npm_config_prefix="$(shell pwd)/npm-prefix" \
+	     npm_config_tmp="$(shell pwd)/npm-tmp" \
+	     ../../node cli.js run-script test-all && \
+	     ../../node cli.js prune --prod && \
+	     cd ../.. && \
+	     rm -rf npm-cache npm-tmp npm-prefix
 
 test-npm-publish: node
 	npm_package_config_publishtest=true ./node deps/npm/test/run.js
@@ -176,6 +190,9 @@ website_files = \
 
 doc: $(apidoc_dirs) $(website_files) $(apiassets) $(apidocs) tools/doc/ out/doc/changelog.html node
 
+doc-branch: NODE_DOC_VERSION = v$(shell $(PYTHON) tools/getnodeversion.py | cut -f1,2 -d.)
+doc-branch: doc
+
 $(apidoc_dirs):
 	mkdir -p $@
 
@@ -189,10 +206,10 @@ out/doc/%: doc/%
 	cp -r $< $@
 
 out/doc/api/%.json: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=json $< > $@
+	NODE_DOC_VERSION=$(NODE_DOC_VERSION) out/Release/node tools/doc/generate.js --format=json $< > $@
 
 out/doc/api/%.html: doc/api/%.markdown node
-	out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
+	NODE_DOC_VERSION=$(NODE_DOC_VERSION) out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
 
 email.md: ChangeLog tools/email-footer.md
 	bash tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
@@ -211,6 +228,11 @@ website-upload: doc
     rm -f ~/web/nodejs.org/dist/node-latest.tar.gz &&\
     ln -s $(VERSION)/node-$(VERSION).tar.gz ~/web/nodejs.org/dist/node-latest.tar.gz'
 
+doc-branch-upload: NODE_DOC_VERSION = v$(shell $(PYTHON) tools/getnodeversion.py | cut -f1,2 -d.)
+doc-branch-upload: doc-branch
+	echo $(NODE_DOC_VERSION)
+	rsync -r out/doc/api/ node@nodejs.org:~/web/nodejs.org/$(NODE_DOC_VERSION)
+
 docopen: out/doc/api/all.html
 	-google-chrome out/doc/api/all.html
 
@@ -219,6 +241,7 @@ docclean:
 
 RAWVER=$(shell $(PYTHON) tools/getnodeversion.py)
 VERSION=v$(RAWVER)
+NODE_DOC_VERSION=$(VERSION)
 RELEASE=$(shell $(PYTHON) tools/getnodeisrelease.py)
 PLATFORM=$(shell uname | tr '[:upper:]' '[:lower:]')
 ifeq ($(findstring x86_64,$(shell uname -m)),x86_64)
@@ -244,7 +267,7 @@ TARBALL=$(TARNAME).tar.gz
 BINARYNAME=$(TARNAME)-$(PLATFORM)-$(ARCH)
 BINARYTAR=$(BINARYNAME).tar.gz
 PKG=out/$(TARNAME).pkg
-packagemaker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
+PACKAGEMAKER ?= /Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
 
 PKGSRC=nodejs-$(DESTCPU)-$(RAWVER).tgz
 ifdef NIGHTLY
@@ -282,10 +305,12 @@ pkg: $(PKG)
 $(PKG): release-only
 	rm -rf $(PKGDIR)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --without-snapshot --dest-cpu=ia32 --tag=$(TAG)
+	$(PYTHON) ./configure --download=all --with-intl=small-icu \
+		--without-snapshot --dest-cpu=ia32 --tag=$(TAG)
 	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)/32
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --without-snapshot --dest-cpu=x64 --tag=$(TAG)
+	$(PYTHON) ./configure --download=all --with-intl=small-icu \
+		--without-snapshot --dest-cpu=x64 --tag=$(TAG)
 	$(MAKE) install V=$(V) DESTDIR=$(PKGDIR)
 	SIGN="$(APP_SIGN)" PKGDIR="$(PKGDIR)" bash tools/osx-codesign.sh
 	lipo $(PKGDIR)/32/usr/local/bin/node \
@@ -294,7 +319,7 @@ $(PKG): release-only
 		-create
 	mv $(PKGDIR)/usr/local/bin/node-universal $(PKGDIR)/usr/local/bin/node
 	rm -rf $(PKGDIR)/32
-	$(packagemaker) \
+	$(PACKAGEMAKER) \
 		--id "org.nodejs.Node" \
 		--doc tools/osx-pkg.pmdoc \
 		--out $(PKG)
@@ -317,7 +342,8 @@ tar: $(TARBALL)
 $(BINARYTAR): release-only
 	rm -rf $(BINARYNAME)
 	rm -rf out/deps out/Release
-	$(PYTHON) ./configure --prefix=/ --without-snapshot --dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
+	$(PYTHON) ./configure --prefix=/ --download=all --with-intl=small-icu \
+		--without-snapshot --dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=$(BINARYNAME) V=$(V) PORTABLE=1
 	cp README.md $(BINARYNAME)
 	cp LICENSE $(BINARYNAME)
@@ -330,8 +356,9 @@ binary: $(BINARYTAR)
 
 $(PKGSRC): release-only
 	rm -rf dist out
-	$(PYTHON) configure --prefix=/ --without-snapshot \
-		--dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
+	$(PYTHON) configure --prefix=/ --without-snapshot --download=all \
+		--with-intl=small-icu --dest-cpu=$(DESTCPU) --tag=$(TAG) \
+		$(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=dist
 	(cd dist; find * -type f | sort) > packlist
 	pkg_info -X pkg_install | \
@@ -398,15 +425,13 @@ jslint:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
 CPPLINT_EXCLUDE ?=
-CPPLINT_EXCLUDE += src/node_dtrace.cc
-CPPLINT_EXCLUDE += src/node_dtrace.cc
 CPPLINT_EXCLUDE += src/node_root_certs.h
 CPPLINT_EXCLUDE += src/node_win32_perfctr_provider.cc
 CPPLINT_EXCLUDE += src/queue.h
 CPPLINT_EXCLUDE += src/tree.h
 CPPLINT_EXCLUDE += src/v8abbr.h
 
-CPPLINT_FILES = $(filter-out $(CPPLINT_EXCLUDE), $(wildcard src/*.cc src/*.h src/*.c))
+CPPLINT_FILES = $(filter-out $(CPPLINT_EXCLUDE), $(wildcard src/*.cc src/*.h src/*.c tools/icu/*.h tools/icu/*.cc deps/debugger-agent/include/* deps/debugger-agent/src/*))
 
 cpplint:
 	@$(PYTHON) tools/cpplint.py $(CPPLINT_FILES)

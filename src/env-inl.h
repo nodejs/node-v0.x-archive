@@ -74,10 +74,10 @@ inline Environment::IsolateData* Environment::IsolateData::Get(
 }
 
 inline Environment::IsolateData* Environment::IsolateData::GetOrCreate(
-    v8::Isolate* isolate) {
+    v8::Isolate* isolate, uv_loop_t* loop) {
   IsolateData* isolate_data = Get(isolate);
   if (isolate_data == NULL) {
-    isolate_data = new IsolateData(isolate);
+    isolate_data = new IsolateData(isolate, loop);
     isolate->SetData(kIsolateSlot, isolate_data);
   }
   isolate_data->ref_count_ += 1;
@@ -91,8 +91,9 @@ inline void Environment::IsolateData::Put() {
   }
 }
 
-inline Environment::IsolateData::IsolateData(v8::Isolate* isolate)
-    : event_loop_(uv_default_loop()),
+inline Environment::IsolateData::IsolateData(v8::Isolate* isolate,
+                                             uv_loop_t* loop)
+    : event_loop_(loop),
       isolate_(isolate),
 #define V(PropertyName, StringValue)                                          \
     PropertyName ## _(isolate, FIXED_ONE_BYTE_STRING(isolate, StringValue)),
@@ -110,25 +111,20 @@ inline v8::Isolate* Environment::IsolateData::isolate() const {
   return isolate_;
 }
 
-inline Environment::AsyncListener::AsyncListener() {
-  for (int i = 0; i < kFieldsCount; ++i)
-    fields_[i] = 0;
+inline Environment::AsyncHooks::AsyncHooks() {
+  for (int i = 0; i < kFieldsCount; i++) fields_[i] = 0;
 }
 
-inline uint32_t* Environment::AsyncListener::fields() {
+inline uint32_t* Environment::AsyncHooks::fields() {
   return fields_;
 }
 
-inline int Environment::AsyncListener::fields_count() const {
+inline int Environment::AsyncHooks::fields_count() const {
   return kFieldsCount;
 }
 
-inline bool Environment::AsyncListener::has_listener() const {
-  return fields_[kHasListener] > 0;
-}
-
-inline uint32_t Environment::AsyncListener::watched_providers() const {
-  return fields_[kWatchedProviders];
+inline bool Environment::AsyncHooks::call_init_hook() {
+  return fields_[kCallInitHook] != 0;
 }
 
 inline Environment::DomainFlag::DomainFlag() {
@@ -188,8 +184,9 @@ inline void Environment::TickInfo::set_last_threw(bool value) {
   last_threw_ = value;
 }
 
-inline Environment* Environment::New(v8::Local<v8::Context> context) {
-  Environment* env = new Environment(context);
+inline Environment* Environment::New(v8::Local<v8::Context> context,
+                                     uv_loop_t* loop) {
+  Environment* env = new Environment(context, loop);
   env->AssignToContext(context);
   return env;
 }
@@ -207,12 +204,15 @@ inline Environment* Environment::GetCurrent(v8::Local<v8::Context> context) {
       context->GetAlignedPointerFromEmbedderData(kContextEmbedderDataIndex));
 }
 
-inline Environment::Environment(v8::Local<v8::Context> context)
+inline Environment::Environment(v8::Local<v8::Context> context,
+                                uv_loop_t* loop)
     : isolate_(context->GetIsolate()),
-      isolate_data_(IsolateData::GetOrCreate(context->GetIsolate())),
+      isolate_data_(IsolateData::GetOrCreate(context->GetIsolate(), loop)),
       using_smalloc_alloc_cb_(false),
       using_domains_(false),
+      using_asyncwrap_(false),
       printed_error_(false),
+      debugger_agent_(this),
       context_(context->GetIsolate(), context) {
   // We'll be creating new objects so make sure we've entered the context.
   v8::HandleScope handle_scope(isolate());
@@ -221,6 +221,10 @@ inline Environment::Environment(v8::Local<v8::Context> context)
   set_module_load_list_array(v8::Array::New(isolate()));
   RB_INIT(&cares_task_list_);
   QUEUE_INIT(&gc_tracker_queue_);
+  QUEUE_INIT(&req_wrap_queue_);
+  QUEUE_INIT(&handle_wrap_queue_);
+  QUEUE_INIT(&handle_cleanup_queue_);
+  handle_cleanup_waiting_ = 0;
 }
 
 inline Environment::~Environment() {
@@ -233,6 +237,21 @@ inline Environment::~Environment() {
   isolate_data()->Put();
 }
 
+inline void Environment::CleanupHandles() {
+  while (!QUEUE_EMPTY(&handle_cleanup_queue_)) {
+    QUEUE* q = QUEUE_HEAD(&handle_cleanup_queue_);
+    QUEUE_REMOVE(q);
+
+    HandleCleanup* hc = ContainerOf(&HandleCleanup::handle_cleanup_queue_, q);
+    handle_cleanup_waiting_++;
+    hc->cb_(this, hc->handle_, hc->arg_);
+    delete hc;
+  }
+
+  while (handle_cleanup_waiting_ != 0)
+    uv_run(event_loop(), UV_RUN_ONCE);
+}
+
 inline void Environment::Dispose() {
   delete this;
 }
@@ -241,14 +260,9 @@ inline v8::Isolate* Environment::isolate() const {
   return isolate_;
 }
 
-inline bool Environment::has_async_listener() const {
+inline bool Environment::call_async_init_hook() const {
   // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return const_cast<Environment*>(this)->async_listener()->has_listener();
-}
-
-inline uint32_t Environment::watched_providers() const {
-  // The const_cast is okay, it doesn't violate conceptual const-ness.
-  return const_cast<Environment*>(this)->async_listener()->watched_providers();
+  return const_cast<Environment*>(this)->async_hooks()->call_init_hook();
 }
 
 inline bool Environment::in_domain() const {
@@ -287,12 +301,23 @@ inline uv_check_t* Environment::idle_check_handle() {
   return &idle_check_handle_;
 }
 
+inline void Environment::RegisterHandleCleanup(uv_handle_t* handle,
+                                               HandleCleanupCb cb,
+                                               void *arg) {
+  HandleCleanup* hc = new HandleCleanup(handle, cb, arg);
+  QUEUE_INSERT_TAIL(&handle_cleanup_queue_, &hc->handle_cleanup_queue_);
+}
+
+inline void Environment::FinishHandleCleanup(uv_handle_t* handle) {
+  handle_cleanup_waiting_--;
+}
+
 inline uv_loop_t* Environment::event_loop() const {
   return isolate_data()->event_loop();
 }
 
-inline Environment::AsyncListener* Environment::async_listener() {
-  return &async_listener_count_;
+inline Environment::AsyncHooks* Environment::async_hooks() {
+  return &async_hooks_;
 }
 
 inline Environment::DomainFlag* Environment::domain_flag() {
@@ -317,6 +342,14 @@ inline bool Environment::using_domains() const {
 
 inline void Environment::set_using_domains(bool value) {
   using_domains_ = value;
+}
+
+inline bool Environment::using_asyncwrap() const {
+  return using_asyncwrap_;
+}
+
+inline void Environment::set_using_asyncwrap(bool value) {
+  using_asyncwrap_ = value;
 }
 
 inline bool Environment::printed_error() const {

@@ -33,15 +33,28 @@ namespace node {
 // Forward declaration
 class StreamWrap;
 
-typedef class ReqWrap<uv_shutdown_t> ShutdownWrap;
+class ShutdownWrap : public ReqWrap<uv_shutdown_t> {
+ public:
+  ShutdownWrap(Environment* env, v8::Local<v8::Object> req_wrap_obj)
+      : ReqWrap<uv_shutdown_t>(env,
+                               req_wrap_obj,
+                               AsyncWrap::PROVIDER_SHUTDOWNWRAP) {
+    Wrap(req_wrap_obj, this);
+  }
+
+  static void NewShutdownWrap(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    CHECK(args.IsConstructCall());
+  }
+};
 
 class WriteWrap: public ReqWrap<uv_write_t> {
  public:
   // TODO(trevnorris): WrapWrap inherits from ReqWrap, which I've globbed
   // into the same provider. How should these be broken apart?
   WriteWrap(Environment* env, v8::Local<v8::Object> obj, StreamWrap* wrap)
-      : ReqWrap<uv_write_t>(env, obj),
+      : ReqWrap<uv_write_t>(env, obj, AsyncWrap::PROVIDER_WRITEWRAP),
         wrap_(wrap) {
+    Wrap(obj, this);
   }
 
   void* operator new(size_t size, char* storage) { return storage; }
@@ -52,6 +65,10 @@ class WriteWrap: public ReqWrap<uv_write_t> {
 
   inline StreamWrap* wrap() const {
     return wrap_;
+  }
+
+  static void NewWriteWrap(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    CHECK(args.IsConstructCall());
   }
 
  private:
@@ -105,6 +122,10 @@ class StreamWrapCallbacks {
 
 class StreamWrap : public HandleWrap {
  public:
+  static void Initialize(v8::Handle<v8::Object> target,
+                         v8::Handle<v8::Value> unused,
+                         v8::Handle<v8::Context> context);
+
   void OverrideCallbacks(StreamWrapCallbacks* callbacks, bool gc) {
     StreamWrapCallbacks* old = callbacks_;
     callbacks_ = callbacks;
@@ -158,7 +179,8 @@ class StreamWrap : public HandleWrap {
   StreamWrap(Environment* env,
              v8::Local<v8::Object> object,
              uv_stream_t* stream,
-             AsyncWrap::ProviderType provider);
+             AsyncWrap::ProviderType provider,
+             AsyncWrap* parent = NULL);
 
   ~StreamWrap() {
     if (!callbacks_gc_ && callbacks_ != &default_callbacks_) {

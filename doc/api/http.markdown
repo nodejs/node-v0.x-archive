@@ -59,12 +59,12 @@ Found'`.
 
 ## http.createServer([requestListener])
 
-Returns a new web server object.
+Returns a new instance of [http.Server](#http_class_http_server).
 
 The `requestListener` is a function which is automatically
 added to the `'request'` event.
 
-## http.createClient([port], [host])
+## http.createClient([port][, host])
 
 This function is **deprecated**; please use [http.request()][] instead.
 Constructs a new HTTP client. `port` and `host` refer to the server to be
@@ -155,12 +155,12 @@ sent to the server on that socket.
 
 `function (exception, socket) { }`
 
-If a client connection emits an 'error' event - it will forwarded here.
+If a client connection emits an 'error' event, it will be forwarded here.
 
 `socket` is the `net.Socket` object that the error originated from.
 
 
-### server.listen(port, [hostname], [backlog], [callback])
+### server.listen(port[, hostname][, backlog][, callback])
 
 Begin accepting connections on the specified port and hostname.  If the
 hostname is omitted, the server will accept connections directed to any
@@ -177,7 +177,7 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'][] event.  See also [net.Server.listen(port)][].
 
 
-### server.listen(path, [callback])
+### server.listen(path[, callback])
 
 Start a UNIX socket server listening for connections on the given `path`.
 
@@ -185,7 +185,7 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'][] event.  See also [net.Server.listen(path)][].
 
 
-### server.listen(handle, [callback])
+### server.listen(handle[, callback])
 
 * `handle` {Object}
 * `callback` {Function}
@@ -275,7 +275,7 @@ After this event, no more events will be emitted on the response object.
 Sends a HTTP/1.1 100 Continue message to the client, indicating that
 the request body should be sent. See the ['checkContinue'][] event on `Server`.
 
-### response.writeHead(statusCode, [statusMessage], [headers])
+### response.writeHead(statusCode[, statusMessage][, headers])
 
 Sends a response header to the request. The status code is a 3-digit HTTP
 status code, like `404`. The last argument, `headers`, are the response headers.
@@ -295,7 +295,7 @@ be called before [response.end()][] is called.
 If you call [response.write()][] or [response.end()][] before calling this, the
 implicit/mutable headers will be calculated and call this function for you.
 
-Note: that Content-Length is given in bytes not characters. The above example
+Note that Content-Length is given in bytes not characters. The above example
 works because the string `'hello world'` contains only single byte characters.
 If the body contains higher coded characters then `Buffer.byteLength()`
 should be used to determine the number of bytes in a given encoding.
@@ -389,7 +389,7 @@ Example:
     response.removeHeader("Content-Encoding");
 
 
-### response.write(chunk, [encoding])
+### response.write(chunk[, encoding][, callback])
 
 If this method is called and [response.writeHead()][] has not been called,
 it will switch to implicit header mode and flush the implicit headers.
@@ -399,7 +399,8 @@ be called multiple times to provide successive parts of the body.
 
 `chunk` can be a string or a buffer. If `chunk` is a string,
 the second parameter specifies how to encode it into a byte stream.
-By default the `encoding` is `'utf8'`.
+By default the `encoding` is `'utf8'`. The last parameter `callback`
+will be called when this chunk of data is flushed.
 
 **Note**: This is the raw HTTP body and has nothing to do with
 higher-level multi-part body encodings that may be used.
@@ -412,7 +413,7 @@ first chunk of body.
 
 Returns `true` if the entire data was flushed successfully to the kernel
 buffer. Returns `false` if all or part of the data was queued in user memory.
-`'drain'` will be emitted when the buffer is again free.
+`'drain'` will be emitted when the buffer is free again.
 
 ### response.addTrailers(headers)
 
@@ -433,18 +434,20 @@ emit trailers, with a list of the header fields in its value. E.g.,
     response.end();
 
 
-### response.end([data], [encoding])
+### response.end([data][, encoding][, callback])
 
 This method signals to the server that all of the response headers and body
 have been sent; that server should consider this message complete.
 The method, `response.end()`, MUST be called on each
 response.
 
-If `data` is specified, it is equivalent to calling `response.write(data, encoding)`
-followed by `response.end()`.
+If `data` is specified, it is equivalent to calling
+`response.write(data, encoding)` followed by `response.end(callback)`.
 
+If `callback` is specified, it will be called when the response stream
+is finished.
 
-## http.request(options, [callback])
+## http.request(options[, callback])
 
 Node maintains several connections per server to make HTTP requests.
 This function allows one to transparently issue requests.
@@ -489,11 +492,19 @@ upload a file with a POST request, then write to the `ClientRequest` object.
 
 Example:
 
+    var postData = querystring.stringify({
+      'msg' : 'Hello World!'
+    });
+
     var options = {
       hostname: 'www.google.com',
       port: 80,
       path: '/upload',
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': postData.length
+      }
     };
 
     var req = http.request(options, function(res) {
@@ -510,8 +521,7 @@ Example:
     });
 
     // write data to request body
-    req.write('data\n');
-    req.write('data\n');
+    req.write(postData);
     req.end();
 
 Note that in the example `req.end()` was called. With `http.request()` one
@@ -537,7 +547,7 @@ There are a few special headers that should be noted.
 * Sending an Authorization header will override using the `auth` option
   to compute basic authentication.
 
-## http.get(options, [callback])
+## http.get(options[, callback])
 
 Since most requests are GET requests without bodies, Node provides this
 convenience method. The only difference between this method and `http.request()`
@@ -845,7 +855,7 @@ Emitted when the server sends a '100 Continue' HTTP response, usually because
 the request contained 'Expect: 100-continue'. This is an instruction that
 the client should send the request body.
 
-### request.flush()
+### request.flushHeaders()
 
 Flush the request headers.
 
@@ -857,7 +867,7 @@ That's usually what you want (it saves a TCP round-trip) but not when the first
 data isn't sent until possibly much later.  `request.flush()` lets you bypass
 the optimization and kickstart the request.
 
-### request.write(chunk, [encoding])
+### request.write(chunk[, encoding][, callback])
 
 Sends a chunk of the body.  By calling this method
 many times, the user can stream a request body to a
@@ -870,21 +880,26 @@ The `chunk` argument should be a [Buffer][] or a string.
 The `encoding` argument is optional and only applies when `chunk` is a string.
 Defaults to `'utf8'`.
 
+The `callback` argument is optional and will be called when this chunk of data
+is flushed.
 
-### request.end([data], [encoding])
+### request.end([data][, encoding][, callback])
 
 Finishes sending the request. If any parts of the body are
 unsent, it will flush them to the stream. If the request is
 chunked, this will send the terminating `'0\r\n\r\n'`.
 
 If `data` is specified, it is equivalent to calling
-`request.write(data, encoding)` followed by `request.end()`.
+`request.write(data, encoding)` followed by `request.end(callback)`.
+
+If `callback` is specified, it will be called when the request stream
+is finished.
 
 ### request.abort()
 
 Aborts a request.  (New since v0.3.8.)
 
-### request.setTimeout(timeout, [callback])
+### request.setTimeout(timeout[, callback])
 
 Once a socket is assigned to this request and is connected
 [socket.setTimeout()][] will be called.
@@ -894,7 +909,7 @@ Once a socket is assigned to this request and is connected
 Once a socket is assigned to this request and is connected
 [socket.setNoDelay()][] will be called.
 
-### request.setSocketKeepAlive([enable], [initialDelay])
+### request.setSocketKeepAlive([enable][, initialDelay])
 
 Once a socket is assigned to this request and is connected
 [socket.setKeepAlive()][] will be called.
@@ -914,7 +929,7 @@ following additional events, methods, and properties.
 
 `function () { }`
 
-Indicates that the underlaying connection was closed.
+Indicates that the underlying connection was closed.
 Just like `'end'`, this event occurs only once per response.
 
 ### message.httpVersion

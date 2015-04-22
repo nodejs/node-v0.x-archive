@@ -57,7 +57,6 @@
       'lib/string_decoder.js',
       'lib/sys.js',
       'lib/timers.js',
-      'lib/tracing.js',
       'lib/tls.js',
       'lib/_tls_common.js',
       'lib/_tls_legacy.js',
@@ -67,6 +66,7 @@
       'lib/util.js',
       'lib/vm.js',
       'lib/zlib.js',
+      'deps/debugger-agent/lib/_debugger_agent.js',
     ],
   },
 
@@ -77,6 +77,7 @@
 
       'dependencies': [
         'node_js2c#host',
+        'deps/debugger-agent/debugger-agent.gyp:debugger-agent',
       ],
 
       'include_dirs': [
@@ -87,6 +88,7 @@
       ],
 
       'sources': [
+        'src/async-wrap.cc',
         'src/fs_event_wrap.cc',
         'src/cares_wrap.cc',
         'src/handle_wrap.cc',
@@ -103,6 +105,7 @@
         'src/node_stat_watcher.cc',
         'src/node_watchdog.cc',
         'src/node_zlib.cc',
+        'src/node_i18n.cc',
         'src/pipe_wrap.cc',
         'src/signal_wrap.cc',
         'src/smalloc.cc',
@@ -134,6 +137,7 @@
         'src/node_version.h',
         'src/node_watchdog.h',
         'src/node_wrap.h',
+        'src/node_i18n.h',
         'src/pipe_wrap.h',
         'src/queue.h',
         'src/smalloc.h',
@@ -164,6 +168,23 @@
       ],
 
       'conditions': [
+        [ 'gcc_version<=44', {
+          # GCC versions <= 4.4 do not handle the aliasing in the queue
+          # implementation, so disable aliasing on these platforms
+          # to avoid subtle bugs
+          'cflags': [ '-fno-strict-aliasing' ],
+        }],
+        [ 'v8_enable_i18n_support==1', {
+          'defines': [ 'NODE_HAVE_I18N_SUPPORT=1' ],
+          'dependencies': [
+            '<(icu_gyp_path):icui18n',
+            '<(icu_gyp_path):icuuc',
+          ],
+          'conditions': [
+            [ 'icu_small=="true"', {
+              'defines': [ 'NODE_HAVE_SMALL_ICU=1' ],
+          }]],
+        }],
         [ 'node_use_openssl=="true"', {
           'defines': [ 'HAVE_OPENSSL=1' ],
           'sources': [
@@ -230,8 +251,7 @@
           'conditions': [
             [ 'OS=="linux"', {
               'sources': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_dtrace_provider.o',
-                '<(SHARED_INTERMEDIATE_DIR)/libuv_dtrace_provider.o',
+                '<(SHARED_INTERMEDIATE_DIR)/node_dtrace_provider.o'
               ],
             }],
             [ 'OS!="mac" and OS!="linux"', {
@@ -361,6 +381,10 @@
         'VCLinkerTool': {
           'SubSystem': 1, # /subsystem:console
         },
+        'VCManifestTool': {
+          'EmbedManifest': 'true',
+          'AdditionalManifestFiles': 'src/res/node.exe.extra.manifest'
+        }
       },
     },
     # generate ETW header and resource files
@@ -491,15 +515,13 @@
             {
               'action_name': 'node_dtrace_provider_o',
               'inputs': [
-                '<(OBJ_DIR)/libuv/deps/uv/src/unix/core.o',
                 '<(OBJ_DIR)/node/src/node_dtrace.o',
               ],
               'outputs': [
                 '<(OBJ_DIR)/node/src/node_dtrace_provider.o'
               ],
               'action': [ 'dtrace', '-G', '-xnolibs', '-s', 'src/node_provider.d',
-                '-s', 'deps/uv/src/unix/uv-dtrace.d', '<@(_inputs)',
-                '-o', '<@(_outputs)' ]
+                '<@(_inputs)', '-o', '<@(_outputs)' ]
             }
           ]
         }],
@@ -514,17 +536,7 @@
               'action': [
                 'dtrace', '-C', '-G', '-s', '<@(_inputs)', '-o', '<@(_outputs)'
               ],
-            },
-            {
-              'action_name': 'libuv_dtrace_provider_o',
-              'inputs': [ 'deps/uv/src/unix/uv-dtrace.d' ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/libuv_dtrace_provider.o'
-              ],
-              'action': [
-                'dtrace', '-C', '-G', '-s', '<@(_inputs)', '-o', '<@(_outputs)'
-              ],
-            },
+            }
           ],
         }],
       ]

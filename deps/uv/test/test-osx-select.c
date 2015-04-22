@@ -54,13 +54,68 @@ TEST_IMPL(osx_select) {
   uv_tty_t tty;
 
   fd = open("/dev/tty", O_RDONLY);
-
-  ASSERT(fd >= 0);
+  if (fd < 0) {
+    LOGF("Cannot open /dev/tty as read-only: %s\n", strerror(errno));
+    return TEST_SKIP;
+  }
 
   r = uv_tty_init(uv_default_loop(), &tty, fd, 1);
   ASSERT(r == 0);
 
   uv_read_start((uv_stream_t*) &tty, alloc_cb, read_cb);
+
+  /* Emulate user-input */
+  str = "got some input\n"
+        "with a couple of lines\n"
+        "feel pretty happy\n";
+  for (i = 0, len = strlen(str); i < len; i++) {
+    r = ioctl(fd, TIOCSTI, str + i);
+    ASSERT(r == 0);
+  }
+
+  uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+
+  ASSERT(read_count == 3);
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
+
+TEST_IMPL(osx_select_many_fds) {
+  int r;
+  int fd;
+  size_t i;
+  size_t len;
+  const char* str;
+  struct sockaddr_in addr;
+  uv_tty_t tty;
+  uv_tcp_t tcps[1500];
+
+  TEST_FILE_LIMIT(ARRAY_SIZE(tcps) + 100);
+
+  r = uv_ip4_addr("127.0.0.1", 0, &addr);
+  ASSERT(r == 0);
+
+  for (i = 0; i < ARRAY_SIZE(tcps); i++) {
+    r = uv_tcp_init(uv_default_loop(), &tcps[i]);
+    ASSERT(r == 0);
+    r = uv_tcp_bind(&tcps[i], (const struct sockaddr *) &addr, 0);
+    ASSERT(r == 0);
+    uv_unref((uv_handle_t*) &tcps[i]);
+  }
+
+  fd = open("/dev/tty", O_RDONLY);
+  if (fd < 0) {
+    LOGF("Cannot open /dev/tty as read-only: %s\n", strerror(errno));
+    return TEST_SKIP;
+  }
+
+  r = uv_tty_init(uv_default_loop(), &tty, fd, 1);
+  ASSERT(r == 0);
+
+  r = uv_read_start((uv_stream_t*) &tty, alloc_cb, read_cb);
+  ASSERT(r == 0);
 
   /* Emulate user-input */
   str = "got some input\n"

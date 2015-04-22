@@ -28,7 +28,10 @@ The name is what your thing is called.  Some tips:
 * The name will probably be passed as an argument to require(), so it should
   be something short, but also reasonably descriptive.
 * You may want to check the npm registry to see if there's something by that name
-  already, before you get too attached to it.  http://registry.npmjs.org/
+  already, before you get too attached to it. <https://www.npmjs.com/>
+
+A name can be optionally prefixed by a scope, e.g. `@myorg/mypackage`. See
+`npm-scope(7)` for more detail.
 
 ## version
 
@@ -72,7 +75,7 @@ with your package.
 
 It should look like this:
 
-    { "url" : "http://github.com/owner/project/issues"
+    { "url" : "https://github.com/owner/project/issues"
     , "email" : "project@hostname.com"
     }
 
@@ -151,12 +154,12 @@ command name to local file name. On install, npm will symlink that file into
 installs.
 
 
-For example, npm has this:
+For example, myapp could have this:
 
-    { "bin" : { "npm" : "./cli.js" } }
+    { "bin" : { "myapp" : "./cli.js" } }
 
-So, when you install npm, it'll create a symlink from the `cli.js` script to
-`/usr/local/bin/npm`.
+So, when you install myapp, it'll create a symlink from the `cli.js` script to
+`/usr/local/bin/myapp`.
 
 If you have a single executable, and its name should be the name
 of the package, then you can just supply it as a string.  For example:
@@ -216,7 +219,7 @@ will create entries for `man foo` and `man 2 foo`
 
 The CommonJS [Packages](http://wiki.commonjs.org/wiki/Packages/1.0) spec details a
 few ways that you can indicate the structure of your package using a `directories`
-hash. If you look at [npm's package.json](http://registry.npmjs.org/npm/latest),
+object. If you look at [npm's package.json](https://registry.npmjs.org/npm/latest),
 you'll see that it has directories for doc, lib, and man.
 
 In the future, this information may be used in other creative ways.
@@ -228,10 +231,10 @@ with the lib folder in any way, but it's useful meta info.
 
 ### directories.bin
 
-If you specify a "bin" directory, then all the files in that folder will
-be used as the "bin" hash.
+If you specify a `bin` directory, then all the files in that folder will
+be added as children of the `bin` path.
 
-If you have a "bin" hash already, then this has no effect.
+If you have a `bin` path already, then this has no effect.
 
 ### directories.man
 
@@ -250,28 +253,33 @@ Put example scripts in here.  Someday, it might be exposed in some clever way.
 ## repository
 
 Specify the place where your code lives. This is helpful for people who
-want to contribute.  If the git repo is on github, then the `npm docs`
+want to contribute.  If the git repo is on GitHub, then the `npm docs`
 command will be able to find you.
 
 Do it like this:
 
     "repository" :
       { "type" : "git"
-      , "url" : "http://github.com/npm/npm.git"
+      , "url" : "https://github.com/npm/npm.git"
       }
 
     "repository" :
       { "type" : "svn"
-      , "url" : "http://v8.googlecode.com/svn/trunk/"
+      , "url" : "https://v8.googlecode.com/svn/trunk/"
       }
 
 The URL should be a publicly available (perhaps read-only) url that can be handed
 directly to a VCS program without any modification.  It should not be a url to an
 html project page that you put in your browser.  It's for computers.
 
+For GitHub repositories you can use the same shortcut syntax you use for `npm
+install`:
+
+    "repository": "npm/npm"
+
 ## scripts
 
-The "scripts" member is an object hash of script commands that are run
+The "scripts" property is a dictionary containing script commands that are run
 at various times in the lifecycle of your package.  The key is the lifecycle
 event, and the value is the command to run at that point.
 
@@ -279,9 +287,9 @@ See `npm-scripts(7)` to find out more about writing package scripts.
 
 ## config
 
-A "config" hash can be used to set configuration
-parameters used in package scripts that persist across upgrades.  For
-instance, if a package had the following:
+A "config" object can be used to set configuration parameters used in package
+scripts that persist across upgrades.  For instance, if a package had the
+following:
 
     { "name" : "foo"
     , "config" : { "port" : "8080" } }
@@ -295,13 +303,13 @@ configs.
 
 ## dependencies
 
-Dependencies are specified with a simple hash of package name to
+Dependencies are specified in a simple object that maps a package name to a
 version range. The version range is a string which has one or more
-space-separated descriptors.  Dependencies can also be identified with
-a tarball or git URL.
+space-separated descriptors.  Dependencies can also be identified with a
+tarball or git URL.
 
 **Please do not put test harnesses or transpilers in your
-`dependencies` hash.**  See `devDependencies`, below.
+`dependencies` object.**  See `devDependencies`, below.
 
 See semver(7) for more details about specifying version ranges.
 
@@ -320,6 +328,8 @@ See semver(7) for more details about specifying version ranges.
 * `range1 || range2` Passes if either range1 or range2 are satisfied.
 * `git...` See 'Git URLs as Dependencies' below
 * `user/repo` See 'GitHub URLs' below
+* `tag` A specific version tagged and published as `tag`  See `npm-tag(1)`
+* `path/path/path` See Local Paths below
 
 For example, these are all valid:
 
@@ -334,6 +344,8 @@ For example, these are all valid:
       , "elf" : "~1.2.3"
       , "two" : "2.x"
       , "thr" : "3.3.x"
+      , "lat" : "latest"
+      , "dyl" : "file:../dyl"
       }
     }
 
@@ -359,15 +371,44 @@ an argument to `git checkout`.  The default is `master`.
 
 ## GitHub URLs
 
-As of version 1.1.65, you can refer to GitHub urls as just "foo": "user/foo-project". For example:
+As of version 1.1.65, you can refer to GitHub urls as just "foo":
+"user/foo-project".  Just as with git URLs, a `commit-ish` suffix can be
+included.  For example:
 
     {
       "name": "foo",
       "version": "0.0.0",
       "dependencies": {
-        "express": "visionmedia/express"
+        "express": "visionmedia/express",
+        "mocha": "visionmedia/mocha#4727d357ea"
       }
     }
+
+## Local Paths
+
+As of version 2.0.0 you can provide a path to a local directory that contains a
+package. Local paths can be saved using `npm install --save`, using any of
+these forms:
+
+    ../foo/bar
+    ~/foo/bar
+    ./foo/bar
+    /foo/bar
+
+in which case they will be normalized to a relative path and added to your
+`package.json`. For example:
+
+    {
+      "name": "baz",
+      "dependencies": {
+        "bar": "file:../foo/bar"
+      }
+    }
+
+This feature is helpful for local offline development and creating
+tests that require npm installing where you don't want to hit an
+external server, but should not be used when publishing packages
+to the public registry.
 
 ## devDependencies
 
@@ -375,8 +416,8 @@ If someone is planning on downloading and using your module in their
 program, then they probably don't want or need to download and build
 the external test or documentation framework that you use.
 
-In this case, it's best to list these additional items in a
-`devDependencies` hash.
+In this case, it's best to map these additional items in a `devDependencies`
+object.
 
 These things will be installed when doing `npm link` or `npm install`
 from the root of a package, and can be managed like any other npm
@@ -409,26 +450,32 @@ run this script as well, so that you can test it easily.
 
 In some cases, you want to express the compatibility of your package with an
 host tool or library, while not necessarily doing a `require` of this host.
-This is usually refered to as a *plugin*. Notably, your module may be exposing
+This is usually referred to as a *plugin*. Notably, your module may be exposing
 a specific interface, expected and specified by the host documentation.
 
 For example:
 
     {
       "name": "tea-latte",
-      "version": "1.3.5"
+      "version": "1.3.5",
       "peerDependencies": {
         "tea": "2.x"
       }
     }
 
 This ensures your package `tea-latte` can be installed *along* with the second
-major version of the host package `tea` only. The host package is automatically
-installed if needed. `npm install tea-latte` could possibly yield the following
-dependency graph:
+major version of the host package `tea` only. `npm install tea-latte` could
+possibly yield the following dependency graph:
 
     ├── tea-latte@1.3.5
     └── tea@2.2.0
+
+**NOTE: npm versions 1 and 2 will automatically install `peerDependencies` if
+they are not explicitly depended upon higher in the dependency tree. In the
+next major version of npm (npm@3), this will no longer be the case. You will
+receive a warning that the peerDependency is not installed instead.** The
+behavior in npms 1 & 2 was frequently confusing and could easily put you into
+dependency hell, a situation that npm is designed to avoid as much as possible.
 
 Trying to install another plugin with a conflicting requirement will cause an
 error. For this reason, make sure your plugin requirement is as broad as
@@ -447,11 +494,11 @@ If this is spelled `"bundleDependencies"`, then that is also honorable.
 
 ## optionalDependencies
 
-If a dependency can be used, but you would like npm to proceed if it
-cannot be found or fails to install, then you may put it in the
-`optionalDependencies` hash.  This is a map of package name to version
-or url, just like the `dependencies` hash.  The difference is that
-failure is tolerated.
+If a dependency can be used, but you would like npm to proceed if it cannot be
+found or fails to install, then you may put it in the `optionalDependencies`
+object.  This is a map of package name to version or url, just like the
+`dependencies` object.  The difference is that build failures do not cause
+installation to fail.
 
 It is still your program's responsibility to handle the lack of the
 dependency.  For example, something like this:
@@ -498,16 +545,17 @@ field is advisory only.
 
 ## engineStrict
 
+**NOTE: This feature is deprecated and will be removed in npm 3.0.0.**
+
 If you are sure that your module will *definitely not* run properly on
-versions of Node/npm other than those specified in the `engines` hash,
+versions of Node/npm other than those specified in the `engines` object,
 then you can set `"engineStrict": true` in your package.json file.
 This will override the user's `engine-strict` config setting.
 
 Please do not do this unless you are really very very sure.  If your
-engines hash is something overly restrictive, you can quite easily and
+engines object is something overly restrictive, you can quite easily and
 inadvertently lock yourself into obscurity and prevent your users from
-updating to new versions of Node.  Consider this choice carefully.  If
-people abuse it, it will be removed in a future version of npm.
+updating to new versions of Node.  Consider this choice carefully.
 
 ## os
 
@@ -553,11 +601,11 @@ does help prevent some confusion if it doesn't work as expected.
 If you set `"private": true` in your package.json, then npm will refuse
 to publish it.
 
-This is a way to prevent accidental publication of private repositories.
-If you would like to ensure that a given package is only ever published
-to a specific registry (for example, an internal registry),
-then use the `publishConfig` hash described below
-to override the `registry` config param at publish-time.
+This is a way to prevent accidental publication of private repositories.  If
+you would like to ensure that a given package is only ever published to a
+specific registry (for example, an internal registry), then use the
+`publishConfig` dictionary described below to override the `registry` config
+param at publish-time.
 
 ## publishConfig
 

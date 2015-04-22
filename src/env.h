@@ -28,6 +28,7 @@
 #include "uv.h"
 #include "v8.h"
 #include "queue.h"
+#include "debugger-agent.h"
 
 #include <stdint.h>
 
@@ -63,8 +64,8 @@ namespace node {
   V(address_string, "address")                                                \
   V(args_string, "args")                                                      \
   V(argv_string, "argv")                                                      \
-  V(async_queue_string, "_asyncQueue")                                        \
   V(async, "async")                                                           \
+  V(async_queue_string, "_asyncQueue")                                        \
   V(atime_string, "atime")                                                    \
   V(birthtime_string, "birthtime")                                            \
   V(blksize_string, "blksize")                                                \
@@ -72,7 +73,6 @@ namespace node {
   V(buffer_string, "buffer")                                                  \
   V(bytes_string, "bytes")                                                    \
   V(bytes_parsed_string, "bytesParsed")                                       \
-  V(byte_length_string, "byteLength")                                         \
   V(callback_string, "callback")                                              \
   V(change_string, "change")                                                  \
   V(close_string, "close")                                                    \
@@ -250,9 +250,9 @@ namespace node {
   V(zero_return_string, "ZERO_RETURN")                                        \
 
 #define ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)                           \
-  V(async_listener_run_function, v8::Function)                                \
-  V(async_listener_load_function, v8::Function)                               \
-  V(async_listener_unload_function, v8::Function)                             \
+  V(async_hooks_init_function, v8::Function)                                  \
+  V(async_hooks_pre_function, v8::Function)                                   \
+  V(async_hooks_post_function, v8::Function)                                  \
   V(binding_cache_object, v8::Object)                                         \
   V(buffer_constructor_function, v8::Function)                                \
   V(context, v8::Context)                                                     \
@@ -286,26 +286,25 @@ RB_HEAD(ares_task_list, ares_task_t);
 
 class Environment {
  public:
-  class AsyncListener {
+  class AsyncHooks {
    public:
     inline uint32_t* fields();
     inline int fields_count() const;
-    inline bool has_listener() const;
-    inline uint32_t watched_providers() const;
+    inline bool call_init_hook();
 
    private:
     friend class Environment;  // So we can call the constructor.
-    inline AsyncListener();
+    inline AsyncHooks();
 
     enum Fields {
-      kHasListener,
-      kWatchedProviders,
+      // Set this to not zero if the init hook should be called.
+      kCallInitHook,
       kFieldsCount
     };
 
     uint32_t fields_[kFieldsCount];
 
-    DISALLOW_COPY_AND_ASSIGN(AsyncListener);
+    DISALLOW_COPY_AND_ASSIGN(AsyncHooks);
   };
 
   class DomainFlag {
@@ -357,11 +356,34 @@ class Environment {
     DISALLOW_COPY_AND_ASSIGN(TickInfo);
   };
 
+  typedef void (*HandleCleanupCb)(Environment* env,
+                                  uv_handle_t* handle,
+                                  void* arg);
+
+  class HandleCleanup {
+   private:
+    friend class Environment;
+
+    HandleCleanup(uv_handle_t* handle, HandleCleanupCb cb, void* arg)
+        : handle_(handle),
+          cb_(cb),
+          arg_(arg) {
+      QUEUE_INIT(&handle_cleanup_queue_);
+    }
+
+    uv_handle_t* handle_;
+    HandleCleanupCb cb_;
+    void* arg_;
+    QUEUE handle_cleanup_queue_;
+  };
+
   static inline Environment* GetCurrent(v8::Isolate* isolate);
   static inline Environment* GetCurrent(v8::Local<v8::Context> context);
 
   // See CreateEnvironment() in src/node.cc.
-  static inline Environment* New(v8::Local<v8::Context> context);
+  static inline Environment* New(v8::Local<v8::Context> context,
+                                 uv_loop_t* loop);
+  inline void CleanupHandles();
   inline void Dispose();
 
   // Defined in src/node_profiler.cc.
@@ -372,7 +394,7 @@ class Environment {
 
   inline v8::Isolate* isolate() const;
   inline uv_loop_t* event_loop() const;
-  inline bool has_async_listener() const;
+  inline bool call_async_init_hook() const;
   inline bool in_domain() const;
   inline uint32_t watched_providers() const;
 
@@ -386,7 +408,13 @@ class Environment {
   static inline Environment* from_idle_check_handle(uv_check_t* handle);
   inline uv_check_t* idle_check_handle();
 
-  inline AsyncListener* async_listener();
+  // Register clean-up cb to be called on env->Dispose()
+  inline void RegisterHandleCleanup(uv_handle_t* handle,
+                                    HandleCleanupCb cb,
+                                    void *arg);
+  inline void FinishHandleCleanup(uv_handle_t* handle);
+
+  inline AsyncHooks* async_hooks();
   inline DomainFlag* domain_flag();
   inline TickInfo* tick_info();
 
@@ -401,6 +429,9 @@ class Environment {
 
   inline bool using_domains() const;
   inline void set_using_domains(bool value);
+
+  inline bool using_asyncwrap() const;
+  inline void set_using_asyncwrap(bool value);
 
   inline bool printed_error() const;
   inline void set_printed_error(bool value);
@@ -435,12 +466,19 @@ class Environment {
   ENVIRONMENT_STRONG_PERSISTENT_PROPERTIES(V)
 #undef V
 
+  inline debugger::Agent* debugger_agent() {
+    return &debugger_agent_;
+  }
+
+  inline QUEUE* handle_wrap_queue() { return &handle_wrap_queue_; }
+  inline QUEUE* req_wrap_queue() { return &req_wrap_queue_; }
+
  private:
   static const int kIsolateSlot = NODE_ISOLATE_SLOT;
 
   class GCInfo;
   class IsolateData;
-  inline explicit Environment(v8::Local<v8::Context> context);
+  inline Environment(v8::Local<v8::Context> context, uv_loop_t* loop);
   inline ~Environment();
   inline IsolateData* isolate_data() const;
   void AfterGarbageCollectionCallback(const GCInfo* before,
@@ -456,7 +494,7 @@ class Environment {
   uv_idle_t immediate_idle_handle_;
   uv_prepare_t idle_prepare_handle_;
   uv_check_t idle_check_handle_;
-  AsyncListener async_listener_count_;
+  AsyncHooks async_hooks_;
   DomainFlag domain_flag_;
   TickInfo tick_info_;
   uv_timer_t cares_timer_handle_;
@@ -464,8 +502,15 @@ class Environment {
   ares_task_list cares_task_list_;
   bool using_smalloc_alloc_cb_;
   bool using_domains_;
+  bool using_asyncwrap_;
   QUEUE gc_tracker_queue_;
   bool printed_error_;
+  debugger::Agent debugger_agent_;
+
+  QUEUE handle_wrap_queue_;
+  QUEUE req_wrap_queue_;
+  QUEUE handle_cleanup_queue_;
+  int handle_cleanup_waiting_;
 
 #define V(PropertyName, TypeName)                                             \
   v8::Persistent<TypeName> PropertyName ## _;
@@ -495,7 +540,8 @@ class Environment {
   // Per-thread, reference-counted singleton.
   class IsolateData {
    public:
-    static inline IsolateData* GetOrCreate(v8::Isolate* isolate);
+    static inline IsolateData* GetOrCreate(v8::Isolate* isolate,
+                                           uv_loop_t* loop);
     inline void Put();
     inline uv_loop_t* event_loop() const;
 
@@ -510,7 +556,7 @@ class Environment {
 
    private:
     inline static IsolateData* Get(v8::Isolate* isolate);
-    inline explicit IsolateData(v8::Isolate* isolate);
+    inline explicit IsolateData(v8::Isolate* isolate, uv_loop_t* loop);
     inline v8::Isolate* isolate() const;
 
     // Defined in src/node_profiler.cc.

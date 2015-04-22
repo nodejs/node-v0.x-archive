@@ -27,197 +27,66 @@
 #include "base-object-inl.h"
 #include "env.h"
 #include "env-inl.h"
+#include "node_internals.h"
 #include "util.h"
 #include "util-inl.h"
 
 #include "v8.h"
-#include <assert.h>
 
 namespace node {
 
 inline AsyncWrap::AsyncWrap(Environment* env,
                             v8::Handle<v8::Object> object,
-                            ProviderType provider)
+                            ProviderType provider,
+                            AsyncWrap* parent)
     : BaseObject(env, object),
-      async_flags_(NO_OPTIONS),
+      has_async_queue_(false),
       provider_type_(provider) {
-  if (!env->has_async_listener())
+  // Check user controlled flag to see if the init callback should run.
+  if (!env->using_asyncwrap())
+    return;
+  if (!env->call_async_init_hook() && parent == NULL)
     return;
 
-  // TODO(trevnorris): Do we really need to TryCatch this call?
+  // TODO(trevnorris): Until it's verified all passed object's are not weak,
+  // add a HandleScope to make sure there's no leak.
+  v8::HandleScope scope(env->isolate());
+
+  v8::Local<v8::Object> parent_obj;
+
   v8::TryCatch try_catch;
-  try_catch.SetVerbose(true);
 
-  v8::Local<v8::Value> val = object.As<v8::Value>();
-  env->async_listener_run_function()->Call(env->process_object(), 1, &val);
+  // If a parent value was sent then call its pre/post functions to let it know
+  // a conceptual "child" is being instantiated (e.g. that a server has
+  // received a connection).
+  if (parent != NULL) {
+    parent_obj = parent->object();
+    env->async_hooks_pre_function()->Call(parent_obj, 0, NULL);
+    if (try_catch.HasCaught())
+      FatalError("node::AsyncWrap::AsyncWrap", "parent pre hook threw");
+  }
 
-  if (!try_catch.HasCaught())
-    async_flags_ |= HAS_ASYNC_LISTENER;
+  env->async_hooks_init_function()->Call(object, 0, NULL);
+
+  if (try_catch.HasCaught())
+    FatalError("node::AsyncWrap::AsyncWrap", "init hook threw");
+
+  has_async_queue_ = true;
+
+  if (parent != NULL) {
+    env->async_hooks_post_function()->Call(parent_obj, 0, NULL);
+    if (try_catch.HasCaught())
+      FatalError("node::AsyncWrap::AsyncWrap", "parent post hook threw");
+  }
 }
 
 
 inline AsyncWrap::~AsyncWrap() {
 }
 
+
 inline uint32_t AsyncWrap::provider_type() const {
   return provider_type_;
-}
-
-
-inline bool AsyncWrap::has_async_listener() {
-  return async_flags_ & HAS_ASYNC_LISTENER;
-}
-
-
-// I hate you domains.
-inline v8::Handle<v8::Value> AsyncWrap::MakeDomainCallback(
-    const v8::Handle<v8::Function> cb,
-    int argc,
-    v8::Handle<v8::Value>* argv) {
-  assert(env()->context() == env()->isolate()->GetCurrentContext());
-
-  v8::Local<v8::Object> context = object();
-  v8::Local<v8::Object> process = env()->process_object();
-  v8::Local<v8::Value> domain_v = context->Get(env()->domain_string());
-  v8::Local<v8::Object> domain;
-
-  v8::TryCatch try_catch;
-  try_catch.SetVerbose(true);
-
-  if (has_async_listener()) {
-    v8::Local<v8::Value> val = context.As<v8::Value>();
-    env()->async_listener_load_function()->Call(process, 1, &val);
-
-    if (try_catch.HasCaught())
-      return v8::Undefined(env()->isolate());
-  }
-
-  bool has_domain = domain_v->IsObject();
-  if (has_domain) {
-    domain = domain_v.As<v8::Object>();
-
-    if (domain->Get(env()->disposed_string())->IsTrue())
-      return Undefined(env()->isolate());
-
-    v8::Local<v8::Function> enter =
-      domain->Get(env()->enter_string()).As<v8::Function>();
-    if (enter->IsFunction()) {
-      enter->Call(domain, 0, NULL);
-      if (try_catch.HasCaught())
-        return Undefined(env()->isolate());
-    }
-  }
-
-  v8::Local<v8::Value> ret = cb->Call(context, argc, argv);
-
-  if (try_catch.HasCaught()) {
-    return Undefined(env()->isolate());
-  }
-
-  if (has_domain) {
-    v8::Local<v8::Function> exit =
-      domain->Get(env()->exit_string()).As<v8::Function>();
-    if (exit->IsFunction()) {
-      exit->Call(domain, 0, NULL);
-      if (try_catch.HasCaught())
-        return Undefined(env()->isolate());
-    }
-  }
-
-  if (has_async_listener()) {
-    v8::Local<v8::Value> val = context.As<v8::Value>();
-    env()->async_listener_unload_function()->Call(process, 1, &val);
-
-    if (try_catch.HasCaught())
-      return Undefined(env()->isolate());
-  }
-
-  Environment::TickInfo* tick_info = env()->tick_info();
-
-  if (tick_info->in_tick()) {
-    return ret;
-  }
-
-  if (tick_info->length() == 0) {
-    tick_info->set_index(0);
-    return ret;
-  }
-
-  tick_info->set_in_tick(true);
-
-  env()->tick_callback_function()->Call(process, 0, NULL);
-
-  tick_info->set_in_tick(false);
-
-  if (try_catch.HasCaught()) {
-    tick_info->set_last_threw(true);
-    return Undefined(env()->isolate());
-  }
-
-  return ret;
-}
-
-
-inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
-    const v8::Handle<v8::Function> cb,
-    int argc,
-    v8::Handle<v8::Value>* argv) {
-  if (env()->using_domains())
-    return MakeDomainCallback(cb, argc, argv);
-
-  assert(env()->context() == env()->isolate()->GetCurrentContext());
-
-  v8::Local<v8::Object> context = object();
-  v8::Local<v8::Object> process = env()->process_object();
-
-  v8::TryCatch try_catch;
-  try_catch.SetVerbose(true);
-
-  if (has_async_listener()) {
-    v8::Local<v8::Value> val = context.As<v8::Value>();
-    env()->async_listener_load_function()->Call(process, 1, &val);
-
-    if (try_catch.HasCaught())
-      return v8::Undefined(env()->isolate());
-  }
-
-  v8::Local<v8::Value> ret = cb->Call(context, argc, argv);
-
-  if (try_catch.HasCaught()) {
-    return Undefined(env()->isolate());
-  }
-
-  if (has_async_listener()) {
-    v8::Local<v8::Value> val = context.As<v8::Value>();
-    env()->async_listener_unload_function()->Call(process, 1, &val);
-
-    if (try_catch.HasCaught())
-      return v8::Undefined(env()->isolate());
-  }
-
-  Environment::TickInfo* tick_info = env()->tick_info();
-
-  if (tick_info->in_tick()) {
-    return ret;
-  }
-
-  if (tick_info->length() == 0) {
-    tick_info->set_index(0);
-    return ret;
-  }
-
-  tick_info->set_in_tick(true);
-
-  env()->tick_callback_function()->Call(process, 0, NULL);
-
-  tick_info->set_in_tick(false);
-
-  if (try_catch.HasCaught()) {
-    tick_info->set_last_threw(true);
-    return Undefined(env()->isolate());
-  }
-
-  return ret;
 }
 
 
@@ -226,10 +95,8 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
     int argc,
     v8::Handle<v8::Value>* argv) {
   v8::Local<v8::Value> cb_v = object()->Get(symbol);
-  v8::Local<v8::Function> cb = cb_v.As<v8::Function>();
-  assert(cb->IsFunction());
-
-  return MakeCallback(cb, argc, argv);
+  ASSERT(cb_v->IsFunction());
+  return MakeCallback(cb_v.As<v8::Function>(), argc, argv);
 }
 
 
@@ -238,10 +105,8 @@ inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
     int argc,
     v8::Handle<v8::Value>* argv) {
   v8::Local<v8::Value> cb_v = object()->Get(index);
-  v8::Local<v8::Function> cb = cb_v.As<v8::Function>();
-  assert(cb->IsFunction());
-
-  return MakeCallback(cb, argc, argv);
+  ASSERT(cb_v->IsFunction());
+  return MakeCallback(cb_v.As<v8::Function>(), argc, argv);
 }
 
 }  // namespace node

@@ -31,6 +31,7 @@ sNtDeviceIoControlFile pNtDeviceIoControlFile;
 sNtQueryInformationFile pNtQueryInformationFile;
 sNtSetInformationFile pNtSetInformationFile;
 sNtQueryVolumeInformationFile pNtQueryVolumeInformationFile;
+sNtQueryDirectoryFile pNtQueryDirectoryFile;
 sNtQuerySystemInformation pNtQuerySystemInformation;
 
 
@@ -51,6 +52,7 @@ sSleepConditionVariableCS pSleepConditionVariableCS;
 sSleepConditionVariableSRW pSleepConditionVariableSRW;
 sWakeAllConditionVariable pWakeAllConditionVariable;
 sWakeConditionVariable pWakeConditionVariable;
+sCancelSynchronousIo pCancelSynchronousIo;
 
 
 void uv_winapi_init() {
@@ -92,6 +94,12 @@ void uv_winapi_init() {
 
   pNtQueryVolumeInformationFile = (sNtQueryVolumeInformationFile)
       GetProcAddress(ntdll_module, "NtQueryVolumeInformationFile");
+  if (pNtQueryVolumeInformationFile == NULL) {
+    uv_fatal_error(GetLastError(), "GetProcAddress");
+  }
+
+  pNtQueryDirectoryFile = (sNtQueryDirectoryFile)
+      GetProcAddress(ntdll_module, "NtQueryDirectoryFile");
   if (pNtQueryVolumeInformationFile == NULL) {
     uv_fatal_error(GetLastError(), "GetProcAddress");
   }
@@ -156,4 +164,7 @@ void uv_winapi_init() {
 
   pWakeConditionVariable = (sWakeConditionVariable)
     GetProcAddress(kernel32_module, "WakeConditionVariable");
+
+  pCancelSynchronousIo = (sCancelSynchronousIo)
+    GetProcAddress(kernel32_module, "CancelSynchronousIo");
 }

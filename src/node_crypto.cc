@@ -74,6 +74,11 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_FN_SN;
 
 namespace node {
+
+bool SSL2_ENABLE = false;
+bool SSL3_ENABLE = false;
+const char * DEFAULT_CIPHER_LIST = DEFAULT_CIPHER_LIST_HEAD;
+
 namespace crypto {
 
 using v8::Array;
@@ -81,6 +86,7 @@ using v8::Boolean;
 using v8::Context;
 using v8::EscapableHandleScope;
 using v8::Exception;
+using v8::External;
 using v8::False;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -97,6 +103,7 @@ using v8::PropertyCallbackInfo;
 using v8::String;
 using v8::V8;
 using v8::Value;
+
 
 
 // Forcibly clear OpenSSL's error stack on return. This stops stale errors
@@ -120,8 +127,7 @@ X509_STORE* root_cert_store;
 template class SSLWrap<TLSCallbacks>;
 template void SSLWrap<TLSCallbacks>::AddMethods(Environment* env,
                                                 Handle<FunctionTemplate> t);
-template void SSLWrap<TLSCallbacks>::InitNPN(SecureContext* sc,
-                                             TLSCallbacks* base);
+template void SSLWrap<TLSCallbacks>::InitNPN(SecureContext* sc);
 template SSL_SESSION* SSLWrap<TLSCallbacks>::GetSessionCallback(
     SSL* s,
     unsigned char* key,
@@ -151,7 +157,8 @@ template int SSLWrap<TLSCallbacks>::TLSExtStatusCallback(SSL* s, void* arg);
 
 
 static void crypto_threadid_cb(CRYPTO_THREADID* tid) {
-  CRYPTO_THREADID_set_numeric(tid, uv_thread_self());
+  assert(sizeof(uv_thread_t) <= sizeof(void*));  // NOLINT(runtime/sizeof)
+  CRYPTO_THREADID_set_pointer(tid, reinterpret_cast<void*>(uv_thread_self()));
 }
 
 
@@ -287,6 +294,11 @@ void SecureContext::Initialize(Environment* env, Handle<Object> target) {
                             "getIssuer",
                             SecureContext::GetCertificate<false>);
 
+  NODE_SET_EXTERNAL(
+      t->PrototypeTemplate(),
+      "_external",
+      CtxGetter);
+
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "SecureContext"),
               t->GetFunction());
   env->set_secure_context_constructor_template(t);
@@ -330,11 +342,23 @@ void SecureContext::Init(const FunctionCallbackInfo<Value>& args) {
       return env->ThrowError("SSLv2 methods disabled");
 #endif
     } else if (strcmp(*sslmethod, "SSLv3_method") == 0) {
+#ifndef OPENSSL_NO_SSL3
       method = SSLv3_method();
+#else
+      return env->ThrowError("SSLv3 methods disabled");
+#endif
     } else if (strcmp(*sslmethod, "SSLv3_server_method") == 0) {
+#ifndef OPENSSL_NO_SSL3
       method = SSLv3_server_method();
+#else
+      return env->ThrowError("SSLv3 methods disabled");
+#endif
     } else if (strcmp(*sslmethod, "SSLv3_client_method") == 0) {
+#ifndef OPENSSL_NO_SSL3
       method = SSLv3_client_method();
+#else
+      return env->ThrowError("SSLv3 methods disabled");
+#endif
     } else if (strcmp(*sslmethod, "SSLv23_method") == 0) {
       method = SSLv23_method();
     } else if (strcmp(*sslmethod, "SSLv23_server_method") == 0) {
@@ -783,7 +807,7 @@ void SecureContext::SetOptions(const FunctionCallbackInfo<Value>& args) {
 
   SecureContext* sc = Unwrap<SecureContext>(args.Holder());
 
-  if (args.Length() != 1 || !args[0]->IntegerValue()) {
+  if (args.Length() != 1 && !args[0]->IsUint32()) {
     return sc->env()->ThrowTypeError("Bad parameter");
   }
 
@@ -957,6 +981,16 @@ void SecureContext::SetTicketKeys(const FunctionCallbackInfo<Value>& args) {
 }
 
 
+void SecureContext::CtxGetter(Local<String> property,
+                              const PropertyCallbackInfo<Value>& info) {
+  HandleScope scope(info.GetIsolate());
+
+  SSL_CTX* ctx = Unwrap<SecureContext>(info.Holder())->ctx_;
+  Local<External> ext = External::New(info.GetIsolate(), ctx);
+  info.GetReturnValue().Set(ext);
+}
+
+
 template <bool primary>
 void SecureContext::GetCertificate(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(args.GetIsolate());
@@ -1007,32 +1041,35 @@ void SSLWrap<Base>::AddMethods(Environment* env, Handle<FunctionTemplate> t) {
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   NODE_SET_PROTOTYPE_METHOD(t, "getNegotiatedProtocol", GetNegotiatedProto);
-  NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", SetNPNProtocols);
 #endif  // OPENSSL_NPN_NEGOTIATED
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+  NODE_SET_PROTOTYPE_METHOD(t, "setNPNProtocols", SetNPNProtocols);
+#endif
+
+  NODE_SET_EXTERNAL(
+      t->PrototypeTemplate(),
+      "_external",
+      SSLGetter);
 }
 
 
 template <class Base>
-void SSLWrap<Base>::InitNPN(SecureContext* sc, Base* base) {
-  if (base->is_server()) {
+void SSLWrap<Base>::InitNPN(SecureContext* sc) {
 #ifdef OPENSSL_NPN_NEGOTIATED
-    // Server should advertise NPN protocols
-    SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
-                                          AdvertiseNextProtoCallback,
-                                          base);
+  // Server should advertise NPN protocols
+  SSL_CTX_set_next_protos_advertised_cb(sc->ctx_,
+                                        AdvertiseNextProtoCallback,
+                                        NULL);
+  // Client should select protocol from list of advertised
+  // If server supports NPN
+  SSL_CTX_set_next_proto_select_cb(sc->ctx_, SelectNextProtoCallback, NULL);
 #endif  // OPENSSL_NPN_NEGOTIATED
-  } else {
-#ifdef OPENSSL_NPN_NEGOTIATED
-    // Client should select protocol from list of advertised
-    // If server supports NPN
-    SSL_CTX_set_next_proto_select_cb(sc->ctx_, SelectNextProtoCallback, base);
-#endif  // OPENSSL_NPN_NEGOTIATED
-  }
 
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
   // OCSP stapling
   SSL_CTX_set_tlsext_status_cb(sc->ctx_, TLSExtStatusCallback);
-  SSL_CTX_set_tlsext_status_arg(sc->ctx_, base);
+  SSL_CTX_set_tlsext_status_arg(sc->ctx_, NULL);
 #endif  // NODE__HAVE_TLSEXT_STATUS_CB
 }
 
@@ -1688,7 +1725,7 @@ int SSLWrap<Base>::AdvertiseNextProtoCallback(SSL* s,
                                               const unsigned char** data,
                                               unsigned int* len,
                                               void* arg) {
-  Base* w = static_cast<Base*>(arg);
+  Base* w = static_cast<Base*>(SSL_get_app_data(s));
   Environment* env = w->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
@@ -1714,7 +1751,7 @@ int SSLWrap<Base>::SelectNextProtoCallback(SSL* s,
                                            const unsigned char* in,
                                            unsigned int inlen,
                                            void* arg) {
-  Base* w = static_cast<Base*>(arg);
+  Base* w = static_cast<Base*>(SSL_get_app_data(s));
   Environment* env = w->env();
   HandleScope handle_scope(env->isolate());
   Context::Scope context_scope(env->context());
@@ -1806,7 +1843,7 @@ void SSLWrap<Base>::SetNPNProtocols(const FunctionCallbackInfo<Value>& args) {
 #ifdef NODE__HAVE_TLSEXT_STATUS_CB
 template <class Base>
 int SSLWrap<Base>::TLSExtStatusCallback(SSL* s, void* arg) {
-  Base* w = static_cast<Base*>(arg);
+  Base* w = static_cast<Base*>(SSL_get_app_data(s));
   Environment* env = w->env();
   HandleScope handle_scope(env->isolate());
 
@@ -1850,6 +1887,17 @@ int SSLWrap<Base>::TLSExtStatusCallback(SSL* s, void* arg) {
   }
 }
 #endif  // NODE__HAVE_TLSEXT_STATUS_CB
+
+
+template <class Base>
+void SSLWrap<Base>::SSLGetter(Local<String> property,
+                        const PropertyCallbackInfo<Value>& info) {
+  HandleScope scope(info.GetIsolate());
+
+  SSL* ssl = Unwrap<Base>(info.Holder())->ssl_;
+  Local<External> ext = External::New(info.GetIsolate(), ssl);
+  info.GetReturnValue().Set(ext);
+}
 
 
 void Connection::OnClientHelloParseEnd(void* arg) {
@@ -2031,15 +2079,6 @@ void Connection::Initialize(Environment* env, Handle<Object> target) {
 
   SSLWrap<Connection>::AddMethods(env, t);
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-  NODE_SET_PROTOTYPE_METHOD(t,
-                            "getNegotiatedProtocol",
-                            Connection::GetNegotiatedProto);
-  NODE_SET_PROTOTYPE_METHOD(t,
-                            "setNPNProtocols",
-                            Connection::SetNPNProtocols);
-#endif
-
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   NODE_SET_PROTOTYPE_METHOD(t, "getServername", Connection::GetServername);
@@ -2122,7 +2161,7 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       if (secure_context_constructor_template->HasInstance(ret)) {
         conn->sniContext_.Reset(env->isolate(), ret);
         SecureContext* sc = Unwrap<SecureContext>(ret.As<Object>());
-        InitNPN(sc, conn);
+        InitNPN(sc);
         SSL_set_SSL_CTX(s, sc->ctx_);
       } else {
         return SSL_TLSEXT_ERR_NOACK;
@@ -2158,7 +2197,7 @@ void Connection::New(const FunctionCallbackInfo<Value>& args) {
   if (is_server)
     SSL_set_info_callback(conn->ssl_, SSLInfoCallback);
 
-  InitNPN(sc, conn);
+  InitNPN(sc);
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   if (is_server) {
@@ -4723,7 +4762,7 @@ void RandomBytes(const FunctionCallbackInfo<Value>& args) {
   // maybe allow a buffer to write to? cuts down on object creation
   // when generating random data in a loop
   if (!args[0]->IsUint32()) {
-    return env->ThrowTypeError("Argument #1 must be number > 0");
+    return env->ThrowTypeError("size must be a number >= 0");
   }
 
   const uint32_t size = args[0]->Uint32Value();
@@ -4813,6 +4852,26 @@ static void array_push_back(const TypeName* md,
   ctx->arr->Set(ctx->arr->Length(), OneByteString(ctx->env()->isolate(), from));
 }
 
+// borrowed from v8
+// (see http://v8.googlecode.com/svn/trunk/samples/shell.cc)
+const char* ToCString(const String::Utf8Value& value) {
+  return *value ? *value : "<string conversion failed>";
+}
+
+void DefaultCiphers(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
+  v8::String::Utf8Value key(args[0]);
+  const char * list = legacy_cipher_list(ToCString(key));
+  if (list != NULL) {
+    args.GetReturnValue().Set(
+      v8::String::NewFromUtf8(args.GetIsolate(), list));
+  } else {
+    args.GetReturnValue().Set(
+      v8::String::NewFromUtf8(args.GetIsolate(),
+                             DEFAULT_CIPHER_LIST_HEAD));
+  }
+}
 
 void GetCiphers(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
@@ -5130,6 +5189,12 @@ void InitCrypto(Handle<Object> target,
                   PublicKeyCipher::Cipher<PublicKeyCipher::kDecrypt,
                                           EVP_PKEY_decrypt_init,
                                           EVP_PKEY_decrypt>);
+
+  NODE_DEFINE_CONSTANT(target, SSL3_ENABLE);
+  NODE_DEFINE_CONSTANT(target, SSL2_ENABLE);
+
+  NODE_DEFINE_STRING_CONSTANT(env->isolate(), target, DEFAULT_CIPHER_LIST);
+  NODE_SET_METHOD(target, "getLegacyCiphers", DefaultCiphers);
 }
 
 }  // namespace crypto

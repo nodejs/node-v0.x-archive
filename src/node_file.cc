@@ -71,11 +71,15 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
   void* operator new(size_t size) { return new char[size]; }
   void* operator new(size_t size, char* storage) { return storage; }
 
-  FSReqWrap(Environment* env, const char* syscall, char* data = NULL)
-    : ReqWrap<uv_fs_t>(env, Object::New(env->isolate())),
+  FSReqWrap(Environment* env,
+            Local<Object> req,
+            const char* syscall,
+            char* data = NULL)
+    : ReqWrap<uv_fs_t>(env, req, AsyncWrap::PROVIDER_FSREQWRAP),
       syscall_(syscall),
       data_(data),
       dest_len_(0) {
+    Wrap(object(), this);
   }
 
   void ReleaseEarly() {
@@ -96,6 +100,11 @@ class FSReqWrap: public ReqWrap<uv_fs_t> {
   unsigned int dest_len_;
   char dest_[1];
 };
+
+
+static void NewFSReqWrap(const FunctionCallbackInfo<Value>& args) {
+  CHECK(args.IsConstructCall());
+}
 
 
 #define ASSERT_OFFSET(a) \
@@ -175,6 +184,10 @@ static void After(uv_fs_t *req) {
         argc = 1;
         break;
 
+      case UV_FS_ACCESS:
+        argv[1] = Integer::New(env->isolate(), req->result);
+        break;
+
       case UV_FS_UTIME:
       case UV_FS_FUTIME:
         argc = 0;
@@ -205,23 +218,28 @@ static void After(uv_fs_t *req) {
         argv[1] = Integer::New(env->isolate(), req->result);
         break;
 
-      case UV_FS_READDIR:
+      case UV_FS_SCANDIR:
         {
-          char *namebuf = static_cast<char*>(req->ptr);
-          int nnames = req->result;
+          int r;
+          Local<Array> names = Array::New(env->isolate(), 0);
 
-          Local<Array> names = Array::New(env->isolate(), nnames);
+          for (int i = 0; ; i++) {
+            uv_dirent_t ent;
 
-          for (int i = 0; i < nnames; i++) {
-            Local<String> name = String::NewFromUtf8(env->isolate(), namebuf);
+            r = uv_fs_scandir_next(req, &ent);
+            if (r == UV_EOF)
+              break;
+            if (r != 0) {
+              argv[0] = UVException(r,
+                                    NULL,
+                                    req_wrap->syscall(),
+                                    static_cast<const char*>(req->path));
+              break;
+            }
+
+            Local<String> name = String::NewFromUtf8(env->isolate(),
+                                                     ent.name);
             names->Set(i, name);
-#ifndef NDEBUG
-            namebuf += strlen(namebuf);
-            assert(*namebuf == '\0');
-            namebuf += 1;
-#else
-            namebuf += strlen(namebuf) + 1;
-#endif
           }
 
           argv[1] = names;
@@ -251,35 +269,35 @@ struct fs_req_wrap {
 };
 
 
-#define ASYNC_DEST_CALL(func, callback, dest_path, ...)                       \
+#define ASYNC_DEST_CALL(func, req, dest_path, ...)                            \
   Environment* env = Environment::GetCurrent(args.GetIsolate());              \
   FSReqWrap* req_wrap;                                                        \
   char* dest_str = (dest_path);                                               \
   int dest_len = dest_str == NULL ? 0 : strlen(dest_str);                     \
   char* storage = new char[sizeof(*req_wrap) + dest_len];                     \
-  req_wrap = new(storage) FSReqWrap(env, #func);                              \
+  CHECK(req->IsObject());                                                     \
+  req_wrap = new(storage) FSReqWrap(env, req.As<Object>(), #func);            \
   req_wrap->dest_len(dest_len);                                               \
   if (dest_str != NULL) {                                                     \
     memcpy(const_cast<char*>(req_wrap->dest()),                               \
            dest_str,                                                          \
            dest_len + 1);                                                     \
   }                                                                           \
-  int err = uv_fs_ ## func(env->event_loop() ,                                \
+  int err = uv_fs_ ## func(env->event_loop(),                                 \
                            &req_wrap->req_,                                   \
                            __VA_ARGS__,                                       \
                            After);                                            \
-  req_wrap->object()->Set(env->oncomplete_string(), callback);                \
   req_wrap->Dispatched();                                                     \
   if (err < 0) {                                                              \
-    uv_fs_t* req = &req_wrap->req_;                                           \
-    req->result = err;                                                        \
-    req->path = NULL;                                                         \
-    After(req);                                                               \
+    uv_fs_t* uv_req = &req_wrap->req_;                                        \
+    uv_req->result = err;                                                     \
+    uv_req->path = NULL;                                                      \
+    After(uv_req);                                                            \
   }                                                                           \
   args.GetReturnValue().Set(req_wrap->persistent());
 
-#define ASYNC_CALL(func, callback, ...)                                       \
-  ASYNC_DEST_CALL(func, callback, NULL, __VA_ARGS__)                          \
+#define ASYNC_CALL(func, req, ...)                                            \
+  ASYNC_DEST_CALL(func, req, NULL, __VA_ARGS__)                               \
 
 #define SYNC_DEST_CALL(func, path, dest, ...)                                 \
   fs_req_wrap req_wrap;                                                       \
@@ -306,6 +324,29 @@ struct fs_req_wrap {
 #define SYNC_RESULT err
 
 
+static void Access(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args.GetIsolate());
+  HandleScope scope(env->isolate());
+
+  if (args.Length() < 2)
+    return THROW_BAD_ARGS;
+  if (!args[0]->IsString())
+    return TYPE_ERROR("path must be a string");
+  if (!args[1]->IsInt32())
+    return TYPE_ERROR("mode must be an integer");
+
+  node::Utf8Value path(args[0]);
+  int mode = static_cast<int>(args[1]->Int32Value());
+
+  if (args[2]->IsObject()) {
+    ASYNC_CALL(access, args[2], *path, mode);
+  } else {
+    SYNC_CALL(access, *path, *path, mode);
+    args.GetReturnValue().Set(SYNC_RESULT);
+  }
+}
+
+
 static void Close(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
@@ -316,7 +357,7 @@ static void Close(const FunctionCallbackInfo<Value>& args) {
 
   int fd = args[0]->Int32Value();
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(close, args[1], fd)
   } else {
     SYNC_CALL(close, 0, fd)
@@ -432,7 +473,7 @@ static void Stat(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(stat, args[1], *path)
   } else {
     SYNC_CALL(stat, *path, *path)
@@ -452,7 +493,7 @@ static void LStat(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(lstat, args[1], *path)
   } else {
     SYNC_CALL(lstat, *path, *path)
@@ -471,7 +512,7 @@ static void FStat(const FunctionCallbackInfo<Value>& args) {
 
   int fd = args[0]->Int32Value();
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(fstat, args[1], fd)
   } else {
     SYNC_CALL(fstat, 0, fd)
@@ -509,10 +550,10 @@ static void Symlink(const FunctionCallbackInfo<Value>& args) {
     }
   }
 
-  if (args[3]->IsFunction()) {
-    ASYNC_DEST_CALL(symlink, args[3], *dest, *dest, *path, flags)
+  if (args[3]->IsObject()) {
+    ASYNC_DEST_CALL(symlink, args[3], *path, *dest, *path, flags)
   } else {
-    SYNC_DEST_CALL(symlink, *path, *dest, *dest, *path, flags)
+    SYNC_DEST_CALL(symlink, *dest, *path, *dest, *path, flags)
   }
 }
 
@@ -533,7 +574,7 @@ static void Link(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value orig_path(args[0]);
   node::Utf8Value new_path(args[1]);
 
-  if (args[2]->IsFunction()) {
+  if (args[2]->IsObject()) {
     ASYNC_DEST_CALL(link, args[2], *new_path, *orig_path, *new_path)
   } else {
     SYNC_DEST_CALL(link, *orig_path, *new_path, *orig_path, *new_path)
@@ -551,7 +592,7 @@ static void ReadLink(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(readlink, args[1], *path)
   } else {
     SYNC_CALL(readlink, *path, *path)
@@ -578,7 +619,7 @@ static void Rename(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value old_path(args[0]);
   node::Utf8Value new_path(args[1]);
 
-  if (args[2]->IsFunction()) {
+  if (args[2]->IsObject()) {
     ASYNC_DEST_CALL(rename, args[2], *new_path, *old_path, *new_path)
   } else {
     SYNC_DEST_CALL(rename, *old_path, *new_path, *old_path, *new_path)
@@ -598,7 +639,7 @@ static void FTruncate(const FunctionCallbackInfo<Value>& args) {
   ASSERT_TRUNCATE_LENGTH(args[1]);
   int64_t len = GET_TRUNCATE_LENGTH(args[1]);
 
-  if (args[2]->IsFunction()) {
+  if (args[2]->IsObject()) {
     ASYNC_CALL(ftruncate, args[2], fd, len)
   } else {
     SYNC_CALL(ftruncate, 0, fd, len)
@@ -615,7 +656,7 @@ static void Fdatasync(const FunctionCallbackInfo<Value>& args) {
 
   int fd = args[0]->Int32Value();
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(fdatasync, args[1], fd)
   } else {
     SYNC_CALL(fdatasync, 0, fd)
@@ -632,7 +673,7 @@ static void Fsync(const FunctionCallbackInfo<Value>& args) {
 
   int fd = args[0]->Int32Value();
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(fsync, args[1], fd)
   } else {
     SYNC_CALL(fsync, 0, fd)
@@ -650,7 +691,7 @@ static void Unlink(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(unlink, args[1], *path)
   } else {
     SYNC_CALL(unlink, *path, *path)
@@ -668,7 +709,7 @@ static void RMDir(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  if (args[1]->IsFunction()) {
+  if (args[1]->IsObject()) {
     ASYNC_CALL(rmdir, args[1], *path)
   } else {
     SYNC_CALL(rmdir, *path, *path)
@@ -686,7 +727,7 @@ static void MKDir(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
   int mode = static_cast<int>(args[1]->Int32Value());
 
-  if (args[2]->IsFunction()) {
+  if (args[2]->IsObject()) {
     ASYNC_CALL(mkdir, args[2], *path, mode)
   } else {
     SYNC_CALL(mkdir, *path, *path, mode)
@@ -704,25 +745,27 @@ static void ReadDir(const FunctionCallbackInfo<Value>& args) {
 
   node::Utf8Value path(args[0]);
 
-  if (args[1]->IsFunction()) {
-    ASYNC_CALL(readdir, args[1], *path, 0 /*flags*/)
+  if (args[1]->IsObject()) {
+    ASYNC_CALL(scandir, args[1], *path, 0 /*flags*/)
   } else {
-    SYNC_CALL(readdir, *path, *path, 0 /*flags*/)
+    SYNC_CALL(scandir, *path, *path, 0 /*flags*/)
 
     assert(SYNC_REQ.result >= 0);
-    char* namebuf = static_cast<char*>(SYNC_REQ.ptr);
-    uint32_t nnames = SYNC_REQ.result;
-    Local<Array> names = Array::New(env->isolate(), nnames);
+    int r;
+    Local<Array> names = Array::New(env->isolate(), 0);
 
-    for (uint32_t i = 0; i < nnames; ++i) {
-      names->Set(i, String::NewFromUtf8(env->isolate(), namebuf));
-#ifndef NDEBUG
-      namebuf += strlen(namebuf);
-      assert(*namebuf == '\0');
-      namebuf += 1;
-#else
-      namebuf += strlen(namebuf) + 1;
-#endif
+    for (int i = 0; ; i++) {
+      uv_dirent_t ent;
+
+      r = uv_fs_scandir_next(&SYNC_REQ, &ent);
+      if (r == UV_EOF)
+        break;
+      if (r != 0)
+        return env->ThrowUVException(r, "readdir", "", *path);
+
+      Local<String> name = String::NewFromUtf8(env->isolate(),
+                                               ent.name);
+      names->Set(i, name);
     }
 
     args.GetReturnValue().Set(names);
@@ -751,7 +794,7 @@ static void Open(const FunctionCallbackInfo<Value>& args) {
   int flags = args[1]->Int32Value();
   int mode = static_cast<int>(args[2]->Int32Value());
 
-  if (args[3]->IsFunction()) {
+  if (args[3]->IsObject()) {
     ASYNC_CALL(open, args[3], *path, flags, mode)
   } else {
     SYNC_CALL(open, *path, *path, flags, mode)
@@ -783,7 +826,7 @@ static void WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   size_t off = args[2]->Uint32Value();
   size_t len = args[3]->Uint32Value();
   int64_t pos = GET_OFFSET(args[4]);
-  Local<Value> cb = args[5];
+  Local<Value> req = args[5];
 
   if (off > buffer_length)
     return env->ThrowRangeError("offset out of bounds");
@@ -798,8 +841,8 @@ static void WriteBuffer(const FunctionCallbackInfo<Value>& args) {
 
   uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
 
-  if (cb->IsFunction()) {
-    ASYNC_CALL(write, cb, fd, &uvbuf, 1, pos)
+  if (req->IsObject()) {
+    ASYNC_CALL(write, req, fd, &uvbuf, 1, pos)
     return;
   }
 
@@ -823,7 +866,7 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
   if (!args[0]->IsInt32())
     return env->ThrowTypeError("First argument must be file descriptor");
 
-  Local<Value> cb;
+  Local<Value> req;
   Local<Value> string = args[1];
   int fd = args[0]->Int32Value();
   char* buf = NULL;
@@ -845,18 +888,19 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
     must_free = true;
   }
   pos = GET_OFFSET(args[2]);
-  cb = args[4];
+  req = args[4];
 
   uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
 
-  if (!cb->IsFunction()) {
+  if (!req->IsObject()) {
     SYNC_CALL(write, NULL, fd, &uvbuf, 1, pos)
     if (must_free)
       delete[] buf;
     return args.GetReturnValue().Set(SYNC_RESULT);
   }
 
-  FSReqWrap* req_wrap = new FSReqWrap(env, "write", must_free ? buf : NULL);
+  FSReqWrap* req_wrap =
+      new FSReqWrap(env, req.As<Object>(), "write", must_free ? buf : NULL);
   int err = uv_fs_write(env->event_loop(),
                         &req_wrap->req_,
                         fd,
@@ -864,7 +908,6 @@ static void WriteString(const FunctionCallbackInfo<Value>& args) {
                         1,
                         pos,
                         After);
-  req_wrap->object()->Set(env->oncomplete_string(), cb);
   req_wrap->Dispatched();
   if (err < 0) {
     uv_fs_t* req = &req_wrap->req_;
@@ -899,7 +942,7 @@ static void Read(const FunctionCallbackInfo<Value>& args) {
 
   int fd = args[0]->Int32Value();
 
-  Local<Value> cb;
+  Local<Value> req;
 
   size_t len;
   int64_t pos;
@@ -929,10 +972,10 @@ static void Read(const FunctionCallbackInfo<Value>& args) {
 
   uv_buf_t uvbuf = uv_buf_init(const_cast<char*>(buf), len);
 
-  cb = args[5];
+  req = args[5];
 
-  if (cb->IsFunction()) {
-    ASYNC_CALL(read, cb, fd, &uvbuf, 1, pos);
+  if (req->IsObject()) {
+    ASYNC_CALL(read, req, fd, &uvbuf, 1, pos);
   } else {
     SYNC_CALL(read, 0, fd, &uvbuf, 1, pos)
     args.GetReturnValue().Set(SYNC_RESULT);
@@ -953,7 +996,7 @@ static void Chmod(const FunctionCallbackInfo<Value>& args) {
   node::Utf8Value path(args[0]);
   int mode = static_cast<int>(args[1]->Int32Value());
 
-  if (args[2]->IsFunction()) {
+  if (args[2]->IsObject()) {
     ASYNC_CALL(chmod, args[2], *path, mode);
   } else {
     SYNC_CALL(chmod, *path, *path, mode);
@@ -974,7 +1017,7 @@ static void FChmod(const FunctionCallbackInfo<Value>& args) {
   int fd = args[0]->Int32Value();
   int mode = static_cast<int>(args[1]->Int32Value());
 
-  if (args[2]->IsFunction()) {
+  if (args[2]->IsObject()) {
     ASYNC_CALL(fchmod, args[2], fd, mode);
   } else {
     SYNC_CALL(fchmod, 0, fd, mode);
@@ -1007,7 +1050,7 @@ static void Chown(const FunctionCallbackInfo<Value>& args) {
   uv_uid_t uid = static_cast<uv_uid_t>(args[1]->Uint32Value());
   uv_gid_t gid = static_cast<uv_gid_t>(args[2]->Uint32Value());
 
-  if (args[3]->IsFunction()) {
+  if (args[3]->IsObject()) {
     ASYNC_CALL(chown, args[3], *path, uid, gid);
   } else {
     SYNC_CALL(chown, *path, *path, uid, gid);
@@ -1040,7 +1083,7 @@ static void FChown(const FunctionCallbackInfo<Value>& args) {
   uv_uid_t uid = static_cast<uv_uid_t>(args[1]->Uint32Value());
   uv_gid_t gid = static_cast<uv_gid_t>(args[2]->Uint32Value());
 
-  if (args[3]->IsFunction()) {
+  if (args[3]->IsObject()) {
     ASYNC_CALL(fchown, args[3], fd, uid, gid);
   } else {
     SYNC_CALL(fchown, 0, fd, uid, gid);
@@ -1070,7 +1113,7 @@ static void UTimes(const FunctionCallbackInfo<Value>& args) {
   const double atime = static_cast<double>(args[1]->NumberValue());
   const double mtime = static_cast<double>(args[2]->NumberValue());
 
-  if (args[3]->IsFunction()) {
+  if (args[3]->IsObject()) {
     ASYNC_CALL(utime, args[3], *path, atime, mtime);
   } else {
     SYNC_CALL(utime, *path, *path, atime, mtime);
@@ -1099,7 +1142,7 @@ static void FUTimes(const FunctionCallbackInfo<Value>& args) {
   const double atime = static_cast<double>(args[1]->NumberValue());
   const double mtime = static_cast<double>(args[2]->NumberValue());
 
-  if (args[3]->IsFunction()) {
+  if (args[3]->IsObject()) {
     ASYNC_CALL(futime, args[3], fd, atime, mtime);
   } else {
     SYNC_CALL(futime, 0, fd, atime, mtime);
@@ -1125,6 +1168,7 @@ void InitFs(Handle<Object> target,
       FIXED_ONE_BYTE_STRING(env->isolate(), "FSInitialize"),
       FunctionTemplate::New(env->isolate(), FSInitialize)->GetFunction());
 
+  NODE_SET_METHOD(target, "access", Access);
   NODE_SET_METHOD(target, "close", Close);
   NODE_SET_METHOD(target, "open", Open);
   NODE_SET_METHOD(target, "read", Read);
@@ -1157,6 +1201,14 @@ void InitFs(Handle<Object> target,
   NODE_SET_METHOD(target, "futimes", FUTimes);
 
   StatWatcher::Initialize(env, target);
+
+  // Create FunctionTemplate for FSReqWrap
+  Local<FunctionTemplate> fst =
+      FunctionTemplate::New(env->isolate(), NewFSReqWrap);
+  fst->InstanceTemplate()->SetInternalFieldCount(1);
+  fst->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "FSReqWrap"));
+  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "FSReqWrap"),
+              fst->GetFunction());
 }
 
 }  // end namespace node

@@ -38,6 +38,7 @@
 
 #include "v8.h"
 
+#include <string.h>
 #include <openssl/ssl.h>
 #include <openssl/ec.h>
 #include <openssl/ecdh.h>
@@ -59,7 +60,52 @@
 # define NODE__HAVE_TLSEXT_STATUS_CB
 #endif  // !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_set_tlsext_status_cb)
 
+#define DEFAULT_CIPHER_LIST_V10_38 "ECDHE-RSA-AES128-SHA256:"                  \
+                                "AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
+
+#define DEFAULT_CIPHER_LIST_V10_39 "ECDHE-RSA-AES128-SHA256:"                  \
+                                "AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH"
+
+#define DEFAULT_CIPHER_LIST_V12_2 "ECDHE-RSA-AES128-SHA256:"                   \
+                                "DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:" \
+                                "HIGH:!MD5:!aNULL"
+
+#define DEFAULT_CIPHER_LIST_V12_3  "ECDHE-RSA-AES128-SHA256:"                  \
+                                "DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:"\
+                                "!RC4:!MD5:!aNULL"
+
+#define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES256-SHA384:"                    \
+                                 "DHE-RSA-AES256-SHA384:"                      \
+                                 "ECDHE-RSA-AES256-SHA256:"                    \
+                                 "DHE-RSA-AES256-SHA256:"                      \
+                                 "ECDHE-RSA-AES128-SHA256:"                    \
+                                 "DHE-RSA-AES128-SHA256:"                      \
+                                 "HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:"  \
+                                 "!PSK:!SRP:!CAMELLIA"
+
+static inline const char * legacy_cipher_list(const char * ver) {
+  if (ver == NULL) {
+    return NULL;
+  }
+  if (strncmp(ver, "v0.10.38", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_38;
+  } else if (strncmp(ver, "v0.10.39", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_39;
+  } else if (strncmp(ver, "v0.12.2", 7) == 0) {
+    return DEFAULT_CIPHER_LIST_V12_2;
+  } else if (strncmp(ver, "v0.12.3", 7) == 0) {
+    return DEFAULT_CIPHER_LIST_V12_3;
+  } else {
+    return NULL;
+  }
+}
+
 namespace node {
+
+extern bool SSL2_ENABLE;
+extern bool SSL3_ENABLE;
+extern const char * DEFAULT_CIPHER_LIST;
+
 namespace crypto {
 
 extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
@@ -105,6 +151,8 @@ class SecureContext : public BaseObject {
   static void LoadPKCS12(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void SetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void CtxGetter(v8::Local<v8::String> property,
+                        const v8::PropertyCallbackInfo<v8::Value>& info);
 
   template <bool primary>
   static void GetCertificate(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -188,7 +236,7 @@ class SSLWrap {
   inline bool is_waiting_new_session() const { return new_session_wait_; }
 
  protected:
-  static void InitNPN(SecureContext* sc, Base* base);
+  static void InitNPN(SecureContext* sc);
   static void AddMethods(Environment* env, v8::Handle<v8::FunctionTemplate> t);
 
   static SSL_SESSION* GetSessionCallback(SSL* s,
@@ -237,6 +285,8 @@ class SSLWrap {
                                      void* arg);
 #endif  // OPENSSL_NPN_NEGOTIATED
   static int TLSExtStatusCallback(SSL* s, void* arg);
+  static void SSLGetter(v8::Local<v8::String> property,
+                        const v8::PropertyCallbackInfo<v8::Value>& info);
 
   inline Environment* ssl_env() const {
     return env_;

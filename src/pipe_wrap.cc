@@ -21,6 +21,7 @@
 
 #include "pipe_wrap.h"
 
+#include "async-wrap.h"
 #include "env.h"
 #include "env-inl.h"
 #include "handle_wrap.h"
@@ -37,6 +38,7 @@ namespace node {
 using v8::Boolean;
 using v8::Context;
 using v8::EscapableHandleScope;
+using v8::External;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -50,8 +52,23 @@ using v8::String;
 using v8::Undefined;
 using v8::Value;
 
+
 // TODO(bnoordhuis) share with TCPWrap?
-typedef class ReqWrap<uv_connect_t> ConnectWrap;
+class PipeConnectWrap : public ReqWrap<uv_connect_t> {
+ public:
+  PipeConnectWrap(Environment* env, Local<Object> req_wrap_obj);
+};
+
+
+PipeConnectWrap::PipeConnectWrap(Environment* env, Local<Object> req_wrap_obj)
+    : ReqWrap<uv_connect_t>(env, req_wrap_obj, AsyncWrap::PROVIDER_PIPEWRAP) {
+  Wrap(req_wrap_obj, this);
+}
+
+
+static void NewPipeConnectWrap(const FunctionCallbackInfo<Value>& args) {
+  CHECK(args.IsConstructCall());
+}
 
 
 uv_pipe_t* PipeWrap::UVHandle() {
@@ -59,12 +76,13 @@ uv_pipe_t* PipeWrap::UVHandle() {
 }
 
 
-Local<Object> PipeWrap::Instantiate(Environment* env) {
+Local<Object> PipeWrap::Instantiate(Environment* env, AsyncWrap* parent) {
   EscapableHandleScope handle_scope(env->isolate());
   assert(!env->pipe_constructor_template().IsEmpty());
   Local<Function> constructor = env->pipe_constructor_template()->GetFunction();
   assert(!constructor.IsEmpty());
-  Local<Object> instance = constructor->NewInstance();
+  Local<Value> ptr = External::New(env->isolate(), parent);
+  Local<Object> instance = constructor->NewInstance(1, &ptr);
   assert(!instance.IsEmpty());
   return handle_scope.Escape(instance);
 }
@@ -119,6 +137,14 @@ void PipeWrap::Initialize(Handle<Object> target,
 
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Pipe"), t->GetFunction());
   env->set_pipe_constructor_template(t);
+
+  // Create FunctionTemplate for PipeConnectWrap.
+  Local<FunctionTemplate> cwt =
+      FunctionTemplate::New(env->isolate(), NewPipeConnectWrap);
+  cwt->InstanceTemplate()->SetInternalFieldCount(1);
+  cwt->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "PipeConnectWrap"));
+  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "PipeConnectWrap"),
+              cwt->GetFunction());
 }
 
 
@@ -127,17 +153,25 @@ void PipeWrap::New(const FunctionCallbackInfo<Value>& args) {
   // Therefore we assert that we are not trying to call this as a
   // normal function.
   assert(args.IsConstructCall());
-  HandleScope handle_scope(args.GetIsolate());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  new PipeWrap(env, args.This(), args[0]->IsTrue());
+  if (args[0]->IsExternal()) {
+    void* ptr = args[0].As<External>()->Value();
+    new PipeWrap(env, args.This(), false, static_cast<AsyncWrap*>(ptr));
+  } else {
+    new PipeWrap(env, args.This(), args[0]->IsTrue(), NULL);
+  }
 }
 
 
-PipeWrap::PipeWrap(Environment* env, Handle<Object> object, bool ipc)
+PipeWrap::PipeWrap(Environment* env,
+                   Handle<Object> object,
+                   bool ipc,
+                   AsyncWrap* parent)
     : StreamWrap(env,
                  object,
                  reinterpret_cast<uv_stream_t*>(&handle_),
-                 AsyncWrap::PROVIDER_PIPEWRAP) {
+                 AsyncWrap::PROVIDER_PIPEWRAP,
+                 parent) {
   int r = uv_pipe_init(env->event_loop(), &handle_, ipc);
   assert(r == 0);  // How do we proxy this error up to javascript?
                    // Suggestion: uv_pipe_init() returns void.
@@ -209,7 +243,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
   }
 
   // Instanciate the client javascript object and handle.
-  Local<Object> client_obj = Instantiate(env);
+  Local<Object> client_obj = Instantiate(env, pipe_wrap);
 
   // Unwrap the client javascript object.
   PipeWrap* wrap = Unwrap<PipeWrap>(client_obj);
@@ -224,7 +258,7 @@ void PipeWrap::OnConnection(uv_stream_t* handle, int status) {
 
 // TODO(bnoordhuis) Maybe share this with TCPWrap?
 void PipeWrap::AfterConnect(uv_connect_t* req, int status) {
-  ConnectWrap* req_wrap = static_cast<ConnectWrap*>(req->data);
+  PipeConnectWrap* req_wrap = static_cast<PipeConnectWrap*>(req->data);
   PipeWrap* wrap = static_cast<PipeWrap*>(req->handle->data);
   assert(req_wrap->env() == wrap->env());
   Environment* env = wrap->env();
@@ -287,9 +321,7 @@ void PipeWrap::Connect(const FunctionCallbackInfo<Value>& args) {
   Local<Object> req_wrap_obj = args[0].As<Object>();
   node::Utf8Value name(args[1]);
 
-  ConnectWrap* req_wrap = new ConnectWrap(env,
-                                          req_wrap_obj,
-                                          AsyncWrap::PROVIDER_CONNECTWRAP);
+  PipeConnectWrap* req_wrap = new PipeConnectWrap(env, req_wrap_obj);
   uv_pipe_connect(&req_wrap->req_,
                   &wrap->handle_,
                   *name,

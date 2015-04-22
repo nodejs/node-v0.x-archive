@@ -34,6 +34,8 @@
 namespace node {
 
 using v8::Context;
+using v8::EscapableHandleScope;
+using v8::External;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -62,8 +64,9 @@ class SendWrap : public ReqWrap<uv_udp_send_t> {
 SendWrap::SendWrap(Environment* env,
                    Local<Object> req_wrap_obj,
                    bool have_callback)
-    : ReqWrap<uv_udp_send_t>(env, req_wrap_obj),
+    : ReqWrap<uv_udp_send_t>(env, req_wrap_obj, AsyncWrap::PROVIDER_UDPWRAP),
       have_callback_(have_callback) {
+  Wrap(req_wrap_obj, this);
 }
 
 
@@ -72,7 +75,12 @@ inline bool SendWrap::have_callback() const {
 }
 
 
-UDPWrap::UDPWrap(Environment* env, Handle<Object> object)
+static void NewSendWrap(const FunctionCallbackInfo<Value>& args) {
+  assert(args.IsConstructCall());
+}
+
+
+UDPWrap::UDPWrap(Environment* env, Handle<Object> object, AsyncWrap* parent)
     : HandleWrap(env,
                  object,
                  reinterpret_cast<uv_handle_t*>(&handle_),
@@ -124,14 +132,29 @@ void UDPWrap::Initialize(Handle<Object> target,
 
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "UDP"), t->GetFunction());
   env->set_udp_constructor_function(t->GetFunction());
+
+  // Create FunctionTemplate for SendWrap
+  Local<FunctionTemplate> swt =
+      FunctionTemplate::New(env->isolate(), NewSendWrap);
+  swt->InstanceTemplate()->SetInternalFieldCount(1);
+  swt->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "SendWrap"));
+  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "SendWrap"),
+              swt->GetFunction());
 }
 
 
 void UDPWrap::New(const FunctionCallbackInfo<Value>& args) {
-  assert(args.IsConstructCall());
-  HandleScope handle_scope(args.GetIsolate());
+  CHECK(args.IsConstructCall());
   Environment* env = Environment::GetCurrent(args.GetIsolate());
-  new UDPWrap(env, args.This());
+  if (args.Length() == 0) {
+    new UDPWrap(env, args.This(), NULL);
+  } else if (args[0]->IsExternal()) {
+    new UDPWrap(env,
+                args.This(),
+                static_cast<AsyncWrap*>(args[0].As<External>()->Value()));
+  } else {
+    UNREACHABLE();
+  }
 }
 
 
@@ -429,10 +452,12 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
 }
 
 
-Local<Object> UDPWrap::Instantiate(Environment* env) {
+Local<Object> UDPWrap::Instantiate(Environment* env, AsyncWrap* parent) {
   // If this assert fires then Initialize hasn't been called yet.
   assert(env->udp_constructor_function().IsEmpty() == false);
-  return env->udp_constructor_function()->NewInstance();
+  EscapableHandleScope scope(env->isolate());
+  Local<Value> ptr = External::New(env->isolate(), parent);
+  return scope.Escape(env->udp_constructor_function()->NewInstance(1, &ptr));
 }
 
 

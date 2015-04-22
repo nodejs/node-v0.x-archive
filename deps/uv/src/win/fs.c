@@ -36,6 +36,8 @@
 #include "req-inl.h"
 #include "handle-inl.h"
 
+#include <wincrypt.h>
+
 
 #define UV_FS_FREE_PATHS         0x0002
 #define UV_FS_FREE_PTR           0x0008
@@ -279,7 +281,7 @@ INLINE static int fs__readlink_handle(HANDLE handle, char** target_ptr,
            (w_target[4] >= L'a' && w_target[4] <= L'z')) &&
           w_target[5] == L':' &&
           (w_target_len == 6 || w_target[6] == L'\\')) {
-        /* \??\«drive»:\ */
+        /* \??\<drive>:\ */
         w_target += 4;
         w_target_len -= 4;
 
@@ -288,8 +290,8 @@ INLINE static int fs__readlink_handle(HANDLE handle, char** target_ptr,
                  (w_target[5] == L'N' || w_target[5] == L'n') &&
                  (w_target[6] == L'C' || w_target[6] == L'c') &&
                  w_target[7] == L'\\') {
-        /* \??\UNC\«server»\«share»\ - make sure the final path looks like */
-        /* \\«server»\«share»\ */
+        /* \??\UNC\<server>\<share>\ - make sure the final path looks like */
+        /* \\<server>\<share>\ */
         w_target += 6;
         w_target[0] = L'\\';
         w_target_len -= 6;
@@ -304,8 +306,8 @@ INLINE static int fs__readlink_handle(HANDLE handle, char** target_ptr,
     w_target_len = reparse_data->MountPointReparseBuffer.SubstituteNameLength /
         sizeof(WCHAR);
 
-    /* Only treat junctions that look like \??\«drive»:\ as symlink. */
-    /* Junctions can also be used as mount points, like \??\Volume{«guid»}, */
+    /* Only treat junctions that look like \??\<drive>:\ as symlink. */
+    /* Junctions can also be used as mount points, like \??\Volume{<guid>}, */
     /* but that's confusing for programs since they wouldn't be able to */
     /* actually understand such a path when returned by uv_readlink(). */
     /* UNC paths are never valid for junctions so we don't care about them. */
@@ -553,11 +555,6 @@ void fs__read(uv_fs_t* req) {
 
   if (offset != -1) {
     memset(&overlapped, 0, sizeof overlapped);
-
-    offset_.QuadPart = offset;
-    overlapped.Offset = offset_.LowPart;
-    overlapped.OffsetHigh = offset_.HighPart;
-
     overlapped_ptr = &overlapped;
   } else {
     overlapped_ptr = NULL;
@@ -567,6 +564,13 @@ void fs__read(uv_fs_t* req) {
   bytes = 0;
   do {
     DWORD incremental_bytes;
+
+    if (offset != -1) {
+      offset_.QuadPart = offset + bytes;
+      overlapped.Offset = offset_.LowPart;
+      overlapped.OffsetHigh = offset_.HighPart;
+    }
+
     result = ReadFile(handle,
                       req->bufs[index].base,
                       req->bufs[index].len,
@@ -609,11 +613,6 @@ void fs__write(uv_fs_t* req) {
 
   if (offset != -1) {
     memset(&overlapped, 0, sizeof overlapped);
-
-    offset_.QuadPart = offset;
-    overlapped.Offset = offset_.LowPart;
-    overlapped.OffsetHigh = offset_.HighPart;
-
     overlapped_ptr = &overlapped;
   } else {
     overlapped_ptr = NULL;
@@ -623,6 +622,13 @@ void fs__write(uv_fs_t* req) {
   bytes = 0;
   do {
     DWORD incremental_bytes;
+
+    if (offset != -1) {
+      offset_.QuadPart = offset + bytes;
+      overlapped.Offset = offset_.LowPart;
+      overlapped.OffsetHigh = offset_.HighPart;
+    }
+
     result = WriteFile(handle,
                        req->bufs[index].base,
                        req->bufs[index].len,
@@ -721,184 +727,262 @@ void fs__mkdir(uv_fs_t* req) {
 }
 
 
-/* Some parts of the implementation were borrowed from glibc. */
+/* OpenBSD original: lib/libc/stdio/mktemp.c */
 void fs__mkdtemp(uv_fs_t* req) {
-  static const WCHAR letters[] =
+  static const WCHAR *tempchars =
     L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  static const size_t num_chars = 62;
+  static const size_t num_x = 6;
+  WCHAR *cp, *ep;
+  unsigned int tries, i;
   size_t len;
-  WCHAR* template_part;
-  static uint64_t value;
-  unsigned int count;
-  int fd;
-
-  /* A lower bound on the number of temporary files to attempt to
-     generate. The maximum total number of temporary file names that
-     can exist for a given template is 62**6. It should never be
-     necessary to try all these combinations. Instead if a reasonable
-     number of names is tried (we define reasonable as 62**3) fail to
-     give the system administrator the chance to remove the problems. */
-#define ATTEMPTS_MIN (62 * 62 * 62)
-
-  /* The number of times to attempt to generate a temporary file. To
-     conform to POSIX, this must be no smaller than TMP_MAX. */
-#if ATTEMPTS_MIN < TMP_MAX
-  unsigned int attempts = TMP_MAX;
-#else
-  unsigned int attempts = ATTEMPTS_MIN;
-#endif
+  HCRYPTPROV h_crypt_prov;
+  uint64_t v;
+  BOOL released;
 
   len = wcslen(req->pathw);
-  if (len < 6 || wcsncmp(&req->pathw[len - 6], L"XXXXXX", 6)) {
+  ep = req->pathw + len;
+  if (len < num_x || wcsncmp(ep - num_x, L"XXXXXX", num_x)) {
     SET_REQ_UV_ERROR(req, UV_EINVAL, ERROR_INVALID_PARAMETER);
     return;
   }
 
-  /* This is where the Xs start. */
-  template_part = &req->pathw[len - 6];
-
-  /* Get some random data. */
-  value += uv_hrtime() ^ _getpid();
-
-  for (count = 0; count < attempts; value += 7777, ++count) {
-    uint64_t v = value;
-
-    /* Fill in the random bits. */
-    template_part[0] = letters[v % 62];
-    v /= 62;
-    template_part[1] = letters[v % 62];
-    v /= 62;
-    template_part[2] = letters[v % 62];
-    v /= 62;
-    template_part[3] = letters[v % 62];
-    v /= 62;
-    template_part[4] = letters[v % 62];
-    v /= 62;
-    template_part[5] = letters[v % 62];
-
-    fd = _wmkdir(req->pathw);
-
-    if (fd >= 0) {
-      len = strlen(req->path);
-      wcstombs((char*) req->path + len - 6, template_part, 6);
-      SET_REQ_RESULT(req, 0);
-      return;
-    } else if (errno != EEXIST) {
-      SET_REQ_RESULT(req, -1);
-      return;
-    }
-  }
-
-  /* We got out of the loop because we ran out of combinations to try. */
-  SET_REQ_RESULT(req, -1);
-}
-
-
-void fs__readdir(uv_fs_t* req) {
-  WCHAR* pathw = req->pathw;
-  size_t len = wcslen(pathw);
-  int result, size;
-  WCHAR* buf = NULL, *ptr, *name;
-  HANDLE dir;
-  WIN32_FIND_DATAW ent = { 0 };
-  size_t buf_char_len = 4096;
-  WCHAR* path2;
-  const WCHAR* fmt;
-
-  if (len == 0) {
-    fmt = L"./*";
-  } else if (pathw[len - 1] == L'/' || pathw[len - 1] == L'\\') {
-    fmt = L"%s*";
-  } else {
-    fmt = L"%s\\*";
-  }
-
-  /* Figure out whether path is a file or a directory. */
-  if (!(GetFileAttributesW(pathw) & FILE_ATTRIBUTE_DIRECTORY)) {
-    req->result = UV_ENOTDIR;
-    req->sys_errno_ = ERROR_SUCCESS;
-    return;
-  }
-
-  path2 = (WCHAR*)malloc(sizeof(WCHAR) * (len + 4));
-  if (!path2) {
-    uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
-  }
-
-  _snwprintf(path2, len + 3, fmt, pathw);
-  dir = FindFirstFileW(path2, &ent);
-  free(path2);
-
-  if(dir == INVALID_HANDLE_VALUE) {
+  if (!CryptAcquireContext(&h_crypt_prov, NULL, NULL, PROV_RSA_FULL,
+                           CRYPT_VERIFYCONTEXT)) {
     SET_REQ_WIN32_ERROR(req, GetLastError());
     return;
   }
 
-  result = 0;
-
+  tries = TMP_MAX;
   do {
-    name = ent.cFileName;
+    if (!CryptGenRandom(h_crypt_prov, sizeof(v), (BYTE*) &v)) {
+      SET_REQ_WIN32_ERROR(req, GetLastError());
+      break;
+    }
 
-    if (name[0] != L'.' || (name[1] && (name[1] != L'.' || name[2]))) {
-      len = wcslen(name);
+    cp = ep - num_x;
+    for (i = 0; i < num_x; i++) {
+      *cp++ = tempchars[v % num_chars];
+      v /= num_chars;
+    }
 
-      if (!buf) {
-        buf = (WCHAR*)malloc(buf_char_len * sizeof(WCHAR));
-        if (!buf) {
-          uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
-        }
+    if (_wmkdir(req->pathw) == 0) {
+      len = strlen(req->path);
+      wcstombs((char*) req->path + len - num_x, ep - num_x, num_x);
+      SET_REQ_RESULT(req, 0);
+      break;
+    } else if (errno != EEXIST) {
+      SET_REQ_RESULT(req, -1);
+      break;
+    }
+  } while (--tries);
 
-        ptr = buf;
+  released = CryptReleaseContext(h_crypt_prov, 0);
+  assert(released);
+  if (tries == 0) {
+    SET_REQ_RESULT(req, -1);
+  }
+}
+
+
+void fs__scandir(uv_fs_t* req) {
+  static const size_t dirents_initial_size = 32;
+
+  HANDLE dir_handle = INVALID_HANDLE_VALUE;
+
+  uv__dirent_t** dirents = NULL;
+  size_t dirents_size = 0;
+  size_t dirents_used = 0;
+
+  IO_STATUS_BLOCK iosb;
+  NTSTATUS status;
+
+  /* Buffer to hold directory entries returned by NtQueryDirectoryFile.
+   * It's important that this buffer can hold at least one entry, regardless
+   * of the length of the file names present in the enumerated directory.
+   * A file name is at most 256 WCHARs long.
+   * According to MSDN, the buffer must be aligned at an 8-byte boundary.
+   */
+  __declspec(align(8)) char buffer[8192];
+
+  STATIC_ASSERT(sizeof buffer >=
+                sizeof(FILE_DIRECTORY_INFORMATION) + 256 * sizeof(WCHAR));
+
+  /* Open the directory. */
+  dir_handle =
+      CreateFileW(req->pathw,
+                  FILE_LIST_DIRECTORY | SYNCHRONIZE,
+                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                  NULL,
+                  OPEN_EXISTING,
+                  FILE_FLAG_BACKUP_SEMANTICS,
+                  NULL);
+  if (dir_handle == INVALID_HANDLE_VALUE)
+    goto win32_error;
+
+  /* Read the first chunk. */
+  status = pNtQueryDirectoryFile(dir_handle,
+                                 NULL,
+                                 NULL,
+                                 NULL,
+                                 &iosb,
+                                 &buffer,
+                                 sizeof buffer,
+                                 FileDirectoryInformation,
+                                 FALSE,
+                                 NULL,
+                                 TRUE);
+
+  /* If the handle is not a directory, we'll get STATUS_INVALID_PARAMETER.
+   * This should be reported back as UV_ENOTDIR.
+   */
+  if (status == STATUS_INVALID_PARAMETER)
+    goto not_a_directory_error;
+
+  while (NT_SUCCESS(status)) {
+    char* position = buffer;
+    size_t next_entry_offset = 0;
+
+    do {
+      FILE_DIRECTORY_INFORMATION* info;
+      uv__dirent_t* dirent;
+
+      size_t wchar_len;
+      size_t utf8_len;
+
+      /* Obtain a pointer to the current directory entry. */
+      position += next_entry_offset;
+      info = (FILE_DIRECTORY_INFORMATION*) position;
+
+      /* Fetch the offset to the next directory entry. */
+      next_entry_offset = info->NextEntryOffset;
+
+      /* Compute the length of the filename in WCHARs. */
+      wchar_len = info->FileNameLength / sizeof info->FileName[0];
+
+      /* Skip over '.' and '..' entries. */
+      if (wchar_len == 1 && info->FileName[0] == L'.')
+        continue;
+      if (wchar_len == 2 && info->FileName[0] == L'.' &&
+          info->FileName[1] == L'.')
+        continue;
+
+      /* Compute the space required to store the filename as UTF-8. */
+      utf8_len = WideCharToMultiByte(
+          CP_UTF8, 0, &info->FileName[0], wchar_len, NULL, 0, NULL, NULL);
+      if (utf8_len == 0)
+        goto win32_error;
+
+      /* Resize the dirent array if needed. */
+      if (dirents_used >= dirents_size) {
+        size_t new_dirents_size =
+            dirents_size == 0 ? dirents_initial_size : dirents_size << 1;
+        uv__dirent_t** new_dirents =
+            realloc(dirents, new_dirents_size * sizeof *dirents);
+
+        if (new_dirents == NULL)
+          goto out_of_memory_error;
+
+        dirents_size = new_dirents_size;
+        dirents = new_dirents;
       }
 
-      while ((ptr - buf) + len + 1 > buf_char_len) {
-        buf_char_len *= 2;
-        path2 = buf;
-        buf = (WCHAR*)realloc(buf, buf_char_len * sizeof(WCHAR));
-        if (!buf) {
-          uv_fatal_error(ERROR_OUTOFMEMORY, "realloc");
-        }
+      /* Allocate space for the uv dirent structure. The dirent structure
+       * includes room for the first character of the filename, but `utf8_len`
+       * doesn't count the NULL terminator at this point.
+       */
+      dirent = malloc(sizeof *dirent + utf8_len);
+      if (dirent == NULL)
+        goto out_of_memory_error;
 
-        ptr = buf + (ptr - path2);
-      }
+      dirents[dirents_used++] = dirent;
 
-      wcscpy(ptr, name);
-      ptr += len + 1;
-      result++;
-    }
-  } while(FindNextFileW(dir, &ent));
+      /* Convert file name to UTF-8. */
+      if (WideCharToMultiByte(CP_UTF8,
+                              0,
+                              &info->FileName[0],
+                              wchar_len,
+                              &dirent->d_name[0],
+                              utf8_len,
+                              NULL,
+                              NULL) == 0)
+        goto win32_error;
 
-  FindClose(dir);
+      /* Add a null terminator to the filename. */
+      dirent->d_name[utf8_len] = '\0';
 
-  if (buf) {
-    /* Convert result to UTF8. */
-    size = uv_utf16_to_utf8(buf, buf_char_len, NULL, 0);
-    if (!size) {
-      SET_REQ_WIN32_ERROR(req, GetLastError());
-      return;
-    }
+      /* Fill out the type field. */
+      if (info->FileAttributes & FILE_ATTRIBUTE_DEVICE)
+        dirent->d_type = UV__DT_CHAR;
+      else if (info->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        dirent->d_type = UV__DT_LINK;
+      else if (info->FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        dirent->d_type = UV__DT_DIR;
+      else
+        dirent->d_type = UV__DT_FILE;
+    } while (next_entry_offset != 0);
 
-    req->ptr = (char*)malloc(size + 1);
-    if (!req->ptr) {
-      uv_fatal_error(ERROR_OUTOFMEMORY, "malloc");
-    }
+    /* Read the next chunk. */
+    status = pNtQueryDirectoryFile(dir_handle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &iosb,
+                                   &buffer,
+                                   sizeof buffer,
+                                   FileDirectoryInformation,
+                                   FALSE,
+                                   NULL,
+                                   FALSE);
 
-    size = uv_utf16_to_utf8(buf, buf_char_len, (char*)req->ptr, size);
-    if (!size) {
-      free(buf);
-      free(req->ptr);
-      req->ptr = NULL;
-      SET_REQ_WIN32_ERROR(req, GetLastError());
-      return;
-    }
-    free(buf);
-
-    ((char*)req->ptr)[size] = '\0';
-    req->flags |= UV_FS_FREE_PTR;
-  } else {
-    req->ptr = NULL;
+    /* After the first pNtQueryDirectoryFile call, the function may return
+     * STATUS_SUCCESS even if the buffer was too small to hold at least one
+     * directory entry.
+     */
+    if (status == STATUS_SUCCESS && iosb.Information == 0)
+      status = STATUS_BUFFER_OVERFLOW;
   }
 
-  SET_REQ_RESULT(req, result);
+  if (status != STATUS_NO_MORE_FILES)
+    goto nt_error;
+
+  CloseHandle(dir_handle);
+
+  /* Store the result in the request object. */
+  req->ptr = dirents;
+  if (dirents != NULL)
+    req->flags |= UV_FS_FREE_PTR;
+
+  SET_REQ_RESULT(req, dirents_used);
+
+  /* `nbufs` will be used as index by uv_fs_scandir_next. */
+  req->nbufs = 0;
+
+  return;
+
+nt_error:
+  SET_REQ_WIN32_ERROR(req, pRtlNtStatusToDosError(status));
+  goto cleanup;
+
+win32_error:
+  SET_REQ_WIN32_ERROR(req, GetLastError());
+  goto cleanup;
+
+not_a_directory_error:
+  SET_REQ_UV_ERROR(req, UV_ENOTDIR, ERROR_DIRECTORY);
+  goto cleanup;
+
+out_of_memory_error:
+  SET_REQ_UV_ERROR(req, UV_ENOMEM, ERROR_OUTOFMEMORY);
+  goto cleanup;
+
+cleanup:
+  if (dir_handle != INVALID_HANDLE_VALUE)
+    CloseHandle(dir_handle);
+  while (dirents_used > 0)
+    free(dirents[--dirents_used]);
+  if (dirents != NULL)
+    free(dirents);
 }
 
 
@@ -941,7 +1025,7 @@ INLINE static int fs__stat_handle(HANDLE handle, uv_stat_t* statbuf) {
    *
    * Currently it's based on whether the 'readonly' attribute is set, which
    * makes little sense because the semantics are so different: the 'read-only'
-   * flag is just a way for a user to protect against accidental deleteion, and
+   * flag is just a way for a user to protect against accidental deletion, and
    * serves no security purpose. Windows uses ACLs for that.
    *
    * Also people now use uv_fs_chmod() to take away the writable bit for good
@@ -950,7 +1034,7 @@ INLINE static int fs__stat_handle(HANDLE handle, uv_stat_t* statbuf) {
    * deleted.
    *
    * IOW it's all just a clusterfuck and we should think of something that
-   * makes slighty more sense.
+   * makes slightly more sense.
    *
    * And uv_fs_chmod should probably just fail on windows or be a total no-op.
    * There's nothing sensible it can do anyway.
@@ -1215,6 +1299,25 @@ static void fs__sendfile(uv_fs_t* req) {
   free(buf);
 
   SET_REQ_RESULT(req, result);
+}
+
+
+static void fs__access(uv_fs_t* req) {
+  DWORD attr = GetFileAttributesW(req->pathw);
+
+  if (attr == INVALID_FILE_ATTRIBUTES) {
+    SET_REQ_WIN32_ERROR(req, GetLastError());
+    return;
+  }
+
+  if ((req->flags & W_OK) &&
+      ((attr & FILE_ATTRIBUTE_READONLY) ||
+      (attr & FILE_ATTRIBUTE_DIRECTORY))) {
+    SET_REQ_WIN32_ERROR(req, UV_EPERM);
+    return;
+  }
+
+  SET_REQ_RESULT(req, 0);
 }
 
 
@@ -1593,6 +1696,7 @@ static void uv__fs_work(struct uv__work* w) {
     XX(FTRUNCATE, ftruncate)
     XX(UTIME, utime)
     XX(FUTIME, futime)
+    XX(ACCESS, access)
     XX(CHMOD, chmod)
     XX(FCHMOD, fchmod)
     XX(FSYNC, fsync)
@@ -1602,7 +1706,7 @@ static void uv__fs_work(struct uv__work* w) {
     XX(MKDIR, mkdir)
     XX(MKDTEMP, mkdtemp)
     XX(RENAME, rename)
-    XX(READDIR, readdir)
+    XX(SCANDIR, scandir)
     XX(LINK, link)
     XX(SYMLINK, symlink)
     XX(READLINK, readlink)
@@ -1837,11 +1941,11 @@ int uv_fs_rmdir(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
 }
 
 
-int uv_fs_readdir(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
+int uv_fs_scandir(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
     uv_fs_cb cb) {
   int err;
 
-  uv_fs_req_init(loop, req, UV_FS_READDIR, cb);
+  uv_fs_req_init(loop, req, UV_FS_SCANDIR, cb);
 
   err = fs__capture_path(loop, req, path, NULL, cb != NULL);
   if (err) {
@@ -1854,7 +1958,7 @@ int uv_fs_readdir(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags,
     QUEUE_FS_TP_JOB(loop, req);
     return 0;
   } else {
-    fs__readdir(req);
+    fs__scandir(req);
     return req->result;
   }
 }
@@ -2097,6 +2201,31 @@ int uv_fs_sendfile(uv_loop_t* loop, uv_fs_t* req, uv_file fd_out,
     fs__sendfile(req);
     return req->result;
   }
+}
+
+
+int uv_fs_access(uv_loop_t* loop,
+                 uv_fs_t* req,
+                 const char* path,
+                 int flags,
+                 uv_fs_cb cb) {
+  int err;
+
+  uv_fs_req_init(loop, req, UV_FS_ACCESS, cb);
+
+  err = fs__capture_path(loop, req, path, NULL, cb != NULL);
+  if (err)
+    return uv_translate_sys_error(err);
+
+  req->flags = flags;
+
+  if (cb) {
+    QUEUE_FS_TP_JOB(loop, req);
+    return 0;
+  }
+
+  fs__access(req);
+  return req->result;
 }
 
 

@@ -28,14 +28,19 @@ exports.testDir = path.dirname(__filename);
 exports.fixturesDir = path.join(exports.testDir, 'fixtures');
 exports.libDir = path.join(exports.testDir, '../lib');
 exports.tmpDir = path.join(exports.testDir, 'tmp');
+if (process.env.NODE_PIPE_DIR === undefined) {
+  exports.pipeTmpDir = exports.tmpDir;
+} else {
+  exports.pipeTmpDir = path.join(process.env.NODE_PIPE_DIR, 'NodePipeTmp');
+}
 exports.PORT = +process.env.NODE_COMMON_PORT || 12346;
 
+exports.opensslCli = path.join(path.dirname(process.execPath), 'openssl-cli');
 if (process.platform === 'win32') {
   exports.PIPE = '\\\\.\\pipe\\libuv-test';
-  exports.opensslCli = path.join(process.execPath, '..', 'openssl-cli.exe');
+  exports.opensslCli += '.exe';
 } else {
-  exports.PIPE = exports.tmpDir + '/test.sock';
-  exports.opensslCli = path.join(process.execPath, '..', 'openssl-cli');
+  exports.PIPE = exports.pipeTmpDir + '/test.sock';
 }
 if (!fs.existsSync(exports.opensslCli))
   exports.opensslCli = false;
@@ -297,4 +302,30 @@ exports.isValidHostname = function(str) {
     '(\\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9]))*$');
 
   return !!str.match(re) && str.length <= 255;
+}
+exports.hasMultiLocalhost = function hasMultiLocalhost() {
+  var TCP = process.binding('tcp_wrap').TCP;
+  var t = new TCP();
+  var ret = t.bind('127.0.0.2', exports.PORT);
+  t.close();
+  return ret === 0;
+};
+
+exports.getNodeVersion = function getNodeVersion() {
+  assert(typeof process.version === 'string');
+
+  var matches = process.version.match(/v(\d+).(\d+).(\d+)-?(.*)/);
+  assert(Array.isArray(matches));
+
+  var major = +matches[1];
+  var minor = +matches[2];
+  var patch = +matches[3];
+  var pre = matches[4];
+
+  return {
+    major: major,
+    minor: minor,
+    patch: patch,
+    pre: pre
+  };
 }

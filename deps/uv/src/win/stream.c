@@ -106,7 +106,11 @@ int uv_read_stop(uv_stream_t* handle) {
   if (handle->type == UV_TTY) {
     err = uv_tty_read_stop((uv_tty_t*) handle);
   } else {
-    handle->flags &= ~UV_HANDLE_READING;
+    if (handle->type == UV_NAMED_PIPE) {
+      uv__pipe_stop_read((uv_pipe_t*) handle);
+    } else {
+      handle->flags &= ~UV_HANDLE_READING;
+    }
     DECREASE_ACTIVE_COUNT(handle->loop, handle);
   }
 
@@ -180,8 +184,22 @@ int uv_write2(uv_write_t* req,
 int uv_try_write(uv_stream_t* stream,
                  const uv_buf_t bufs[],
                  unsigned int nbufs) {
-  /* NOTE: Won't work with overlapped writes */
-  return UV_ENOSYS;
+  if (stream->flags & UV__HANDLE_CLOSING)
+    return UV_EBADF;
+  if (!(stream->flags & UV_HANDLE_WRITABLE))
+    return UV_EPIPE;
+
+  switch (stream->type) {
+    case UV_TCP:
+      return uv__tcp_try_write((uv_tcp_t*) stream, bufs, nbufs);
+    case UV_TTY:
+      return uv__tty_try_write((uv_tty_t*) stream, bufs, nbufs);
+    case UV_NAMED_PIPE:
+      return UV_EAGAIN;
+    default:
+      assert(0);
+      return UV_ENOSYS;
+  }
 }
 
 

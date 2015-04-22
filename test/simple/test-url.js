@@ -45,6 +45,30 @@ var parseTests = {
     href: 'http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch'
   },
 
+  'http:\\\\evil-phisher\\foo.html?json="\\"foo\\""#h\\a\\s\\h': {
+    protocol: 'http:',
+    slashes: true,
+    host: 'evil-phisher',
+    hostname: 'evil-phisher',
+    pathname: '/foo.html',
+    search: '?json=%22%5C%22foo%5C%22%22',
+    query: 'json=%22%5C%22foo%5C%22%22',
+    path: '/foo.html?json=%22%5C%22foo%5C%22%22',
+    hash: '#h%5Ca%5Cs%5Ch',
+    href: 'http://evil-phisher/foo.html?json=%22%5C%22foo%5C%22%22#h%5Ca%5Cs%5Ch'
+  },
+
+  'http:\\\\evil-phisher\\foo.html#h\\a\\s\\h?blarg': {
+    protocol: 'http:',
+    slashes: true,
+    host: 'evil-phisher',
+    hostname: 'evil-phisher',
+    pathname: '/foo.html',
+    path: '/foo.html',
+    hash: '#h%5Ca%5Cs%5Ch?blarg',
+    href: 'http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch?blarg'
+  },
+
 
   'http:\\\\evil-phisher\\foo.html': {
     protocol: 'http:',
@@ -153,32 +177,44 @@ var parseTests = {
     'path': '/Y'
   },
 
+  // + not an invalid host character
+  // per https://url.spec.whatwg.org/#host-parsing
+  'http://x.y.com+a/b/c' : {
+    'href': 'http://x.y.com+a/b/c',
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'x.y.com+a',
+    'hostname': 'x.y.com+a',
+    'pathname': '/b/c',
+    'path': '/b/c'
+  },
+
   // an unexpected invalid char in the hostname.
-  'HtTp://x.y.cOm*a/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*a/b/c?d=e#f%20g%3Ch%3Ei',
+  'HtTp://x.y.cOm;a/b/c?d=e#f g<h>i' : {
+    'href': 'http://x.y.com/;a/b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.y.com',
     'hostname': 'x.y.com',
-    'pathname': '/*a/b/c',
+    'pathname': ';a/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*a/b/c?d=e'
+    'path': ';a/b/c?d=e'
   },
 
   // make sure that we don't accidentally lcast the path parts.
-  'HtTp://x.y.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://x.y.com/*A/b/c?d=e#f%20g%3Ch%3Ei',
+  'HtTp://x.y.cOm;A/b/c?d=e#f g<h>i' : {
+    'href': 'http://x.y.com/;A/b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
     'host': 'x.y.com',
     'hostname': 'x.y.com',
-    'pathname': '/*A/b/c',
+    'pathname': ';A/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*A/b/c?d=e'
+    'path': ';A/b/c?d=e'
   },
 
   'http://x...y...#p': {
@@ -493,17 +529,17 @@ var parseTests = {
     'path': '/'
   },
 
-  'http://www.Äffchen.cOm*A/b/c?d=e#f g<h>i' : {
-    'href': 'http://www.xn--ffchen-9ta.com/*A/b/c?d=e#f%20g%3Ch%3Ei',
+  'http://www.Äffchen.cOm;A/b/c?d=e#f g<h>i' : {
+    'href': 'http://www.xn--ffchen-9ta.com/;A/b/c?d=e#f%20g%3Ch%3Ei',
     'protocol': 'http:',
     'slashes': true,
     'host': 'www.xn--ffchen-9ta.com',
     'hostname': 'www.xn--ffchen-9ta.com',
-    'pathname': '/*A/b/c',
+    'pathname': ';A/b/c',
     'search': '?d=e',
     'query': 'd=e',
     'hash': '#f%20g%3Ch%3Ei',
-    'path': '/*A/b/c?d=e'
+    'path': ';A/b/c?d=e'
   },
 
   'http://SÉLIER.COM/' : {
@@ -821,6 +857,22 @@ var parseTests = {
     pathname: '%0D%0Ad/e',
     path: '%0D%0Ad/e?f',
     href: 'http://a%0D%22%20%09%0A%3C\'b:b@c/%0D%0Ad/e?f'
+  },
+
+  // git urls used by npm
+  'git+ssh://git@github.com:npm/npm': {
+    protocol: 'git+ssh:',
+    slashes: true,
+    auth: 'git',
+    host: 'github.com',
+    port: null,
+    hostname: 'github.com',
+    hash: null,
+    search: null,
+    query: null,
+    pathname: '/:npm/npm',
+    path: '/:npm/npm',
+    href: 'git+ssh://git@github.com/:npm/npm'
   }
 
 };
@@ -867,6 +919,20 @@ var parseTestsWithQueryString = {
     'search': '',
     'pathname': '/',
     'path': '/'
+  },
+  '/example': {
+    protocol: null,
+    slashes: null,
+    auth: null,
+    host: null,
+    port: null,
+    hostname: null,
+    hash: null,
+    search: '',
+    query: {},
+    pathname: '/example',
+    path: '/example',
+    href: '/example'
   },
   '/example?query=value':{
     protocol: null,
@@ -1112,6 +1178,14 @@ var relativeTests = [
   ['/foo/bar/baz/', 'quux/baz', '/foo/bar/baz/quux/baz'],
   ['/foo/bar/baz', '../../../../../../../../quux/baz', '/quux/baz'],
   ['/foo/bar/baz', '../../../../../../../quux/baz', '/quux/baz'],
+  ['/foo', '.', '/'],
+  ['/foo', '..', '/'],
+  ['/foo/', '.', '/foo/'],
+  ['/foo/', '..', '/'],
+  ['/foo/bar', '.', '/foo/'],
+  ['/foo/bar', '..', '/'],
+  ['/foo/bar/', '.', '/foo/bar/'],
+  ['/foo/bar/', '..', '/foo/'],
   ['foo/bar', '../../../baz', '../../baz'],
   ['foo/bar/', '../../../baz', '../baz'],
   ['http://example.com/b//c//d;p?q#blarg', 'https:#hash2', 'https:///#hash2'],

@@ -35,6 +35,9 @@ set noetw_msi_arg=
 set noperfctr=
 set noperfctr_arg=
 set noperfctr_msi_arg=
+set i18n_arg=
+set download_arg=
+set build_release=
 
 :next-arg
 if "%1"=="" goto args-done
@@ -59,9 +62,15 @@ if /i "%1"=="test-message"  set test=test-message&goto arg-ok
 if /i "%1"=="test-gc"       set test=test-gc&set buildnodeweak=1&goto arg-ok
 if /i "%1"=="test-all"      set test=test-all&set buildnodeweak=1&goto arg-ok
 if /i "%1"=="test"          set test=test&goto arg-ok
-if /i "%1"=="msi"           set msi=1&set licensertf=1&goto arg-ok
+@rem Include small-icu support with MSI installer
+if /i "%1"=="msi"           set msi=1&set licensertf=1&set download_arg="--download=all"&set i18n_arg=small-icu&goto arg-ok
 if /i "%1"=="upload"        set upload=1&goto arg-ok
 if /i "%1"=="jslint"        set jslint=1&goto arg-ok
+if /i "%1"=="small-icu"     set i18n_arg=%1&goto arg-ok
+if /i "%1"=="full-icu"      set i18n_arg=%1&goto arg-ok
+if /i "%1"=="intl-none"     set i18n_arg=%1&goto arg-ok
+if /i "%1"=="download-all"  set download_arg="--download=all"&goto arg-ok
+if /i "%1"=="build-release" set build_release=1&goto arg-ok
 
 echo Warning: ignoring invalid command line option `%1`.
 
@@ -74,11 +83,24 @@ goto next-arg
 if defined upload goto upload
 if defined jslint goto jslint
 
+if defined build_release (
+  set nosnapshot=1
+  set config=Release
+  set msi=1
+  set licensertf=1
+  set download_arg="--download=all"
+  set i18n_arg=small-icu
+)
+
 if "%config%"=="Debug" set debug_arg=--debug
 if "%target_arch%"=="x64" set msiplatform=x64
 if defined nosnapshot set nosnapshot_arg=--without-snapshot
 if defined noetw set noetw_arg=--without-etw& set noetw_msi_arg=/p:NoETW=1
 if defined noperfctr set noperfctr_arg=--without-perfctr& set noperfctr_msi_arg=/p:NoPerfCtr=1
+
+if "%i18n_arg%"=="full-icu" set i18n_arg=--with-intl=full-icu
+if "%i18n_arg%"=="small-icu" set i18n_arg=--with-intl=small-icu
+if "%i18n_arg%"=="intl-none" set i18n_arg=--with-intl=none
 
 :project-gen
 @rem Skip project generation if requested.
@@ -89,7 +111,7 @@ if defined NIGHTLY set TAG=nightly-%NIGHTLY%
 @rem Generate the VS project.
 SETLOCAL
   if defined VS100COMNTOOLS call "%VS100COMNTOOLS%\VCVarsQueryRegistry.bat"
-  python configure %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
+  python configure %download_arg% %i18n_arg% %debug_arg% %nosnapshot_arg% %noetw_arg% %noperfctr_arg% --dest-cpu=%target_arch% --tag=%TAG%
   if errorlevel 1 goto create-msvs-files-failed
   if not exist node.sln goto create-msvs-files-failed
   echo Project files generated.
@@ -102,7 +124,10 @@ if defined nobuild goto sign
 @rem Look for Visual Studio 2013
 if not defined VS120COMNTOOLS goto vc-set-2012
 if not exist "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2012
-call "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat"
+if "%VCVARS_VER%" NEQ "120" (
+  call "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat"
+  SET VCVARS_VER=120
+)
 if not defined VCINSTALLDIR goto msbuild-not-found
 set GYP_MSVS_VERSION=2013
 goto msbuild-found
@@ -111,7 +136,10 @@ goto msbuild-found
 @rem Look for Visual Studio 2012
 if not defined VS110COMNTOOLS goto vc-set-2010
 if not exist "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2010
-call "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat"
+if "%VCVARS_VER%" NEQ "110" (
+  call "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat"
+  SET VCVARS_VER=110
+)
 if not defined VCINSTALLDIR goto msbuild-not-found
 set GYP_MSVS_VERSION=2012
 goto msbuild-found
@@ -119,7 +147,10 @@ goto msbuild-found
 :vc-set-2010
 if not defined VS100COMNTOOLS goto msbuild-not-found
 if not exist "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat" goto msbuild-not-found
-call "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat"
+if "%VCVARS_VER%" NEQ "100" (
+  call "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat"
+  SET VCVARS_VER=100
+)
 if not defined VCINSTALLDIR goto msbuild-not-found
 goto msbuild-found
 
@@ -217,12 +248,13 @@ python tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --noj
 goto exit
 
 :help
-echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild] [nosign] [x86/x64]
+echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [small-icu/full-icu/intl-none] [nobuild] [nosign] [x86/x64] [download-all]
 echo Examples:
 echo   vcbuild.bat                : builds release build
 echo   vcbuild.bat debug          : builds debug build
 echo   vcbuild.bat release msi    : builds release build and MSI installer package
 echo   vcbuild.bat test           : builds debug build and runs tests
+echo   vcbuild.bat build-release  : builds the release distribution as used by nodejs.org
 goto exit
 
 :exit

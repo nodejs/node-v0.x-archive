@@ -101,6 +101,7 @@ int uv_pipe_init(uv_loop_t* loop, uv_pipe_t* handle, int ipc) {
   handle->pending_ipc_info.queue_len = 0;
   handle->ipc = ipc;
   handle->non_overlapped_writes_tail = NULL;
+  handle->readfile_thread = NULL;
 
   uv_req_init(loop, (uv_req_t*) &handle->ipc_header_write_req);
 
@@ -112,6 +113,12 @@ static void uv_pipe_connection_init(uv_pipe_t* handle) {
   uv_connection_init((uv_stream_t*) handle);
   handle->read_req.data = handle;
   handle->eof_timer = NULL;
+  assert(!(handle->flags & UV_HANDLE_PIPESERVER));
+  if (pCancelSynchronousIo &&
+      handle->flags & UV_HANDLE_NON_OVERLAPPED_PIPE) {
+      uv_mutex_init(&handle->readfile_mutex);
+      handle->flags |= UV_HANDLE_PIPE_READ_CANCELABLE;
+  }
 }
 
 
@@ -320,6 +327,11 @@ void uv_pipe_endgame(uv_loop_t* loop, uv_pipe_t* handle) {
   IO_STATUS_BLOCK io_status;
   FILE_PIPE_LOCAL_INFORMATION pipe_info;
   uv__ipc_queue_item_t* item;
+
+  if (handle->flags & UV_HANDLE_PIPE_READ_CANCELABLE) {
+    handle->flags &= ~UV_HANDLE_PIPE_READ_CANCELABLE;
+    uv_mutex_destroy(&handle->readfile_mutex);
+  }
 
   if ((handle->flags & UV_HANDLE_CONNECTION) &&
       handle->shutdown_req != NULL &&
@@ -658,11 +670,48 @@ error:
 }
 
 
+void uv__pipe_pause_read(uv_pipe_t* handle) {
+  if (handle->flags & UV_HANDLE_PIPE_READ_CANCELABLE) {
+      /* Pause the ReadFile task briefly, to work
+         around the Windows kernel bug that causes
+         any access to a NamedPipe to deadlock if
+         any process has called ReadFile */
+      HANDLE h;
+      uv_mutex_lock(&handle->readfile_mutex);
+      h = handle->readfile_thread;
+      while (h) {
+        /* spinlock: we expect this to finish quickly,
+           or we are probably about to deadlock anyways
+           (in the kernel), so it doesn't matter */
+        pCancelSynchronousIo(h);
+        SwitchToThread(); /* yield thread control briefly */
+        h = handle->readfile_thread;
+      }
+  }
+}
+
+
+void uv__pipe_unpause_read(uv_pipe_t* handle) {
+  if (handle->flags & UV_HANDLE_PIPE_READ_CANCELABLE) {
+    uv_mutex_unlock(&handle->readfile_mutex);
+  }
+}
+
+
+void uv__pipe_stop_read(uv_pipe_t* handle) {
+  handle->flags &= ~UV_HANDLE_READING;
+  uv__pipe_pause_read((uv_pipe_t*)handle);
+  uv__pipe_unpause_read((uv_pipe_t*)handle);
+}
+
+
 /* Cleans up uv_pipe_t (server or connection) and all resources associated */
 /* with it. */
 void uv_pipe_cleanup(uv_loop_t* loop, uv_pipe_t* handle) {
   int i;
   HANDLE pipeHandle;
+
+  uv__pipe_stop_read(handle);
 
   if (handle->name) {
     free(handle->name);
@@ -689,6 +738,7 @@ void uv_pipe_cleanup(uv_loop_t* loop, uv_pipe_t* handle) {
     CloseHandle(handle->handle);
     handle->handle = INVALID_HANDLE_VALUE;
   }
+
 }
 
 
@@ -867,19 +917,61 @@ static DWORD WINAPI uv_pipe_zero_readfile_thread_proc(void* parameter) {
   uv_read_t* req = (uv_read_t*) parameter;
   uv_pipe_t* handle = (uv_pipe_t*) req->data;
   uv_loop_t* loop = handle->loop;
+  HANDLE hThread = NULL;
+  DWORD err;
+  uv_mutex_t *m = &handle->readfile_mutex;
 
   assert(req != NULL);
   assert(req->type == UV_READ);
   assert(handle->type == UV_NAMED_PIPE);
 
+  if (handle->flags & UV_HANDLE_PIPE_READ_CANCELABLE) {
+    uv_mutex_lock(m); /* mutex controls *setting* of readfile_thread */
+    if (DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                        GetCurrentProcess(), &hThread,
+                        0, TRUE, DUPLICATE_SAME_ACCESS)) {
+      handle->readfile_thread = hThread;
+    } else {
+      hThread = NULL;
+    }
+    uv_mutex_unlock(m);
+  }
+restart_readfile:
   result = ReadFile(handle->handle,
                     &uv_zero_,
                     0,
                     &bytes,
                     NULL);
+  if (!result) {
+    err = GetLastError();
+    if (err == ERROR_OPERATION_ABORTED &&
+        handle->flags & UV_HANDLE_PIPE_READ_CANCELABLE) {
+      if (handle->flags & UV_HANDLE_READING) {
+        /* just a brief break to do something else */
+        handle->readfile_thread = NULL;
+        /* resume after it is finished */
+        uv_mutex_lock(m);
+        handle->readfile_thread = hThread;
+        uv_mutex_unlock(m);
+        goto restart_readfile;
+      } else {
+        result = 1; /* successfully stopped reading */
+      }
+    }
+  }
+  if (hThread) {
+    assert(hThread == handle->readfile_thread);
+    /* mutex does not control clearing readfile_thread */
+    handle->readfile_thread = NULL;
+    uv_mutex_lock(m);
+    /* only when we hold the mutex lock is it safe to
+       open or close the handle */
+    CloseHandle(hThread);
+    uv_mutex_unlock(m);
+  }
 
   if (!result) {
-    SET_REQ_ERROR(req, GetLastError());
+    SET_REQ_ERROR(req, err);
   }
 
   POST_COMPLETION_FOR_REQ(loop, req);
@@ -1255,7 +1347,7 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
     }
 
     /* Request queued by the kernel. */
-    req->queued_bytes = uv__count_bufs(bufs, nbufs);
+    req->queued_bytes = bufs[0].len;
     handle->write_queue_size += req->queued_bytes;
   } else if (handle->flags & UV_HANDLE_BLOCKING_WRITES) {
     /* Using overlapped IO, but wait for completion before returning */
@@ -1280,12 +1372,13 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
       /* Request completed immediately. */
       req->queued_bytes = 0;
     } else {
-      assert(ipc_header_req != NULL);
       /* Request queued by the kernel. */
-      if (WaitForSingleObject(ipc_header_req->overlapped.hEvent, INFINITE) !=
+      req->queued_bytes = bufs[0].len;
+      handle->write_queue_size += req->queued_bytes;
+      if (WaitForSingleObject(req->overlapped.hEvent, INFINITE) !=
           WAIT_OBJECT_0) {
         err = GetLastError();
-        CloseHandle(ipc_header_req->overlapped.hEvent);
+        CloseHandle(req->overlapped.hEvent);
         return uv_translate_sys_error(err);
       }
     }
@@ -1294,7 +1387,6 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
     REGISTER_HANDLE_REQ(loop, handle, req);
     handle->reqs_pending++;
     handle->write_reqs_pending++;
-    POST_COMPLETION_FOR_REQ(loop, req);
     return 0;
   } else {
     result = WriteFile(handle->handle,
@@ -1312,7 +1404,7 @@ static int uv_pipe_write_impl(uv_loop_t* loop,
       req->queued_bytes = 0;
     } else {
       /* Request queued by the kernel. */
-      req->queued_bytes = uv__count_bufs(bufs, nbufs);
+      req->queued_bytes = bufs[0].len;
       handle->write_queue_size += req->queued_bytes;
     }
 
@@ -1756,7 +1848,7 @@ static void eof_timer_cb(uv_timer_t* timer) {
 
 
 static void eof_timer_destroy(uv_pipe_t* pipe) {
-  assert(pipe->flags && UV_HANDLE_CONNECTION);
+  assert(pipe->flags & UV_HANDLE_CONNECTION);
 
   if (pipe->eof_timer) {
     uv_close((uv_handle_t*) pipe->eof_timer, eof_timer_close_cb);
@@ -1818,7 +1910,7 @@ int uv_pipe_open(uv_pipe_t* pipe, uv_file file) {
 }
 
 
-int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
+static int uv__pipe_getname(const uv_pipe_t* handle, char* buffer, size_t* size) {
   NTSTATUS nt_status;
   IO_STATUS_BLOCK io_status;
   FILE_NAME_INFORMATION tmp_name_info;
@@ -1832,9 +1924,11 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
   name_info = NULL;
 
   if (handle->handle == INVALID_HANDLE_VALUE) {
-    *len = 0;
+    *size = 0;
     return UV_EINVAL;
   }
+
+  uv__pipe_pause_read((uv_pipe_t*)handle); /* cast away const warning */
 
   nt_status = pNtQueryInformationFile(handle->handle,
                                       &io_status,
@@ -1845,8 +1939,9 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
     name_size = sizeof(*name_info) + tmp_name_info.FileNameLength;
     name_info = malloc(name_size);
     if (!name_info) {
-      *len = 0;
-      return UV_ENOMEM;
+      *size = 0;
+      err = UV_ENOMEM;
+      goto cleanup;
     }
 
     nt_status = pNtQueryInformationFile(handle->handle,
@@ -1857,7 +1952,7 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
   }
 
   if (nt_status != STATUS_SUCCESS) {
-    *len = 0;
+    *size = 0;
     err = uv_translate_sys_error(pRtlNtStatusToDosError(nt_status));
     goto error;
   }
@@ -1872,7 +1967,7 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
   }
 
   if (name_len == 0) {
-    *len = 0;
+    *size = 0;
     err = 0;
     goto error;
   }
@@ -1889,39 +1984,42 @@ int uv_pipe_getsockname(const uv_pipe_t* handle, char* buf, size_t* len) {
                                 NULL,
                                 NULL);
   if (!addrlen) {
-    *len = 0;
+    *size = 0;
     err = uv_translate_sys_error(GetLastError());
     goto error;
-  } else if (pipe_prefix_len + addrlen + 1 > *len) {
-    /* "\\\\.\\pipe" + name + '\0' */
-    *len = pipe_prefix_len + addrlen + 1;
+  } else if (pipe_prefix_len + addrlen > *size) {
+    /* "\\\\.\\pipe" + name */
+    *size = pipe_prefix_len + addrlen;
     err = UV_ENOBUFS;
     goto error;
   }
 
-  memcpy(buf, pipe_prefix, pipe_prefix_len);
+  memcpy(buffer, pipe_prefix, pipe_prefix_len);
   addrlen = WideCharToMultiByte(CP_UTF8,
                                 0,
                                 name_buf,
                                 name_len,
-                                buf+pipe_prefix_len,
-                                *len-pipe_prefix_len,
+                                buffer+pipe_prefix_len,
+                                *size-pipe_prefix_len,
                                 NULL,
                                 NULL);
   if (!addrlen) {
-    *len = 0;
+    *size = 0;
     err = uv_translate_sys_error(GetLastError());
     goto error;
   }
 
   addrlen += pipe_prefix_len;
-  buf[addrlen++] = '\0';
-  *len = addrlen;
+  *size = addrlen;
 
-  return 0;
+  err = 0;
+  goto cleanup;
 
 error:
   free(name_info);
+
+cleanup:
+  uv__pipe_unpause_read((uv_pipe_t*)handle); /* cast away const warning */
   return err;
 }
 
@@ -1930,6 +2028,32 @@ int uv_pipe_pending_count(uv_pipe_t* handle) {
   if (!handle->ipc)
     return 0;
   return handle->pending_ipc_info.queue_len;
+}
+
+
+int uv_pipe_getsockname(const uv_pipe_t* handle, char* buffer, size_t* size) {
+  if (handle->flags & UV_HANDLE_BOUND)
+    return uv__pipe_getname(handle, buffer, size);
+
+  if (handle->flags & UV_HANDLE_CONNECTION ||
+      handle->handle != INVALID_HANDLE_VALUE) {
+    *size = 0;
+    return 0;
+  }
+
+  return UV_EBADF;
+}
+
+
+int uv_pipe_getpeername(const uv_pipe_t* handle, char* buffer, size_t* size) {
+  /* emulate unix behaviour */
+  if (handle->flags & UV_HANDLE_BOUND)
+    return UV_ENOTCONN;
+
+  if (handle->handle != INVALID_HANDLE_VALUE)
+    return uv__pipe_getname(handle, buffer, size);
+
+  return UV_EBADF;
 }
 
 

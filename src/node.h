@@ -63,6 +63,9 @@
 
 #define NODE_DEPRECATED(msg, fn) V8_DEPRECATED(msg, fn)
 
+// Forward-declare libuv loop
+struct uv_loop_s;
+
 // Forward-declare these functions now to stop MSVS from becoming
 // terminally confused when it's done in node_internals.h
 namespace node {
@@ -134,8 +137,8 @@ NODE_EXTERN v8::Handle<v8::Value> MakeCallback(
 
 }  // namespace node
 
-#if NODE_WANT_INTERNALS
-#include "node_internals.h"
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+# include "node_internals.h"
 #endif
 
 #include <assert.h>
@@ -178,11 +181,25 @@ NODE_EXTERN void Init(int* argc,
 class Environment;
 
 NODE_EXTERN Environment* CreateEnvironment(v8::Isolate* isolate,
+                                           struct uv_loop_s* loop,
                                            v8::Handle<v8::Context> context,
                                            int argc,
                                            const char* const* argv,
                                            int exec_argc,
                                            const char* const* exec_argv);
+NODE_EXTERN void LoadEnvironment(Environment* env);
+
+// NOTE: Calling this is the same as calling
+// CreateEnvironment() + LoadEnvironment() from above.
+// `uv_default_loop()` will be passed as `loop`.
+NODE_EXTERN Environment* CreateEnvironment(v8::Isolate* isolate,
+                                           v8::Handle<v8::Context> context,
+                                           int argc,
+                                           const char* const* argv,
+                                           int exec_argc,
+                                           const char* const* exec_argv);
+
+
 NODE_EXTERN void EmitBeforeExit(Environment* env);
 NODE_EXTERN int EmitExit(Environment* env);
 NODE_EXTERN void RunAtExit(Environment* env);
@@ -202,9 +219,20 @@ NODE_EXTERN void RunAtExit(Environment* env);
         v8::Number::New(isolate, static_cast<double>(constant));              \
     v8::PropertyAttribute constant_attributes =                               \
         static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);    \
-    (target)->Set(constant_name, constant_value, constant_attributes);        \
+    (target)->ForceSet(constant_name, constant_value, constant_attributes);   \
   }                                                                           \
   while (0)
+
+#define NODE_DEFINE_STRING_CONSTANT(isolate, target, constant)                \
+  do {                                                                        \
+    v8::Local<v8::String> constant_name =                                     \
+        v8::String::NewFromUtf8(isolate, #constant);                          \
+    v8::Local<v8::String> constant_value =                                    \
+        v8::String::NewFromUtf8(isolate, constant);                           \
+    v8::PropertyAttribute constant_attributes =                               \
+        static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);    \
+    (target)->ForceSet(constant_name, constant_value, constant_attributes);   \
+  } while (0)
 
 // Used to be a macro, hence the uppercase name.
 template <typename TypeName>
@@ -330,6 +358,7 @@ typedef void (*addon_context_register_func)(
     void* priv);
 
 #define NM_F_BUILTIN 0x01
+#define NM_F_LINKED  0x02
 
 struct node_module {
   int nm_version;
@@ -344,6 +373,7 @@ struct node_module {
 };
 
 node_module* get_builtin_module(const char *name);
+node_module* get_linked_module(const char *name);
 
 extern "C" NODE_EXTERN void node_module_register(void* mod);
 

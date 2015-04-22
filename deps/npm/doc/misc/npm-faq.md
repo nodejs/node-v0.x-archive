@@ -3,7 +3,7 @@ npm-faq(7) -- Frequently Asked Questions
 
 ## Where can I find these docs in HTML?
 
-<https://www.npmjs.org/doc/>, or run:
+<https://docs.npmjs.com/>, or run:
 
     npm config set viewer browser
 
@@ -75,18 +75,20 @@ npm will not help you do something that is known to be a bad idea.
 
 ## Should I check my `node_modules` folder into git?
 
-Mikeal Rogers answered this question very well:
+Usually, no. Allow npm to resolve dependencies for your packages.
 
-<http://www.futurealoof.com/posts/nodemodules-in-git.html>
+For packages you **deploy**, such as websites and apps,
+you should use npm shrinkwrap to lock down your full dependency tree:
 
-tl;dr
+<https://docs.npmjs.com/cli/shrinkwrap>
 
-* Check `node_modules` into git for things you **deploy**, such as
-  websites and apps.
-* Do not check `node_modules` into git for libraries and modules
-  intended to be reused.
-* Use npm to manage dependencies in your dev environment, but not in
-  your deployment scripts.
+If you are paranoid about depending on the npm ecosystem,
+you should run a private npm mirror or a private cache.
+
+If you want 100% confidence in being able to reproduce the specific bytes
+included in a deployment, you should use an additional mechanism that can
+verify contents rather than versions. For example,
+Amazon machine images, DigitalOcean snapshots, Heroku slugs, or simple tarballs.
 
 ## Is it 'npm' or 'NPM' or 'Npm'?
 
@@ -133,7 +135,7 @@ Arguments are greps.  `npm search jsdom` shows jsdom packages.
 
 ## How do I update npm?
 
-    npm update npm -g
+    npm install npm -g
 
 You can also update all outdated local packages by doing `npm update` without
 any arguments, or global packages by doing `npm update -g`.
@@ -145,7 +147,7 @@ command.)
 
 In those cases, you can do this:
 
-    curl https://www.npmjs.org/install.sh | sh
+    curl https://www.npmjs.com/install.sh | sh
 
 ## What is a `package`?
 
@@ -305,7 +307,7 @@ See `npm-registry(7)`.
 
 ## I forgot my password, and can't publish.  How do I reset it?
 
-Go to <https://npmjs.org/forgot>.
+Go to <https://npmjs.com/forgot>.
 
 ## I get ECONNREFUSED a lot.  What's up?
 
@@ -325,13 +327,38 @@ on Freenode IRC.
 
 ## Why no namespaces?
 
-Please see this discussion: <https://github.com/npm/npm/issues/798>
+npm has only one global namespace.  If you want to namespace your own packages,
+you may: simply use the `-` character to separate the names.  npm is a mostly
+anarchic system.  There is not sufficient need to impose namespace rules on
+everyone.
 
-tl;dr - It doesn't actually make things better, and can make them worse.
+As of 2.0, npm supports scoped packages, which allow you to publish a group of
+related modules without worrying about name collisions.
 
-If you want to namespace your own packages, you may: simply use the
-`-` character to separate the names.  npm is a mostly anarchic system.
-There is not sufficient need to impose namespace rules on everyone.
+Every npm user owns the scope associated with their username.  For example, the
+user named `npm` owns the scope `@npm`.  Scoped packages are published inside a
+scope by naming them as if they were files under the scope directory, e.g., by
+setting `name` in `package.json` to `@npm/npm`.
+
+Scoped packages can coexist with public npm packages in a private npm registry.
+At present (2014-11-04) scoped packages may NOT be published to the public npm
+registry.
+
+Unscoped packages can only depend on other unscoped packages.  Scoped packages
+can depend on packages from their own scope, a different scope, or the public
+registry (unscoped).
+
+For the current documentation of scoped packages, see
+<https://docs.npmjs.com/misc/scope>
+
+References:
+
+1. For the reasoning behind the "one global namespace", please see  this
+   discussion: <https://github.com/npm/npm/issues/798> (TL;DR: It doesn't
+   actually make things better, and can make them worse.)
+
+2. For the pre-implementation discussion of the scoped package feature, see
+   this discussion: <https://github.com/npm/npm/issues/5239>
 
 ## Who does npm?
 
@@ -339,7 +366,7 @@ npm was originally written by Isaac Z. Schlueter, and many others have
 contributed to it, some of them quite substantially.
 
 The npm open source project, The npm Registry, and [the community
-website](https://www.npmjs.org) are maintained and operated by the
+website](https://www.npmjs.com) are maintained and operated by the
 good folks at [npm, Inc.](http://www.npmjs.com)
 
 ## I have a question or request not addressed here. Where should I put it?

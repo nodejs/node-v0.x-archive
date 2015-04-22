@@ -36,12 +36,11 @@
 #include "req-inl.h"
 
 
-/* The only event loop we support right now */
-static uv_loop_t uv_default_loop_;
+static uv_loop_t default_loop_struct;
+static uv_loop_t* default_loop_ptr;
 
-/* uv_once intialization guards */
+/* uv_once initialization guards */
 static uv_once_t uv_init_guard_ = UV_ONCE_INIT;
-static uv_once_t uv_default_loop_init_guard_ = UV_ONCE_INIT;
 
 
 #if defined(_DEBUG) && (defined(_MSC_VER) || defined(__MINGW64_VERSION_MAJOR))
@@ -104,7 +103,7 @@ static void uv_init(void) {
 #endif
 
   /* Fetch winapi function pointers. This must be done first because other
-   * intialization code might need these function pointers to be loaded.
+   * initialization code might need these function pointers to be loaded.
    */
   uv_winapi_init();
 
@@ -134,11 +133,10 @@ int uv_loop_init(uv_loop_t* loop) {
   if (loop->iocp == NULL)
     return uv_translate_sys_error(GetLastError());
 
-  /* To prevent uninitialized memory access, loop->time must be intialized
+  /* To prevent uninitialized memory access, loop->time must be initialized
    * to zero before calling uv_update_time for the first time.
    */
   loop->time = 0;
-  loop->last_tick_count = 0;
   uv_update_time(loop);
 
   QUEUE_INIT(&loop->wq);
@@ -181,94 +179,38 @@ int uv_loop_init(uv_loop_t* loop) {
 }
 
 
-static void uv_default_loop_init(void) {
-  /* Initialize libuv itself first */
-  uv__once_init();
-
-  /* Initialize the main loop */
-  uv_loop_init(&uv_default_loop_);
-}
-
-
 void uv__once_init(void) {
   uv_once(&uv_init_guard_, uv_init);
 }
 
 
-uv_loop_t* uv_default_loop(void) {
-  uv_once(&uv_default_loop_init_guard_, uv_default_loop_init);
-  return &uv_default_loop_;
-}
+void uv__loop_close(uv_loop_t* loop) {
+  size_t i;
 
-
-static void uv__loop_close(uv_loop_t* loop) {
-  /* close the async handle without needeing an extra loop iteration */
+  /* close the async handle without needing an extra loop iteration */
   assert(!loop->wq_async.async_sent);
   loop->wq_async.close_cb = NULL;
   uv__handle_closing(&loop->wq_async);
   uv__handle_close(&loop->wq_async);
 
-  if (loop != &uv_default_loop_) {
-    size_t i;
-    for (i = 0; i < ARRAY_SIZE(loop->poll_peer_sockets); i++) {
-      SOCKET sock = loop->poll_peer_sockets[i];
-      if (sock != 0 && sock != INVALID_SOCKET)
-        closesocket(sock);
-    }
+  for (i = 0; i < ARRAY_SIZE(loop->poll_peer_sockets); i++) {
+    SOCKET sock = loop->poll_peer_sockets[i];
+    if (sock != 0 && sock != INVALID_SOCKET)
+      closesocket(sock);
   }
-  /* TODO: cleanup default loop*/
 
   uv_mutex_lock(&loop->wq_mutex);
   assert(QUEUE_EMPTY(&loop->wq) && "thread pool work queue not empty!");
   assert(!uv__has_active_reqs(loop));
   uv_mutex_unlock(&loop->wq_mutex);
   uv_mutex_destroy(&loop->wq_mutex);
+
+  CloseHandle(loop->iocp);
 }
 
 
-int uv_loop_close(uv_loop_t* loop) {
-  QUEUE* q;
-  uv_handle_t* h;
-  if (!QUEUE_EMPTY(&(loop)->active_reqs))
-    return UV_EBUSY;
-  QUEUE_FOREACH(q, &loop->handle_queue) {
-    h = QUEUE_DATA(q, uv_handle_t, handle_queue);
-    if (!(h->flags & UV__HANDLE_INTERNAL))
-      return UV_EBUSY;
-  }
-
-  uv__loop_close(loop);
-
-#ifndef NDEBUG
-  memset(loop, -1, sizeof(*loop));
-#endif
-
-  return 0;
-}
-
-
-uv_loop_t* uv_loop_new(void) {
-  uv_loop_t* loop;
-
-  loop = (uv_loop_t*)malloc(sizeof(uv_loop_t));
-  if (loop == NULL) {
-    return NULL;
-  }
-
-  if (uv_loop_init(loop)) {
-    free(loop);
-    return NULL;
-  }
-
-  return loop;
-}
-
-
-void uv_loop_delete(uv_loop_t* loop) {
-  int err = uv_loop_close(loop);
-  assert(err == 0);
-  if (loop != &uv_default_loop_)
-    free(loop);
+int uv__loop_configure(uv_loop_t* loop, uv_loop_option option, va_list ap) {
+  return UV_ENOSYS;
 }
 
 
@@ -313,13 +255,17 @@ static void uv_poll(uv_loop_t* loop, DWORD timeout) {
     /* Package was dequeued */
     req = uv_overlapped_to_req(overlapped);
     uv_insert_pending_req(loop, req);
+
+    /* Some time might have passed waiting for I/O,
+     * so update the loop time here.
+     */
+    uv_update_time(loop);
   } else if (GetLastError() != WAIT_TIMEOUT) {
     /* Serious error */
     uv_fatal_error(GetLastError(), "GetQueuedCompletionStatus");
-  } else {
-    /* We're sure that at least `timeout` milliseconds have expired, but
-     * this may not be reflected yet in the GetTickCount() return value.
-     * Therefore we ensure it's taken into account here.
+  } else if (timeout > 0) {
+    /* GetQueuedCompletionStatus can occasionally return a little early.
+     * Make sure that the desired timeout is reflected in the loop time.
      */
     uv__time_forward(loop, timeout);
   }
@@ -346,13 +292,17 @@ static void uv_poll_ex(uv_loop_t* loop, DWORD timeout) {
       req = uv_overlapped_to_req(overlappeds[i].lpOverlapped);
       uv_insert_pending_req(loop, req);
     }
+
+    /* Some time might have passed waiting for I/O,
+     * so update the loop time here.
+     */
+    uv_update_time(loop);
   } else if (GetLastError() != WAIT_TIMEOUT) {
     /* Serious error */
     uv_fatal_error(GetLastError(), "GetQueuedCompletionStatusEx");
   } else if (timeout > 0) {
-    /* We're sure that at least `timeout` milliseconds have expired, but
-     * this may not be reflected yet in the GetTickCount() return value.
-     * Therefore we ensure it's taken into account here.
+    /* GetQueuedCompletionStatus can occasionally return a little early.
+     * Make sure that the desired timeout is reflected in the loop time.
      */
     uv__time_forward(loop, timeout);
   }
@@ -374,6 +324,7 @@ int uv_loop_alive(const uv_loop_t* loop) {
 int uv_run(uv_loop_t *loop, uv_run_mode mode) {
   DWORD timeout;
   int r;
+  int ran_pending;
   void (*poll)(uv_loop_t* loop, DWORD timeout);
 
   if (pGetQueuedCompletionStatusEx)
@@ -389,12 +340,12 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
     uv_update_time(loop);
     uv_process_timers(loop);
 
-    uv_process_reqs(loop);
+    ran_pending = uv_process_reqs(loop);
     uv_idle_invoke(loop);
     uv_prepare_invoke(loop);
 
     timeout = 0;
-    if ((mode & UV_RUN_NOWAIT) == 0)
+    if ((mode == UV_RUN_ONCE && !ran_pending) || mode == UV_RUN_DEFAULT)
       timeout = uv_backend_timeout(loop);
 
     (*poll)(loop, timeout);
@@ -403,7 +354,7 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
     uv_process_endgames(loop);
 
     if (mode == UV_RUN_ONCE) {
-      /* UV_RUN_ONCE implies forward progess: at least one callback must have
+      /* UV_RUN_ONCE implies forward progress: at least one callback must have
        * been invoked when it returns. uv__io_poll() can return without doing
        * I/O (meaning: no callbacks) when its timeout expires - which means we
        * have pending timers that satisfy the forward progress constraint.
@@ -411,12 +362,11 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
        * UV_RUN_NOWAIT makes no guarantees about progress so it's omitted from
        * the check.
        */
-      uv_update_time(loop);
       uv_process_timers(loop);
     }
 
     r = uv__loop_alive(loop);
-    if (mode & (UV_RUN_ONCE | UV_RUN_NOWAIT))
+    if (mode == UV_RUN_ONCE || mode == UV_RUN_NOWAIT)
       break;
   }
 
@@ -427,4 +377,69 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
     loop->stop_flag = 0;
 
   return r;
+}
+
+
+int uv_fileno(const uv_handle_t* handle, uv_os_fd_t* fd) {
+  uv_os_fd_t fd_out;
+
+  switch (handle->type) {
+  case UV_TCP:
+    fd_out = (uv_os_fd_t)((uv_tcp_t*) handle)->socket;
+    break;
+
+  case UV_NAMED_PIPE:
+    fd_out = ((uv_pipe_t*) handle)->handle;
+    break;
+
+  case UV_TTY:
+    fd_out = ((uv_tty_t*) handle)->handle;
+    break;
+
+  case UV_UDP:
+    fd_out = (uv_os_fd_t)((uv_udp_t*) handle)->socket;
+    break;
+
+  case UV_POLL:
+    fd_out = (uv_os_fd_t)((uv_poll_t*) handle)->socket;
+    break;
+
+  default:
+    return UV_EINVAL;
+  }
+
+  if (uv_is_closing(handle) || fd_out == INVALID_HANDLE_VALUE)
+    return UV_EBADF;
+
+  *fd = fd_out;
+  return 0;
+}
+
+
+int uv__socket_sockopt(uv_handle_t* handle, int optname, int* value) {
+  int r;
+  int len;
+  SOCKET socket;
+
+  if (handle == NULL || value == NULL)
+    return UV_EINVAL;
+
+  if (handle->type == UV_TCP)
+    socket = ((uv_tcp_t*) handle)->socket;
+  else if (handle->type == UV_UDP)
+    socket = ((uv_udp_t*) handle)->socket;
+  else
+    return UV_ENOTSUP;
+
+  len = sizeof(*value);
+
+  if (*value == 0)
+    r = getsockopt(socket, SOL_SOCKET, optname, (char*) value, &len);
+  else
+    r = setsockopt(socket, SOL_SOCKET, optname, (const char*) value, len);
+
+  if (r == SOCKET_ERROR)
+    return uv_translate_sys_error(WSAGetLastError());
+
+  return 0;
 }

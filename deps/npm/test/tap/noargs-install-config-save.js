@@ -11,8 +11,8 @@ var mr = require("npm-registry-mock")
 var spawn = require("child_process").spawn
 var node = process.execPath
 
-var pkg = process.env.npm_config_tmp || "/tmp"
-pkg += path.sep + "noargs-install-config-save"
+var pkg = path.resolve(process.env.npm_config_tmp || "/tmp",
+  "noargs-install-config-save")
 
 function writePackageJson() {
   rimraf.sync(pkg)
@@ -26,14 +26,14 @@ function writePackageJson() {
     "devDependencies": {
       "underscore": "1.3.1"
     }
-  }), 'utf8')
+  }), "utf8")
 }
 
 function createChild (args) {
   var env = {
-    npm_config_save: true,
-    npm_config_registry: common.registry,
-    npm_config_cache: pkg + "/cache",
+    "npm_config_save": true,
+    "npm_config_registry": common.registry,
+    "npm_config_cache": pkg + "/cache",
     HOME: process.env.HOME,
     Path: process.env.PATH,
     PATH: process.env.PATH
@@ -52,11 +52,11 @@ test("does not update the package.json with empty arguments", function (t) {
   writePackageJson()
   t.plan(1)
 
-  mr(common.port, function (s) {
+  mr({port : common.port}, function (er, s) {
     var child = createChild([npm, "install"])
     child.on("close", function () {
       var text = JSON.stringify(fs.readFileSync(pkg + "/package.json", "utf8"))
-      t.ok(text.indexOf('"dependencies') === -1)
+      t.ok(text.indexOf("\"dependencies") === -1)
       s.close()
       t.end()
     })
@@ -67,11 +67,11 @@ test("updates the package.json (adds dependencies) with an argument", function (
   writePackageJson()
   t.plan(1)
 
-  mr(common.port, function (s) {
+  mr({port : common.port}, function (er, s) {
     var child = createChild([npm, "install", "underscore"])
     child.on("close", function () {
       var text = JSON.stringify(fs.readFileSync(pkg + "/package.json", "utf8"))
-      t.ok(text.indexOf('"dependencies') !== -1)
+      t.ok(text.indexOf("\"dependencies") !== -1)
       s.close()
       t.end()
     })

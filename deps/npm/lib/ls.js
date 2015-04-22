@@ -14,8 +14,8 @@ var npm = require("./npm.js")
   , archy = require("archy")
   , semver = require("semver")
   , url = require("url")
-  , isGitUrl = require("./utils/is-git-url.js")
   , color = require("ansicolors")
+  , npa = require("npm-package-arg")
 
 ls.usage = "npm ls"
 
@@ -29,9 +29,9 @@ function ls (args, silent, cb) {
   // npm ls 'foo@~1.3' bar 'baz@<2'
   if (!args) args = []
   else args = args.map(function (a) {
-    var nv = a.split("@")
-      , name = nv.shift()
-      , ver = semver.validRange(nv.join("@")) || ""
+    var p = npa(a)
+      , name = p.name
+      , ver = semver.validRange(p.rawSpec) || ""
 
     return [ name, ver ]
   })
@@ -39,6 +39,8 @@ function ls (args, silent, cb) {
   var depth = npm.config.get("depth")
   var opt = { depth: depth, log: log.warn, dev: true }
   readInstalled(dir, opt, function (er, data) {
+    pruneNestedExtraneous(data)
+    filterByEnv(data)
     var bfs = bfsify(data, args)
       , lite = getLite(bfs)
 
@@ -73,6 +75,33 @@ function ls (args, silent, cb) {
     }
     cb(er, data, lite)
   })
+}
+
+function pruneNestedExtraneous (data, visited) {
+  visited = visited || []
+  visited.push(data)
+  for (var i in data.dependencies) {
+    if (data.dependencies[i].extraneous) {
+      data.dependencies[i].dependencies = {}
+    } else if (visited.indexOf(data.dependencies[i]) === -1) {
+      pruneNestedExtraneous(data.dependencies[i], visited)
+    }
+  }
+}
+
+function filterByEnv (data) {
+  var dev = npm.config.get("dev")
+  var production = npm.config.get("production")
+  if (dev === production) return
+  var dependencies = {}
+  var devDependencies = data.devDependencies || []
+  Object.keys(data.dependencies).forEach(function (name) {
+    var keys = Object.keys(devDependencies)
+    if (production && keys.indexOf(name) !== -1) return
+    if (dev && keys.indexOf(name) === -1) return
+    dependencies[name] = data.dependencies[name]
+  })
+  data.dependencies = dependencies
 }
 
 function alphasort (a, b) {
@@ -237,8 +266,7 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
   if (data._found === true && data._id) {
     if (npm.color) {
       out.label = color.bgBlack(color.yellow(out.label.trim())) + " "
-    }
-    else {
+    } else {
       out.label = out.label.trim() + " "
     }
   }
@@ -265,7 +293,7 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
 
   // add giturl to name@version
   if (data._resolved) {
-    if (isGitUrl(url.parse(data._resolved)))
+    if (npa(data._resolved).type === "git")
       out.label += " (" + data._resolved + ")"
   }
 
@@ -278,10 +306,13 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
   }
 
   // now all the children.
-  out.nodes = Object.keys(data.dependencies || {})
-    .sort(alphasort).map(function (d) {
-      return makeArchy_(data.dependencies[d], long, dir, depth + 1, data, d)
-    })
+  out.nodes = []
+  if (depth <= npm.config.get("depth")) {
+    out.nodes = Object.keys(data.dependencies || {})
+      .sort(alphasort).map(function (d) {
+        return makeArchy_(data.dependencies[d], long, dir, depth + 1, data, d)
+      })
+  }
 
   if (out.nodes.length === 0 && data.path === dir) {
     out.nodes = ["(empty)"]

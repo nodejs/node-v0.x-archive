@@ -51,7 +51,7 @@ using v8::RetainedObjectInfo;
 using v8::Uint32;
 using v8::Value;
 using v8::WeakCallbackData;
-using v8::kExternalUnsignedByteArray;
+using v8::kExternalUint8Array;
 
 
 class CallbackInfo {
@@ -132,7 +132,7 @@ void CallbackInfo::WeakCallback(Isolate* isolate, Local<Object> object) {
       object->GetIndexedPropertiesExternalArrayDataType();
   size_t array_size = ExternalArraySize(array_type);
   CHECK_GT(array_size, 0);
-  if (array_size > 1) {
+  if (array_size > 1 && array_data != NULL) {
     CHECK_GT(array_length * array_size, array_length);  // Overflow check.
     array_length *= array_size;
   }
@@ -147,23 +147,23 @@ void CallbackInfo::WeakCallback(Isolate* isolate, Local<Object> object) {
 // return size of external array type, or 0 if unrecognized
 size_t ExternalArraySize(enum ExternalArrayType type) {
   switch (type) {
-    case v8::kExternalUnsignedByteArray:
+    case v8::kExternalUint8Array:
       return sizeof(uint8_t);
-    case v8::kExternalByteArray:
+    case v8::kExternalInt8Array:
       return sizeof(int8_t);
-    case v8::kExternalShortArray:
+    case v8::kExternalInt16Array:
       return sizeof(int16_t);
-    case v8::kExternalUnsignedShortArray:
+    case v8::kExternalUint16Array:
       return sizeof(uint16_t);
-    case v8::kExternalIntArray:
+    case v8::kExternalInt32Array:
       return sizeof(int32_t);
-    case v8::kExternalUnsignedIntArray:
+    case v8::kExternalUint32Array:
       return sizeof(uint32_t);
-    case v8::kExternalFloatArray:
+    case v8::kExternalFloat32Array:
       return sizeof(float);   // NOLINT(runtime/sizeof)
-    case v8::kExternalDoubleArray:
+    case v8::kExternalFloat64Array:
       return sizeof(double);  // NOLINT(runtime/sizeof)
-    case v8::kExternalPixelArray:
+    case v8::kExternalUint8ClampedArray:
       return sizeof(uint8_t);
   }
   return 0;
@@ -207,7 +207,7 @@ void CopyOnto(const FunctionCallbackInfo<Value>& args) {
   size_t dest_size = ExternalArraySize(dest_type);
 
   // optimization for Uint8 arrays (i.e. Buffers)
-  if (source_size != 1 && dest_size != 1) {
+  if (source_size != 1 || dest_size != 1) {
     if (source_size == 0)
       return env->ThrowTypeError("unknown source external array type");
     if (dest_size == 0)
@@ -304,7 +304,7 @@ void Alloc(const FunctionCallbackInfo<Value>& args) {
 
   // it's faster to not pass the default argument then use Uint32Value
   if (args[2]->IsUndefined()) {
-    array_type = kExternalUnsignedByteArray;
+    array_type = kExternalUint8Array;
   } else {
     array_type = static_cast<ExternalArrayType>(args[2]->Uint32Value());
     size_t type_length = ExternalArraySize(array_type);
@@ -385,7 +385,7 @@ void AllocDispose(Environment* env, Handle<Object> obj) {
 
   if (data != NULL) {
     obj->SetIndexedPropertiesToExternalArrayData(NULL,
-                                                 kExternalUnsignedByteArray,
+                                                 kExternalUint8Array,
                                                  0);
     free(data);
   }
@@ -446,6 +446,9 @@ bool HasExternalData(Environment* env, Local<Object> obj) {
   return obj->HasIndexedPropertiesInExternalArrayData();
 }
 
+void IsTypedArray(const FunctionCallbackInfo<Value>& args) {
+  args.GetReturnValue().Set(args[0]->IsTypedArray());
+}
 
 void AllocTruncate(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
@@ -534,6 +537,56 @@ RetainedObjectInfo* WrapperInfo(uint16_t class_id, Handle<Value> wrapper) {
 }
 
 
+// User facing API.
+
+void Alloc(Isolate* isolate,
+           Handle<Object> obj,
+           size_t length,
+           enum ExternalArrayType type) {
+  Alloc(Environment::GetCurrent(isolate), obj, length, type);
+}
+
+
+void Alloc(Isolate* isolate,
+           Handle<Object> obj,
+           char* data,
+           size_t length,
+           enum ExternalArrayType type) {
+  Alloc(Environment::GetCurrent(isolate), obj, data, length, type);
+}
+
+
+void Alloc(Isolate* isolate,
+           Handle<Object> obj,
+           size_t length,
+           FreeCallback fn,
+           void* hint,
+           enum ExternalArrayType type) {
+  Alloc(Environment::GetCurrent(isolate), obj, length, fn, hint, type);
+}
+
+
+void Alloc(Isolate* isolate,
+           Handle<Object> obj,
+           char* data,
+           size_t length,
+           FreeCallback fn,
+           void* hint,
+           enum ExternalArrayType type) {
+  Alloc(Environment::GetCurrent(isolate), obj, data, length, fn, hint, type);
+}
+
+
+void AllocDispose(Isolate* isolate, Handle<Object> obj) {
+  AllocDispose(Environment::GetCurrent(isolate), obj);
+}
+
+
+bool HasExternalData(Isolate* isolate, Local<Object> obj) {
+  return HasExternalData(Environment::GetCurrent(isolate), obj);
+}
+
+
 void Initialize(Handle<Object> exports,
                 Handle<Value> unused,
                 Handle<Context> context) {
@@ -547,6 +600,7 @@ void Initialize(Handle<Object> exports,
   NODE_SET_METHOD(exports, "truncate", AllocTruncate);
 
   NODE_SET_METHOD(exports, "hasExternalData", HasExternalData);
+  NODE_SET_METHOD(exports, "isTypedArray", IsTypedArray);
 
   exports->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kMaxLength"),
                Uint32::NewFromUnsigned(env->isolate(), kMaxLength));
