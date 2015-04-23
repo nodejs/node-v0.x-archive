@@ -102,13 +102,13 @@ doTest(V1038Ciphers, 'v0.10.38', 8);
 });
 
 // invalid value
-assert.throws(function() {tls.getLegacyCiphers('foo');});
+assert.throws(function() {tls.getLegacyCiphers('foo');}, Error);
 // no parameters
-assert.throws(function() {tls.getLegacyCiphers();});
+assert.throws(function() {tls.getLegacyCiphers();}, TypeError);
 // not a string parameter
-assert.throws(function() {tls.getLegacyCiphers(1);});
+assert.throws(function() {tls.getLegacyCiphers(1);}, TypeError);
 // too many parameters
-assert.throws(function() {tls.getLegacyCiphers('abc', 'extra');});
+assert.throws(function() {tls.getLegacyCiphers('abc', 'extra');}, TypeError);
 // ah, just right
 assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.38');});
 assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.39');});
