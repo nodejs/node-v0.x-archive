@@ -131,6 +131,15 @@ can have a significant impact on the security of an application. The
 `--cipher-list` and `NODE_CIPHER_LIST` options should only be used if
 absolutely necessary.
 
+NOTE: The --cipher and --enable-legacy-ciper-list options may be specified on
+the command line multiple times and both options affect the default cipher list.
+In addition, the NODE_CIPHER_LIST and NODE_LEGACY_CIPHER_LIST environment
+variables may also be specified. When specified more than once on the command
+line, the rightmost (last) instance of an option will take precedence.
+In respect to precedence, environment variables are treated as if they were at
+the start of the command line (ie any options on the command line
+take precedence over them).
+
 ### Using Legacy Default Cipher Suite ###
 
 It is possible for the built-in default cipher suite to change from one release
@@ -152,6 +161,14 @@ Currently, the values supported for the `enable-legacy-cipher-list` switch and
 
       ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
 
+NOTE: in v0.10.38 due to an omission, the default cipher list only applied to
+servers using tls.  Part of the change for v0.10.39 is to make the default
+cipher list apply to both the server AND the client when using tls (as is
+already the case in 0.12.0 and later).  Therefore, when using
+--enable-legacy-cipher-list to set the default cipher list to that of
+v0.10.38, the behaviour is reverted to that of v0.10.38.  The default cipher
+list reverts to that shown above, and it only applies to servers and not clients.
+
 These legacy cipher suites are also made available for use via the
 `getLegacyCiphers()` method:
 
@@ -163,6 +180,15 @@ strengthen the default security for applications running within Node.js.
 Reverting back to the defaults used by older releases can weaken the security
 of your applications. The legacy cipher suites should only be used if absolutely
 necessary.
+
+NOTE: The --cipher and --enable-legacy-ciper-list options may be specified on
+the command line multiple times and both options affect the default cipher list.
+In addition, the NODE_CIPHER_LIST and NODE_LEGACY_CIPHER_LIST environment
+variables may also be specified. When specified more than once on the command
+line, the rightmost (last) instance of an option will take precedence.
+In respect to precedence, environment variables are treated as if they were at
+the start of the command line (ie any options on the command line
+take precedence over them).
 
 ## tls.getCiphers()
 
