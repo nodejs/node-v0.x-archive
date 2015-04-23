@@ -40,6 +40,33 @@ function doTest(checklist, env, useswitch) {
       // Test NODE_LEGACY_CIPHER_LIST
       if (env) options = {env:{"NODE_LEGACY_CIPHER_LIST": env}};
       break;
+    case 4:
+      // Test command line switch takes precedence over environment variable
+      args.unshift('--cipher-list=' + env);
+      if (env) options = {env:{"NODE_CIPHER_LIST": "XYZ"}};
+      break;
+    case 5:
+      // Test command line switch takes precedence over environment variable
+      args.unshift('--enable-legacy-cipher-list=' + env);
+      if (env) options = {env:{"NODE_CIPHER_LIST": "XYZ"}};
+      break;
+    case 6:
+      // Test right-most option takes precedence
+      args.unshift('--enable-legacy-cipher-list=' + env);
+      args.unshift('--cipher-list=XYZ');
+      break;
+    case 7:
+      // Test right-most option takes precedence
+      args.unshift('--cipher-list=' + env);
+      args.unshift('--enable-legacy-cipher-list=v0.10.38');
+      break;
+    case 8:
+      // Test NODE_LEGACY_CIPHER_LIST takes precendence over NODE_CIPHER_LIST
+      options = {env:{
+        "NODE_LEGACY_CIPHER_LIST": env,
+        "NODE_CIPHER_LIST": "ABC"
+      }};
+      break;
     default:
       // Test NODE_CIPHER_LIST
       if (env) options = {env:env};
@@ -56,11 +83,34 @@ function doTest(checklist, env, useswitch) {
       });
 }
 
+var V1038Ciphers = tls.getLegacyCiphers('v0.10.38');
+
 doTest(tls.DEFAULT_CIPHERS); // test the default
 doTest('ABC', {'NODE_CIPHER_LIST':'ABC'}); // test the envar
 doTest('ABC', 'ABC', 1); // test the --cipher-list switch
+
+// test precedence order
+doTest('ABC', 'ABC', 4);
+doTest(V1038Ciphers, 'v0.10.38', 5);
+doTest(V1038Ciphers, 'v0.10.38', 6);
+doTest('ABC', 'ABC', 7);
+doTest(V1038Ciphers, 'v0.10.38', 8);
 
 ['v0.10.38', 'v0.10.39', 'v0.12.2', 'v0.12.3'].forEach(function(ver) {
   doTest(tls.getLegacyCiphers(ver), ver, 2);
   doTest(tls.getLegacyCiphers(ver), ver, 3);
 });
+
+// invalid value
+assert.throws(function() {tls.getLegacyCiphers('foo');});
+// no parameters
+assert.throws(function() {tls.getLegacyCiphers();});
+// not a string parameter
+assert.throws(function() {tls.getLegacyCiphers(1);});
+// too many parameters
+assert.throws(function() {tls.getLegacyCiphers('abc', 'extra');});
+// ah, just right
+assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.38');});
+assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.39');});
+assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.12.2');});
+assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.12.3');});
