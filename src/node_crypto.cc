@@ -4199,12 +4199,18 @@ const char* ToCString(const node::Utf8Value& value) {
 
 Handle<Value> DefaultCiphers(const Arguments& args) {
   HandleScope scope;
+  unsigned int len = args.Length();
+  if (len != 1 || !args[0]->IsString()) {
+    return ThrowException(Exception::TypeError(String::New("A single string parameter is required")));
+  }
   node::Utf8Value key(args[0]);
   const char * list = legacy_cipher_list(ToCString(key));
-  if (list == NULL) {
-    list = DEFAULT_CIPHER_LIST_HEAD;
+  if (list != NULL) {
+    return scope.Close(v8::String::New(list));
+  } else {
+    return ThrowException(Exception::Error(String::New(
+      "Unknown legacy cipher list")));
   }
-  return scope.Close(v8::String::New(list));
 }
 
 Handle<Value> GetCiphers(const Arguments& args) {
