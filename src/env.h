@@ -213,6 +213,7 @@ namespace node {
   V(subjectaltname_string, "subjectaltname")                                  \
   V(sys_string, "sys")                                                        \
   V(syscall_string, "syscall")                                                \
+  V(target_string, "target")                                    \
   V(tick_callback_string, "_tickCallback")                                    \
   V(tick_domain_cb_string, "_tickDomainCallback")                             \
   V(timeout_string, "timeout")                                                \

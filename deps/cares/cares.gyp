@@ -71,6 +71,7 @@
         'src/ares_parse_soa_reply.c',
         'src/ares_parse_srv_reply.c',
         'src/ares_parse_txt_reply.c',
+        'src/ares_parse_uri_reply.c',
         'src/ares_platform.h',
         'src/ares_private.h',
         'src/ares_process.c',

@@ -309,6 +309,30 @@ TEST(function test_resolveTxt(done) {
   checkWrap(req);
 });
 
+TEST(function test_resolveUri(done) {
+	  var req = dns.resolveUri('single.draft-faltstrom-uri.uk', function(err, result) {
+	    if (err) throw err;
+
+	    assert.ok(result.length > 0);
+
+	    for (var i = 0; i < result.length; i++) {
+	      var item = result[i];
+	      assert.ok(item);
+	      assert.ok(typeof item === 'object');
+
+	      assert.ok(item.target);
+	      assert.ok(typeof item.target === 'string');
+	      assert.equal(item.target, 'http://tools.ietf.org/html/draft-faltstrom-uri');
+
+	      assert.ok(typeof item.priority === 'number');
+	      assert.ok(typeof item.weight === 'number');
+	    }
+
+	    done();
+	  });
+
+	  checkWrap(req);
+	});
 
 TEST(function test_lookup_ipv4_explicit(done) {
   var req = dns.lookup('www.google.com', 4, function(err, ip, family) {

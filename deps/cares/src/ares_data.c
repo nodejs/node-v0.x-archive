@@ -36,6 +36,9 @@
 **   ares_get_servers()
 **   ares_parse_srv_reply()
 **   ares_parse_txt_reply()
+**   ares_parse_naptr_reply()
+**   ares_parse_soa_reply()
+**   ares_parse_uri_reply()
 */
 
 void ares_free_data(void *dataptr)
@@ -111,7 +114,14 @@ void ares_free_data(void *dataptr)
           free(ptr->data.soa_reply.nsname);
         if (ptr->data.soa_reply.hostmaster)
           free(ptr->data.soa_reply.hostmaster);
-	break;
+        break;
+
+      case ARES_DATATYPE_URI_REPLY:
+        if (ptr->data.uri_reply.next)
+          ares_free_data(ptr->data.uri_reply.next);
+        if (ptr->data.uri_reply.target)
+          free(ptr->data.uri_reply.target);
+        break;
 
       default:
         return;
@@ -188,6 +198,13 @@ void *ares_malloc_data(ares_datatype type)
         ptr->data.soa_reply.expire = 0;
         ptr->data.soa_reply.minttl = 0;
 	break;
+
+      case ARES_DATATYPE_URI_REPLY:
+        ptr->data.uri_reply.next = NULL;
+        ptr->data.uri_reply.target = NULL;
+        ptr->data.uri_reply.priority = 0;
+        ptr->data.uri_reply.weight = 0;
+        break;
 
       default:
         free(ptr);
