@@ -60,7 +60,7 @@ object. This is useful for inspecting large complicated objects. Defaults to
 `2`. To make it recurse indefinitely pass `null`.
 
 - `colors` - if `true`, then the output will be styled with ANSI color codes.
-Defaults to `false`. Colors are customizable, see below.
+Defaults to `false`. Colors are customizable, see [util.inspect()][] for more information.
 
 ## console.time(label)
 
@@ -89,3 +89,4 @@ Similar to [assert.ok()][], but the error message is formatted as
 
 [assert.ok()]: assert.html#assert_assert_value_message_assert_ok_value_message
 [util.format()]: util.html#util_util_format_format
+[util.inspect()]: util.html#util_customizing_util_inspect_colors
