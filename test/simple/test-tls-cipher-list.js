@@ -71,6 +71,27 @@ function doTest(checklist, env, useswitch) {
         "NODE_CIPHER_LIST": "ABC"
       }};
       break;
+    case 9:
+      // Test command line switch takes precedence over environment variable
+      args.unshift('--cipher-list=' + env);
+      if (env) options = {env:{"NODE_LEGACY_CIPHER_LIST": "v0.10.38"}};
+      break;
+    case 10:
+      // Test command line switch takes precedence over environment variable
+      args.unshift('--enable-legacy-cipher-list=' + env);
+      if (env) options = {
+        env:{
+          "NODE_LEGACY_CIPHER_LIST": "v0.10.38",
+          "NODE_CIPHER_LIST": "XYZ"
+        }
+      };
+      break;
+    case 11:
+      // Test right-most option takes precedence, multiple of same option
+      args.unshift('--cipher-list=' + env);
+      args.unshift('--enable-legacy-cipher-list=v0.10.38');
+      args.unshift('--cipher-list=' + 'XYZ');
+      break;
     default:
       // Test NODE_CIPHER_LIST
       if (env) options = {env:env};
@@ -99,6 +120,9 @@ doTest(V1038Ciphers, 'v0.10.38', 5);
 doTest(V1038Ciphers, 'v0.10.38', 6);
 doTest('ABC', 'ABC', 7);
 doTest(V1038Ciphers, 'v0.10.38', 8);
+doTest('ABC', 'ABC', 9);
+doTest(V1038Ciphers, 'v0.10.38', 10);
+doTest('YYY', 'YYY', 11);
 
 ['v0.10.38'].forEach(function(ver) {
   doTest(tls.getLegacyCiphers(ver), ver, 2);
