@@ -229,7 +229,7 @@ If the `NODE_CIPHER_LIST` and `NODE_LEGACY_CIPHER_LIST` environment variables
 are both specified, the `NODE_LEGACY_CIPHER_LIST` setting will take precedence.
 
 The `--cipher-list` and `--enable-legacy-cipher-list` command line options
-will override the environment variables. If both happened to be specified, the
+will override the environment variables. If both happen to be specified, the
 right-most (second one specified) will take precedence. For instance, in the
 example:
 
