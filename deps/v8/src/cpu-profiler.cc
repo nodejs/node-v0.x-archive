@@ -112,10 +112,18 @@ void ProfilerEventsProcessor::Run() {
     timer.Start();
     // Keep processing existing events until we need to do next sample.
     do {
-      if (FoundSampleForNextCodeEvent == ProcessOneSample()) {
+      switch (ProcessOneSample()) {
+      case FoundSampleForNextCodeEvent:
         // All ticks of the current last_processed_code_event_id_ are
         // processed, proceed to the next code event.
         ProcessCodeEvent();
+        break;
+      case NoSamplesInQueue:
+        base::Thread::YieldCPU();
+        break;
+      default:
+        // carry on processing samples
+        break;
       }
     } while (!timer.HasExpired(period_));
 
