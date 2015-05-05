@@ -174,8 +174,7 @@ v0.10.38 behavior of only using the default cipher list on the server.
 ### Cipher List Precedence
 
 Note that the `--enable-legacy-cipher-list`, `NODE_LEGACY_CIPHER_LIST`,
-`--cipher-list` and `NODE_CIPHER_LIST` options are mutually exclusive. Only
-_one_ should be used at a time.
+`--cipher-list` and `NODE_CIPHER_LIST` options are mutually exclusive.
 
 If the `NODE_CIPHER_LIST` and `NODE_LEGACY_CIPHER_LIST` environment variables
 are both specified, the `NODE_LEGACY_CIPHER_LIST` setting will take precedence.
