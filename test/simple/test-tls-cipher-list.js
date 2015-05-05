@@ -88,7 +88,7 @@ function doTestPrecedence() {
     // test the right-most command line option takes precedence
     doTest('XYZ',
            [
-             '--cipher-list=XYZ',
+             '--cipher-list=ABC',
              '--enable-legacy-cipher-list=v0.10.39',
              '--cipher-list=XYZ'
            ]);
@@ -154,10 +154,12 @@ assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.12.3');});
 var script = (
   function() {
     var tls = require('tls');
-    //var orig_createCredentials = require('crypto').createCredentials;
     var orig_createSecureContext = tls.createSecureContext;
-    //require('crypto').createCredentials = function(options) {
     tls.createSecureContext = function(details) {
+      // since node was started with the --enable-legacy-cipher-list
+      // switch equal to v0.10.38, the options.ciphers should be
+      // undefined. If it's not undefined, we have a problem and
+      // the test fails
       if (details.ciphers !== undefined) {
         console.error(details.ciphers);
         process.exit(1);
@@ -175,7 +177,7 @@ var script = (
 
 var test_count = 0;
 
-function doDefaultCipherTest(additional_args, env, failexpected) {
+function doDefaultCipherTest(additional_args, env, opts) {
   var options = {};
   if (env) options.env = env;
   var out = '', err = '';
@@ -190,7 +192,7 @@ function doDefaultCipherTest(additional_args, env, failexpected) {
       out += data;
     }).
     on('end', function() {
-      if (failexpected && err === '') {
+      if (opts.failExpected && err === '') {
         // if we get here, there's a problem because the default cipher
         // list was not set when it should have been
         assert.fail('options.cipher list was not set');
@@ -202,7 +204,7 @@ function doDefaultCipherTest(additional_args, env, failexpected) {
     }).
     on('end', function() {
       if (err !== '') {
-        if (!failexpected) {
+        if (!opts.failExpected) {
           assert.fail(err.substr(0,err.length-1));
         }
       }
@@ -222,11 +224,10 @@ server.listen(common.PORT, function() {
   doDefaultCipherTest(['--enable-legacy-cipher-list=v0.10.38']);
   doDefaultCipherTest([], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
   // this variant checks to ensure that the default cipher list IS set
-  var test_uses_default_cipher_list = true;
-  doDefaultCipherTest([], {}, test_uses_default_cipher_list);
+  doDefaultCipherTest([], {}, {failExpected:true});
   // test that setting the cipher list explicitly to the v0.10.38
   // string without using the legacy cipher switch causes the
   // default ciphers to be set.
   doDefaultCipherTest(['--cipher-list=' + V1038Ciphers], {},
-                      test_uses_default_cipher_list);
+                      {failExpected:true});
 });
