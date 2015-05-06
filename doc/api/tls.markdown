@@ -302,10 +302,6 @@ automatically set as a listener for the [secureConnection][] event.  The
     which is not authorized with the list of supplied CAs. This option only
     has an effect if `requestCert` is `true`. Default: `false`.
 
-  - `checkServerIdentity(servername, cert)`: Provide an override for checking
-    server's hostname against the certificate. Should return an error if verification
-    fails. Return `undefined` if passing.
-
   - `NPNProtocols`: An array or `Buffer` of possible NPN protocols. (Protocols
     should be ordered by their priority).
 
@@ -444,6 +440,10 @@ Creates a new client connection to the given `port` and `host` (old API) or
     OpenSSL and are defined in the constant [SSL_METHODS][].
 
   - `session`: A `Buffer` instance, containing TLS session.
+
+  - `checkServerIdentity(servername, cert)`: Provide an override for checking
+    server's hostname against the certificate. Should return an error if verification
+    fails. Return `undefined` if passing.
 
 The `callback` parameter will be added as a listener for the
 ['secureConnect'][] event.
