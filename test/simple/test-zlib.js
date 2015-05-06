@@ -161,69 +161,126 @@ var failures = 0;
 var total = 0;
 var done = 0;
 
+function run_test(test, file, pair, inf_opts, def_opts, trickle, chunkSize)
+{
+    var Def = pair[0];
+    var Inf = pair[1];
+
+    var def = new Def(def_opts);
+    var inf = new Inf(inf_opts);
+
+    var ss = new SlowStream(trickle);
+    var buf = new BufferStream();
+        console.log('  ...');
+        console.log('  testfile: ' + file);
+        console.log('  type: ' + Def.name + ' -> ' + Inf.name);
+        console.log('  inflate options: ' + JSON.stringify(inf_opts));
+        console.log('  deflate options: ' + JSON.stringify(def_opts));
+        console.log('  chunkSize: ' + chunkSize);
+        console.log('  ---');
+
+    // verify that the same exact buffer comes out the other end.
+    buf.on('data', function(c) {
+console.log("BUFFER!!!!");
+      var msg = file + ' ' +
+          chunkSize + ' ' +
+          JSON.stringify(inf_opts) + ' ' +
+          JSON.stringify(def_opts) + ' ' +
+          Def.name + ' -> ' + Inf.name;
+      var ok = true;
+      var testNum = ++done;
+      for (var i = 0; i < Math.max(c.length, test.length); i++) {
+        if (c[i] !== test[i]) {
+          ok = false;
+          failures++;
+          break;
+        }
+      }
+      if (ok) {
+        console.log('ok ' + (testNum) + ' ' + msg);
+      } else {
+        console.log('not ok ' + (testNum) + ' ' + msg);
+        console.log('  ...');
+        console.log('  testfile: ' + file);
+        console.log('  type: ' + Def.name + ' -> ' + Inf.name);
+        console.log('  position: ' + i);
+        console.log('  inflate options: ' + JSON.stringify(inf_opts));
+        console.log('  deflate options: ' + JSON.stringify(def_opts));
+        console.log('  expect: ' + test[i]);
+        console.log('  actual: ' + c[i]);
+        console.log('  chunkSize: ' + chunkSize);
+        console.log('  ---');
+      }
+    });
+
+    // the magic happens here.
+    ss.pipe(def).pipe(inf).pipe(buf);
+    ss.end(test);
+    
+    total++;
+}
+
+// Test the inflate windowBits = 0 case.
 Object.keys(tests).forEach(function(file) {
-  var test = tests[file];
-  chunkSize.forEach(function(chunkSize) {
-    trickle.forEach(function(trickle) {
-      windowBits.forEach(function(windowBits) {
-        level.forEach(function(level) {
-          memLevel.forEach(function(memLevel) {
-            strategy.forEach(function(strategy) {
-              zlibPairs.forEach(function(pair) {
-                var Def = pair[0];
-                var Inf = pair[1];
-                var opts = { level: level,
-                  windowBits: windowBits,
-                  memLevel: memLevel,
-                  strategy: strategy };
+    var test = tests[file];
+    chunkSize.forEach(function(chunkSize) {
+        trickle.forEach(function(trickle) {
+            windowBits.forEach(function(windowBits) {
+                level.forEach(function(level) {
+                    memLevel.forEach(function(memLevel) {
+                        strategy.forEach(function(strategy) {
+                            zlibPairs.forEach(function(pair) {
+                                // Windowbits = 0 is only valid in the inflate case.
+                                var inf_opts = {
+                                    level: level,
+                                    windowBits: 0,
+                                    memLevel: memLevel,
+                                    strategy: strategy
+                                };
+                                var def_opts = {
+                                    level: level,
+                                    windowBits: windowBits,
+                                    memLevel: memLevel,
+                                    strategy: strategy
+                                };
 
-                total++;
-
-                var def = new Def(opts);
-                var inf = new Inf(opts);
-                var ss = new SlowStream(trickle);
-                var buf = new BufferStream();
-
-                // verify that the same exact buffer comes out the other end.
-                buf.on('data', function(c) {
-                  var msg = file + ' ' +
-                      chunkSize + ' ' +
-                      JSON.stringify(opts) + ' ' +
-                      Def.name + ' -> ' + Inf.name;
-                  var ok = true;
-                  var testNum = ++done;
-                  for (var i = 0; i < Math.max(c.length, test.length); i++) {
-                    if (c[i] !== test[i]) {
-                      ok = false;
-                      failures++;
-                      break;
-                    }
-                  }
-                  if (ok) {
-                    console.log('ok ' + (testNum) + ' ' + msg);
-                  } else {
-                    console.log('not ok ' + (testNum) + ' ' + msg);
-                    console.log('  ...');
-                    console.log('  testfile: ' + file);
-                    console.log('  type: ' + Def.name + ' -> ' + Inf.name);
-                    console.log('  position: ' + i);
-                    console.log('  options: ' + JSON.stringify(opts));
-                    console.log('  expect: ' + test[i]);
-                    console.log('  actual: ' + c[i]);
-                    console.log('  chunkSize: ' + chunkSize);
-                    console.log('  ---');
-                  }
+                                run_test(test, file, pair, inf_opts, def_opts, trickle, chunkSize);
+                            });
+                        });
+                    });
                 });
+            });
+        });
+    });
+});
 
-                // the magic happens here.
-                ss.pipe(def).pipe(inf).pipe(buf);
-                ss.end(test);
-              });
-            }); }); }); }); }); }); // sad stallman is sad.
+Object.keys(tests).forEach(function(file) {
+    var test = tests[file];
+    chunkSize.forEach(function(chunkSize) {
+        trickle.forEach(function(trickle) {
+            windowBits.forEach(function(windowBits) {
+                level.forEach(function(level) {
+                    memLevel.forEach(function(memLevel) {
+                        strategy.forEach(function(strategy) {
+                            zlibPairs.forEach(function(pair) {
+                                var opts = {
+                                    level: level,
+                                    windowBits: windowBits,
+                                    memLevel: memLevel,
+                                    strategy: strategy
+                                };
+                                run_test(test, file, pair, opts, opts, trickle, chunkSize);
+                            });
+                        });
+                    });
+                });
+            });
+        });
+    });
 });
 
 process.on('exit', function(code) {
-  console.log('1..' + done);
-  assert.equal(done, total, (total - done) + ' tests left unfinished');
-  assert.ok(!failures, 'some test failures');
+    console.log('1..' + done);
+    assert.equal(done, total, (total - done) + ' tests left unfinished');
+    assert.ok(!failures, 'some test failures');
 });
