@@ -409,6 +409,9 @@ Creates a new client connection to the given `port` and `host` (old API) or
   - `socket`: Establish secure connection on a given socket rather than
     creating a new socket. If this option is specified, `host` and `port`
     are ignored.
+	
+  - `secureContext`: An optional TLS context object from
+     `tls.createSecureContext( ... )`
 
   - `path`: Creates unix socket connection to path. If this option is
     specified, `host` and `port` are ignored.
