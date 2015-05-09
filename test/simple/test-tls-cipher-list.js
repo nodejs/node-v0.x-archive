@@ -19,12 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var spawn  = require('child_process').spawn;
+var spawn = require('child_process').spawn;
 var assert = require('assert');
-var tls    = require('tls');
+var tls = require('tls');
 var crypto = process.binding('crypto');
 var common = require('../common');
-var fs     = require('fs');
+var fs = require('fs');
 
 var V1038Ciphers = tls.getLegacyCiphers('v0.10.38');
 
@@ -62,7 +62,6 @@ function doTestPrecedence() {
          ['--cipher-list=ABC'],
          {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
 
-
   // test that --enable-legacy-cipher-list takes precence over both envars
   // note: in this release, there's only one legal value for the legacy
   //       switch so this test is largely a non-op. When multiple values
@@ -99,17 +98,14 @@ function doTestPrecedence() {
 
     // test that NODE_LEGACY_CIPHER_LIST takes precedence over
     // NODE_CIPHER_LIST
-
     doTest(V1038Ciphers, [],
            {
              'NODE_LEGACY_CIPHER_LIST': 'v0.10.38',
              'NODE_CIPHER_LIST': 'ABC'
            });
-
 }
 
 // Start running the tests...
-
 doTest(crypto.DEFAULT_CIPHER_LIST); // test the default
 
 // Test the NODE_CIPHER_LIST environment variable
@@ -142,8 +138,6 @@ assert.throws(function() {tls.getLegacyCiphers('abc', 'extra');}, TypeError);
 // ah, just right
 assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.38');});
 
-
-
 // Test to ensure default ciphers are not set when v0.10.38 legacy cipher
 // switch is used. This is a bit involved... we need to first set up the
 // TLS server, then spawn a second node instance using the v0.10.38 cipher,
@@ -151,6 +145,8 @@ assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.38');});
 // is no direct way of testing it, an alternate createCredentials shim is
 // created that intercepts the call to createCredentials and checks the output.
 // The following server code was adopted from test-tls-connect-simple.
+// This spins up a server to verify that the connection is still able to
+// function with the default ciphers not set on the client side.
 
 // note that the following function is written out to a string and
 // passed in as an argument to a child node instance.
@@ -158,7 +154,9 @@ var script = (
   function() {
     var tls = require('tls');
     var orig_createCredentials = require('crypto').createCredentials;
+    var used_monkey_patch = false;
     require('crypto').createCredentials = function(options) {
+      used_monkey_patch = true;
       // since node was started with the --enable-legacy-cipher-list
       // switch equal to v0.10.38, the options.ciphers should be
       // undefined. If it's not undefined, we have a problem and
@@ -174,6 +172,10 @@ var script = (
       rejectUnauthorized: false
     }, function() {
       socket.end();
+      if (!used_monkey_patch) {
+        console.error('monkey patched createCredentials not used.');
+        process.exit(1);
+      }
     });
   }
 ).toString();
