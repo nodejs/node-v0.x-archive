@@ -19,12 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var spawn  = require('child_process').spawn;
+var spawn = require('child_process').spawn;
 var assert = require('assert');
-var tls    = require('tls');
+var tls = require('tls');
 var crypto = process.binding('crypto');
 var common = require('../common');
-var fs     = require('fs');
+var fs = require('fs');
 
 var V1038Ciphers = tls.getLegacyCiphers('v0.10.38');
 
@@ -62,7 +62,6 @@ function doTestPrecedence() {
          ['--cipher-list=ABC'],
          {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
 
-
   // test that --enable-legacy-cipher-list takes precence over both envars
   doTest(V1038Ciphers,
          ['--enable-legacy-cipher-list=v0.10.38'],
@@ -95,17 +94,14 @@ function doTestPrecedence() {
 
     // test that NODE_LEGACY_CIPHER_LIST takes precedence over
     // NODE_CIPHER_LIST
-
     doTest(V1038Ciphers, [],
            {
              'NODE_LEGACY_CIPHER_LIST': 'v0.10.38',
              'NODE_CIPHER_LIST': 'ABC'
            });
-
 }
 
 // Start running the tests...
-
 doTest(crypto.DEFAULT_CIPHER_LIST); // test the default
 
 // Test the NODE_CIPHER_LIST environment variable
@@ -148,14 +144,18 @@ assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.12.3');});
 // is no direct way of testing it, an alternate createCredentials shim is
 // created that intercepts the call to createCredentials and checks the output.
 // The following server code was adopted from test-tls-connect-simple.
+// This test spins up a server in order to test that a connection will work
+// even without the default ciphers set
 
 // note that the following function is written out to a string and
 // passed in as an argument to a child node instance.
 var script = (
   function() {
     var tls = require('tls');
+    var used_monkey_patch = false;
     var orig_createSecureContext = tls.createSecureContext;
     tls.createSecureContext = function(details) {
+      used_monkey_patch = true;
       // since node was started with the --enable-legacy-cipher-list
       // switch equal to v0.10.38, the options.ciphers should be
       // undefined. If it's not undefined, we have a problem and
@@ -171,6 +171,10 @@ var script = (
       rejectUnauthorized: false
     }, function() {
       socket.end();
+      if (!used_monkey_patch) {
+        console.error('monkey patched createSecureContext was not used');
+        process.exit(1);
+      }
     });
   }
 ).toString();
