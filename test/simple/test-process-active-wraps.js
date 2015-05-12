@@ -24,6 +24,16 @@ var assert = require('assert');
 var spawn = require('child_process').spawn;
 var net = require('net');
 
+// Node first tries to use IPV6 when the host is not specified
+// and then falls back to IPV4 if that fails.  That causes
+// the test to fail if IPV6 is not configured as we end up with
+// an active handle for each of IPV6 and IPV4.  We will therefore
+// bind specifically to the IP4 or IPV6 loopback as appropriate
+var loopback = '::1';
+if(!common.hasIPv6) {
+  loopback = '127.0.0.1';
+}
+
 function expect(activeHandles, activeRequests) {
   assert.equal(process._getActiveHandles().length, activeHandles);
   assert.equal(process._getActiveRequests().length, activeRequests);
@@ -33,7 +43,7 @@ var handles = [];
 
 (function() {
   expect(0, 0);
-  var server = net.createServer().listen(common.PORT);
+  var server = net.createServer().listen(loopback, common.PORT);
   expect(1, 0);
   server.close();
   expect(1, 0); // server handle doesn't shut down until next tick
@@ -48,7 +58,7 @@ var handles = [];
   };
 
   expect(1, 0);
-  var conn = net.createConnection(common.PORT);
+  var conn = net.createConnection(loopback, common.PORT);
   conn.on('lookup', onlookup);
   conn.on('error', function() { assert(false); });
   expect(2, 1);
