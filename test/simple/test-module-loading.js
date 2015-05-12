@@ -211,7 +211,7 @@ assert.deepEqual(json, {
 // the appropriate children, and so on.
 
 var children = module.children.reduce(function red(set, child) {
-  var id = path.relative(path.dirname(__dirname), child.id)
+  var id = path.relative(path.dirname(__dirname), child.id);
   id = id.replace(/\\/g, '/');
   set[id] = child.children.reduce(red, {});
   return set;

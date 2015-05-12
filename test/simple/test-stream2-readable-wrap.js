@@ -31,7 +31,8 @@ function runTest(highWaterMark, objectMode, produce) {
   testRuns++;
 
   var old = new EE;
-  var r = new Readable({ highWaterMark: highWaterMark, objectMode: objectMode });
+  var r = new Readable({ highWaterMark: highWaterMark,
+    objectMode: objectMode });
   assert.equal(r, r.wrap(old));
 
   var ended = false;
@@ -71,7 +72,8 @@ function runTest(highWaterMark, objectMode, produce) {
     }
   }
 
-  var w = new Writable({ highWaterMark: highWaterMark * 2, objectMode: objectMode });
+  var w = new Writable({ highWaterMark: highWaterMark * 2,
+    objectMode: objectMode });
   var written = [];
   w._write = function(chunk, encoding, cb) {
     console.log('_write', chunk);
@@ -88,19 +90,19 @@ function runTest(highWaterMark, objectMode, produce) {
 
   flow();
 
-  function performAsserts() { 
+  function performAsserts() {
     assert(ended);
     assert(oldEnded);
     assert.deepEqual(written, expected);
   }
 }
 
-runTest(100, false, function(){ return new Buffer(100); });
-runTest(10, false, function(){ return new Buffer('xxxxxxxxxx'); });
-runTest(1, true, function(){ return { foo: 'bar' }; });
+runTest(100, false, function() { return new Buffer(100); });
+runTest(10, false, function() { return new Buffer('xxxxxxxxxx'); });
+runTest(1, true, function() { return { foo: 'bar' }; });
 
-var objectChunks = [ 5, 'a', false, 0, '', 'xyz', { x: 4 }, 7, [], 555 ];
-runTest(1, true, function(){ return objectChunks.shift() });
+var objectChunks = [5, 'a', false, 0, '', 'xyz', { x: 4 }, 7, [], 555];
+runTest(1, true, function() { return objectChunks.shift() });
 
 process.on('exit', function() {
   assert.equal(testRuns, completedRuns);

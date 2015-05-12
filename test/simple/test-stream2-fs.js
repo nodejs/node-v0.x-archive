@@ -54,7 +54,7 @@ TestWriter.prototype.write = function(c) {
 TestWriter.prototype.end = function(c) {
   if (c) this.buffer.push(c.toString());
   this.emit('results', this.buffer);
-}
+};
 
 var r = new FSReadable(file);
 var w = new TestWriter();
@@ -63,7 +63,7 @@ w.on('results', function(res) {
   console.error(res, w.length);
   assert.equal(w.length, size);
   var l = 0;
-  assert.deepEqual(res.map(function (c) {
+  assert.deepEqual(res.map(function(c) {
     return c.length;
   }), expectLengths);
   console.log('ok');

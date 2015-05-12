@@ -115,8 +115,8 @@ var w = {
   '\\': 1,
   '\\\\': 2,
   '\\\\\\': 3,
-  '\\\\\\\\': 4,
-}
+  '\\\\\\\\': 4
+};
 
 var y = ['a', 'b', 'c'];
 y['\\\\\\'] = 'd';
@@ -129,17 +129,17 @@ assert.ok(util.inspect(y), '[ \'a\', \'b\', \'c\', \'\\\\\\\': \'d\' ]');
 function test_color_style(style, input, implicit) {
   var color_name = util.inspect.styles[style];
   var color = ['', ''];
-  if(util.inspect.colors[color_name])
+  if (util.inspect.colors[color_name])
     color = util.inspect.colors[color_name];
 
   var without_color = util.inspect(input, false, 0, false);
   var with_color = util.inspect(input, false, 0, true);
   var expect = '\u001b[' + color[0] + 'm' + without_color +
                '\u001b[' + color[1] + 'm';
-  assert.equal(with_color, expect, 'util.inspect color for style '+style);
+  assert.equal(with_color, expect, 'util.inspect color for style ' + style);
 }
 
-test_color_style('special', function(){});
+test_color_style('special', function() {});
 test_color_style('number', 123.456);
 test_color_style('boolean', true);
 test_color_style('undefined', undefined);
@@ -171,9 +171,11 @@ assert(util.inspect(subject, { depth: null }).indexOf('{ d: 0 }') !== -1);
 subject = { inspect: function() { return 123; } };
 
 assert(util.inspect(subject, { customInspect: true }).indexOf('123') !== -1);
-assert(util.inspect(subject, { customInspect: true }).indexOf('inspect') === -1);
+assert(util.inspect(subject, { customInspect: true }).
+    indexOf('inspect') === -1);
 assert(util.inspect(subject, { customInspect: false }).indexOf('123') === -1);
-assert(util.inspect(subject, { customInspect: false }).indexOf('inspect') !== -1);
+assert(util.inspect(subject, { customInspect: false }).
+    indexOf('inspect') !== -1);
 
 // custom inspect() functions should be able to return other Objects
 subject.inspect = function() { return { foo: 'bar' }; };

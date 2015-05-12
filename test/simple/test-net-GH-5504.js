@@ -77,7 +77,7 @@ function parent() {
   var opt = {
     env: util._extend(process.env, {
       NODE_DEBUG: 'net',
-      NODE_COMMON_PORT: process.env.NODE_COMMON_PORT,
+      NODE_COMMON_PORT: process.env.NODE_COMMON_PORT
     })
   };
 

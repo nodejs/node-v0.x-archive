@@ -40,10 +40,10 @@ function getSrc() {
     paused = false;
   };
 
-  var chunks = [ '', 'asdf', '', 'foo', '', 'bar', '' ];
+  var chunks = ['', 'asdf', '', 'foo', '', 'bar', ''];
   var interval = setInterval(function() {
     if (paused)
-      return
+      return;
 
     var chunk = chunks.shift();
     if (chunk !== undefined) {

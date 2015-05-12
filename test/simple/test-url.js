@@ -55,7 +55,8 @@ var parseTests = {
     query: 'json=%22%5C%22foo%5C%22%22',
     path: '/foo.html?json=%22%5C%22foo%5C%22%22',
     hash: '#h%5Ca%5Cs%5Ch',
-    href: 'http://evil-phisher/foo.html?json=%22%5C%22foo%5C%22%22#h%5Ca%5Cs%5Ch'
+    href: 'http://evil-phisher/foo.html?json=' +
+        '%22%5C%22foo%5C%22%22#h%5Ca%5Cs%5Ch'
   },
 
   'http:\\\\evil-phisher\\foo.html#h\\a\\s\\h?blarg': {
@@ -728,7 +729,7 @@ var parseTests = {
     'hostname': '-lovemonsterz.tumblr.com',
     'href': 'http://-lovemonsterz.tumblr.com/rss',
     'pathname': '/rss',
-    'path': '/rss',
+    'path': '/rss'
   },
 
   'http://-lovemonsterz.tumblr.com:80/rss': {
@@ -739,7 +740,7 @@ var parseTests = {
     'hostname': '-lovemonsterz.tumblr.com',
     'href': 'http://-lovemonsterz.tumblr.com:80/rss',
     'pathname': '/rss',
-    'path': '/rss',
+    'path': '/rss'
   },
 
   'http://user:pass@-lovemonsterz.tumblr.com/rss': {
@@ -750,7 +751,7 @@ var parseTests = {
     'hostname': '-lovemonsterz.tumblr.com',
     'href': 'http://user:pass@-lovemonsterz.tumblr.com/rss',
     'pathname': '/rss',
-    'path': '/rss',
+    'path': '/rss'
   },
 
   'http://user:pass@-lovemonsterz.tumblr.com:80/rss': {
@@ -762,7 +763,7 @@ var parseTests = {
     'hostname': '-lovemonsterz.tumblr.com',
     'href': 'http://user:pass@-lovemonsterz.tumblr.com:80/rss',
     'pathname': '/rss',
-    'path': '/rss',
+    'path': '/rss'
   },
 
   'http://_jabber._tcp.google.com/test': {
@@ -772,7 +773,7 @@ var parseTests = {
     'hostname': '_jabber._tcp.google.com',
     'href': 'http://_jabber._tcp.google.com/test',
     'pathname': '/test',
-    'path': '/test',
+    'path': '/test'
   },
 
   'http://user:pass@_jabber._tcp.google.com/test': {
@@ -783,7 +784,7 @@ var parseTests = {
     'hostname': '_jabber._tcp.google.com',
     'href': 'http://user:pass@_jabber._tcp.google.com/test',
     'pathname': '/test',
-    'path': '/test',
+    'path': '/test'
   },
 
   'http://_jabber._tcp.google.com:80/test': {
@@ -794,7 +795,7 @@ var parseTests = {
     'hostname': '_jabber._tcp.google.com',
     'href': 'http://_jabber._tcp.google.com:80/test',
     'pathname': '/test',
-    'path': '/test',
+    'path': '/test'
   },
 
   'http://user:pass@_jabber._tcp.google.com:80/test': {
@@ -806,7 +807,7 @@ var parseTests = {
     'hostname': '_jabber._tcp.google.com',
     'href': 'http://user:pass@_jabber._tcp.google.com:80/test',
     'pathname': '/test',
-    'path': '/test',
+    'path': '/test'
   },
 
   'http://x:1/\' <>"`/{}|\\^~`/': {
@@ -844,7 +845,7 @@ var parseTests = {
     query: '@c'
   },
 
-  'http://a\r" \t\n<\'b:b@c\r\nd/e?f':{
+  'http://a\r" \t\n<\'b:b@c\r\nd/e?f': {
     protocol: 'http:',
     slashes: true,
     auth: 'a\r" \t\n<\'b:b',
@@ -880,9 +881,9 @@ var parseTests = {
 for (var u in parseTests) {
   var actual = url.parse(u),
       spaced = url.parse('     \t  ' + u + '\n\t');
-      expected = parseTests[u];
+  expected = parseTests[u];
 
-  Object.keys(actual).forEach(function (i) {
+  Object.keys(actual).forEach(function(i) {
     if (expected[i] === undefined && actual[i] === null) {
       expected[i] = null;
     }
@@ -934,7 +935,7 @@ var parseTestsWithQueryString = {
     path: '/example',
     href: '/example'
   },
-  '/example?query=value':{
+  '/example?query=value': {
     protocol: null,
     slashes: null,
     auth: null,
@@ -1113,22 +1114,22 @@ var formatTests = {
 
   // `#`,`?` in path
   '/path/to/%%23%3F+=&.txt?foo=theA1#bar' : {
-    href : '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
+    href: '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
     pathname: '/path/to/%#?+=&.txt',
     query: {
       foo: 'theA1'
     },
-    hash: "#bar"
+    hash: '#bar'
   },
 
   // `#`,`?` in path + `#` in query
   '/path/to/%%23%3F+=&.txt?foo=the%231#bar' : {
-    href : '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
+    href: '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
     pathname: '/path/to/%#?+=&.txt',
     query: {
       foo: 'the#1'
     },
-    hash: "#bar"
+    hash: '#bar'
   },
 
   // `?` and `#` in path and search
@@ -1138,7 +1139,7 @@ var formatTests = {
     hostname: 'ex.com',
     hash: '#frag',
     search: '?abc=the#1?&foo=bar',
-    pathname: '/foo?100%m#r',
+    pathname: '/foo?100%m#r'
   },
 
   // `?` and `#` in search only
@@ -1148,7 +1149,7 @@ var formatTests = {
     hostname: 'ex.com',
     hash: '#frag',
     search: '?abc=the#1?&foo=bar',
-    pathname: '/fooA100%mBr',
+    pathname: '/fooA100%mBr'
   }
 };
 for (var u in formatTests) {

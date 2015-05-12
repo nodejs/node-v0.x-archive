@@ -54,9 +54,9 @@ function makeRequest() {
   // process.execArgv to track down nextTick recursion errors
   // more easily.  Also, this is handy when using this test to
   // view V8 opt/deopt behavior.
-  var args = process.execArgv.concat([ childScript,
-                                       common.PORT,
-                                       bytesExpected ]);
+  var args = process.execArgv.concat([childScript,
+    common.PORT,
+    bytesExpected]);
 
   var child = spawn(process.execPath, args);
 

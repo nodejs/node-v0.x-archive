@@ -40,20 +40,20 @@ nonStringInputs.forEach(function(input) {
 
 console.error('Doing the unzips');
 // zlib.Unzip classes need to get valid data, or else they'll throw.
-var unzips = [ zlib.Unzip(),
+var unzips = [zlib.Unzip(),
                zlib.Gunzip(),
                zlib.Inflate(),
-               zlib.InflateRaw() ];
+               zlib.InflateRaw()];
 var hadError = [];
-unzips.forEach(function (uz, i) {
-  console.error('Error for '+uz.constructor.name);
+unzips.forEach(function(uz, i) {
+  console.error('Error for ' + uz.constructor.name);
   uz.on('error', function(er) {
     console.error('Error event', er);
     hadError[i] = true;
   });
 
   uz.on('end', function(er) {
-    throw new Error('end event should not be emitted '+uz.constructor.name);
+    throw new Error('end event should not be emitted ' + uz.constructor.name);
   });
 
   // this will trigger error event

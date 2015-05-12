@@ -202,7 +202,7 @@ var spaceTimeout = setTimeout(function() {
 }, 1000);
 
 testMe.complete(' ', function(error, data) {
-  assert.deepEqual(data, [[],undefined]);
+  assert.deepEqual(data, [[], undefined]);
   clearTimeout(spaceTimeout);
 });
 

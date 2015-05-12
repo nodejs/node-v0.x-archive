@@ -25,7 +25,7 @@ var util = require('util');
 var revivals = 0;
 var deaths = 0;
 
-process.on('beforeExit', function() { deaths++; } );
+process.on('beforeExit', function() { deaths++; });
 
 process.once('beforeExit', tryImmediate);
 
@@ -39,7 +39,7 @@ function tryImmediate() {
 
 function tryTimer() {
   console.log('set a timeout');
-  setTimeout(function () {
+  setTimeout(function() {
     console.log('timeout cb, do another once beforeExit');
     revivals++;
     process.once('beforeExit', tryListen);
@@ -51,9 +51,9 @@ function tryListen() {
   net.createServer()
     .listen(0)
     .on('listening', function() {
-      revivals++;
-      this.close();
-    });
+        revivals++;
+        this.close();
+      });
 }
 
 process.on('exit', function() {

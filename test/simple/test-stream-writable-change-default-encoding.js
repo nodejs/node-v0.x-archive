@@ -28,11 +28,11 @@ var util = require('util');
 function MyWritable(fn, options) {
   stream.Writable.call(this, options);
   this.fn = fn;
-};
+}
 
 util.inherits(MyWritable, stream.Writable);
 
-MyWritable.prototype._write = function (chunk, encoding, callback) {
+MyWritable.prototype._write = function(chunk, encoding, callback) {
   this.fn(Buffer.isBuffer(chunk), typeof chunk, encoding);
   callback();
 };

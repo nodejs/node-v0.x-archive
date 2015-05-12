@@ -39,7 +39,7 @@ var options = {
 };
 
 var server = http.createServer(function(req, res) {
-  res.writeHead(200, {'Content-Length':'2'});
+  res.writeHead(200, {'Content-Length': '2'});
   res.write('*');
   setTimeout(function() { res.end('*') }, 100);
 });

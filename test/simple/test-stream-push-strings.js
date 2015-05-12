@@ -58,7 +58,7 @@ ms.on('readable', function() {
     results.push(chunk + '');
 });
 
-var expect = [ 'first chunksecond to last chunk', 'last chunk' ];
+var expect = ['first chunksecond to last chunk', 'last chunk'];
 process.on('exit', function() {
   assert.equal(ms._chunks, -1);
   assert.deepEqual(results, expect);

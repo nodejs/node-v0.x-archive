@@ -35,7 +35,7 @@ var spawn = require('child_process').spawn;
 var options = {
   key: fs.readFileSync(join(common.fixturesDir, 'keys', 'agent5-key.pem')),
   cert: fs.readFileSync(join(common.fixturesDir, 'keys', 'agent5-cert.pem')),
-  ca: [ fs.readFileSync(join(common.fixturesDir, 'keys', 'ca2-cert.pem')) ]
+  ca: [fs.readFileSync(join(common.fixturesDir, 'keys', 'ca2-cert.pem'))]
 };
 var verified = false;
 

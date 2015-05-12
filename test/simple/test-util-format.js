@@ -72,7 +72,8 @@ assert.equal(util.format(new Error('foo')), '[Error: foo]');
 function CustomError(msg) {
   Error.call(this);
   Object.defineProperty(this, 'message', { value: msg, enumerable: false });
-  Object.defineProperty(this, 'name', { value: 'CustomError', enumerable: false });
+  Object.defineProperty(this, 'name',
+      { value: 'CustomError', enumerable: false });
 }
 util.inherits(CustomError, Error);
 assert.equal(util.format(new CustomError('bar')), '[CustomError: bar]');

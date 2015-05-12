@@ -49,7 +49,7 @@ process.on('exit', function() {
 server.listen(common.PORT, function() {
   http.get({ port: common.PORT }, function(res) {
     assert.equal(200, res.statusCode);
-    assert.deepEqual(res.headers, { date : 'coffee o clock' });
+    assert.deepEqual(res.headers, { date: 'coffee o clock' });
 
     res.setEncoding('ascii');
     res.on('data', function(chunk) {

@@ -38,7 +38,7 @@ stream.on('data', function(chunk) {
     stream.resume();
   }
 });
-  
+
 process.nextTick(function() {
   stream.pause();
   setTimeout(function() {

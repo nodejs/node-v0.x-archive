@@ -44,7 +44,7 @@ assert.throws(function() {
 console.error('undefined reference');
 var error;
 script = new Script('foo.bar = 5;');
-assert.throws(function () {
+assert.throws(function() {
   script.runInNewContext();
 }, /not defined/);
 

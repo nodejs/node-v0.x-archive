@@ -7,17 +7,17 @@ function serverHandler(req, res) {
   res.end('Hello World\n');
 }
 
-var http  = require('http'),
-    weak    = require('weak'),
-    done    = 0,
-    count   = 0,
+var http = require('http'),
+    weak = require('weak'),
+    done = 0,
+    count = 0,
     countGC = 0,
-    todo    = 500,
+    todo = 500,
     common = require('../common.js'),
     assert = require('assert'),
     PORT = common.PORT;
 
-console.log('We should do '+ todo +' requests');
+console.log('We should do ' + todo + ' requests');
 
 var http = require('http');
 var server = http.createServer(serverHandler);
@@ -27,10 +27,10 @@ function getall() {
   if (count >= todo)
     return;
 
-  (function(){
+  (function() {
     function cb(res) {
       res.resume();
-      done+=1;
+      done += 1;
       statusLater();
     }
     function onerror(er) {
@@ -45,7 +45,7 @@ function getall() {
 
     count++;
     weak(req, afterGC);
-  })()
+  })();
 
   setImmediate(getall);
 }
@@ -53,8 +53,8 @@ function getall() {
 for (var i = 0; i < 10; i++)
   getall();
 
-function afterGC(){
-  countGC ++;
+function afterGC() {
+  countGC++;
 }
 
 var timer;

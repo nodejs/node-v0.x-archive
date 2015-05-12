@@ -62,7 +62,7 @@ function doTest() {
   // file containing a proper serialization of a session ticket.
   // To avoid a source control diff, we copy the ticket to a temporary file.
 
-  var sessionFileName = (function () {
+  var sessionFileName = (function() {
     var ticketFileName = 'tls-session-ticket.txt';
     var fixturesPath = join(common.fixturesDir, ticketFileName);
     var tmpPath = join(common.tmpDir, ticketFileName);
@@ -72,7 +72,7 @@ function doTest() {
 
   // Expects a callback -- cb(connectionType : enum ['New'|'Reused'])
 
-  var Client = function (cb) {
+  var Client = function(cb) {
     var flags = [
       's_client',
       '-connect', 'localhost:' + common.PORT,
@@ -89,7 +89,7 @@ function doTest() {
     });
     client.on('exit', function(code) {
       var connectionType;
-      var grepConnectionType = function (line) {
+      var grepConnectionType = function(line) {
         var matches = line.match(/(New|Reused), /);
         if (matches) {
           connectionType = matches[1];
@@ -117,7 +117,7 @@ function doTest() {
       assert(connectionType === 'New');
       Client(function(connectionType) {
         assert(connectionType === 'Reused');
-        setTimeout(function () {
+        setTimeout(function() {
           Client(function(connectionType) {
             assert(connectionType === 'New');
             server.close();

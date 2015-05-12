@@ -267,7 +267,7 @@ function testAssertionMessage(actual, expected) {
   } catch (e) {
     assert.equal(e.toString(),
         ['AssertionError:', expected, '==', '\'\''].join(' '));
-    assert.ok(e.generatedMessage, "Message not marked as generated");
+    assert.ok(e.generatedMessage, 'Message not marked as generated');
   }
 }
 testAssertionMessage(undefined, 'undefined');
@@ -286,7 +286,7 @@ testAssertionMessage([1, 2, 3], '[ 1, 2, 3 ]');
 testAssertionMessage(/a/, '/a/');
 testAssertionMessage(/abc/gim, '/abc/gim');
 testAssertionMessage(function f() {}, '[Function: f]');
-testAssertionMessage(function () {}, '[Function]');
+testAssertionMessage(function() {}, '[Function]');
 testAssertionMessage({}, '{}');
 testAssertionMessage(circular, '{ y: 1, x: [Circular] }');
 testAssertionMessage({a: undefined, b: null}, '{ a: undefined, b: null }');
@@ -295,7 +295,7 @@ testAssertionMessage({a: NaN, b: Infinity, c: -Infinity},
 
 // #2893
 try {
-  assert.throws(function () {
+  assert.throws(function() {
     assert.ifError(null);
   });
 } catch (e) {
@@ -308,14 +308,14 @@ assert.ok(threw);
 try {
   assert.equal(1, 2);
 } catch (e) {
-  assert.equal(e.toString().split('\n')[0], 'AssertionError: 1 == 2')
+  assert.equal(e.toString().split('\n')[0], 'AssertionError: 1 == 2');
   assert.ok(e.generatedMessage, 'Message not marked as generated');
 }
 
 try {
   assert.equal(1, 2, 'oh no');
 } catch (e) {
-  assert.equal(e.toString().split('\n')[0], 'AssertionError: oh no')
+  assert.equal(e.toString().split('\n')[0], 'AssertionError: oh no');
   assert.equal(e.generatedMessage, false,
-              'Message incorrectly marked as generated');
+      'Message incorrectly marked as generated');
 }

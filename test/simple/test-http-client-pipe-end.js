@@ -37,7 +37,7 @@ var server = http.createServer(function(req, res) {
 server.listen(common.PIPE, function() {
   var req = http.request({
     socketPath: common.PIPE,
-    headers: {'Content-Length':'1'},
+    headers: {'Content-Length': '1'},
     method: 'POST',
     path: '/'
   });

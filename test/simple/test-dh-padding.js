@@ -41,6 +41,6 @@ p.setPublicKey(apub, 'hex');
 p.setPrivateKey(apriv, 'hex');
 
 assert.equal(
-  p.computeSecret(bpub, 'hex', 'hex'),
-  '0025616eed33f1af7975bbd0a8071d98a014f538b243bef90d76c08e81a0b3c5'
+    p.computeSecret(bpub, 'hex', 'hex'),
+    '0025616eed33f1af7975bbd0a8071d98a014f538b243bef90d76c08e81a0b3c5'
 );

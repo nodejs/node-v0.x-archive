@@ -36,24 +36,24 @@ function Stream2buffer(callback) {
   stream.Writable.call(this);
 
   this._buffers = [];
-  this.once('finish', function () {
+  this.once('finish', function() {
     callback(null, Buffer.concat(this._buffers));
   });
 }
 util.inherits(Stream2buffer, stream.Writable);
 
-Stream2buffer.prototype._write = function (data, encodeing, done) {
+Stream2buffer.prototype._write = function(data, encodeing, done) {
   this._buffers.push(data);
   return done(null);
 };
 
 // Create an md5 hash of "Hallo world"
 var hasher1 = crypto.createHash('md5');
-    hasher1.pipe(new Stream2buffer(common.mustCall(function end(err, hash) {
-      assert.equal(err, null);
-      assert.equal(hash.toString('hex'), '06460dadb35d3d503047ce750ceb2d07');
-    })));
-    hasher1.end('Hallo world');
+hasher1.pipe(new Stream2buffer(common.mustCall(function end(err, hash) {
+  assert.equal(err, null);
+  assert.equal(hash.toString('hex'), '06460dadb35d3d503047ce750ceb2d07');
+})));
+hasher1.end('Hallo world');
 
 // Simpler check for unpipe, setEncoding, pause and resume
 crypto.createHash('md5').unpipe({});
@@ -70,7 +70,7 @@ var key = new Buffer('48fb56eb10ffeb13fc0ef551bbca3b1b', 'hex'),
 
 cipher.pipe(decipher)
   .on('error', common.mustCall(function end(err) {
-    assert(/bad decrypt/.test(err));
-  }));
+      assert(/bad decrypt/.test(err));
+    }));
 
 cipher.end('Papaya!');  // Should not cause an unhandled exception.

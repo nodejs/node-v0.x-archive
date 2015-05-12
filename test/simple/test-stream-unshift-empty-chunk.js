@@ -22,7 +22,7 @@
 var common = require('../common');
 var assert = require('assert');
 
-// This test verifies that stream.unshift(Buffer(0)) or 
+// This test verifies that stream.unshift(Buffer(0)) or
 // stream.unshift('') does not set state.reading=false.
 var Readable = require('stream').Readable;
 
@@ -56,24 +56,24 @@ r.on('readable', function() {
 });
 
 var expect =
-  [ 'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy',
-    'xxxxxxxxxx',
-    'yyyyy' ];
+    ['xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy',
+     'xxxxxxxxxx',
+     'yyyyy'];
 
 r.on('end', function() {
   assert.deepEqual(seen, expect);

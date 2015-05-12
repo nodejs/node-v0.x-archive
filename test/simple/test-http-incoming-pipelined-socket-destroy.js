@@ -63,13 +63,13 @@ function generator(seeds) {
     return 'GET /' + r + ' HTTP/1.1\r\n' +
            'Host: localhost:' + common.PORT + '\r\n' +
            '\r\n' +
-           '\r\n'
+           '\r\n';
   }).join('');
 }
 
 
 server.listen(common.PORT, function() {
-  var seeds = [ 3, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4 ];
+  var seeds = [3, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4];
   var client = net.connect({ port: common.PORT });
   var done = 0;
   server.on('requestDone', function() {

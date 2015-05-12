@@ -47,12 +47,12 @@ var d = fs.readFileSync(__filename, 'utf8');
 assert.equal(d, dataExpected);
 
 var called = false;
-fs.readFile(__filename, 'utf8', function (er, d) {
+fs.readFile(__filename, 'utf8', function(er, d) {
   assert.equal(d, dataExpected);
   called = true;
 });
 
 process.on('exit', function() {
   assert(called);
-  console.log("ok");
+  console.log('ok');
 });

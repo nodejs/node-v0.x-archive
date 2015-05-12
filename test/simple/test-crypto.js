@@ -49,13 +49,13 @@ var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
 var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
     'ascii');
 var rsaKeyPemEncrypted = fs.readFileSync(
-  common.fixturesDir + '/test_rsa_privkey_encrypted.pem', 'ascii');
+    common.fixturesDir + '/test_rsa_privkey_encrypted.pem', 'ascii');
 var dsaPubPem = fs.readFileSync(common.fixturesDir + '/test_dsa_pubkey.pem',
     'ascii');
 var dsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_dsa_privkey.pem',
     'ascii');
 var dsaKeyPemEncrypted = fs.readFileSync(
-  common.fixturesDir + '/test_dsa_privkey_encrypted.pem', 'ascii');
+    common.fixturesDir + '/test_dsa_privkey_encrypted.pem', 'ascii');
 
 
 // TODO(indunty): move to a separate test eventually
@@ -83,19 +83,19 @@ assert.throws(function() {
 
 // PFX tests
 assert.doesNotThrow(function() {
-  tls.createSecureContext({pfx:certPfx, passphrase:'sample'});
+  tls.createSecureContext({pfx: certPfx, passphrase: 'sample'});
 });
 
 assert.throws(function() {
-  tls.createSecureContext({pfx:certPfx});
+  tls.createSecureContext({pfx: certPfx});
 }, 'mac verify failure');
 
 assert.throws(function() {
-  tls.createSecureContext({pfx:certPfx, passphrase:'test'});
+  tls.createSecureContext({pfx: certPfx, passphrase: 'test'});
 }, 'mac verify failure');
 
 assert.throws(function() {
-  tls.createSecureContext({pfx:'sample', passphrase:'test'});
+  tls.createSecureContext({pfx: 'sample', passphrase: 'test'});
 }, 'not enough data');
 
 // Test HMAC
@@ -146,8 +146,8 @@ var wikipedia = [
           'b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c71214' +
           '4292c5ad'
     }
-  },
-]
+  }
+];
 
 for (var i = 0, l = wikipedia.length; i < l; i++) {
   for (var hash in wikipedia[i]['hmac']) {
@@ -485,15 +485,15 @@ assert.equal(a1, 'h\u00ea\u00cb\u0097\u00d8o\fF!\u00fa+\u000e\u0017\u00ca' +
 assert.equal(a2, '2bX1jws4GYKTlxhloUB09Z66PoJZW+y+hq5R8dnx9l4=',
              'Test SHA256 as base64');
 assert.deepEqual(
-  a3,
-  new Buffer(
+    a3,
+    new Buffer(
     '\u00c1(4\u00f1\u0003\u001fd\u0097!O\'\u00d4C/&Qz\u00d4' +
     '\u0094\u0015l\u00b8\u008dQ+\u00db\u001d\u00c4\u00b5}\u00b2' +
     '\u00d6\u0092\u00a3\u00df\u00a2i\u00a1\u009b\n\n*\u000f' +
     '\u00d7\u00d6\u00a2\u00a8\u0085\u00e3<\u0083\u009c\u0093' +
     '\u00c2\u0006\u00da0\u00a1\u00879(G\u00ed\'',
     'binary'),
-  'Test SHA512 as assumed buffer');
+    'Test SHA512 as assumed buffer');
 assert.deepEqual(a4,
                  new Buffer('8308651804facb7b9af8ffc53a33a22d6a1c8ac2', 'hex'),
                  'Test SHA1');

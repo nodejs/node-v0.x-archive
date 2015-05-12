@@ -37,7 +37,7 @@ child.stderr.on('data', function(data) {
   var lines = data.toString().replace(/\r/g, '').trim().split('\n');
   var line = lines[0];
 
-  lines.forEach(function(ln) { console.log('> ' + ln) } );
+  lines.forEach(function(ln) { console.log('> ' + ln) });
 
   if (line === 'all workers are running') {
     assertOutputLines();
@@ -54,8 +54,8 @@ process.on('exit', function onExit() {
 var assertOutputLines = common.mustCall(function() {
   var expectedLines = [
     'Debugger listening on port ' + port,
-    'Debugger listening on port ' + (port+1),
-    'Debugger listening on port ' + (port+2),
+    'Debugger listening on port ' + (port + 1),
+    'Debugger listening on port ' + (port + 2)
   ];
 
   // Do not assume any particular order of output messages,
@@ -63,7 +63,7 @@ var assertOutputLines = common.mustCall(function() {
   // start up
   outputLines.sort();
 
-  assert.equal(outputLines.length, expectedLines.length)
+  assert.equal(outputLines.length, expectedLines.length);
   for (var i = 0; i < expectedLines.length; i++)
     assert.equal(outputLines[i], expectedLines[i]);
 });

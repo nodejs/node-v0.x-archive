@@ -34,13 +34,13 @@ var methods = [
   'resolveSrv',
   'resolveNaptr',
   'resolveSoa'
-]
+];
 
 methods.forEach(function(method) {
   var d = domain.create();
   d.run(function() {
     dns[method]('google.com', function() {
-      assert.strictEqual(process.domain, d, method + ' retains domain')
+      assert.strictEqual(process.domain, d, method + ' retains domain');
     });
   });
 });

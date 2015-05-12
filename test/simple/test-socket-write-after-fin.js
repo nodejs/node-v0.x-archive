@@ -33,7 +33,7 @@ var server = net.createServer({ allowHalfOpen: true }, function(sock) {
     serverData += c;
   });
   sock.on('end', function() {
-    gotServerEnd = true
+    gotServerEnd = true;
     sock.end(serverData);
     server.close();
   });

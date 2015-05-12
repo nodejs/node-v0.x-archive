@@ -51,7 +51,7 @@ function runAb(opts, callback) {
   var args = [
     '-c', opts.concurrent || 100,
     '-t', opts.threads || 2,
-    '-d', opts.duration || '10s',
+    '-d', opts.duration || '10s'
   ];
 
   if (!opts.keepalive) {
@@ -59,7 +59,8 @@ function runAb(opts, callback) {
     args.push('Connection: close');
   }
 
-  args.push(url.format({ hostname: '127.0.0.1', port: common.PORT, protocol: 'http'}));
+  args.push(url.format({ hostname: '127.0.0.1', port: common.PORT, protocol:
+        'http'}));
 
   var comm = path.join(__dirname, '..', '..', 'tools', 'wrk', 'wrk');
 

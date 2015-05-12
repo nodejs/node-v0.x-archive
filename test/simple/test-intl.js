@@ -25,7 +25,7 @@ var assert = require('assert');
 // does node think that i18n was enabled?
 var enablei18n = process.config.variables.v8_enable_i18n_support;
 if (enablei18n === undefined) {
-    enablei18n = false;
+  enablei18n = false;
 }
 
 // is the Intl object present?
@@ -48,9 +48,9 @@ if (!haveIntl) {
 
 } else {
   var erMsg =
-    '"Intl" object is present but v8_enable_i18n_support is ' +
-    enablei18n +
-    '. Is this test out of date?';
+      '"Intl" object is present but v8_enable_i18n_support is ' +
+      enablei18n +
+      '. Is this test out of date?';
   assert.equal(enablei18n, true, erMsg);
 
   // Construct a new date at the beginning of Unix time

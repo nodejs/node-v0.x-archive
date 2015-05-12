@@ -27,8 +27,8 @@ var common = require('../common');
 console.error('argv=%j', process.argv);
 console.error('exec=%j', process.execPath);
 
-if (process.argv[2] !== "child") {
-  var child = spawn('./node', [__filename, "child"], {
+if (process.argv[2] !== 'child') {
+  var child = spawn('./node', [__filename, 'child'], {
     cwd: path.dirname(process.execPath)
   });
 
@@ -40,7 +40,7 @@ if (process.argv[2] !== "child") {
   child.stderr.on('data', function(chunk) {
     childErr += chunk;
   });
-  child.on('exit', function () {
+  child.on('exit', function() {
     console.error('CHILD: %s', childErr.trim().split('\n').join('\nCHILD: '));
     if (process.platform === 'win32') {
       // On Windows argv[0] is not expanded into full path

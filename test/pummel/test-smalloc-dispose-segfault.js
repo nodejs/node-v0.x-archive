@@ -41,7 +41,7 @@ if (process.argv[2] === 'child') {
 } else {
   // test case
   var child = spawn(process.execPath,
-                ['--expose_gc', __filename, 'child']);
+      ['--expose_gc', __filename, 'child']);
 
   child.on('exit', function(code, signal) {
     assert.equal(code, 0, signal);

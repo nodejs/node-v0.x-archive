@@ -60,7 +60,7 @@ var TEST_CASES = [
   { algo: 'aes-256-gcm', key: '3zTvzr3p67VC61jmV54rIYu1545x4TlY',
     iv: '60iP0h6vJoEa', plain: 'Hello node.js world!',
     ct: '58E62CFF7B1D274011A82267EBB93866E72B6C2B',
-    tag: '9BB44F663BADABACAE9720881FB1EC7A', tampered: true },
+    tag: '9BB44F663BADABACAE9720881FB1EC7A', tampered: true }
 ];
 
 var ciphers = crypto.getCiphers();
@@ -112,7 +112,7 @@ for (var i in TEST_CASES) {
   (function() {
     // non-authenticating mode:
     var encrypt = crypto.createCipheriv('aes-128-cbc',
-      'ipxp9a6i1Mb4USb4', '6fKjEjR3Vl30EUYC');
+        'ipxp9a6i1Mb4USb4', '6fKjEjR3Vl30EUYC');
     encrypt.update('blah', 'ascii');
     encrypt.final();
     assert.throws(function() { encrypt.getAuthTag(); }, / state/);

@@ -148,8 +148,8 @@ assert.strictEqual(Math.floor(c.length / 2), copied);
 for (var i = 0; i < Math.floor(c.length / 2); i++) {
   assert.strictEqual(b[b.length - Math.floor(c.length / 2) + i], c[i]);
 }
-for (var i = Math.floor(c.length /2) + 1; i < c.length; i++) {
-  assert.strictEqual(c[c.length-1], c[i]);
+for (var i = Math.floor(c.length / 2) + 1; i < c.length; i++) {
+  assert.strictEqual(c[c.length - 1], c[i]);
 }
 
 // try to copy 513 bytes, and check we don't overrun c
@@ -842,7 +842,7 @@ assert.equal(b.toString(), 'xxx');
 // issue GH-3416
 Buffer(Buffer(0), 0, 0);
 
-[ 'hex',
+['hex',
   'utf8',
   'utf-8',
   'ascii',
@@ -851,29 +851,27 @@ Buffer(Buffer(0), 0, 0);
   'ucs2',
   'ucs-2',
   'utf16le',
-  'utf-16le' ].forEach(function(enc) {
-    assert.equal(Buffer.isEncoding(enc), true);
-  });
+  'utf-16le'].forEach(function(enc) {
+  assert.equal(Buffer.isEncoding(enc), true);
+});
 
-[ 'utf9',
+['utf9',
   'utf-7',
   'Unicode-FTW',
-  'new gnu gun'  ].forEach(function(enc) {
-    assert.equal(Buffer.isEncoding(enc), false);
-  });
+  'new gnu gun'].forEach(function(enc) {
+  assert.equal(Buffer.isEncoding(enc), false);
+});
 
 
 // GH-5110
-(function () {
+(function() {
   var buffer = new Buffer('test'),
       string = JSON.stringify(buffer);
 
   assert.equal(string, '{"type":"Buffer","data":[116,101,115,116]}');
 
   assert.deepEqual(buffer, JSON.parse(string, function(key, value) {
-    return value && value.type === 'Buffer'
-      ? new Buffer(value.data)
-      : value;
+    return value && value.type === 'Buffer' ? new Buffer(value.data) : value;
   }));
 })();
 
@@ -974,16 +972,16 @@ assert.equal(buf.readInt8(0), -1);
   var buf = new Buffer([0xFF, 0xFF, 0xFF, 0xFF]);
 
   assert.equal(buf['readUInt' + bits + 'BE'](0),
-                (0xFFFFFFFF >>> (32 - bits)));
+      (0xFFFFFFFF >>> (32 - bits)));
 
   assert.equal(buf['readUInt' + bits + 'LE'](0),
-                (0xFFFFFFFF >>> (32 - bits)));
+      (0xFFFFFFFF >>> (32 - bits)));
 
   assert.equal(buf['readInt' + bits + 'BE'](0),
-                (0xFFFFFFFF >> (32 - bits)));
+      (0xFFFFFFFF >> (32 - bits)));
 
   assert.equal(buf['readInt' + bits + 'LE'](0),
-                (0xFFFFFFFF >> (32 - bits)));
+      (0xFFFFFFFF >> (32 - bits)));
 });
 
 // test for common read(U)IntLE/BE
@@ -1089,7 +1087,7 @@ assert.equal(buf.readInt8(0), -1);
   // see https://github.com/joyent/node/issues/5881
   SlowBuffer(0).slice(0, 1);
   // make sure a zero length slice doesn't set the .parent attribute
-  assert.equal(Buffer(5).slice(0,0).parent, undefined);
+  assert.equal(Buffer(5).slice(0, 0).parent, undefined);
   // and make sure a proper slice does have a parent
   assert.ok(typeof Buffer(5).slice(0, 5).parent === 'object');
 })();
@@ -1121,11 +1119,11 @@ assert.throws(function() {
 })();
 
 
-assert.throws(function () {
+assert.throws(function() {
   new Buffer(smalloc.kMaxLength + 1);
 }, RangeError);
 
-assert.throws(function () {
+assert.throws(function() {
   new SlowBuffer(smalloc.kMaxLength + 1);
 }, RangeError);
 
@@ -1136,8 +1134,8 @@ var b1 = new Buffer('YW55=======', 'base64');
 var b2 = new Buffer('YW55', 'base64');
 
 assert.equal(
-  crypto.createHash('sha1').update(b1).digest('hex'),
-  crypto.createHash('sha1').update(b2).digest('hex')
+    crypto.createHash('sha1').update(b1).digest('hex'),
+    crypto.createHash('sha1').update(b2).digest('hex')
 );
 
 // Test Compare

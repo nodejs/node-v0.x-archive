@@ -49,7 +49,7 @@ switch (process.argv[2]) {
 // a more low-level approach, use child process IPC manually.
 function test() {
   var parent = spawn(process.execPath, [__filename, 'parent'], {
-    stdio: [ 0, 'pipe', 2 ]
+    stdio: [0, 'pipe', 2]
   });
   var json = '';
   parent.stdout.on('data', function(c) {
@@ -63,8 +63,8 @@ function test() {
     http.get({
       server: 'localhost',
       port: PORT,
-      path: '/',
-    }).on('response', function (res) {
+      path: '/'
+    }).on('response', function(res) {
       var s = '';
       res.on('data', function(c) {
         s += c.toString();
@@ -79,7 +79,7 @@ function test() {
         assert.equal(res.statusCode, 200);
         console.log('ok');
       });
-    })
+    });
   }
 }
 
@@ -93,7 +93,7 @@ function parent() {
 
     var spawn = require('child_process').spawn;
     var master = spawn(process.execPath, [__filename, 'master'], {
-      stdio: [ 0, 1, 2, server._handle ],
+      stdio: [0, 1, 2, server._handle],
       detached: true
     });
 
@@ -116,7 +116,7 @@ function parent() {
 function master() {
   console.error('in master, spawning worker');
   cluster.setupMaster({
-    args: [ 'worker' ]
+    args: ['worker']
   });
   var worker = cluster.fork();
   console.log('%j\n', { master: process.pid, worker: worker.pid });

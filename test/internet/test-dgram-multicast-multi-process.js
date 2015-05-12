@@ -150,7 +150,7 @@ if (process.argv[2] !== 'child') {
   sendSocket.bind();
 
   // The socket is actually created async now
-  sendSocket.on('listening', function () {
+  sendSocket.on('listening', function() {
     sendSocket.setTTL(1);
     sendSocket.setBroadcast(true);
     sendSocket.setMulticastTTL(1);
@@ -227,7 +227,7 @@ if (process.argv[2] === 'child') {
 
   listenSocket.bind(common.PORT);
 
-  listenSocket.on('listening', function () {
+  listenSocket.on('listening', function() {
     listenSocket.addMembership(LOCAL_BROADCAST_HOST);
   });
 }

@@ -39,25 +39,25 @@ repl.addTest('sb(")^$*+?}{|][(.js\\\\", 1)', [
 
 // continue - the breakpoint should be triggered
 repl.addTest('c', [
-    /break in .*[\\\/]mod\.js:23/,
-    /21/, /22/, /23/, /24/, /25/
+  /break in .*[\\\/]mod\.js:23/,
+  /21/, /22/, /23/, /24/, /25/
 ]);
 
 // -- RESTORE BREAKPOINT ON RESTART --
 
 // Restart the application - breakpoint should be restored
 repl.addTest('restart', [].concat(
-  [
-    /terminated/
-  ],
-  repl.handshakeLines,
-  [
-    /Restoring breakpoint mod.js:23/,
-    /Warning: script 'mod\.js' was not loaded yet\./,
-    /Restoring breakpoint \).*:\d+/,
-    /Warning: script '\)[^']*' was not loaded yet\./
-  ],
-  repl.initialBreakLines));
+    [
+     /terminated/
+    ],
+    repl.handshakeLines,
+    [
+     /Restoring breakpoint mod.js:23/,
+     /Warning: script 'mod\.js' was not loaded yet\./,
+     /Restoring breakpoint \).*:\d+/,
+     /Warning: script '\)[^']*' was not loaded yet\./
+    ],
+    repl.initialBreakLines));
 
 // continue - the breakpoint should be triggered
 repl.addTest('c', [

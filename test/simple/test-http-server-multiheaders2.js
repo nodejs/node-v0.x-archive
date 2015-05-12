@@ -48,7 +48,7 @@ var multipleAllowed = [
 
   // make sure that unspecified headers is treated as multiple
   'Some-Random-Header',
-  'X-Some-Random-Header',
+  'X-Some-Random-Header'
 ];
 
 var multipleForbidden = [
@@ -62,7 +62,7 @@ var multipleForbidden = [
   'If-Unmodified-Since',
   'From',
   'Location',
-  'Max-Forwards',
+  'Max-Forwards'
 
   // special case, tested differently
   //'Content-Length',
@@ -70,10 +70,12 @@ var multipleForbidden = [
 
 var srv = http.createServer(function(req, res) {
   multipleForbidden.forEach(function(header) {
-    assert.equal(req.headers[header.toLowerCase()], 'foo', 'header parsed incorrectly: ' + header);
+    assert.equal(req.headers[header.toLowerCase()],
+        'foo', 'header parsed incorrectly: ' + header);
   });
   multipleAllowed.forEach(function(header) {
-    assert.equal(req.headers[header.toLowerCase()], 'foo, bar', 'header parsed incorrectly: ' + header);
+    assert.equal(req.headers[header.toLowerCase()],
+        'foo, bar', 'header parsed incorrectly: ' + header);
   });
   assert.equal(req.headers['content-length'], 0);
 
@@ -94,8 +96,8 @@ var headers = []
   .concat(multipleForbidden.map(makeHeader('foo')))
   .concat(multipleAllowed.map(makeHeader('bar')))
   .concat(multipleForbidden.map(makeHeader('bar')))
-  // content-length is a special case since node.js
-  // is dropping connetions with non-numeric headers
+    // content-length is a special case since node.js
+    // is dropping connetions with non-numeric headers
   .concat([['content-length', 0], ['content-length', 123]]);
 
 srv.listen(common.PORT, function() {
@@ -103,6 +105,6 @@ srv.listen(common.PORT, function() {
     host: 'localhost',
     port: common.PORT,
     path: '/',
-    headers: headers,
+    headers: headers
   });
 });

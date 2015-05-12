@@ -47,14 +47,14 @@ server.listen(options.port, options.host, function() {
 
   var timeout_events = 0;
   req.setTimeout(1);
-  req.on('timeout', function () {
+  req.on('timeout', function() {
     timeout_events += 1;
   });
-  setTimeout(function () {
+  setTimeout(function() {
     req.destroy();
     assert.equal(timeout_events, 1);
   }, 100);
-  setTimeout(function () {
+  setTimeout(function() {
     req.end();
   }, 50);
 });

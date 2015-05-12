@@ -86,7 +86,7 @@ function child4() {
   process.stderr.write('child 4\nfoo\nbar\nbaz\n');
 }
 
-var children = [ child0, child1, child2, child3, child4 ];
+var children = [child0, child1, child2, child3, child4];
 
 if (!process.argv[2]) {
   parent();

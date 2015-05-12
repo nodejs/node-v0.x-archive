@@ -42,7 +42,7 @@ var server = http.createServer(function(req, res) {
   opts.agent = new http.Agent();
   opts.agent.protocol = null;
 
-  http.get(opts, function (res) {
+  http.get(opts, function(res) {
     response++;
     res.resume();
     server.close();

@@ -61,7 +61,7 @@ server.listen(common.PORT, '127.0.0.1', function() {
     }
   }
 
-  var client1 = net.connect({ port: common.PORT })
+  var client1 = net.connect({ port: common.PORT });
   client1.on('end', addEndedClient);
 
   var client2 = net.connect({ port: common.PORT });

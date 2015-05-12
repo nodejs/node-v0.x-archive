@@ -65,7 +65,7 @@ vm.runInNewContext('f.a = 2', { f: f });
 assert.equal(f.a, 2);
 
 console.error('use function in context without referencing context');
-var fn = vm.runInNewContext('(function() { obj.p = {}; })', { obj: {} })
+var fn = vm.runInNewContext('(function() { obj.p = {}; })', { obj: {} });
 gc();
 fn();
 // Should not crash

@@ -111,8 +111,8 @@ function startTest() {
     var options = clientsOptions[i++];
     var client = tls.connect(options, function() {
       clientResults.push(
-        client.authorizationError &&
-        /Hostname\/IP doesn't/.test(client.authorizationError));
+          client.authorizationError &&
+          /Hostname\/IP doesn't/.test(client.authorizationError));
       client.destroy();
 
       // Continue

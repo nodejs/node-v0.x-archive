@@ -44,15 +44,15 @@ function callback() {
     clearTimeout(timer);
     client.close();
   } else if (callbacks > 2) {
-    throw new Error("the callbacks should be called only two times");
+    throw new Error('the callbacks should be called only two times');
   }
 }
 
-client.on('message', function (buffer, bytes) {
+client.on('message', function(buffer, bytes) {
   callback();
 });
 
-client.send(new Buffer(1), 0, 0, common.PORT, "127.0.0.1", function (err, len) {
+client.send(new Buffer(1), 0, 0, common.PORT, '127.0.0.1', function(err, len) {
   callback();
 });
 

@@ -28,5 +28,5 @@ var buff = new Buffer(Buffer.poolSize + 1);
 var slicedBuffer = buff.slice();
 assert.equal(slicedBuffer.parent,
              buff,
-             "slicedBufffer should have its parent set to the original " +
-             " buffer");
+             'slicedBufffer should have its parent set to the original ' +
+             ' buffer');

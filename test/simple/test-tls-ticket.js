@@ -52,7 +52,8 @@ function createServer() {
   return server;
 }
 
-var servers = [ createServer(), createServer(), createServer(), createServer(), createServer(), createServer() ];
+var servers = [createServer(), createServer(), createServer(),
+      createServer(), createServer(), createServer()];
 
 // Create one TCP server and balance sockets to multiple TLS server instances
 var shared = net.createServer(function(c) {

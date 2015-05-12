@@ -25,11 +25,11 @@ var exec = require('child_process').exec;
 
 if (process.platform !== 'win32') {
   // Unix.
-  var SLEEP3_COMMAND = "sleep 3";
+  var SLEEP3_COMMAND = 'sleep 3';
 } else {
   // Windows: `choice` is a command built into cmd.exe. Use another cmd process
   // to create a process tree, so we can catch bugs related to it.
-  var SLEEP3_COMMAND = "cmd /c choice /t 3 /c X /d X";
+  var SLEEP3_COMMAND = 'cmd /c choice /t 3 /c X /d X';
 }
 
 
@@ -39,17 +39,17 @@ var error_count = 0;
 
 exec(process.execPath + ' -p -e process.versions',
      function(err, stdout, stderr) {
-  if (err) {
-    error_count++;
-    console.log('error!: ' + err.code);
-    console.log('stdout: ' + JSON.stringify(stdout));
-    console.log('stderr: ' + JSON.stringify(stderr));
-    assert.equal(false, err.killed);
-  } else {
-    success_count++;
-    console.dir(stdout);
-  }
-});
+      if (err) {
+        error_count++;
+        console.log('error!: ' + err.code);
+        console.log('stdout: ' + JSON.stringify(stdout));
+        console.log('stderr: ' + JSON.stringify(stderr));
+        assert.equal(false, err.killed);
+      } else {
+        success_count++;
+        console.dir(stdout);
+      }
+    });
 
 
 exec('thisisnotavalidcommand', function(err, stdout, stderr) {

@@ -83,12 +83,12 @@ var writer = new Writable({
 var written = [];
 
 var expectWritten =
-  [ 'asdfgasdfgasdfgasdfg',
-    'asdfgasdfgasdfgasdfg',
-    'asdfgasdfgasdfgasdfg',
-    'asdfgasdfgasdfgasdfg',
-    'asdfgasdfgasdfgasdfg',
-    'asdfgasdfgasdfgasdfg' ];
+    ['asdfgasdfgasdfgasdfg',
+     'asdfgasdfgasdfgasdfg',
+     'asdfgasdfgasdfgasdfg',
+     'asdfgasdfgasdfgasdfg',
+     'asdfgasdfgasdfgasdfg',
+     'asdfgasdfgasdfgasdfg'];
 
 writer._write = function(chunk, encoding, cb) {
   console.error('WRITE %s', chunk);
@@ -101,7 +101,7 @@ writer.on('finish', finish);
 
 // now emit some chunks.
 
-var chunk = "asdfg";
+var chunk = 'asdfg';
 
 var set = 0;
 readStart();

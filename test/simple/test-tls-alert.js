@@ -44,9 +44,10 @@ function loadPEM(n) {
 var server = tls.Server({
   secureProtocol: 'TLSv1_2_server_method',
   key: loadPEM('agent2-key'),
-  cert:loadPEM('agent2-cert')
+  cert: loadPEM('agent2-cert')
 }, null).listen(common.PORT, function() {
-  var args = ['s_client', '-quiet', '-tls1_1','-connect', '127.0.0.1:' + common.PORT];
+  var args = ['s_client', '-quiet', '-tls1_1', '-connect',
+    '127.0.0.1:' + common.PORT];
   var client = spawn(common.opensslCli, args);
   var out = '';
   client.stderr.setEncoding('utf8');

@@ -30,13 +30,13 @@ check([{
   requests: [{
     expectClose: true,
     data: 'POST / HTTP/1.0\r\n' +
-          'Connection: keep-alive\r\n' +
-          '\r\n'
+        'Connection: keep-alive\r\n' +
+        '\r\n'
   }, {
     expectClose: true,
     data: 'POST / HTTP/1.0\r\n' +
-          'Connection: keep-alive\r\n' +
-          '\r\n'
+        'Connection: keep-alive\r\n' +
+        '\r\n'
   }],
   responses: [{
     headers: {'Connection': 'keep-alive'},
@@ -49,13 +49,13 @@ check([{
   requests: [{
     expectClose: false,
     data: 'POST / HTTP/1.0\r\n' +
-          'Connection: keep-alive\r\n' +
-          'TE: chunked\r\n' +
-          '\r\n'
+        'Connection: keep-alive\r\n' +
+        'TE: chunked\r\n' +
+        '\r\n'
   }, {
     expectClose: true,
     data: 'POST / HTTP/1.0\r\n' +
-          '\r\n'
+        '\r\n'
   }],
   responses: [{
     headers: {'Connection': 'keep-alive'},
@@ -68,16 +68,16 @@ check([{
   requests: [{
     expectClose: false,
     data: 'POST / HTTP/1.0\r\n' +
-          'Connection: keep-alive\r\n' +
-          '\r\n'
+        'Connection: keep-alive\r\n' +
+        '\r\n'
   }, {
     expectClose: true,
     data: 'POST / HTTP/1.0\r\n' +
-          '\r\n'
+        '\r\n'
   }],
   responses: [{
     headers: {'Connection': 'keep-alive',
-              'Transfer-Encoding': 'chunked'},
+      'Transfer-Encoding': 'chunked'},
     chunks: ['OK']
   }, {
     chunks: []
@@ -87,16 +87,16 @@ check([{
   requests: [{
     expectClose: false,
     data: 'POST / HTTP/1.0\r\n' +
-          'Connection: keep-alive\r\n' +
-          '\r\n'
+        'Connection: keep-alive\r\n' +
+        '\r\n'
   }, {
     expectClose: true,
     data: 'POST / HTTP/1.0\r\n' +
-          '\r\n'
+        '\r\n'
   }],
   responses: [{
     headers: {'Connection': 'keep-alive',
-              'Content-Length': '2'},
+      'Content-Length': '2'},
     chunks: ['OK']
   }, {
     chunks: []
@@ -143,7 +143,7 @@ function check(tests) {
         current++;
         if (ctx.expectClose) return;
         conn.removeListener('close', onclose);
-        conn.removeListener('data', ondata);;
+        conn.removeListener('data', ondata);
         connected();
       }
       conn.on('data', ondata);

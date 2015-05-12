@@ -38,7 +38,7 @@ var options = {
 function Mediator() {
   stream.Writable.call(this);
   this.buf = '';
-};
+}
 util.inherits(Mediator, stream.Writable);
 
 Mediator.prototype._write = function write(data, enc, cb) {

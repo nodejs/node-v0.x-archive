@@ -30,7 +30,7 @@ http.createServer(function(req, res) {
   var req = http.request({
     method: 'POST',
     host: '127.0.0.1',
-    port: common.PORT,
+    port: common.PORT
   });
   req.flushHeaders();  // Flush the request headers.
   req.flushHeaders();  // Should be idempotent.

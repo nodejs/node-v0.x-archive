@@ -35,7 +35,7 @@ var spawn = require('child_process').spawn;
 var options = {
   key: fs.readFileSync(join(common.fixturesDir, 'keys', 'agent1-key.pem')),
   cert: fs.readFileSync(join(common.fixturesDir, 'keys', 'agent1-cert.pem')),
-  ca: [ fs.readFileSync(join(common.fixturesDir, 'keys', 'ca1-cert.pem')) ]
+  ca: [fs.readFileSync(join(common.fixturesDir, 'keys', 'ca1-cert.pem'))]
 };
 var verified = false;
 
@@ -58,7 +58,7 @@ server.listen(common.PORT, function() {
     assert.equal(peerCert.subject.emailAddress, 'ry@tinyclouds.org');
     assert.equal(peerCert.serialNumber, '9A84ABCFB8A72ABE');
     assert.deepEqual(peerCert.infoAccess['OCSP - URI'],
-                     [ 'http://ocsp.nodejs.org/' ]);
+                     ['http://ocsp.nodejs.org/']);
 
     var issuer = peerCert.issuerCertificate;
     assert.ok(issuer.issuerCertificate === issuer);
