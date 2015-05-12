@@ -149,7 +149,7 @@ assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.12.3');});
 
 // note that the following function is written out to a string and
 // passed in as an argument to a child node instance.
-var script = (
+var fail_if_default_ciphers_set = (
   function() {
     var tls = require('tls');
     var used_monkey_patch = false;
@@ -179,59 +179,84 @@ var script = (
   }
 ).toString();
 
+// Verifies that the default cipher list is set.
+// like fail_if_default_ciphers_set, this is serialized
+// out to a string and passed to a new node instance
+var fail_if_default_ciphers_not_set = (
+  function() {
+    var tls = require('tls');
+    var used_monkey_patch = false;
+    var orig_createSecureContext = tls.createSecureContext;
+    tls.createSecureContext = function(details) {
+      used_monkey_patch = true;
+      // node is not started with --enable-legacy-cipher-list
+      if (!details.ciphers) {
+        console.error('default ciphers are not set');
+        process.exit(1);
+      }
+      return orig_createSecureContext(details);
+    };
+    var socket = tls.connect({
+      port: 0,
+      rejectUnauthorized: false
+    }, function() {
+      socket.end();
+      if (!used_monkey_patch) {
+        console.error('monkey patched createSecureContext not used');
+      }
+    });
+  }
+).toString();
+
 var test_count = 0;
 
-function doDefaultCipherTest(additional_args, env, opts) {
+function doDefaultCipherTest(test, additional_args, env) {
   var options = {};
   if (env) options.env = env;
   var out = '', err = '';
   additional_args = additional_args || [];
   var args = additional_args.concat([
-    '-e', require('util').format('(%s)()', script).replace(
+    '-e', require('util').format('(%s)()', test).replace(
       'port: 0', 'port: ' + common.PORT)
   ]);
   var child = spawn(process.execPath, args, options);
-  child.stdout.
-    on('data', function(data) {
-      out += data;
-    }).
-    on('end', function() {
-      if (opts.failExpected && err === '') {
-        // if we get here, there's a problem because the default cipher
-        // list was not set when it should have been
-        assert.fail('options.cipher list was not set');
-      }
-    });
   child.stderr.
     on('data', function(data) {
       err += data;
     }).
     on('end', function() {
       if (err !== '') {
-        if (!opts.failExpected) {
-          assert.fail(err.substr(0,err.length-1));
-        }
+        assert.fail(err.substr(0,err.length-1));
       }
     });
-  child.on('close', function() {
-    test_count++;
-    if (test_count === 4) server.close();
-  });
 }
 
 var options = {
   key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
   cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
-var server = tls.Server(options, function(socket) {});
+var server = tls.Server(options, function(socket) {
+  test_count++;
+  if (test_count === 4) server.close();
+});
 server.listen(common.PORT, function() {
-  doDefaultCipherTest(['--enable-legacy-cipher-list=v0.10.38']);
-  doDefaultCipherTest([], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
+  // checks to make sure the default ciphers are *not* set
+  // because the --enable-legacy-cipher-list switch is set to
+  // v0.10.38
+  doDefaultCipherTest(fail_if_default_ciphers_set,
+                      ['--enable-legacy-cipher-list=v0.10.38']);
+
+  // checks to make sure the default ciphers are *not* set
+  // because the NODE_LEGACY_CIPHER_LIST envar is set to v0.10.38
+  doDefaultCipherTest(fail_if_default_ciphers_set,
+                      [], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
+
   // this variant checks to ensure that the default cipher list IS set
-  doDefaultCipherTest([], {}, {failExpected:true});
+  doDefaultCipherTest(fail_if_default_ciphers_not_set, [], {});
+
   // test that setting the cipher list explicitly to the v0.10.38
   // string without using the legacy cipher switch causes the
   // default ciphers to be set.
-  doDefaultCipherTest(['--cipher-list=' + V1038Ciphers], {},
-                      {failExpected:true});
+  doDefaultCipherTest(fail_if_default_ciphers_not_set,
+                      ['--cipher-list=' + V1038Ciphers], {});
 });
