@@ -143,14 +143,15 @@ assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.38');});
 // TLS server, then spawn a second node instance using the v0.10.38 cipher,
 // then connect and check to make sure the options are correct. Since there
 // is no direct way of testing it, an alternate createCredentials shim is
-// created that intercepts the call to createCredentials and checks the output.
-// The following server code was adopted from test-tls-connect-simple.
-// This spins up a server to verify that the connection is still able to
-// function with the default ciphers not set on the client side.
+// created that intercepts the call to createCredentials and checks the
+// output. The following server code was adopted from
+// test-tls-connect-simple. This spins up a server to verify that the
+// connection is still able to function with the default ciphers not set
+// on the client side.
 
 // note that the following function is written out to a string and
 // passed in as an argument to a child node instance.
-var script = (
+var fail_if_default_ciphers_set = (
   function() {
     var tls = require('tls');
     var orig_createCredentials = require('crypto').createCredentials;
@@ -180,59 +181,93 @@ var script = (
   }
 ).toString();
 
-var test_count = 0;
-
-function doDefaultCipherTest(additional_args, env, opts) {
-  var options = {};
-  if (env) options.env = env;
-  var out = '', err = '';
-  additional_args = additional_args || [];
-  var args = additional_args.concat([
-    '-e', require('util').format('(%s)()', script).replace(
-      'port: 0', 'port: ' + common.PORT)
-  ]);
-  var child = spawn(process.execPath, args, options);
-  child.stdout.
-    on('data', function(data) {
-      out += data;
-    }).
-    on('end', function() {
-      if (opts.failExpected && err === '') {
-        // if we get here, there's a problem because the default cipher
-        // list was not set when it should have been
-        assert.fail('options.cipher list was not set');
+// Verifies that the default cipher list is set.
+// like fail_if_default_ciphers_set, this is serialized
+// out to a string and passed to a new node instance
+var fail_if_default_ciphers_not_set = (
+  function() {
+    var tls = require('tls');
+    var orig_createCredentials = require('crypto').createCredentials;
+    var used_monkey_patch = false;
+    require('crypto').createCredentials = function(options) {
+      used_monkey_patch = true;
+      // node is not started with --enable-legacy-cipher-list
+      if (!options.ciphers) {
+        console.error('default ciphers are not set');
+        process.exit(1);
+      }
+      return orig_createCredentials(options);
+    };
+    var socket = tls.connect({
+      port: 0,
+      rejectUnauthorized: false
+    }, function() {
+      socket.end();
+      if (!used_monkey_patch) {
+        console.error('monkey patched createCredentials not used.');
+        process.exit(1);
       }
     });
+  }
+).toString();
+
+
+var test_count = 0;
+
+function doDefaultCipherTest(test, additional_args, env) {
+  var options = {};
+  if (env) options.env = env;
+  var err = '';
+  additional_args = additional_args || [];
+  var args = additional_args.concat([
+    '-e', require('util').format('(%s)()', test).
+                          replace('port: 0',
+                                  'port: ' + common.PORT)
+  ]);
+  var child = spawn(process.execPath, args, options);
+  // if the child process writes to stderr, report it
+  // as a failure. This will capture the error in the
+  // tls connection also, which is what we want. We
+  // want to be able to verify that changes to the
+  // default cipher list being set or not will not impact
+  // the actual connection being made.
   child.stderr.
     on('data', function(data) {
       err += data;
     }).
     on('end', function() {
       if (err !== '') {
-        if (!opts.failExpected) {
-          assert.fail(err.substr(0,err.length-1));
-        }
+        assert.fail(err.substr(0,err.length-1));
       }
     });
-  child.on('close', function() {
-    test_count++;
-    if (test_count === 4) server.close();
-  });
 }
 
 var options = {
   key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
   cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
-var server = tls.Server(options, function(socket) {});
+var server = tls.Server(options, function(socket) {
+  test_count++;
+  if (test_count === 4) server.close();
+});
 server.listen(common.PORT, function() {
-  doDefaultCipherTest(['--enable-legacy-cipher-list=v0.10.38']);
-  doDefaultCipherTest([], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
+  // checks to make sure the default ciphers are *not* set
+  // because the --enable-legacy-cipher-list switch is set to
+  // v0.10.38
+  doDefaultCipherTest(fail_if_default_ciphers_set,
+                      ['--enable-legacy-cipher-list=v0.10.38']);
+
+  // checks to make sure the default ciphers are *not* set
+  // because the NODE_LEGACY_CIPHER_LIST envar is set to v0.10.38
+  doDefaultCipherTest(fail_if_default_ciphers_set,
+                      [], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
+
   // this variant checks to ensure that the default cipher list IS set
-  doDefaultCipherTest([], {}, {failedExpected:true});
+  doDefaultCipherTest(fail_if_default_ciphers_not_set, [], {});
+
   // test that setting the cipher list explicitly to the v0.10.38
   // string without using the legacy cipher switch causes the
   // default ciphers to be set.
-  doDefaultCipherTest(['--cipher-list=' + V1038Ciphers], {},
-                      {failedExpected:true});
+  doDefaultCipherTest(fail_if_default_ciphers_not_set,
+                      ['--cipher-list=' + V1038Ciphers], {});
 });

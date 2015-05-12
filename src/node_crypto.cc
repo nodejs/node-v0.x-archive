@@ -4201,7 +4201,9 @@ Handle<Value> DefaultCiphers(const Arguments& args) {
   HandleScope scope;
   unsigned int len = args.Length();
   if (len != 1 || !args[0]->IsString()) {
-    return ThrowException(Exception::TypeError(String::New("A single string parameter is required")));
+    return ThrowException(
+      Exception::TypeError(
+        String::New("A single string parameter is required")));
   }
   node::Utf8Value key(args[0]);
   const char * list = legacy_cipher_list(ToCString(key));
