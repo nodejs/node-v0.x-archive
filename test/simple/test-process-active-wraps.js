@@ -31,12 +31,17 @@ function expect(activeHandles, activeRequests) {
 
 var handles = [];
 
+/* Start from the assumption that IPv6 is enabled, just like Node does;
+ * if it is disabled, a different number of handles will be created. */
+var isIPv6 = true;
+
 (function() {
   expect(0, 0);
   var server = net.createServer().listen(common.PORT);
-  expect(1, 0);
+  if (server.address().family !== 'IPv6') isIPv6 = false;
+  isIPv6 ? expect(1, 0) : expect(2, 0);
   server.close();
-  expect(1, 0); // server handle doesn't shut down until next tick
+  isIPv6 ? expect(1, 0) : expect(2, 0); // server handle doesn't shut down until next tick
   handles.push(server);
 })();
 
@@ -47,13 +52,13 @@ var handles = [];
     });
   };
 
-  expect(1, 0);
+  isIPv6 ? expect(1, 0) : expect(2, 0);
   var conn = net.createConnection(common.PORT);
   conn.on('lookup', onlookup);
   conn.on('error', function() { assert(false); });
-  expect(2, 1);
+  isIPv6 ? expect(2, 1) : expect(3, 1);
   conn.destroy();
-  expect(2, 1); // client handle doesn't shut down until next tick
+  isIPv6 ? expect(2, 1) : expect(3, 1); // client handle doesn't shut down until next tick
   handles.push(conn);
 })();
 
