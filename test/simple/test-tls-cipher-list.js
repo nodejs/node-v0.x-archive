@@ -27,7 +27,7 @@ function doTest(checklist, env, useswitch) {
   var options;
   var args = ['-e', 'console.log(require(\'tls\').DEFAULT_CIPHERS)'];
 
-  switch(useswitch) {
+  switch (useswitch) {
     case 1:
       // Test --cipher-list
       args.unshift('--cipher-list=' + env);
@@ -38,16 +38,16 @@ function doTest(checklist, env, useswitch) {
       break;
     case 3:
       // Test NODE_LEGACY_CIPHER_LIST
-      if (env) options = {env:{"NODE_LEGACY_CIPHER_LIST": env}};
+      if (env) options = {env: {'NODE_LEGACY_CIPHER_LIST': env}};
       break;
     default:
       // Test NODE_CIPHER_LIST
-      if (env) options = {env:env};
+      if (env) options = {env: env};
   }
 
   var out = '';
   spawn(process.execPath, args, options).
-    stdout.
+      stdout.
       on('data', function(data) {
         out += data;
       }).
@@ -57,7 +57,7 @@ function doTest(checklist, env, useswitch) {
 }
 
 doTest(tls.DEFAULT_CIPHERS); // test the default
-doTest('ABC', {'NODE_CIPHER_LIST':'ABC'}); // test the envar
+doTest('ABC', {'NODE_CIPHER_LIST': 'ABC'}); // test the envar
 doTest('ABC', 'ABC', 1); // test the --cipher-list switch
 
 ['v0.10.38', 'v0.10.39', 'v0.12.2', 'v0.12.3'].forEach(function(ver) {

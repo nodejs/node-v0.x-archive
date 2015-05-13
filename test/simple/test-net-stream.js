@@ -50,7 +50,7 @@ var server = net.createServer(function(socket) {
     socket.destroy();
   }).on('close', function() {
     server.close();
-  })
+  });
 
   for (var i = 0; i < N; ++i) {
     socket.write(buf, function() { });
@@ -58,14 +58,14 @@ var server = net.createServer(function(socket) {
   socket.end();
 
 }).listen(common.PORT, function() {
-    var conn = net.connect(common.PORT);
-    conn.on('data', function(buf) {
-      conn.pause();
-      setTimeout(function() {
-        conn.destroy();
-      }, 20);
-    });
+  var conn = net.connect(common.PORT);
+  conn.on('data', function(buf) {
+    conn.pause();
+    setTimeout(function() {
+      conn.destroy();
+    }, 20);
   });
+});
 
 process.on('exit', function() {
   assert.equal(server.connections, 0);

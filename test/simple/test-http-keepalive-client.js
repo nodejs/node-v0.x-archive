@@ -87,6 +87,6 @@ function makeRequest(n) {
 }
 
 process.on('exit', function() {
-  assert.equal(actualRequests, expectRequests)
+  assert.equal(actualRequests, expectRequests);
   console.log('ok');
 });

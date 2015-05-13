@@ -38,9 +38,9 @@ test('utf-8', new Buffer('𤭢', 'utf-8'), '𤭢');
 // U+0030 -> 30
 // U+3045 -> E3 81 85
 test(
-  'utf-8',
-  new Buffer([0xCB, 0xA4, 0x64, 0xE1, 0x8B, 0xA4, 0x30, 0xE3, 0x81, 0x85]),
-  '\u02e4\u0064\u12e4\u0030\u3045'
+    'utf-8',
+    new Buffer([0xCB, 0xA4, 0x64, 0xE1, 0x8B, 0xA4, 0x30, 0xE3, 0x81, 0x85]),
+    '\u02e4\u0064\u12e4\u0030\u3045'
 );
 
 // CESU-8
@@ -50,7 +50,7 @@ test('utf-8', new Buffer('EDA0BDEDB18D', 'hex'), '\ud83d\udc4d'); // thumbs up
 test('ucs2', new Buffer('ababc', 'ucs2'), 'ababc');
 
 // UTF-16LE
-test('ucs2', new Buffer('3DD84DDC', 'hex'),  '\ud83d\udc4d'); // thumbs up
+test('ucs2', new Buffer('3DD84DDC', 'hex'), '\ud83d\udc4d'); // thumbs up
 
 console.log(' crayon!');
 
@@ -75,11 +75,11 @@ function test(encoding, input, expected, singleSequence) {
     process.stdout.write('.');
     if (output !== expected) {
       var message =
-        'Expected "'+unicodeEscape(expected)+'", '+
-        'but got "'+unicodeEscape(output)+'"\n'+
-        'Write sequence: '+JSON.stringify(sequence)+'\n'+
-        'Decoder charBuffer: 0x'+decoder.charBuffer.toString('hex')+'\n'+
-        'Full Decoder State: '+JSON.stringify(decoder, null, 2);
+          'Expected "' + unicodeEscape(expected) + '", ' +
+          'but got "' + unicodeEscape(output) + '"\n' +
+          'Write sequence: ' + JSON.stringify(sequence) + '\n' +
+          'Decoder charBuffer: 0x' + decoder.charBuffer.toString('hex') + '\n' +
+          'Full Decoder State: ' + JSON.stringify(decoder, null, 2);
       assert.fail(output, expected, message);
     }
   });
@@ -89,7 +89,7 @@ function test(encoding, input, expected, singleSequence) {
 function unicodeEscape(str) {
   var r = '';
   for (var i = 0; i < str.length; i++) {
-    r += '\\u'+str.charCodeAt(i).toString(16);
+    r += '\\u' + str.charCodeAt(i).toString(16);
   }
   return r;
 }
@@ -107,7 +107,7 @@ function unicodeEscape(str) {
 function writeSequences(length, start, sequence) {
   if (start === undefined) {
     start = 0;
-    sequence = []
+    sequence = [];
   } else if (start === length) {
     return [sequence];
   }

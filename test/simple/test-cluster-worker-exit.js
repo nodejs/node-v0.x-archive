@@ -45,23 +45,23 @@ if (cluster.isWorker) {
 } else if (cluster.isMaster) {
 
   var expected_results = {
-      cluster_emitDisconnect: [1, "the cluster did not emit 'disconnect'"],
-      cluster_emitExit: [1, "the cluster did not emit 'exit'"],
-      cluster_exitCode: [EXIT_CODE, 'the cluster exited w/ incorrect exitCode'],
-      cluster_signalCode: [null, 'the cluster exited w/ incorrect signalCode'],
-      worker_emitDisconnect: [1, "the worker did not emit 'disconnect'"],
-      worker_emitExit: [1, "the worker did not emit 'exit'"],
-      worker_state: ['disconnected', 'the worker state is incorrect'],
-      worker_suicideMode: [false, 'the worker.suicide flag is incorrect'],
-      worker_died: [true, 'the worker is still running'],
-      worker_exitCode: [EXIT_CODE, 'the worker exited w/ incorrect exitCode'],
-      worker_signalCode: [null, 'the worker exited w/ incorrect signalCode']
+    cluster_emitDisconnect: [1, "the cluster did not emit 'disconnect'"],
+    cluster_emitExit: [1, "the cluster did not emit 'exit'"],
+    cluster_exitCode: [EXIT_CODE, 'the cluster exited w/ incorrect exitCode'],
+    cluster_signalCode: [null, 'the cluster exited w/ incorrect signalCode'],
+    worker_emitDisconnect: [1, "the worker did not emit 'disconnect'"],
+    worker_emitExit: [1, "the worker did not emit 'exit'"],
+    worker_state: ['disconnected', 'the worker state is incorrect'],
+    worker_suicideMode: [false, 'the worker.suicide flag is incorrect'],
+    worker_died: [true, 'the worker is still running'],
+    worker_exitCode: [EXIT_CODE, 'the worker exited w/ incorrect exitCode'],
+    worker_signalCode: [null, 'the worker exited w/ incorrect signalCode']
   };
   var results = {
-      cluster_emitDisconnect: 0,
-      cluster_emitExit: 0,
-      worker_emitDisconnect: 0,
-      worker_emitExit: 0
+    cluster_emitDisconnect: 0,
+    cluster_emitExit: 0,
+    worker_emitDisconnect: 0,
+    worker_emitExit: 0
   };
 
 
@@ -122,31 +122,31 @@ if (cluster.isWorker) {
 
 // some helper functions ...
 
-  function checkResults(expected_results, results) {
-    for (var k in expected_results) {
-      var actual = results[k],
-          expected = expected_results[k];
+function checkResults(expected_results, results) {
+  for (var k in expected_results) {
+    var actual = results[k],
+        expected = expected_results[k];
 
-      if (typeof expected === 'function') {
-        expected(r[k]);
+    if (typeof expected === 'function') {
+      expected(r[k]);
+    } else {
+      var msg = (expected[1] || '') +
+          (' [expected: ' + expected[0] + ' / actual: ' + actual + ']');
+
+      if (expected && expected.length) {
+        assert.equal(actual, expected[0], msg);
       } else {
-        var msg = (expected[1] || '') +
-            (' [expected: ' + expected[0] + ' / actual: ' + actual + ']');
-
-        if (expected && expected.length) {
-          assert.equal(actual, expected[0], msg);
-        } else {
-          assert.equal(actual, expected, msg);
-        }
+        assert.equal(actual, expected, msg);
       }
     }
   }
+}
 
-  function alive(pid) {
-    try {
-      process.kill(pid, 'SIGCONT');
-      return true;
-    } catch (e) {
-      return false;
-    }
+function alive(pid) {
+  try {
+    process.kill(pid, 'SIGCONT');
+    return true;
+  } catch (e) {
+    return false;
   }
+}

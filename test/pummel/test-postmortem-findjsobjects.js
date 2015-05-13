@@ -39,19 +39,19 @@ var obj = new LanguageH(1);
 var spawn = require('child_process').spawn;
 var prefix = '/var/tmp/node';
 var corefile = prefix + '.' + process.pid;
-var gcore = spawn('gcore', [ '-o', prefix, process.pid + '' ]);
+var gcore = spawn('gcore', ['-o', prefix, process.pid + '']);
 var output = '';
 var unlinkSync = require('fs').unlinkSync;
-var args = [ corefile ];
+var args = [corefile];
 
 if (process.env.MDB_LIBRARY_PATH && process.env.MDB_LIBRARY_PATH != '')
-  args = args.concat([ '-L', process.env.MDB_LIBRARY_PATH ]);
+  args = args.concat(['-L', process.env.MDB_LIBRARY_PATH]);
 
-gcore.stderr.on('data', function (data) {
+gcore.stderr.on('data', function(data) {
   console.log('gcore: ' + data);
 });
 
-gcore.on('exit', function (code) {
+gcore.on('exit', function(code) {
   if (code != 0) {
     console.error('gcore exited with code ' + code);
     process.exit(code);
@@ -59,7 +59,7 @@ gcore.on('exit', function (code) {
 
   var mdb = spawn('mdb', args, { stdio: 'pipe' });
 
-  mdb.on('exit', function (code) {
+  mdb.on('exit', function(code) {
     var retained = '; core retained as ' + corefile;
 
     if (code != 0) {
@@ -76,17 +76,17 @@ gcore.on('exit', function (code) {
     }
 
     assert.equal(found, nexpected, 'expected ' + nexpected +
-      ' objects, found ' + found + retained);
+        ' objects, found ' + found + retained);
 
     unlinkSync(corefile);
     process.exit(0);
   });
 
-  mdb.stdout.on('data', function (data) {
+  mdb.stdout.on('data', function(data) {
     output += data;
   });
 
-  mdb.stderr.on('data', function (data) {
+  mdb.stderr.on('data', function(data) {
     console.log('mdb stderr: ' + data);
   });
 

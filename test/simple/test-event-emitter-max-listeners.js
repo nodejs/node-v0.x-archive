@@ -47,7 +47,7 @@ assert.throws(function() {
 });
 
 assert.throws(function() {
-  e.setMaxListeners("and even this");
+  e.setMaxListeners('and even this');
 });
 
 e.emit('maxListeners');

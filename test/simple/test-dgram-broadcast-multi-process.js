@@ -38,7 +38,7 @@ var common = require('../common'),
 // take the first non-internal interface as the address for binding
 get_bindAddress: for (var name in networkInterfaces) {
   var interfaces = networkInterfaces[name];
-  for(var i = 0; i < interfaces.length; i++) {
+  for (var i = 0; i < interfaces.length; i++) {
     var localInterface = interfaces[i];
     if (!localInterface.internal && localInterface.family === 'IPv4') {
       var bindAddress = localInterface.address;
@@ -165,7 +165,7 @@ if (process.argv[2] !== 'child') {
   // bind the address explicitly for sending
   // INADDR_BROADCAST to only one interface
   sendSocket.bind(common.PORT, bindAddress);
-  sendSocket.on('listening', function () {
+  sendSocket.on('listening', function() {
     sendSocket.setBroadcast(true);
   });
 

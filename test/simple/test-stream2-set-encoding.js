@@ -45,7 +45,7 @@ function run() {
   fn({
     same: assert.deepEqual,
     equal: assert.equal,
-    end: function () {
+    end: function() {
       count--;
       run();
     }
@@ -53,7 +53,7 @@ function run() {
 }
 
 // ensure all tests have run
-process.on("exit", function () {
+process.on('exit', function() {
   assert.equal(count, 0);
 });
 
@@ -90,7 +90,7 @@ TestReader.prototype._read = function(n) {
     var ret = new Buffer(n);
     ret.fill('a');
 
-    console.log("this.push(ret)", ret)
+    console.log('this.push(ret)', ret);
 
     return this.push(ret);
   }.bind(this), 1);
@@ -101,16 +101,16 @@ test('setEncoding utf8', function(t) {
   tr.setEncoding('utf8');
   var out = [];
   var expect =
-    [ 'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa' ];
+      ['aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa'];
 
   tr.on('readable', function flow() {
     var chunk;
@@ -130,26 +130,26 @@ test('setEncoding hex', function(t) {
   tr.setEncoding('hex');
   var out = [];
   var expect =
-    [ '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161' ];
+      ['6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161'];
 
   tr.on('readable', function flow() {
     var chunk;
@@ -168,32 +168,32 @@ test('setEncoding hex with read(13)', function(t) {
   tr.setEncoding('hex');
   var out = [];
   var expect =
-    [ "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "16161" ];
+      ['6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '16161'];
 
   tr.on('readable', function flow() {
-    console.log("readable once")
+    console.log('readable once');
     var chunk;
     while (null !== (chunk = tr.read(13)))
       out.push(chunk);
   });
 
   tr.on('end', function() {
-    console.log("END")
+    console.log('END');
     t.same(out, expect);
     t.end();
   });
@@ -204,20 +204,20 @@ test('setEncoding base64', function(t) {
   tr.setEncoding('base64');
   var out = [];
   var expect =
-    [ 'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYQ==' ];
+      ['YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYQ=='];
 
   tr.on('readable', function flow() {
     var chunk;
@@ -235,16 +235,16 @@ test('encoding: utf8', function(t) {
   var tr = new TestReader(100, { encoding: 'utf8' });
   var out = [];
   var expect =
-    [ 'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa',
-      'aaaaaaaaaa' ];
+      ['aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa',
+       'aaaaaaaaaa'];
 
   tr.on('readable', function flow() {
     var chunk;
@@ -263,26 +263,26 @@ test('encoding: hex', function(t) {
   var tr = new TestReader(100, { encoding: 'hex' });
   var out = [];
   var expect =
-    [ '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161',
-      '6161616161' ];
+      ['6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161',
+       '6161616161'];
 
   tr.on('readable', function flow() {
     var chunk;
@@ -300,22 +300,22 @@ test('encoding: hex with read(13)', function(t) {
   var tr = new TestReader(100, { encoding: 'hex' });
   var out = [];
   var expect =
-    [ "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "1616161616161",
-      "6161616161616",
-      "16161" ];
+      ['6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '1616161616161',
+       '6161616161616',
+       '16161'];
 
   tr.on('readable', function flow() {
     var chunk;
@@ -333,20 +333,20 @@ test('encoding: base64', function(t) {
   var tr = new TestReader(100, { encoding: 'base64' });
   var out = [];
   var expect =
-    [ 'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYWFhYWFh',
-      'YWFhYWFhYW',
-      'FhYQ==' ];
+      ['YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYWFhYWFh',
+       'YWFhYWFhYW',
+       'FhYQ=='];
 
   tr.on('readable', function flow() {
     var chunk;

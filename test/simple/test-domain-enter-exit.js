@@ -27,7 +27,7 @@ var domain = require('domain');
 
 function names(array) {
   return array.map(function(d) {
-    return d.name
+    return d.name;
   }).join(', ');
 }
 

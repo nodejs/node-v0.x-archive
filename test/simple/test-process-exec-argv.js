@@ -30,11 +30,11 @@ if (process.argv[2] === 'child') {
   var child = spawn(process.execPath, execArgv.concat(args));
   var out = '';
 
-  child.stdout.on('data', function (chunk) {
+  child.stdout.on('data', function(chunk) {
     out += chunk;
   });
 
-  child.on('exit', function () {
+  child.on('exit', function() {
     assert.deepEqual(JSON.parse(out), execArgv);
   });
 }

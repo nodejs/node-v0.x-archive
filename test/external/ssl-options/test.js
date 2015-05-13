@@ -1,26 +1,26 @@
-var tls       = require('tls');
-var fs        = require('fs');
-var path      = require('path');
-var fork      = require('child_process').fork;
-var assert    = require('assert');
+var tls = require('tls');
+var fs = require('fs');
+var path = require('path');
+var fork = require('child_process').fork;
+var assert = require('assert');
 var constants = require('constants');
-var os        = require('os');
+var os = require('os');
 
-var async     = require('async');
-var debug     = require('debug')('test-node-ssl');
+var async = require('async');
+var debug = require('debug')('test-node-ssl');
 
 var common = require('../../common');
 
 var SSL2_COMPATIBLE_CIPHERS = 'RC4-MD5';
 
-var CMD_LINE_OPTIONS = [ null, "--enable-ssl2", "--enable-ssl3" ];
+var CMD_LINE_OPTIONS = [null, '--enable-ssl2', '--enable-ssl3'];
 
 var SERVER_SSL_PROTOCOLS = [
   null,
   'SSLv2_method', 'SSLv2_server_method',
   'SSLv3_method', 'SSLv3_server_method',
   'TLSv1_method', 'TLSv1_server_method',
-  'SSLv23_method','SSLv23_server_method'
+  'SSLv23_method', 'SSLv23_server_method'
 ];
 
 var CLIENT_SSL_PROTOCOLS = [
@@ -28,7 +28,7 @@ var CLIENT_SSL_PROTOCOLS = [
   'SSLv2_method', 'SSLv2_client_method',
   'SSLv3_method', 'SSLv3_client_method',
   'TLSv1_method', 'TLSv1_client_method',
-  'SSLv23_method','SSLv23_client_method'
+  'SSLv23_method', 'SSLv23_client_method'
 ];
 
 var SECURE_OPTIONS = [
@@ -54,15 +54,17 @@ function xtend(source) {
 function isAutoNegotiationProtocol(sslProtocol) {
   assert(sslProtocol === null || typeof sslProtocol === 'string');
 
-  return  sslProtocol == null ||
-          sslProtocol === 'SSLv23_method' ||
+  return sslProtocol == null ||
+      sslProtocol === 'SSLv23_method' ||
           sslProtocol === 'SSLv23_client_method' ||
           sslProtocol === 'SSLv23_server_method';
 }
 
 function isSameSslProtocolVersion(serverSecureProtocol, clientSecureProtocol) {
-  assert(serverSecureProtocol === null || typeof serverSecureProtocol === 'string');
-  assert(clientSecureProtocol === null || typeof clientSecureProtocol === 'string');
+  assert(serverSecureProtocol === null ||
+      typeof serverSecureProtocol === 'string');
+  assert(clientSecureProtocol === null ||
+      typeof clientSecureProtocol === 'string');
 
   if (serverSecureProtocol === clientSecureProtocol) {
     return true;
@@ -113,7 +115,8 @@ function isSsl2Protocol(secureProtocol) {
          secureProtocol === 'SSLv2_server_method';
 }
 
-function secureProtocolCompatibleWithSecureOptions(secureProtocol, secureOptions, cmdLineOption) {
+function secureProtocolCompatibleWithSecureOptions(secureProtocol,
+    secureOptions, cmdLineOption) {
   if (secureOptions == null) {
     if (isSsl2Protocol(secureProtocol) &&
         (!cmdLineOption || cmdLineOption.indexOf('--enable-ssl2') === -1)) {
@@ -125,11 +128,13 @@ function secureProtocolCompatibleWithSecureOptions(secureProtocol, secureOptions
       return false;
     }
   } else {
-    if (secureOptions & constants.SSL_OP_NO_SSLv2 && isSsl2Protocol(secureProtocol)) {
+    if (secureOptions & constants.SSL_OP_NO_SSLv2 &&
+        isSsl2Protocol(secureProtocol)) {
       return false;
     }
 
-    if (secureOptions & constants.SSL_OP_NO_SSLv3 && isSsl3Protocol(secureProtocol)) {
+    if (secureOptions & constants.SSL_OP_NO_SSLv3 &&
+        isSsl3Protocol(secureProtocol)) {
       return false;
     }
   }
@@ -188,14 +193,16 @@ function testSetupsCompatible(serverSetup, clientSetup) {
 function sslSetupMakesSense(cmdLineOption, secureProtocol, secureOption) {
   if (isSsl2Protocol(secureProtocol)) {
     if (secureOption & constants.SSL_OP_NO_SSLv2 ||
-        (secureOption == null && (!cmdLineOption || cmdLineOption.indexOf('--enable-ssl2') === -1))) {
+        (secureOption == null && (!cmdLineOption ||
+            cmdLineOption.indexOf('--enable-ssl2') === -1))) {
       return false;
     }
   }
 
   if (isSsl3Protocol(secureProtocol)) {
     if (secureOption & constants.SSL_OP_NO_SSLv3 ||
-        (secureOption == null && (!cmdLineOption || cmdLineOption.indexOf('--enable-ssl3') === -1))) {
+        (secureOption == null && (!cmdLineOption ||
+            cmdLineOption.indexOf('--enable-ssl3') === -1))) {
       return false;
     }
   }
@@ -208,9 +215,9 @@ function createTestsSetups() {
   var serversSetup = [];
   var clientsSetup = [];
 
-  CMD_LINE_OPTIONS.forEach(function (cmdLineOption) {
-    SERVER_SSL_PROTOCOLS.forEach(function (serverSecureProtocol) {
-      SECURE_OPTIONS.forEach(function (secureOption) {
+  CMD_LINE_OPTIONS.forEach(function(cmdLineOption) {
+    SERVER_SSL_PROTOCOLS.forEach(function(serverSecureProtocol) {
+      SECURE_OPTIONS.forEach(function(secureOption) {
         if (sslSetupMakesSense(cmdLineOption,
                                serverSecureProtocol,
                                secureOption)) {
@@ -231,8 +238,8 @@ function createTestsSetups() {
       });
     });
 
-    CLIENT_SSL_PROTOCOLS.forEach(function (clientSecureProtocol) {
-      SECURE_OPTIONS.forEach(function (secureOption) {
+    CLIENT_SSL_PROTOCOLS.forEach(function(clientSecureProtocol) {
+      SECURE_OPTIONS.forEach(function(secureOption) {
         if (sslSetupMakesSense(cmdLineOption,
                                clientSecureProtocol,
                                secureOption)) {
@@ -256,8 +263,8 @@ function createTestsSetups() {
 
   var testSetups = [];
   var testId = 0;
-  serversSetup.forEach(function (serverSetup) {
-    clientsSetup.forEach(function (clientSetup) {
+  serversSetup.forEach(function(serverSetup) {
+    clientsSetup.forEach(function(clientSetup) {
       var testSetup = {
         server: serverSetup,
         client: clientSetup,
@@ -291,12 +298,12 @@ function runServer(port, secureProtocol, secureOptions, ciphers) {
   var cert = fs.readFileSync(certPath).toString();
 
   var server = new tls.Server({ key: key,
-                                cert: cert,
-                                ca: [],
-                                ciphers: ciphers,
-                                secureProtocol: secureProtocol,
-                                secureOptions: secureOptions
-                              });
+    cert: cert,
+    ca: [],
+    ciphers: ciphers,
+    secureProtocol: secureProtocol,
+    secureOptions: secureOptions
+  });
 
   server.listen(port, function() {
     process.on('message', function onChildMsg(msg) {
@@ -336,15 +343,15 @@ function runClient(port, secureProtocol, secureOptions, ciphers) {
                         },
                         function() {
 
-    // TODO jgilli: test that sslProtocolUsed is at least as "secure" as
-    // "secureProtocol"
-    /*
+        // TODO jgilli: test that sslProtocolUsed is at least as "secure" as
+        // "secureProtocol"
+        /*
      * var sslProtocolUsed = con.getVersion();
      * debug('Protocol used: ' + sslProtocolUsed);
      */
 
-    process.send('client_done');
-  });
+        process.send('client_done');
+      });
 
   con.on('error', function(err) {
     debug('Client could not connect:' + err);
@@ -358,7 +365,7 @@ function stringToSecureOptions(secureOptionsString) {
   var secureOptions;
 
   var optionStrings = secureOptionsString.split('|');
-  optionStrings.forEach(function (option) {
+  optionStrings.forEach(function(option) {
     if (option === 'SSL_OP_NO_SSLv2') {
       secureOptions |= constants.SSL_OP_NO_SSLv2;
     }
@@ -375,10 +382,10 @@ function stringToSecureOptions(secureOptionsString) {
   return secureOptions;
 }
 
-function processTestCmdLineOptions(argv){
+function processTestCmdLineOptions(argv) {
   var options = {};
 
-  argv.forEach(function (arg) {
+  argv.forEach(function(arg) {
     var key;
     var value;
 
@@ -438,7 +445,7 @@ function secureOptionsToString(secureOptions) {
 }
 
 function forkTestProcess(processType, testSetup, port) {
-  var argv = [ processType ];
+  var argv = [processType];
 
   if (testSetup.secureProtocol) {
     argv.push('secureProtocol:' + testSetup.secureProtocol);
@@ -459,8 +466,8 @@ function forkTestProcess(processType, testSetup, port) {
   var forkOptions;
   if (testSetup.cmdLine) {
     forkOptions = {
-      execArgv: [ testSetup.cmdLine ]
-    }
+      execArgv: [testSetup.cmdLine]
+    };
   }
 
   return fork(process.argv[1],
@@ -508,7 +515,7 @@ function runTest(testSetup, testDone) {
         if (serverExitCode != null) {
           var err;
           if (!checkTestExitCode(testSetup, serverExitCode, clientExitCode))
-            err = new Error("Test failed!");
+            err = new Error('Test failed!');
 
           return testDone(err);
         } else {
@@ -522,7 +529,7 @@ function runTest(testSetup, testDone) {
         if (msg === 'client_done' && serverChild.connected) {
           serverChild.send('close');
         }
-      })
+      });
     }
   });
 
@@ -533,7 +540,7 @@ function runTest(testSetup, testDone) {
     if (clientExitCode != null || !clientStarted) {
       var err;
       if (!checkTestExitCode(testSetup, serverExitCode, clientExitCode))
-        err = new Error("Test failed!");
+        err = new Error('Test failed!');
 
       return testDone(err);
     }
@@ -600,7 +607,7 @@ function processDriverCmdLineOptions(argv) {
 function outputTestResult(test, err, output) {
   output.write(os.EOL);
   output.write('Test:' + os.EOL);
-  output.write(JSON.stringify(test, null, " "));
+  output.write(JSON.stringify(test, null, ' '));
   output.write(os.EOL);
   output.write('Result:');
   output.write(err ? 'failure' : 'success');
@@ -653,14 +660,14 @@ if (agentType === 'client' || agentType === 'server') {
   if (driverOptions.outputFile) {
     testOutput = fs.createWriteStream(driverOptions.outputFile)
       .on('error', function onError(err) {
-        console.error(err);
-        process.exit(1);
-      });
+          console.error(err);
+          process.exit(1);
+        });
   }
 
   debug('Tests setups:');
   debug('Number of tests: ' + testSetups.length);
-  debug(JSON.stringify(testSetups, null, " "));
+  debug(JSON.stringify(testSetups, null, ' '));
   debug();
 
   var nbTestsStarted = 0;
@@ -676,7 +683,7 @@ if (agentType === 'client' || agentType === 'server') {
     debug('Starting new batch of tests...');
 
     var port = common.PORT;
-    async.each(tests, function (test, testDone) {
+    async.each(tests, function(test, testDone) {
       test.port = port++;
 
       ++nbTestsStarted;
@@ -698,7 +705,7 @@ if (agentType === 'client' || agentType === 'server') {
     }, function testsDone(err, results) {
       if (err) {
         assert(false,
-               "At least one test in the most recent batch failed: " + err);
+               'At least one test in the most recent batch failed: ' + err);
       }
 
       return callback(err);

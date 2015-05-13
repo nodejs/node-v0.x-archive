@@ -24,7 +24,7 @@ var assert = require('assert');
 var path = require('path');
 var fs = require('fs');
 var tmp = common.tmpDir;
-if (!fs.existsSync(tmp)) 
+if (!fs.existsSync(tmp))
   fs.mkdirSync(tmp);
 var filename = path.resolve(tmp, 'truncate-file.txt');
 

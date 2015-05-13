@@ -36,7 +36,7 @@ if (os.type() != 'SunOS') {
  */
 function myTestFunction()
 {
-  [ 1 ].forEach(function myIterFunction(t) {});
+  [1].forEach(function myIterFunction(t) {});
   return (new Buffer(bufstr));
 }
 
@@ -62,20 +62,20 @@ var spawn = require('child_process').spawn;
 var prefix = '/var/tmp/node';
 var corefile = prefix + '.' + process.pid;
 var tmpfile = '/var/tmp/node-postmortem-func' + '.' + process.pid;
-var gcore = spawn('gcore', [ '-o', prefix, process.pid + '' ]);
+var gcore = spawn('gcore', ['-o', prefix, process.pid + '']);
 var output = '';
 var unlinkSync = require('fs').unlinkSync;
-var args = [ corefile ];
+var args = [corefile];
 var mybuffer;
 
 if (process.env.MDB_LIBRARY_PATH && process.env.MDB_LIBRARY_PATH != '')
-  args = args.concat([ '-L', process.env.MDB_LIBRARY_PATH ]);
+  args = args.concat(['-L', process.env.MDB_LIBRARY_PATH]);
 
-gcore.stderr.on('data', function (data) {
+gcore.stderr.on('data', function(data) {
   console.log('gcore: ' + data);
 });
 
-gcore.on('exit', function (code) {
+gcore.on('exit', function(code) {
   if (code != 0) {
     console.error('gcore exited with code ' + code);
     process.exit(code);
@@ -83,7 +83,7 @@ gcore.on('exit', function (code) {
 
   var mdb = spawn('mdb', args, { stdio: 'pipe' });
 
-  mdb.on('exit', function (code) {
+  mdb.on('exit', function(code) {
     unlinkSync(tmpfile);
     var retained = '; core retained as ' + corefile;
 
@@ -122,18 +122,18 @@ gcore.on('exit', function (code) {
     process.exit(0);
   });
 
-  mdb.stdout.on('data', function (data) {
+  mdb.stdout.on('data', function(data) {
     output += data;
   });
 
-  mdb.stderr.on('data', function (data) {
+  mdb.stderr.on('data', function(data) {
     console.log('mdb stderr: ' + data);
   });
 
   var verifiers = [];
   var buffer;
   verifiers.push(function verifyConstructor(testlines) {
-    assert.deepEqual(testlines, [ 'Buffer' ]);
+    assert.deepEqual(testlines, ['Buffer']);
   });
   verifiers.push(function verifyNodebuffer(testlines) {
     assert.equal(testlines.length, 1);
@@ -145,7 +145,7 @@ gcore.on('exit', function (code) {
     assert.equal(testlines[0], '0x' + buffer + ':      Hello');
   });
   verifiers.push(function verifyV8internal(testlines) {
-    assert.deepEqual(testlines, [ buffer ]);
+    assert.deepEqual(testlines, [buffer]);
   });
   verifiers.push(function verifyJsfunctionN(testlines) {
     assert.equal(testlines.length, 2);
@@ -157,7 +157,7 @@ gcore.on('exit', function (code) {
   verifiers.push(function verifyJsfunctionS(testlines) {
     var foundtest = false, founditer = false;
     assert.ok(testlines.length > 1);
-    testlines.forEach(function (line) {
+    testlines.forEach(function(line) {
       var parts = line.trim().split(/\s+/);
       if (parts[2] == 'myIterFunction') {
         assert.equal(parts[1], '3');
@@ -176,7 +176,7 @@ gcore.on('exit', function (code) {
     assert.ok(content.indexOf('function myTestFunction()\n') != -1);
     assert.ok(content.indexOf('return (new Buffer(bufstr));\n') != -1);
   });
-  OBJECT_KINDS.forEach(function (kind) {
+  OBJECT_KINDS.forEach(function(kind) {
     verifiers.push(function verifyFindObjectsKind(testLines) {
       // There should be at least one object for
       // every kind of objects (except for the special cases
@@ -205,7 +205,8 @@ gcore.on('exit', function (code) {
   mdb.stdin.write(mod);
   mdb.stdin.write('!echo test: jsconstructor\n');
   mdb.stdin.write('::findjsobjects -p my_buffer | ::findjsobjects | ' +
-      '::jsprint -b length ! awk -F: \'$2 == ' + bufstr.length + '{ print $1 }\'' +
+      '::jsprint -b length ! awk -F: \'$2 ==' +
+      bufstr.length + '{ print $1 }\'' +
       '| head -1 > ' + tmpfile + '\n');
   mdb.stdin.write('::cat ' + tmpfile + ' | ::jsconstructor\n');
   mdb.stdin.write('!echo test: nodebuffer\n');
@@ -214,7 +215,8 @@ gcore.on('exit', function (code) {
   mdb.stdin.write('::cat ' + tmpfile + ' | ::nodebuffer | ::eval "./ccccc"\n');
 
   mdb.stdin.write('!echo test: v8internal\n');
-  mdb.stdin.write('::cat ' + tmpfile + ' | ::v8print ! awk \'$2 == "elements"{' +
+  mdb.stdin.write('::cat ' + tmpfile +
+      ' | ::v8print ! awk \'$2 == "elements"{' +
       'print $4 }\' > ' + tmpfile + '\n');
   mdb.stdin.write('::cat ' + tmpfile + ' | ::v8internal 0\n');
 
@@ -226,7 +228,7 @@ gcore.on('exit', function (code) {
   mdb.stdin.write('::jsfunctions -n myTestFunction ! ' +
       'awk \'NR == 2 {print $1}\' | head -1 > ' + tmpfile + '\n');
   mdb.stdin.write('::cat ' + tmpfile + ' | ::jssource -n 0\n');
-  OBJECT_KINDS.forEach(function (kind) {
+  OBJECT_KINDS.forEach(function(kind) {
     mdb.stdin.write(util.format('!echo test: findjsobjects -k %s\n', kind));
     mdb.stdin.write(util.format('::findjsobjects -k %s\n', kind));
   });

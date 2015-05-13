@@ -43,7 +43,8 @@ function isWarned(emitter) {
   return false;
 }
 
-[ true, false ].forEach(function(terminal) {
+var temp = [true, false];
+temp.forEach(function(terminal) {
   var fi;
   var rli;
   var called;
@@ -121,7 +122,7 @@ function isWarned(emitter) {
   assert.equal(callCount, expectedLines.length - 1);
   rli.close();
 
-  // sending multiple newlines at once that does not end with a new(empty) 
+  // sending multiple newlines at once that does not end with a new(empty)
   // line and a `end` event
   fi = new FakeInput();
   rli = new readline.Interface({ input: fi, output: fi, terminal: terminal });
@@ -133,7 +134,7 @@ function isWarned(emitter) {
   });
   rli.on('close', function() {
     callCount++;
-  })
+  });
   fi.emit('data', expectedLines.join('\n'));
   fi.emit('end');
   assert.equal(callCount, expectedLines.length);
@@ -187,7 +188,7 @@ function isWarned(emitter) {
   // \r at start of input should output blank line
   fi = new FakeInput();
   rli = new readline.Interface({ input: fi, output: fi, terminal: true });
-  expectedLines = ['', 'foo' ];
+  expectedLines = ['', 'foo'];
   callCount = 0;
   rli.on('line', function(line) {
     assert.equal(line, expectedLines[callCount]);
@@ -221,11 +222,11 @@ function isWarned(emitter) {
     ['\x1b[31m'],
     ['\x1b[31m', '\x1b[39m'],
     ['\x1b[31m', 'a', '\x1b[39m', 'a']
-  ].forEach(function (keypresses) {
+  ].forEach(function(keypresses) {
     fi = new FakeInput();
     callCount = 0;
     var remainingKeypresses = keypresses.slice();
-    function keypressListener (ch, key) {
+    function keypressListener(ch, key) {
       callCount++;
       if (ch) assert(!key.code);
       assert.equal(key.sequence, remainingKeypresses.shift());
@@ -285,9 +286,12 @@ function isWarned(emitter) {
   assert.equal(readline.getStringWidth('A\ud83c\ude00BC'), 5); // surrogate
 
   // check if vt control chars are stripped
-  assert.equal(readline.stripVTControlCharacters('\u001b[31m> \u001b[39m'), '> ');
-  assert.equal(readline.stripVTControlCharacters('\u001b[31m> \u001b[39m> '), '> > ');
-  assert.equal(readline.stripVTControlCharacters('\u001b[31m\u001b[39m'), '');
+  assert.equal(readline.
+      stripVTControlCharacters('\u001b[31m> \u001b[39m'), '> ');
+  assert.equal(readline.
+      stripVTControlCharacters('\u001b[31m> \u001b[39m> '), '> > ');
+  assert.equal(readline.
+      stripVTControlCharacters('\u001b[31m\u001b[39m'), '');
   assert.equal(readline.stripVTControlCharacters('> '), '> ');
   assert.equal(readline.getStringWidth('\u001b[31m> \u001b[39m'), 2);
   assert.equal(readline.getStringWidth('\u001b[31m> \u001b[39m> '), 4);
@@ -297,7 +301,7 @@ function isWarned(emitter) {
   assert.deepEqual(fi.listeners(terminal ? 'keypress' : 'data'), []);
 
   // check EventEmitter memory leak
-  for (var i=0; i<12; i++) {
+  for (var i = 0; i < 12; i++) {
     var rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
@@ -320,7 +324,7 @@ function isWarned(emitter) {
   assert.ok(called);
 
   assert.doesNotThrow(function() {
-    rli.setPrompt("ddd> ");
+    rli.setPrompt('ddd> ');
   });
 
   assert.doesNotThrow(function() {
@@ -332,10 +336,10 @@ function isWarned(emitter) {
   });
 
   assert.doesNotThrow(function() {
-    rli.question("What do you think of node.js? ", function(answer) {
-      console.log("Thank you for your valuable feedback:", answer);
+    rli.question('What do you think of node.js? ', function(answer) {
+      console.log('Thank you for your valuable feedback:', answer);
       rli.close();
-    })
+    });
   });
 
 });

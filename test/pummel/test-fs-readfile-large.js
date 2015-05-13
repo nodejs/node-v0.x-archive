@@ -23,8 +23,8 @@ var common = require('../common');
 var assert = require('assert');
 
 var path = require('path'),
-  fs = require('fs'),
-  filename = path.join(common.fixturesDir, 'large_file.txt');
+    fs = require('fs'),
+    filename = path.join(common.fixturesDir, 'large_file.txt');
 
 var filesize = 1024 * 1024 * 1024;
 
@@ -47,7 +47,7 @@ function makeFile(done) {
   }
 }
 
-makeFile(function () {
+makeFile(function() {
   fs.readFile(filename, function(err) {
     assert.ok(err, 'should get RangeError');
     assert.equal(err.name, 'RangeError', 'should get RangeError');
@@ -55,6 +55,6 @@ makeFile(function () {
   });
 });
 
-process.on('uncaughtException', function (err) {
+process.on('uncaughtException', function(err) {
   assert.ok(!err, 'should not throw uncaughtException');
 });

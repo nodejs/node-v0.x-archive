@@ -116,5 +116,5 @@ sed.stdout.on('data', function(data) {
 });
 
 sed.stdout.on('end', function(code) {
-  assert.equal(result, 'hellO' + os.EOL + 'nOde' + os.EOL  +'wOrld' + os.EOL);
+  assert.equal(result, 'hellO' + os.EOL + 'nOde' + os.EOL + 'wOrld' + os.EOL);
 });

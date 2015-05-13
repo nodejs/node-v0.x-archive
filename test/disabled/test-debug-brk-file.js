@@ -83,7 +83,7 @@ function debug_client_connect() {
         // get breakpoint list and check if it exists on line 0
         if (!body.length) {
           var req = JSON.stringify({'seq': 1, 'type': 'request',
-                                    'command': 'listbreakpoints'});
+            'command': 'listbreakpoints'});
           conn.write('Content-Length: ' + req.length + '\r\n\r\n' + req);
           return;
         }
@@ -97,7 +97,7 @@ function debug_client_connect() {
         }
 
         var req = JSON.stringify({'seq': 100, 'type': 'request',
-                                  'command': 'disconnect'});
+          'command': 'disconnect'});
         conn.write('Content-Length: ' + req.length + '\r\n\r\n' + req);
       } finally {
         msg = null;

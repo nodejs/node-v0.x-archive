@@ -95,7 +95,7 @@ function doTest(testOptions, callback) {
       '-cert', join(common.fixturesDir, 'agent.crt'),
       '-reconnect'
     ].concat(testOptions.tickets ? [] : '-no_ticket'), {
-      stdio: [ 0, 1, 'pipe' ]
+      stdio: [0, 1, 'pipe']
     });
     var err = '';
     client.stderr.setEncoding('utf8');

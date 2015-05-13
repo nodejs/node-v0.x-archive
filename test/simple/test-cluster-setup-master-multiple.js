@@ -45,7 +45,7 @@ cluster.on('setup', function() {
 var execs = [
   'node-next',
   'node-next-2',
-  'node-next-3',
+  'node-next-3'
 ];
 
 process.on('exit', function assertTests() {

@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var assert = require('assert');
-var cluster = require('cluster')
+var cluster = require('cluster');
 var net = require('net');
 
 var destroyed;
@@ -41,7 +41,7 @@ var server;
 if (cluster.isMaster) {
   server = net.createServer(function(conn) {
     server.close();
-    worker.disconnect()
+    worker.disconnect();
     worker.once('disconnect', function() {
       setTimeout(function() {
         conn.destroy();
@@ -58,8 +58,8 @@ if (cluster.isMaster) {
 
     worker = cluster.fork()
       .on('online', function() {
-        this.send({port: port});
-      });
+          this.send({port: port});
+        });
   });
   process.on('exit', function() {
     assert(success);

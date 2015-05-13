@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var assert = require('assert');
-var cluster = require('cluster')
+var cluster = require('cluster');
 var net = require('net');
 
 var SENTINEL = 42;
@@ -58,21 +58,21 @@ checkForced();
 function checkUnforced() {
   cluster.fork()
   .on('online', function() {
-    this.disconnect();
-  })
+        this.disconnect();
+      })
   .on('exit', function(status) {
-    assert.equal(status, SENTINEL);
-    unforcedOk = true;
-  });
+        assert.equal(status, SENTINEL);
+        unforcedOk = true;
+      });
 }
 
 function checkForced() {
   cluster.fork()
   .on('online', function() {
-    this.process.disconnect();
-  })
+        this.process.disconnect();
+      })
   .on('exit', function(status) {
-    assert.equal(status, 0);
-    forcedOk = true;
-  });
+        assert.equal(status, 0);
+        forcedOk = true;
+      });
 }

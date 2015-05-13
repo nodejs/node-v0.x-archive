@@ -32,11 +32,11 @@ process.on('exit', function(c) {
 domain.create().run(function() {
   domain.create().run(function() {
     domain.create().run(function() {
-      domain.create().on("error", function(e) {
-          // Don't need to do anything here
+      domain.create().on('error', function(e) {
+        // Don't need to do anything here
       }).run(function() {
-        throw new Error("died")
-      })
-    })
-  })
-})
+        throw new Error('died');
+      });
+    });
+  });
+});

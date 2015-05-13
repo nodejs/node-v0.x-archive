@@ -44,7 +44,8 @@ process.on('exit', function() {
   assert.equal(nconns, 6);
 });
 
-function test(honorCipherOrder, clientCipher, expectedCipher, secureOptions, cb) {
+function test(honorCipherOrder, clientCipher,
+    expectedCipher, secureOptions, cb) {
   var soptions = {
     secureProtocol: SSL_Method,
     key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
@@ -59,7 +60,8 @@ function test(honorCipherOrder, clientCipher, expectedCipher, secureOptions, cb)
   });
 
   if (!!honorCipherOrder) {
-    assert.strictEqual(server.secureOptions & opCipher, opCipher, 'we should preserve cipher preference');
+    assert.strictEqual(server.secureOptions & opCipher, opCipher,
+        'we should preserve cipher preference');
   }
 
   if (secureOptions) {
@@ -67,10 +69,10 @@ function test(honorCipherOrder, clientCipher, expectedCipher, secureOptions, cb)
     if (!!honorCipherOrder) expectedSecureOpts |= opCipher;
 
     assert.strictEqual(server.secureOptions & expectedSecureOpts,
-                       expectedSecureOpts, 'we should preserve secureOptions');
+        expectedSecureOpts, 'we should preserve secureOptions');
     assert.strictEqual(server.secureOptions & ~expectedSecureOpts,
-                       0,
-                       'we should not add extra options');
+        0,
+        'we should not add extra options');
   }
 
   server.listen(common.PORT, localhost, function() {
@@ -95,7 +97,7 @@ test1();
 
 function test1() {
   // Client has the preference of cipher suites by default
-  test(false, 'DES-CBC-SHA:RC4-SHA:AES256-SHA','DES-CBC-SHA', 0, test2);
+  test(false, 'DES-CBC-SHA:RC4-SHA:AES256-SHA', 'DES-CBC-SHA', 0, test2);
 }
 
 function test2() {

@@ -64,19 +64,19 @@ try {
 
 // PFX tests
 assert.doesNotThrow(function() {
-  tls.createSecureContext({pfx:certPfx, passphrase:'sample'});
+  tls.createSecureContext({pfx: certPfx, passphrase: 'sample'});
 });
 
 assert.throws(function() {
-  tls.createSecureContext({pfx:certPfx});
+  tls.createSecureContext({pfx: certPfx});
 }, 'mac verify failure');
 
 assert.throws(function() {
-  tls.createSecureContext({pfx:certPfx, passphrase:'test'});
+  tls.createSecureContext({pfx: certPfx, passphrase: 'test'});
 }, 'mac verify failure');
 
 assert.throws(function() {
-  tls.createSecureContext({pfx:'sample', passphrase:'test'});
+  tls.createSecureContext({pfx: 'sample', passphrase: 'test'});
 }, 'not enough data');
 
 // Test HMAC

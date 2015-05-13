@@ -28,13 +28,13 @@ var fs = require('fs');
 var PORT = common.PORT;
 var dir = common.fixturesDir;
 var options = { key: fs.readFileSync(dir + '/test_key.pem'),
-                cert: fs.readFileSync(dir + '/test_cert.pem'),
-                ca: [ fs.readFileSync(dir + '/test_ca.pem') ] };
+  cert: fs.readFileSync(dir + '/test_cert.pem'),
+  ca: [fs.readFileSync(dir + '/test_ca.pem')] };
 
 var writes = [
   'some server data',
   'and a separate packet',
-  'and one more',
+  'and one more'
 ];
 var receivedWrites = 0;
 

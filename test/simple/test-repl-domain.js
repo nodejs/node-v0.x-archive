@@ -22,8 +22,8 @@
 var assert = require('assert');
 var common = require('../common.js');
 
-var util   = require('util');
-var repl   = require('repl');
+var util = require('util');
+var repl = require('repl');
 
 // A stream to push an array into a REPL
 function ArrayStream() {
@@ -47,15 +47,15 @@ putIn.write = function(data) {
   // Don't use assert for this because the domain might catch it, and
   // give a false negative.  Don't throw, just print and exit.
   if (data === 'OK\n') {
-      console.log('ok');
+    console.log('ok');
   }
   else {
-      console.error(data);
-      process.exit(1);
+    console.error(data);
+    process.exit(1);
   }
 };
 
 putIn.run([
-  'require("domain").create().on("error", function () { console.log("OK") })'
-  + '.run(function () { throw new Error("threw") })'
+  'require("domain").create().on("error", function () { console.log("OK") })' +
+      '.run(function () { throw new Error("threw") })'
 ]);

@@ -26,7 +26,7 @@ var tls = require('tls');
 function test1() {
   var ciphers = '';
   tls.createSecureContext = function(options) {
-    ciphers = options.ciphers
+    ciphers = options.ciphers;
   }
   var s = tls.connect(common.PORT);
   s.destroy();

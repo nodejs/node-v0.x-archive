@@ -62,7 +62,7 @@ fs.writeFileSync(filepathOne, 'hello');
 
 assert.doesNotThrow(
     function() {
-      var watcher = fs.watch(filepathOne)
+      var watcher = fs.watch(filepathOne);
       watcher.on('change', function(event, filename) {
         assert.equal('change', event);
 
@@ -144,7 +144,7 @@ assert.throws(function() {
 oldhandle.close(); // clean up
 
 assert.throws(function() {
-  var w = fs.watchFile(__filename, {persistent:false}, function(){});
+  var w = fs.watchFile(__filename, {persistent: false}, function() {});
   oldhandle = w._handle;
   w._handle = { stop: w._handle.stop };
   w.stop();

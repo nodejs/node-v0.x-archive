@@ -24,7 +24,7 @@ var assert = require('assert'),
 
 var complete;
 
-var server = http.createServer(function (req, res) {
+var server = http.createServer(function(req, res) {
   // We should not see the queued /thatotherone request within the server
   // as it should be aborted before it is sent.
   assert.equal(req.url, '/');
@@ -32,13 +32,13 @@ var server = http.createServer(function (req, res) {
   res.writeHead(200);
   res.write('foo');
 
-  complete = complete || function () {
+  complete = complete || function() {
     res.end();
   };
 });
 
 
-server.listen(0, function () {
+server.listen(0, function() {
   console.log('listen', server.address().port);
 
   var agent = new http.Agent({maxSockets: 1});

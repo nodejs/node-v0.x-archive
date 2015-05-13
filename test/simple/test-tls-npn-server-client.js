@@ -46,7 +46,7 @@ var serverOptions = {
     cb(null, tls.createSecureContext({
       key: loadPEM('agent2-key'),
       cert: loadPEM('agent2-cert'),
-      crl: loadPEM('ca2-crl'),
+      crl: loadPEM('ca2-crl')
     }));
   },
   NPNProtocols: ['a', 'b', 'c']

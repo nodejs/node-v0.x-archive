@@ -24,7 +24,7 @@ var common = require('../common.js');
 
 var spawn = require('child_process').spawn;
 
-var child = spawn(process.execPath, [ '-i' ], {
+var child = spawn(process.execPath, ['-i'], {
   stdio: [null, null, 2]
 });
 

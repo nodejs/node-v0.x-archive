@@ -64,7 +64,8 @@ server_http.listen(common.PORT, function() {
   req.end();
 });
 
-// Then try https server (requires functions to be mirroed in tls.js's CryptoStream)
+// Then try https server (requires functions to
+// be mirroed in tls.js's CryptoStream)
 
 var server_https = https.createServer(options, function(req, res) {
   console.log('got HTTPS request');
@@ -72,7 +73,7 @@ var server_https = https.createServer(options, function(req, res) {
   res.end(body);
 });
 
-server_https.listen(common.PORT+1, function() {
+server_https.listen(common.PORT + 1, function() {
   var req = https.request({
     port: common.PORT + 1,
     rejectUnauthorized: false

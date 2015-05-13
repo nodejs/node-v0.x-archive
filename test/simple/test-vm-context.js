@@ -43,7 +43,7 @@ assert.equal(3, context.foo);
 assert.equal('lala', context.thing);
 
 // Issue GH-227:
-assert.throws(function () {
+assert.throws(function() {
   vm.runInNewContext('', null, 'some.js');
 }, TypeError);
 
@@ -72,7 +72,7 @@ console.error('test RegExp as argument to assert.throws');
 script = vm.createScript('var assert = require(\'assert\'); assert.throws(' +
                          'function() { throw "hello world"; }, /hello/);',
                          'some.js');
-script.runInNewContext({ require : require });
+script.runInNewContext({ require: require });
 
 // Issue GH-7529
 script = vm.createScript('delete b');

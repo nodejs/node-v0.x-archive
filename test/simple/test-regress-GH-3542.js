@@ -43,8 +43,8 @@ function test(p) {
 
 test('//localhost/c$/windows/system32');
 test('//localhost/c$/windows');
-test('//localhost/c$/')
-test('\\\\localhost\\c$')
+test('//localhost/c$/');
+test('\\\\localhost\\c$');
 test('c:\\');
 test('c:');
 test(process.env.windir);

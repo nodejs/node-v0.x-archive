@@ -74,10 +74,10 @@ assert.equal(true, util.isError(Object.create(Error.prototype)));
 assert.ok(util.isObject({}) === true);
 
 // _extend
-assert.deepEqual(util._extend({a:1}),             {a:1});
-assert.deepEqual(util._extend({a:1}, []),         {a:1});
-assert.deepEqual(util._extend({a:1}, null),       {a:1});
-assert.deepEqual(util._extend({a:1}, true),       {a:1});
-assert.deepEqual(util._extend({a:1}, false),      {a:1});
-assert.deepEqual(util._extend({a:1}, {b:2}),      {a:1, b:2});
-assert.deepEqual(util._extend({a:1, b:2}, {b:3}), {a:1, b:3});
+assert.deepEqual(util._extend({a: 1}), {a: 1});
+assert.deepEqual(util._extend({a: 1}, []), {a: 1});
+assert.deepEqual(util._extend({a: 1}, null), {a: 1});
+assert.deepEqual(util._extend({a: 1}, true), {a: 1});
+assert.deepEqual(util._extend({a: 1}, false), {a: 1});
+assert.deepEqual(util._extend({a: 1}, {b: 2}), {a: 1, b: 2});
+assert.deepEqual(util._extend({a: 1, b: 2}, {b: 3}), {a: 1, b: 3});

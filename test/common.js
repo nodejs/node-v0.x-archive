@@ -48,8 +48,8 @@ if (!fs.existsSync(exports.opensslCli))
 if (process.platform === 'win32') {
   exports.faketimeCli = false;
 } else {
-  exports.faketimeCli = path.join(__dirname, "..", "tools", "faketime", "src",
-    "faketime");
+  exports.faketimeCli = path.join(__dirname, '..', 'tools', 'faketime', 'src',
+      'faketime');
 }
 
 var ifaces = os.networkInterfaces();
@@ -175,8 +175,8 @@ function leakedGlobals() {
     if (-1 === knownGlobals.indexOf(global[val]))
       leaked.push(val);
 
-  return leaked;
-};
+    return leaked;
+}
 exports.leakedGlobals = leakedGlobals;
 
 // Turn this off if the test should not check for global leaks.
@@ -243,7 +243,7 @@ exports.checkSpawnSyncRet = function(ret) {
 var etcServicesFileName = path.join('/etc', 'services');
 if (process.platform === 'win32') {
   etcServicesFileName = path.join(process.env.SystemRoot, 'System32', 'drivers',
-    'etc', 'services');
+      'etc', 'services');
 }
 
 /*
@@ -258,11 +258,11 @@ if (process.platform === 'win32') {
  */
 exports.getServiceName = function getServiceName(port, protocol) {
   if (port == null) {
-    throw new Error("Missing port number");
+    throw new Error('Missing port number');
   }
 
   if (typeof protocol !== 'string') {
-    throw new Error("Protocol must be a string");
+    throw new Error('Protocol must be a string');
   }
 
   /*
@@ -273,13 +273,13 @@ exports.getServiceName = function getServiceName(port, protocol) {
 
   try {
     /*
-     * I'm not a big fan of readFileSync, but reading /etc/services asynchronously
-     * here would require implementing a simple line parser, which seems overkill
-     * for a simple utility function that is not running concurrently with any
-     * other one.
+     * I'm not a big fan of readFileSync, but reading /etc/services
+     * asynchronously here would require implementing a simple
+     * line parser, which seems overkill for a simple utility function
+     * that is not running concurrently with any other one.
      */
     var servicesContent = fs.readFileSync(etcServicesFileName,
-      { encoding: 'utf8'});
+        { encoding: 'utf8'});
     var regexp = util.format('^(\\w+)\\s+\\s%d/%s\\s', port, protocol);
     var re = new RegExp(regexp, 'm');
 
@@ -287,22 +287,22 @@ exports.getServiceName = function getServiceName(port, protocol) {
     if (matches && matches.length > 1) {
       serviceName = matches[1];
     }
-  } catch(e) {
+  } catch (e) {
     console.error('Cannot read file: ', etcServicesFileName);
     return undefined;
   }
 
   return serviceName;
-}
+};
 
 exports.isValidHostname = function(str) {
   // See http://stackoverflow.com/a/3824105
   var re = new RegExp(
-    '^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])' +
-    '(\\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9]))*$');
+      '^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])' +
+      '(\\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9]))*$');
 
   return !!str.match(re) && str.length <= 255;
-}
+};
 exports.hasMultiLocalhost = function hasMultiLocalhost() {
   var TCP = process.binding('tcp_wrap').TCP;
   var t = new TCP();
@@ -328,4 +328,4 @@ exports.getNodeVersion = function getNodeVersion() {
     patch: patch,
     pre: pre
   };
-}
+};

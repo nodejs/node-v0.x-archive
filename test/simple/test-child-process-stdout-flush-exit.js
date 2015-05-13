@@ -45,14 +45,14 @@ if (process.argv[2] === 'child') {
   var gotBye = false;
 
   child.stderr.setEncoding('utf8');
-  child.stderr.on('data', function (data) {
+  child.stderr.on('data', function(data) {
     console.log('parent stderr: ' + data);
     assert.ok(false);
   });
 
   // check if we receive both 'hello' at start and 'goodbye' at end
   child.stdout.setEncoding('utf8');
-  child.stdout.on('data', function (data) {
+  child.stdout.on('data', function(data) {
     if (data.slice(0, 6) == 'hello\n') {
       gotHello = true;
     } else if (data.slice(data.length - 8) == 'goodbye\n') {
@@ -62,7 +62,7 @@ if (process.argv[2] === 'child') {
     }
   });
 
-  child.on('close', function (data) {
+  child.on('close', function(data) {
     assert(gotHello);
     assert(gotBye);
   });

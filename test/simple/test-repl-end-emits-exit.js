@@ -28,7 +28,7 @@ var common = require('../common'),
 
 // create a dummy stream that does nothing
 var stream = new Stream();
-stream.write = stream.pause = stream.resume = function(){};
+stream.write = stream.pause = stream.resume = function() {};
 stream.readable = stream.writable = true;
 
 function testTerminalMode() {

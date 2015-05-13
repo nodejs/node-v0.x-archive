@@ -20,23 +20,23 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var assert = require('assert'),
-  child_process = require('child_process'),
-  spawn = child_process.spawn,
-  fork = child_process.fork,
-  execFile = child_process.execFile,
-  windows = (process.platform === 'win32'),
-  cmd = (windows) ? 'rundll32' : 'ls',
-  invalidcmd = 'hopefully_you_dont_have_this_on_your_machine',
-  invalidArgsMsg = /Incorrect value of args option/,
-  invalidOptionsMsg = /options argument must be an object/,
-  empty = require('../common').fixturesDir + '/empty.js',
-  errors = 0;
+    child_process = require('child_process'),
+    spawn = child_process.spawn,
+    fork = child_process.fork,
+    execFile = child_process.execFile,
+    windows = (process.platform === 'win32'),
+    cmd = (windows) ? 'rundll32' : 'ls',
+    invalidcmd = 'hopefully_you_dont_have_this_on_your_machine',
+    invalidArgsMsg = /Incorrect value of args option/,
+    invalidOptionsMsg = /options argument must be an object/,
+    empty = require('../common').fixturesDir + '/empty.js',
+    errors = 0;
 
 try {
   // Ensure this throws a TypeError
   var child = spawn(invalidcmd, 'this is not an array');
 
-  child.on('error', function (err) {
+  child.on('error', function(err) {
     errors++;
   });
 
@@ -87,7 +87,8 @@ process.on('exit', function() {
 });
 
 // Argument types for combinatorics
-var a=[], o={}, c=(function callback(){}), s='string', u=undefined, n=null;
+var a = [], o = {}, c = (function callback() {});
+var s = 'string', u = undefined, n = null;
 
 // function spawn(file=f [,args=a] [, options=o]) has valid combinations:
 //   (f)

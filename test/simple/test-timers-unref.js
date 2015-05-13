@@ -66,5 +66,6 @@ process.on('exit', function() {
   assert.strictEqual(interval_fired, false, 'Interval should not fire');
   assert.strictEqual(timeout_fired, false, 'Timeout should not fire');
   assert.strictEqual(unref_timer, true, 'An unrefd timeout should still fire');
-  assert.strictEqual(unref_interval, true, 'An unrefd interval should still fire');
+  assert.strictEqual(unref_interval, true,
+      'An unrefd interval should still fire');
 });

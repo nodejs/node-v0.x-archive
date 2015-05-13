@@ -30,7 +30,7 @@ function expect(expected) {
     assert.deepEqual(actual.sort(), expected.sort());
   });
   function listener(name) {
-    actual.push(name)
+    actual.push(name);
   }
   return common.mustCall(listener, expected.length);
 }

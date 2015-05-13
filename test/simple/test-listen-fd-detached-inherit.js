@@ -45,7 +45,7 @@ switch (process.argv[2]) {
 // a more low-level approach, use child process IPC manually.
 function test() {
   var parent = spawn(process.execPath, [__filename, 'parent'], {
-    stdio: [ 0, 'pipe', 2 ]
+    stdio: [0, 'pipe', 2]
   });
   var json = '';
   parent.stdout.on('data', function(c) {
@@ -59,8 +59,8 @@ function test() {
     http.get({
       server: 'localhost',
       port: PORT,
-      path: '/',
-    }).on('response', function (res) {
+      path: '/'
+    }).on('response', function(res) {
       var s = '';
       res.on('data', function(c) {
         s += c.toString();
@@ -76,7 +76,7 @@ function test() {
         assert.equal(s, 'hello from child\n');
         assert.equal(res.statusCode, 200);
       });
-    })
+    });
   }
 }
 
@@ -90,7 +90,7 @@ function parent() {
     console.error('server listening on %d', PORT);
 
     var child = spawn(process.execPath, [__filename, 'child'], {
-      stdio: [ 0, 1, 2, server._handle ],
+      stdio: [0, 1, 2, server._handle],
       detached: true
     });
 

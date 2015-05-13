@@ -33,21 +33,21 @@ if (os.type() != 'SunOS') {
 /*
  * Some functions to create a recognizable stack.
  */
-var frames = [ 'stalloogle', 'bagnoogle', 'doogle' ];
+var frames = ['stalloogle', 'bagnoogle', 'doogle'];
 var expected;
 
-var stalloogle = function (str) {
+var stalloogle = function(str) {
   expected = str;
   os.loadavg();
 };
 
-var bagnoogle = function (arg0, arg1) {
+var bagnoogle = function(arg0, arg1) {
   stalloogle(arg0 + ' is ' + arg1 + ' except that it is read-only');
 };
 
 var done = false;
 
-var doogle = function () {
+var doogle = function() {
   if (!done)
     setTimeout(doogle, 10);
 
@@ -57,28 +57,28 @@ var doogle = function () {
 var spawn = require('child_process').spawn;
 var prefix = '/var/tmp/node';
 var corefile = prefix + '.' + process.pid;
-var args = [ corefile ];
+var args = [corefile];
 
 if (process.env.MDB_LIBRARY_PATH && process.env.MDB_LIBRARY_PATH != '')
-  args = args.concat([ '-L', process.env.MDB_LIBRARY_PATH ]);
+  args = args.concat(['-L', process.env.MDB_LIBRARY_PATH]);
 
 /*
  * We're going to use DTrace to stop us, gcore us, and set us running again
  * when we call getloadavg() -- with the implicit assumption that our
  * deepest function is the only caller of os.loadavg().
  */
-var dtrace = spawn('dtrace', [ '-qwn', 'syscall::getloadavg:entry/pid == ' +
-  process.pid + '/{stop(); system("gcore -o ' +
-  prefix + ' %d", pid); system("prun %d", pid); exit(0); }' ]);
+var dtrace = spawn('dtrace', ['-qwn', 'syscall::getloadavg:entry/pid == ' +
+      process.pid + '/{stop(); system("gcore -o ' +
+      prefix + ' %d", pid); system("prun %d", pid); exit(0); }']);
 
 var output = '';
 var unlinkSync = require('fs').unlinkSync;
 
-dtrace.stderr.on('data', function (data) {
+dtrace.stderr.on('data', function(data) {
   console.log('dtrace: ' + data);
 });
 
-dtrace.on('exit', function (code) {
+dtrace.on('exit', function(code) {
   if (code != 0) {
     console.error('dtrace exited with code ' + code);
     process.exit(code);
@@ -99,7 +99,7 @@ dtrace.on('exit', function (code) {
                                   'Release',
                                   'mdb_v8.so'));
 
-  mdb.on('exit', function (code) {
+  mdb.on('exit', function(code) {
     var retained = '; core retained as ' + corefile;
 
     if (code != 0) {
@@ -127,16 +127,16 @@ dtrace.on('exit', function (code) {
       var top = frames.shift();
 
       assert.equal(frame.indexOf(top), 0, 'unexpected frame where ' +
-        top + ' was expected' + retained);
+          top + ' was expected' + retained);
 
       matched++;
     }
 
     assert.equal(frames.length, 0, 'did not find expected frame ' +
-      frames[0] + retained);
+        frames[0] + retained);
 
     assert.notEqual(straddr, undefined,
-      'did not find arg1 for top frame' + retained);
+        'did not find arg1 for top frame' + retained);
 
     /*
      * Now we're going to take one more swing at the core file to print out
@@ -145,24 +145,24 @@ dtrace.on('exit', function (code) {
     output = '';
     mdb = spawn('mdb', args, { stdio: 'pipe' });
 
-    mdb.on('exit', function (code) {
+    mdb.on('exit', function(code) {
       if (code != 0) {
         console.error('mdb (second) exited with code ' + code + retained);
         process.exit(code);
       }
 
       assert.notEqual(output.indexOf(expected), -1, 'did not find arg1 (' +
-        straddr + ') to contain expected string' + retained);
+          straddr + ') to contain expected string' + retained);
 
       unlinkSync(corefile);
       process.exit(0);
     });
 
-    mdb.stdout.on('data', function (data) {
+    mdb.stdout.on('data', function(data) {
       output += data;
     });
 
-    mdb.stderr.on('data', function (data) {
+    mdb.stderr.on('data', function(data) {
       console.log('mdb (second) stderr: ' + data);
     });
 
@@ -171,11 +171,11 @@ dtrace.on('exit', function (code) {
     mdb.stdin.end();
   });
 
-  mdb.stdout.on('data', function (data) {
+  mdb.stdout.on('data', function(data) {
     output += data;
   });
 
-  mdb.stderr.on('data', function (data) {
+  mdb.stderr.on('data', function(data) {
     console.log('mdb stderr: ' + data);
   });
 

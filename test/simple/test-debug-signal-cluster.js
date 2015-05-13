@@ -23,9 +23,9 @@ var common = require('../common');
 var assert = require('assert');
 var spawn = require('child_process').spawn;
 
-var args = [ common.fixturesDir + '/clustered-server/app.js' ];
+var args = [common.fixturesDir + '/clustered-server/app.js'];
 var child = spawn(process.execPath, args, {
-  stdio: [ 'pipe', 'pipe', 'pipe', 'ipc' ]
+  stdio: ['pipe', 'pipe', 'pipe', 'ipc']
 });
 var outputLines = [];
 var outputTimerId;
@@ -84,7 +84,7 @@ var expectedLines = [
   'Starting debugger agent.',
   'Debugger listening on port ' + 5859,
   'Starting debugger agent.',
-  'Debugger listening on port ' + 5860,
+  'Debugger listening on port ' + 5860
 ];
 
 function assertOutputLines() {

@@ -75,7 +75,7 @@ function error_test() {
   client_unix.on('data', function(data) {
     read_buffer += data.toString('ascii', 0, data.length);
     console.error('Unix data: ' + JSON.stringify(read_buffer) + ', expecting ' +
-                 (client_unix.expect.exec ?
+                  (client_unix.expect.exec ?
                   client_unix.expect :
                   JSON.stringify(client_unix.expect)));
 
@@ -112,6 +112,17 @@ function error_test() {
     }
   });
 
+  var dupDataPropertyRegExp = new RegExp('^SyntaxError: Duplicate' +
+      'data property in object literal not allowed in strict mode');
+  var dupParamNameRegExp = new RegExp('^SyntaxError: Strict mode' +
+      'function may not have duplicate parameter names');
+  var includeWithStmtRegExp = new RegExp('^SyntaxError: Strict mode' +
+      'code may not include a with statement');
+  var delUnqualifiedIdentifierStrictRegExp = new RegExp('^SyntaxError: Delete' +
+      'of an unqualified identifier in strict mode');
+  var immediateWithinFuncRegExp = new RegExp('^SyntaxError: In strict' +
+      'mode code, functions can only be declared at top level or' +
+      'immediately within another function');
   send_expect([
     // Uncaught error throws and prints out
     { client: client_unix, send: 'throw new Error(\'test error\');',
@@ -154,20 +165,26 @@ function error_test() {
     { client: client_unix, send: 'new RegExp("foo", "wrong modifier");',
       expect: /^SyntaxError: Invalid flags supplied to RegExp constructor/ },
     // strict mode syntax errors should be caught (GH-5178)
-    { client: client_unix, send: '(function() { "use strict"; return 0755; })()',
+    { client: client_unix, send:
+          '(function() { "use strict"; return 0755; })()',
       expect: /^SyntaxError: Octal literals are not allowed in strict mode/ },
-    { client: client_unix, send: '(function() { "use strict"; return { p: 1, p: 2 }; })()',
-      expect: /^SyntaxError: Duplicate data property in object literal not allowed in strict mode/ },
-    { client: client_unix, send: '(function(a, a, b) { "use strict"; return a + b + c; })()',
-      expect: /^SyntaxError: Strict mode function may not have duplicate parameter names/ },
-    { client: client_unix, send: '(function() { "use strict"; with (this) {} })()',
-      expect: /^SyntaxError: Strict mode code may not include a with statement/ },
-    { client: client_unix, send: '(function() { "use strict"; var x; delete x; })()',
-      expect: /^SyntaxError: Delete of an unqualified identifier in strict mode/ },
+    { client: client_unix, send:
+          '(function() { "use strict"; return { p: 1, p: 2 }; })()',
+      expect: dupDataPropertyRegExp},
+    { client: client_unix,
+      send: '(function(a, a, b) { "use strict"; return a + b + c; })()',
+      expect: dupParamNameRegExp},
+    { client: client_unix,
+      send: '(function() { "use strict"; with (this) {} })()',
+      expect: includeWithStmtRegExp},
+    { client: client_unix,
+      send: '(function() { "use strict"; var x; delete x; })()',
+      expect: delUnqualifiedIdentifierStrictRegExp},
     { client: client_unix, send: '(function() { "use strict"; eval = 17; })()',
       expect: /^SyntaxError: Unexpected eval or arguments in strict mode/ },
-    { client: client_unix, send: '(function() { "use strict"; if (true){ function f() { } } })()',
-      expect: /^SyntaxError: In strict mode code, functions can only be declared at top level or immediately within another function/ },
+    { client: client_unix,
+      send: '(function() { "use strict"; if (true){ function f() { } } })()',
+      expect: immediateWithinFuncRegExp},
     // Named functions can be used:
     { client: client_unix, send: 'function blah() { return 1; }',
       expect: prompt_unix },
@@ -240,7 +257,7 @@ function tcp_test() {
     client_tcp.on('data', function(data) {
       read_buffer += data.toString('ascii', 0, data.length);
       console.error('TCP data: ' + JSON.stringify(read_buffer) +
-                   ', expecting ' + JSON.stringify(client_tcp.expect));
+                    ', expecting ' + JSON.stringify(client_tcp.expect));
       if (read_buffer.indexOf(prompt_tcp) !== -1) {
         assert.strictEqual(client_tcp.expect, read_buffer);
         console.error('match');
@@ -309,7 +326,7 @@ function unix_test() {
     client_unix.on('data', function(data) {
       read_buffer += data.toString('ascii', 0, data.length);
       console.error('Unix data: ' + JSON.stringify(read_buffer) +
-                   ', expecting ' + JSON.stringify(client_unix.expect));
+                    ', expecting ' + JSON.stringify(client_unix.expect));
       if (read_buffer.indexOf(prompt_unix) !== -1) {
         assert.strictEqual(client_unix.expect, read_buffer);
         console.error('match');

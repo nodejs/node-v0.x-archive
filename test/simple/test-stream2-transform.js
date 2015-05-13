@@ -45,7 +45,7 @@ function run() {
     same: assert.deepEqual,
     equal: assert.equal,
     ok: assert,
-    end: function () {
+    end: function() {
       count--;
       run();
     }
@@ -53,7 +53,7 @@ function run() {
 }
 
 // ensure all tests have run
-process.on("exit", function () {
+process.on('exit', function() {
   assert.equal(count, 0);
 });
 
@@ -104,7 +104,7 @@ test('passthrough', function(t) {
   t.end();
 });
 
-test('object passthrough', function (t) {
+test('object passthrough', function(t) {
   var pt = new PassThrough({ objectMode: true });
 
   pt.write(1);
@@ -208,7 +208,7 @@ test('assymetric transform (expand)', function(t) {
       setTimeout(function() {
         pt.push(chunk);
         cb();
-      }, 10)
+      }, 10);
     }, 10);
   };
 
@@ -288,7 +288,7 @@ test('assymetric transform (compress)', function(t) {
 test('complex transform', function(t) {
   var count = 0;
   var saved = null;
-  var pt = new Transform({highWaterMark:3});
+  var pt = new Transform({highWaterMark: 3});
   pt._transform = function(c, e, cb) {
     if (count++ === 1)
       saved = c;
@@ -372,7 +372,7 @@ test('passthrough event emission reordered', function(t) {
   var pt = new PassThrough;
   var emits = 0;
   pt.on('readable', function() {
-    console.error('emit readable', emits)
+    console.error('emit readable', emits);
     emits++;
   });
 
@@ -454,8 +454,8 @@ test('object transform (json parse)', function(t) {
   var objects = [
     { foo: 'bar' },
     100,
-    "string",
-    { nested: { things: [ { foo: 'bar' }, 100, "string" ] } }
+    'string',
+    { nested: { things: [{ foo: 'bar' }, 100, 'string'] } }
   ];
 
   var ended = false;
@@ -476,7 +476,7 @@ test('object transform (json parse)', function(t) {
   process.nextTick(function() {
     t.ok(ended);
     t.end();
-  })
+  });
 });
 
 test('object transform (json stringify)', function(t) {
@@ -496,8 +496,8 @@ test('object transform (json stringify)', function(t) {
   var objects = [
     { foo: 'bar' },
     100,
-    "string",
-    { nested: { things: [ { foo: 'bar' }, 100, "string" ] } }
+    'string',
+    { nested: { things: [{ foo: 'bar' }, 100, 'string'] } }
   ];
 
   var ended = false;
@@ -518,5 +518,5 @@ test('object transform (json stringify)', function(t) {
   process.nextTick(function() {
     t.ok(ended);
     t.end();
-  })
+  });
 });

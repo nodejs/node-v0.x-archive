@@ -60,7 +60,7 @@ someObject._onTimeout = function _onTimeout() {
   if (nbTimeouts === N) timers.unenroll(someObject);
 
   timers._unrefActive(someObject);
-}
+};
 
 function startTimer() { timers._unrefActive(someObject); }
 

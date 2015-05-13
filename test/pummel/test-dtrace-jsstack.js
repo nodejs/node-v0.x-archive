@@ -32,21 +32,21 @@ if (os.type() != 'SunOS') {
 /*
  * Some functions to create a recognizable stack.
  */
-var frames = [ 'stalloogle', 'bagnoogle', 'doogle' ];
+var frames = ['stalloogle', 'bagnoogle', 'doogle'];
 var expected;
 
-var stalloogle = function (str) {
+var stalloogle = function(str) {
   expected = str;
   os.loadavg();
 };
 
-var bagnoogle = function (arg0, arg1) {
+var bagnoogle = function(arg0, arg1) {
   stalloogle(arg0 + ' is ' + arg1 + ' except that it is read-only');
 };
 
 var done = false;
 
-var doogle = function () {
+var doogle = function() {
   if (!done)
     setTimeout(doogle, 10);
 
@@ -62,20 +62,20 @@ var corefile = prefix + '.' + process.pid;
  * when we call getloadavg() -- with the implicit assumption that our
  * deepest function is the only caller of os.loadavg().
  */
-var dtrace = spawn('dtrace', [ '-qwn', 'syscall::getloadavg:entry/pid == ' +
-  process.pid + '/{ustack(100, 8192); exit(0); }' ]);
+var dtrace = spawn('dtrace', ['-qwn', 'syscall::getloadavg:entry/pid == ' +
+      process.pid + '/{ustack(100, 8192); exit(0); }']);
 
 var output = '';
 
-dtrace.stderr.on('data', function (data) {
+dtrace.stderr.on('data', function(data) {
   console.log('dtrace: ' + data);
 });
 
-dtrace.stdout.on('data', function (data) {
+dtrace.stdout.on('data', function(data) {
   output += data;
 });
 
-dtrace.on('exit', function (code) {
+dtrace.on('exit', function(code) {
   if (code != 0) {
     console.error('dtrace exited with code ' + code);
     process.exit(code);
@@ -96,7 +96,7 @@ dtrace.on('exit', function (code) {
     var top = frames.shift();
 
     assert.equal(frame.indexOf(top), 0, 'unexpected frame where ' +
-      top + ' was expected');
+        top + ' was expected');
   }
 
   assert.equal(frames.length, 0, 'did not find expected frame ' + frames[0]);

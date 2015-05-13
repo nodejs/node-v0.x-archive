@@ -33,13 +33,13 @@ function removeFile(file) {
   } catch (err) {
     // Ignore error
   }
-};
+}
 
 function createFileWithPerms(file, mode) {
   removeFile(file);
   fs.writeFileSync(file, '');
   fs.chmodSync(file, mode);
-};
+}
 
 createFileWithPerms(readOnlyFile, 0444);
 createFileWithPerms(readWriteFile, 0666);
@@ -136,7 +136,7 @@ assert.doesNotThrow(function() {
 
 assert.throws(function() {
   fs.accessSync(doesNotExist);
-}, function (err) {
+}, function(err) {
   return err.code === 'ENOENT' && err.path === doesNotExist;
 });
 

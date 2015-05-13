@@ -29,7 +29,7 @@ var enoentPath = 'foo123';
 assert.equal(fs.existsSync(enoentPath), false);
 
 var enoentChild = spawn(enoentPath);
-enoentChild.on('error', function (err) {
+enoentChild.on('error', function(err) {
   assert.equal(err.path, enoentPath);
   errors++;
 });

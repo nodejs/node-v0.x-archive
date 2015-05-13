@@ -59,7 +59,7 @@ function tmp(p) {
 var fixturesAbsDir = common.fixturesDir;
 var tmpAbsDir = common.tmpDir;
 
-console.error("absolutes\n%s\n%s", fixturesAbsDir, tmpAbsDir);
+console.error('absolutes\n%s\n%s', fixturesAbsDir, tmpAbsDir);
 
 function asynctest(testBlock, args, callback, assertBlock) {
   async_expected++;
@@ -389,12 +389,14 @@ function test_escape_cwd(cb) {
   console.log('test_escape_cwd');
   asynctest(fs.realpath, ['..'], cb, function(er, uponeActual) {
     assert.equal(upone, uponeActual,
-        'realpath("..") expected: ' + path.resolve(upone) + ' actual:' + uponeActual);
+        'realpath("..") expected: ' + path.resolve(upone) +
+            ' actual:' + uponeActual);
   });
 }
 var uponeActual = fs.realpathSync('..');
 assert.equal(upone, uponeActual,
-    'realpathSync("..") expected: ' + path.resolve(upone) + ' actual:' + uponeActual);
+    'realpathSync("..") expected: ' + path.resolve(upone) +
+        ' actual:' + uponeActual);
 
 
 // going up with .. multiple times
@@ -436,10 +438,10 @@ function test_up_multiple(cb) {
 
   assert.equal(fs.realpathSync(abedabeda), abedabeda_real);
   assert.equal(fs.realpathSync(abedabed), abedabed_real);
-  fs.realpath(abedabeda, function (er, real) {
+  fs.realpath(abedabeda, function(er, real) {
     if (er) throw er;
     assert.equal(abedabeda_real, real);
-    fs.realpath(abedabed, function (er, real) {
+    fs.realpath(abedabed, function(er, real) {
       if (er) throw er;
       assert.equal(abedabed_real, real);
       cb();
@@ -522,7 +524,7 @@ function test_lying_cache_liar(cb) {
   if (isWindows) {
     var wc = {};
     Object.keys(cache).forEach(function(k) {
-      wc[ path.resolve(k) ] = path.resolve(cache[k]);
+      wc[path.resolve(k)] = path.resolve(cache[k]);
     });
     cache = wc;
   }

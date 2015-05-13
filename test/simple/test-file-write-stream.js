@@ -26,16 +26,16 @@ var path = require('path');
 var fs = require('fs');
 var fn = path.join(common.tmpDir, 'write.txt');
 var file = fs.createWriteStream(fn, {
-      highWaterMark: 10
-    });
+  highWaterMark: 10
+});
 
 var EXPECTED = '012345678910';
 
 var callbacks = {
-      open: -1,
-      drain: -2,
-      close: -1
-    };
+  open: -1,
+  drain: -2,
+  close: -1
+};
 
 file
   .on('open', function(fd) {

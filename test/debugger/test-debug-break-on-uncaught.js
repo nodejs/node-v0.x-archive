@@ -41,7 +41,7 @@ var scenarios;
 function addScenario(scriptName, throwsInFile, throwsOnLine) {
   if (!scenarios) scenarios = [];
   scenarios.push(
-    runScenario.bind(null, scriptName, throwsInFile, throwsOnLine, run)
+      runScenario.bind(null, scriptName, throwsInFile, throwsOnLine, run)
   );
 }
 
@@ -56,16 +56,16 @@ function runScenario(scriptName, throwsInFile, throwsOnLine, next) {
   var port = common.PORT + 1337;
 
   var testScript = path.join(
-    common.fixturesDir,
-    'uncaught-exceptions',
-    scriptName
-  );
+      common.fixturesDir,
+      'uncaught-exceptions',
+      scriptName
+      );
 
-  var child = spawn(process.execPath, [ '--debug-brk=' + port, testScript ]);
+  var child = spawn(process.execPath, ['--debug-brk=' + port, testScript]);
   child.on('close', function() {
     assert(asserted, 'debugger did not pause on exception');
     if (next) next();
-  })
+  });
 
   var exceptions = [];
 
@@ -90,25 +90,25 @@ function runScenario(scriptName, throwsInFile, throwsOnLine, next) {
 
   function runTest(client) {
     client.req(
-      {
-        command: 'setexceptionbreak',
-        arguments: {
-          type: 'uncaught',
-          enabled: true
-        }
-      },
-      function(error, result) {
-        assert.ifError(error);
-
-        client.on('exception', function(event) {
-          exceptions.push(event.body);
-        });
-
-        client.reqContinue(function(error, result) {
+        {
+          command: 'setexceptionbreak',
+          arguments: {
+            type: 'uncaught',
+            enabled: true
+          }
+        },
+        function(error, result) {
           assert.ifError(error);
-          setTimeout(assertHasPaused.bind(null, client), 100);
-        });
-      }
+
+          client.on('exception', function(event) {
+            exceptions.push(event.body);
+          });
+
+          client.reqContinue(function(error, result) {
+            assert.ifError(error);
+            setTimeout(assertHasPaused.bind(null, client), 100);
+          });
+        }
     );
   }
 

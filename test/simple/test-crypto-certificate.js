@@ -40,13 +40,11 @@ assert.equal(certificate.verifySpkac(spkacValid), true);
 assert.equal(certificate.verifySpkac(spkacFail), false);
 
 assert.equal(stripLineEndings(certificate.exportPublicKey(spkacValid)
-							  .toString('utf8')),
-			 stripLineEndings(spkacPem.toString('utf8')));
+    .toString('utf8')), stripLineEndings(spkacPem.toString('utf8')));
 assert.equal(certificate.exportPublicKey(spkacFail), '');
 
 assert.equal(certificate.exportChallenge(spkacValid)
-			 .toString('utf8'),
-			 'fb9ab814-6677-42a4-a60c-f905d1a6924d');
+  .toString('utf8'), 'fb9ab814-6677-42a4-a60c-f905d1a6924d');
 assert.equal(certificate.exportChallenge(spkacFail), '');
 
 function stripLineEndings(obj) {

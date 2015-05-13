@@ -30,7 +30,7 @@ var immediateA = false,
 setImmediate(function() {
   try {
     immediateA = process.hrtime(before);
-  } catch(e) {
+  } catch (e) {
     console.log('failed to get hrtime with offset');
   }
   clearImmediate(immediateB);

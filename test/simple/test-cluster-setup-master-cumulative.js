@@ -34,7 +34,7 @@ assert.deepEqual(cluster.settings, {
   args: process.argv.slice(2),
   exec: process.argv[1],
   execArgv: process.execArgv,
-  silent: false,
+  silent: false
 });
 console.log('ok sets defaults');
 
@@ -57,6 +57,6 @@ assert.deepEqual(cluster.settings, {
   args: ['foo', 'bar'],
   exec: 'overridden',
   execArgv: ['baz', 'bang'],
-  silent: false,
+  silent: false
 });
 console.log('ok preserves current settings');

@@ -32,13 +32,13 @@ var accum = [];
 var timeout;
 
 src._read = function(n) {
-  if(!hasRead) {
+  if (!hasRead) {
     hasRead = true;
     process.nextTick(function() {
       src.push(new Buffer('1'));
       src.push(null);
     });
-  };
+  }
 };
 
 dst._write = function(chunk, enc, cb) {
@@ -49,7 +49,7 @@ dst._write = function(chunk, enc, cb) {
 src.on('end', function() {
   assert.equal(Buffer.concat(accum) + '', 'MQ==');
   clearTimeout(timeout);
-})
+});
 
 src.pipe(dst);
 

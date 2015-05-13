@@ -40,8 +40,8 @@ var tests = [
   { host: 'b.a.com', cert: {
     subjectaltname: 'DNS:omg.com',
     subject: { CN: '*.a.com' } },
-    error: 'Host: b.a.com. is not in the cert\'s altnames: ' +
-           'DNS:omg.com'
+  error: 'Host: b.a.com. is not in the cert\'s altnames: ' +
+      'DNS:omg.com'
   },
 
   // Multiple CN fields
@@ -58,7 +58,7 @@ var tests = [
       subject: { CN: 'b.com' }
     },
     error: 'Host: a.com. is not in the cert\'s altnames: ' +
-           'DNS:*'
+        'DNS:*'
   },
   {
     host: 'a.com', cert: {
@@ -66,7 +66,7 @@ var tests = [
       subject: { CN: 'b.com' }
     },
     error: 'Host: a.com. is not in the cert\'s altnames: ' +
-           'DNS:*.com'
+        'DNS:*.com'
   },
   {
     host: 'a.co.uk', cert: {
@@ -80,7 +80,7 @@ var tests = [
       subject: { CN: 'a.com' }
     },
     error: 'Host: a.com. is not in the cert\'s altnames: ' +
-           'DNS:*.a.com'
+        'DNS:*.a.com'
   },
   {
     host: 'a.com', cert: {
@@ -88,7 +88,7 @@ var tests = [
       subject: { CN: 'b.com' }
     },
     error: 'Host: a.com. is not in the cert\'s altnames: ' +
-           'DNS:*.a.com'
+        'DNS:*.a.com'
   },
   {
     host: 'a.com', cert: {
@@ -110,7 +110,7 @@ var tests = [
       subject: {}
     },
     error: 'Host: a.com. is not in the cert\'s altnames: ' +
-           'DNS:*.a.com'
+        'DNS:*.a.com'
   },
   {
     host: 'b.a.com', cert: {
@@ -124,7 +124,7 @@ var tests = [
       subject: {}
     },
     error: 'Host: c.b.a.com. is not in the cert\'s altnames: ' +
-           'DNS:*.a.com'
+        'DNS:*.a.com'
   },
   {
     host: 'b.a.com', cert: {
@@ -144,7 +144,7 @@ var tests = [
       subject: {}
     },
     error: 'Host: a.b.a.com. is not in the cert\'s altnames: ' +
-           'DNS:*b.a.com'
+        'DNS:*b.a.com'
   },
   // Mutliple DNS names
   {
@@ -166,7 +166,7 @@ var tests = [
       subject: {}
     },
     error: 'Host: a.b.a.com. is not in the cert\'s altnames: ' +
-           'URI:http://*.b.a.com/'
+        'URI:http://*.b.a.com/'
   },
   // IP addresses
   {
@@ -175,7 +175,7 @@ var tests = [
       subject: {}
     },
     error: 'Host: a.b.a.com. is not in the cert\'s altnames: ' +
-           'IP Address:127.0.0.1'
+        'IP Address:127.0.0.1'
   },
   {
     host: '127.0.0.1', cert: {
@@ -189,7 +189,7 @@ var tests = [
       subject: {}
     },
     error: 'IP: 127.0.0.2 is not in the cert\'s list: ' +
-           '127.0.0.1'
+        '127.0.0.1'
   },
   {
     host: '127.0.0.1', cert: {
@@ -204,8 +204,8 @@ var tests = [
       subject: { CN: 'localhost' }
     },
     error: 'Host: localhost. is not in the cert\'s altnames: ' +
-           'DNS:a.com'
-  },
+        'DNS:a.com'
+  }
 ];
 
 tests.forEach(function(test, i) {

@@ -40,7 +40,7 @@ options = {
 };
 
 // the "proxy" server
-a = tls.createServer(options, function (socket) {
+a = tls.createServer(options, function(socket) {
   var options = {
     host: '127.0.0.1',
     port: b.address().port,
@@ -52,16 +52,16 @@ a = tls.createServer(options, function (socket) {
 });
 
 // the "target" server
-b = tls.createServer(options, function (socket) {
+b = tls.createServer(options, function(socket) {
   socket.end('hello');
 });
 
-process.on('exit', function () {
+process.on('exit', function() {
   assert(gotHello);
 });
 
-a.listen(common.PORT, function () {
-  b.listen(common.PORT + 1, function () {
+a.listen(common.PORT, function() {
+  b.listen(common.PORT + 1, function() {
     options = {
       host: '127.0.0.1',
       port: a.address().port,
@@ -74,11 +74,11 @@ a.listen(common.PORT, function () {
       rejectUnauthorized: false
     });
     ssl.setEncoding('utf8');
-    ssl.once('data', function (data) {
+    ssl.once('data', function(data) {
       assert.equal('hello', data);
       gotHello = true;
     });
-    ssl.on('end', function () {
+    ssl.on('end', function() {
       ssl.end();
       a.close();
       b.close();

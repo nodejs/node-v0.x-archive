@@ -43,24 +43,24 @@ if (process.argv[2] !== 'child') {
 
   // in the error handler, we trigger several MakeCallback events
   d.on('error', function(e) {
-    console.log('a')
-    console.log('b')
-    console.log('c')
-    console.log('d')
-    console.log('e')
+    console.log('a');
+    console.log('b');
+    console.log('c');
+    console.log('d');
+    console.log('e');
     f();
   });
 
   function f() {
     process.nextTick(function() {
       d.run(function() {
-        throw(new Error('x'));
+        throw (new Error('x'));
       });
     });
   }
 
   f();
-  setTimeout(function () {
+  setTimeout(function() {
     console.error('broke in!');
     //process.stdout.close();
     //process.stderr.close();

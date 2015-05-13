@@ -43,7 +43,7 @@ function run() {
   fn({
     same: assert.deepEqual,
     equal: assert.equal,
-    end: function () {
+    end: function() {
       count--;
       run();
     }
@@ -51,7 +51,7 @@ function run() {
 }
 
 // ensure all tests have run
-process.on("exit", function () {
+process.on('exit', function() {
   assert.equal(count, 0);
 });
 
@@ -62,10 +62,10 @@ process.nextTick(run);
 test('buffers', function(t) {
   // have a length
   var len = 16;
-  var list = [ new Buffer('foog'),
+  var list = [new Buffer('foog'),
                new Buffer('bark'),
                new Buffer('bazy'),
-               new Buffer('kuel') ];
+               new Buffer('kuel')];
 
   // read more than the first element.
   var ret = fromList(6, { buffer: list, length: 16 });
@@ -92,10 +92,10 @@ test('buffers', function(t) {
 test('strings', function(t) {
   // have a length
   var len = 16;
-  var list = [ 'foog',
-               'bark',
-               'bazy',
-               'kuel' ];
+  var list = ['foog',
+    'bark',
+    'bazy',
+    'kuel'];
 
   // read more than the first element.
   var ret = fromList(6, { buffer: list, length: 16, decoder: true });
