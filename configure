@@ -466,6 +466,13 @@ def host_arch_win():
   return matchup.get(arch, 'ia32')
 
 
+def int_lenient(n):
+  try:
+    return int(n)
+  except ValueError:
+    return 0
+
+
 def compiler_version():
   try:
     proc = subprocess.Popen(shlex.split(CC) + ['--version'],
@@ -477,7 +484,7 @@ def compiler_version():
 
   proc = subprocess.Popen(shlex.split(CC) + ['-dumpversion'],
                           stdout=subprocess.PIPE)
-  version = tuple(map(int, proc.communicate()[0].split('.')))
+  version = tuple(map(int_lenient, proc.communicate()[0].split('.')))
 
   return (version, is_clang)
 
