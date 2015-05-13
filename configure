@@ -332,12 +332,14 @@ def b(value):
 
 
 def pkg_config(pkg):
-  cmd = os.popen('pkg-config --libs %s' % pkg, 'r')
+  pkg_config = os.environ.get('PKG_CONFIG') or 'pkg-config'
+
+  cmd = os.popen('%s --libs %s' % (pkg_config, pkg), 'r')
   libs = cmd.readline().strip()
   ret = cmd.close()
   if (ret): return None
 
-  cmd = os.popen('pkg-config --cflags %s' % pkg, 'r')
+  cmd = os.popen('%s --cflags %s' % (pkg_config, pkg), 'r')
   cflags = cmd.readline().strip()
   ret = cmd.close()
   if (ret): return None
@@ -596,15 +598,21 @@ def configure_node(o):
 def configure_libz(o):
   o['variables']['node_shared_zlib'] = b(options.shared_zlib)
 
-  # assume shared_zlib if one of these is set?
-  if options.shared_zlib_libpath:
-    o['libraries'] += ['-L%s' % options.shared_zlib_libpath]
-  if options.shared_zlib_libname:
-    o['libraries'] += ['-l%s' % options.shared_zlib_libname]
-  elif options.shared_zlib:
-    o['libraries'] += ['-lz']
-  if options.shared_zlib_includes:
-    o['include_dirs'] += [options.shared_zlib_includes]
+  if options.shared_zlib:
+    (libs, cflags) = pkg_config('zlib') or ('-lz', '')
+
+    if options.shared_zlib_libpath:
+      o['libraries'] += ['-L%s' % options.shared_zlib_libpath]
+
+    if options.shared_zlib_libname:
+      o['libraries'] += ['-l%s' % options.shared_zlib_libname]
+    else:
+      o['libraries'] += libs.split()
+
+    if options.shared_zlib_includes:
+      o['include_dirs'] += [options.shared_zlib_includes]
+    else:
+      o['cflags'] += cflags.split()
 
 
 def configure_http_parser(o):
