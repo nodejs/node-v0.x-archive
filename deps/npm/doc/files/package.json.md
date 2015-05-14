@@ -17,14 +17,23 @@ them.  The name and version together form an identifier that is assumed
 to be completely unique.  Changes to the package should come along with
 changes to the version.
 
-The name is what your thing is called.  Some tips:
+The name is what your thing is called.
 
+Some rules:
+
+* The name must be shorter than 214 characters. This includes the scope for
+  scoped packages.
+* The name can't start with a dot or an underscore.
+* New packages must not have uppercase letters in the name.
+* The name ends up being part of a URL, an argument on the command line, and a
+  folder name. Therefore, the name can't contain any non-URL-safe characters.
+
+Some tips:
+
+* Don't use the same name as a core Node module.
 * Don't put "js" or "node" in the name.  It's assumed that it's js, since you're
   writing a package.json file, and you can specify the engine using the "engines"
   field.  (See below.)
-* The name ends up being part of a URL, an argument on the command line, and a
-  folder name. Any name with non-url-safe characters will be rejected.
-  Also, it can't start with a dot or an underscore.
 * The name will probably be passed as an argument to require(), so it should
   be something short, but also reasonably descriptive.
 * You may want to check the npm registry to see if there's something by that name
@@ -114,7 +123,7 @@ is an object with a "name" field and optionally "url" and "email", like this:
 
 Or you can shorten that all into a single string, and npm will parse it for you:
 
-    "Barney Rubble <b@rubble.com> (http://barnyrubble.tumblr.com/)
+    "Barney Rubble <b@rubble.com> (http://barnyrubble.tumblr.com/)"
 
 Both email and url are optional either way.
 
@@ -272,10 +281,16 @@ The URL should be a publicly available (perhaps read-only) url that can be hande
 directly to a VCS program without any modification.  It should not be a url to an
 html project page that you put in your browser.  It's for computers.
 
-For GitHub repositories you can use the same shortcut syntax you use for `npm
-install`:
+For GitHub, GitHub gist, Bitbucket, or GitLab repositories you can use the same
+shortcut syntax you use for `npm install`:
 
     "repository": "npm/npm"
+
+    "repository": "gist:11081aaa281"
+
+    "repository": "bitbucket:example/repo"
+
+    "repository": "gitlab:another/repo"
 
 ## scripts
 

@@ -21,14 +21,22 @@ Those are actually required, and your package won&#39;t install without
 them.  The name and version together form an identifier that is assumed
 to be completely unique.  Changes to the package should come along with
 changes to the version.</p>
-<p>The name is what your thing is called.  Some tips:</p>
+<p>The name is what your thing is called.</p>
+<p>Some rules:</p>
 <ul>
+<li>The name must be shorter than 214 characters. This includes the scope for
+scoped packages.</li>
+<li>The name can&#39;t start with a dot or an underscore.</li>
+<li>New packages must not have uppercase letters in the name.</li>
+<li>The name ends up being part of a URL, an argument on the command line, and a
+folder name. Therefore, the name can&#39;t contain any non-URL-safe characters.</li>
+</ul>
+<p>Some tips:</p>
+<ul>
+<li>Don&#39;t use the same name as a core Node module.</li>
 <li>Don&#39;t put &quot;js&quot; or &quot;node&quot; in the name.  It&#39;s assumed that it&#39;s js, since you&#39;re
 writing a package.json file, and you can specify the engine using the &quot;engines&quot;
 field.  (See below.)</li>
-<li>The name ends up being part of a URL, an argument on the command line, and a
-folder name. Any name with non-url-safe characters will be rejected.
-Also, it can&#39;t start with a dot or an underscore.</li>
 <li>The name will probably be passed as an argument to require(), so it should
 be something short, but also reasonably descriptive.</li>
 <li>You may want to check the npm registry to see if there&#39;s something by that name
@@ -89,7 +97,7 @@ is an object with a &quot;name&quot; field and optionally &quot;url&quot; and &q
 , &quot;url&quot; : &quot;http://barnyrubble.tumblr.com/&quot;
 }
 </code></pre><p>Or you can shorten that all into a single string, and npm will parse it for you:</p>
-<pre><code>&quot;Barney Rubble &lt;b@rubble.com&gt; (http://barnyrubble.tumblr.com/)
+<pre><code>&quot;Barney Rubble &lt;b@rubble.com&gt; (http://barnyrubble.tumblr.com/)&quot;
 </code></pre><p>Both email and url are optional either way.</p>
 <p>npm also sets a top-level &quot;maintainers&quot; field with your npm user info.</p>
 <h2 id="files">files</h2>
@@ -196,9 +204,15 @@ command will be able to find you.</p>
 </code></pre><p>The URL should be a publicly available (perhaps read-only) url that can be handed
 directly to a VCS program without any modification.  It should not be a url to an
 html project page that you put in your browser.  It&#39;s for computers.</p>
-<p>For GitHub repositories you can use the same shortcut syntax you use for <code>npm
-install</code>:</p>
+<p>For GitHub, GitHub gist, Bitbucket, or GitLab repositories you can use the same
+shortcut syntax you use for <code>npm install</code>:</p>
 <pre><code>&quot;repository&quot;: &quot;npm/npm&quot;
+
+&quot;repository&quot;: &quot;gist:11081aaa281&quot;
+
+&quot;repository&quot;: &quot;bitbucket:example/repo&quot;
+
+&quot;repository&quot;: &quot;gitlab:another/repo&quot;
 </code></pre><h2 id="scripts">scripts</h2>
 <p>The &quot;scripts&quot; property is a dictionary containing script commands that are run
 at various times in the lifecycle of your package.  The key is the lifecycle
@@ -496,5 +510,5 @@ ignored.</p>
 <tr><td style="width:60px;height:10px;background:rgb(237,127,127)" colspan=6>&nbsp;</td><td colspan=10 style="width:10px;height:10px;background:rgb(237,127,127)">&nbsp;</td></tr>
 <tr><td colspan=5 style="width:50px;height:10px;background:#fff">&nbsp;</td><td style="width:40px;height:10px;background:rgb(237,127,127)" colspan=4>&nbsp;</td><td style="width:90px;height:10px;background:#fff" colspan=9>&nbsp;</td></tr>
 </table>
-<p id="footer">npm-json &mdash; npm@2.7.4</p>
+<p id="footer">npm-json &mdash; npm@2.9.1</p>
 
