@@ -511,8 +511,12 @@ Example:
       console.log('STATUS: ' + res.statusCode);
       console.log('HEADERS: ' + JSON.stringify(res.headers));
       res.setEncoding('utf8');
+      var str = '';
       res.on('data', function (chunk) {
-        console.log('BODY: ' + chunk);
+        str += chunk;
+      });
+      res.on('end', function() {
+        console.log('BODY: ' + str);
       });
     });
 
