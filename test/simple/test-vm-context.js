@@ -61,6 +61,22 @@ catch (e) {
 assert.ok(gh1140Exception,
           'expected exception from runInContext signature test');
 
+// Issue GH-9445:
+console.error('test runInContext offset');
+var gh9445Exception;
+try {
+  vm.runInContext('throw new Error()', context, { filename: 'expected-filename.js', 
+                                                  lineOffset: 32,
+                                                  columnOffset: 123});
+}
+catch (e) {
+  gh9445Exception = e;
+  assert.ok(/expected-filename.js:33:130/.test(e.stack),
+            'expected appearance of proper offset in Error stack');
+}
+assert.ok(gh9445Exception,
+          'expected exception from runInContext offset test');
+
 // GH-558, non-context argument segfaults / raises assertion
 [undefined, null, 0, 0.0, '', {}, []].forEach(function(e) {
   assert.throws(function() { script.runInContext(e); }, TypeError);

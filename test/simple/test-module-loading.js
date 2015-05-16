@@ -306,3 +306,18 @@ process.on('exit', function() {
 // #1440 Loading files with a byte order marker.
 assert.equal(42, require('../fixtures/utf8-bom.js'));
 assert.equal(42, require('../fixtures/utf8-bom.json'));
+
+// #9445 Error on first line of a module have the correct column number.
+var gh9445Exception;
+try {
+  var err_js = require('../fixtures/module-err.js');
+}
+catch (e) {
+  gh9445Exception = e;
+  assert.ok(/module-err.js:1:1/.test(e.stack),
+            'expected appearance of proper offset in Error stack');
+}
+assert.ok(gh9445Exception,
+          'expected exception from runInContext offset test');
+
+
