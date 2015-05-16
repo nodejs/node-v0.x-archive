@@ -570,7 +570,7 @@ encrypted data, and one reads/writes cleartext data.
 Generally the encrypted one is piped to/from an incoming encrypted data stream,
 and the cleartext one is used as a replacement for the initial encrypted stream.
 
- - `credentials`: A secure context object from tls.createSecureContext( ... )
+ - `context`: A secure context object from tls.createSecureContext( ... )
 
  - `isServer`: A boolean indicating whether this tls connection should be
    opened as a server or a client.
