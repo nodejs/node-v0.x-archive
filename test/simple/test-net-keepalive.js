@@ -28,6 +28,14 @@ var echoServer = net.createServer(function(connection) {
   serverConnection = connection;
   connection.setTimeout(0);
   assert.notEqual(connection.setKeepAlive, undefined);
+
+  // very low keepalive values should throw an error
+  assert.throws(function() {
+    // minimum keepalive times may vary with the platform
+    // so use something very low
+    connection.setKeepAlive(true, 1);
+  });
+
   // send a keepalive packet after 1000 ms
   connection.setKeepAlive(true, 1000);
   connection.on('end', function() {
