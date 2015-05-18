@@ -204,6 +204,34 @@ Reverting back to the defaults used by older releases can weaken the security
 of your applications. The legacy cipher suites should only be used if absolutely
 necessary.
 
+NOTE: Due to an error in Node.js v0.10.38, the default cipher list only applied
+to servers using TLS. The default cipher list would _not_ be used by clients.
+This behavior has been changed in v0.10.39 and v0.12.x and the default cipher
+list is now used by both the server and client when using TLS. However, when
+using `--enable-legacy-cipher-list=v0.10.38`, Node.js is reverted back to the
+v0.10.38 behavior of only using the default cipher list on the server.
+
+### Cipher List Precedence
+
+Note that the `--enable-legacy-cipher-list`, `NODE_LEGACY_CIPHER_LIST`,
+`--cipher-list` and `NODE_CIPHER_LIST` options are mutually exclusive.
+
+If the `NODE_CIPHER_LIST` and `NODE_LEGACY_CIPHER_LIST` environment variables
+are both specified, the `NODE_LEGACY_CIPHER_LIST` setting will take precedence.
+
+The `--cipher-list` and `--enable-legacy-cipher-list` command line options
+will override the environment variables. If both happen to be specified, the
+right-most (second one specified) will take precedence. For instance, in the
+example:
+
+    node --cipher-list=ABC --enable-legacy-cipher-list=v0.10.38
+
+The v0.10.38 default cipher list will be used.
+
+    node --enable-legacy-cipher-list=v0.10.38 --cipher-list=ABC
+
+The custom cipher list will be used.
+
 ## tls.getCiphers()
 
 Returns an array with the names of the supported SSL ciphers.
@@ -215,10 +243,16 @@ Example:
 
 ## tls.getLegacyCiphers(version)
 
-Returns the legacy default cipher suite for the specified Node.js release.
+Returns a default cipher list used in a previous version of Node.js. The
+version parameter must be a string whose value identifies previous Node.js
+release version. The only values currently supported are `v0.10.38`,
+`v0.10.39`, and `v0.12.2`.
 
-Example:
-    var cipher_suite = tls.getLegacyCiphers('v0.10.38');
+A TypeError will be thrown if: (a) the `version` is any type other than a
+string, (b) the `version` parameter is not specified, or (c) additional
+parameters are passed in. An Error will be thrown if the `version` parameter is
+passed in as a string but the value does not correlate to any known Node.js
+release for which a default cipher list is available.
 
 ## tls.createServer(options[, secureConnectionListener])
 

@@ -2938,9 +2938,7 @@ static void PrintHelp() {
          "  --enable-ssl3        enable ssl3\n"
          "  --cipher-list=val    specify the default TLS cipher list\n"
          "  --enable-legacy-cipher-list=val \n"
-         "                       set to v0.10.38 to use the v0.10.38 list,\n"
-         "                       set to v0.10.39 to use the v0.10.39 list.\n"
-         "                       set to v0.12.2 to use the v0.12.2 list.\n"
+         "                       val = v0.10.38, v0.10.39, or v0.12.2\n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2959,10 +2957,8 @@ static void PrintHelp() {
 #endif
 #endif
          "NODE_CIPHER_LIST       Override the default TLS cipher list\n"
-         "NODE_LEGACY_CIPHER_LIST\n"
-         "                       Set to v0.10.38 to use the v0.10.38 list.\n"
-         "                       Set to v0.10.39 to use the v0.10.39 list.\n"
-         "                       Set to v0.12.2 to use the v0.12.2 list.\n"
+         "NODE_LEGACY_CIPHER_LIST=val\n"
+         "                       val = v0.10.38, v0.10.39, or v0.12.2\n"
          "\n"
          "Documentation can be found at http://nodejs.org/\n");
 }
@@ -3002,7 +2998,6 @@ static void ParseArgs(int* argc,
   unsigned int new_argc = 1;
   new_v8_argv[0] = argv[0];
   new_argv[0] = argv[0];
-  bool using_legacy_cipher_list = false;
 
   unsigned int index = 1;
   while (index < nargs && argv[index][0] == '-') {
@@ -3059,14 +3054,11 @@ static void ParseArgs(int* argc,
       new_v8_argv[new_v8_argc] = "--help";
       new_v8_argc += 1;
     } else if (strncmp(arg, "--cipher-list=", 14) == 0) {
-      if (!using_legacy_cipher_list) {
-        DEFAULT_CIPHER_LIST = arg + 14;
-      }
+      DEFAULT_CIPHER_LIST = arg + 14;
     } else if (strncmp(arg, "--enable-legacy-cipher-list=", 28) == 0) {
       // use the original v0.10.x/v0.12.x cipher lists
       const char * legacy_list = legacy_cipher_list(arg+28);
       if (legacy_list != NULL) {
-        using_legacy_cipher_list = true;
         DEFAULT_CIPHER_LIST = legacy_list;
       } else {
         fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
@@ -3423,6 +3415,24 @@ void Init(int* argc,
   V8::SetFlagsFromString(NODE_V8_OPTIONS, sizeof(NODE_V8_OPTIONS) - 1);
 #endif
 
+  // set the cipher list from the environment variable first,
+  // the command line switch will override if specified.
+  const char * cipher_list = getenv("NODE_CIPHER_LIST");
+  if (cipher_list != NULL) {
+    DEFAULT_CIPHER_LIST = cipher_list;
+  }
+  const char * leg_cipher_id = getenv("NODE_LEGACY_CIPHER_LIST");
+  if (leg_cipher_id != NULL) {
+    const char * leg_cipher_list =
+      legacy_cipher_list(leg_cipher_id);
+    if (leg_cipher_list != NULL) {
+      DEFAULT_CIPHER_LIST = leg_cipher_list;
+    } else {
+      fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
+      exit(9);
+    }
+  }
+
   // Parse a few arguments which are specific to Node.
   int v8_argc;
   const char** v8_argv;
@@ -3438,27 +3448,6 @@ void Init(int* argc,
       break;
     }
   }
-
-  const char * cipher_list = getenv("NODE_CIPHER_LIST");
-  if (cipher_list != NULL) {
-    DEFAULT_CIPHER_LIST = cipher_list;
-  }
-  // Allow the NODE_LEGACY_CIPHER_LIST envar to override the other
-  // cipher list options. NODE_LEGACY_CIPHER_LIST=v0.10.38 will use
-  // the cipher list from v0.10.38, NODE_LEGACY_CIPHER_LIST=v0.12.2 will
-  // use the cipher list from v0.12.2
-  const char * leg_cipher_id = getenv("NODE_LEGACY_CIPHER_LIST");
-  if (leg_cipher_id != NULL) {
-    const char * leg_cipher_list =
-      legacy_cipher_list(leg_cipher_id);
-    if (leg_cipher_list != NULL) {
-      DEFAULT_CIPHER_LIST = leg_cipher_list;
-    } else {
-      fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
-      exit(9);
-    }
-  }
-
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
   if (icu_data_dir == NULL) {
