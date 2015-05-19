@@ -511,8 +511,13 @@ Example:
       console.log('STATUS: ' + res.statusCode);
       console.log('HEADERS: ' + JSON.stringify(res.headers));
       res.setEncoding('utf8');
+      var data = '';
       res.on('data', function (chunk) {
-        console.log('BODY: ' + chunk);
+        console.log('PARTIAL BODY: ' + chunk);
+        data += chunk;
+      });
+      res.on('end', function() {
+        console.log('COMPLETE BODY: ' + data);  
       });
     });
 
@@ -523,6 +528,12 @@ Example:
     // write data to request body
     req.write(postData);
     req.end();
+
+The `res` object handed off to the callback function passed into to
+`http.request` is an instance of [http.IncomingMessage], which is an
+instance of a Readable Stream. The content of a successful response will be
+delivered using zero or more `data` events followed by a closing `end`
+event.
 
 Note that in the example `req.end()` was called. With `http.request()` one
 must always call `req.end()` to signify that you're done with the request -
