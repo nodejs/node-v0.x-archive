@@ -28,9 +28,13 @@ string will not be in the parsed object. Examples are shown for the URL
 
     Example: `'host.com:8080'`
 
-* `auth`: The authentication information portion of a URL.
+* `username`: The username portion of a URL.
 
-    Example: `'user:pass'`
+    Example: `'user'`
+
+* `password`: The password portion of a URL.
+
+    Example: `'pass'`
 
 * `hostname`: Just the lowercased hostname portion of the host.
 
@@ -63,6 +67,10 @@ string will not be in the parsed object. Examples are shown for the URL
 
     Example: `'#hash'`
 
+* `auth`: The authentication information portion of a URL.
+
+    Deprecated: `auth` does not handled URL encoding properly, use `username` and `password` instead.
+
 The following methods are provided by the URL module:
 
 ## url.parse(urlStr[, parseQueryString][, slashesDenoteHost])
@@ -93,7 +101,9 @@ Here's how the formatting process works:
 * `slashes` set to `true` if the protocol requires `://` (colon-slash-slash)
   * Only needs to be set for protocols not previously listed as requiring
     slashes, such as `mongodb://localhost:8000/`
-* `auth` will be used if present.
+* `username` will be used if present.
+* `password` will be used if present.
+* `auth` will only be used if `username` and `password` are absent.
 * `hostname` will only be used if `host` is absent.
 * `port` will only be used if `host` is absent.
 * `host` will be used in place of `hostname` and `port`
