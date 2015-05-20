@@ -247,8 +247,10 @@ automatically set as a listener for the [secureConnection][] event.  The
     PEM format. (Could be an array of certs). (Required)
 
   - `ca`: An array of strings or `Buffer`s of trusted certificates in PEM
-    format. If this is omitted several well known "root" CAs will be used,
-    like VeriSign. These are used to authorize connections.
+    format.  If this is omitted the OpenSSL default trusted CA list will be
+    used.  If OpenSSL is not configured with a default trusted CA list, then
+    node.js will use a hard-coded list of well known root CAs.  These are used
+    to authorize connections.
 
   - `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate
     Revocation List)

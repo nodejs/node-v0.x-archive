@@ -77,8 +77,9 @@ dictionary with keys:
   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>
   for details on the format.
 
-If no 'ca' details are given, then node.js will use the default
-publicly trusted list of CAs as given in
+If no `ca` is provided, the OpenSSL default trusted CA list will be used.  If
+OpenSSL is not configured with a default trusted CA list, then node.js will use
+a hard-coded list of publicly trusted CAs based on
 <http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
 
 

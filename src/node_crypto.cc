@@ -699,6 +699,9 @@ void SecureContext::AddRootCerts(const FunctionCallbackInfo<Value>& args) {
 
   assert(sc->ca_store_ == NULL);
 
+  if (SSL_CTX_set_default_verify_paths(sc->ctx_))
+    return;
+
   if (!root_cert_store) {
     root_cert_store = X509_STORE_new();
 
