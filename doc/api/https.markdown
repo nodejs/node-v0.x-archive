@@ -125,8 +125,13 @@ The following options from [tls.connect()][] can also be specified. However, a
 - `key`: Private key to use for SSL. Default `null`.
 - `passphrase`: A string of passphrase for the private key or pfx. Default `null`.
 - `cert`: Public x509 certificate to use. Default `null`.
-- `ca`: An authority certificate or array of authority certificates to check
-  the remote host against.
+- `ca`: A string or array of strings containing PEM encoded CA certificates to
+  check the remote host against.
+- `caFile`: A string containing the path to a file containing PEM encoded CA
+  certificates to check the remote host against.
+- `caPath`: A string containing the path to a directory containing PEM encoded
+  CA certificates to check the remote host against.  This directory must be
+  prepared using the OpenSSL c\_rehash utility.
 - `ciphers`: A string describing the ciphers to use or exclude. Consult
   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT> for
   details on the format.

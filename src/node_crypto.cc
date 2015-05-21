@@ -699,6 +699,29 @@ void SecureContext::AddRootCerts(const FunctionCallbackInfo<Value>& args) {
 
   assert(sc->ca_store_ == NULL);
 
+  if (args.Length() == 2) {
+    char* caFile = NULL;
+    char* caPath = NULL;
+    if (args[0]->IsString()) {
+      String::Utf8Value file(args[0]);
+      caFile = *file;
+    } else if (!args[0]->IsUndefined() && !args[0]->IsNull()) {
+      return sc->env()->ThrowTypeError("Bad parameter");
+    }
+    if (args[1]->IsString()) {
+      String::Utf8Value path(args[1]);
+      caPath = *path;
+    } else if (!args[1]->IsUndefined() && !args[1]->IsNull()) {
+      return sc->env()->ThrowTypeError("Bad parameter");
+    }
+    if (!SSL_CTX_load_verify_locations(sc->ctx_, caFile, caPath))
+      return sc->env()->ThrowTypeError("Error loading CA certificates from caFile or caPath");
+    return;
+  }
+
+  if (args.Length() != 0)
+    return sc->env()->ThrowTypeError("Bad parameter");
+
   if (SSL_CTX_set_default_verify_paths(sc->ctx_))
     return;
 

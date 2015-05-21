@@ -70,6 +70,11 @@ dictionary with keys:
 * `cert` : A string holding the PEM encoded certificate
 * `ca` : Either a string or list of strings of PEM encoded CA
   certificates to trust.
+* `caFile` : A string holding the path to a file containing PEM
+  encoded CA certificates to trust.
+* `caPath` : A string holding the path to a directory containing PEM
+  encoded CA certificates to trust.  This directory must be prepared
+  using the OpenSSL c\_rehash utility.
 * `crl` : Either a string or list of strings of PEM encoded CRLs
   (Certificate Revocation List)
 * `ciphers`: A string describing the ciphers to use or exclude.
@@ -77,9 +82,9 @@ dictionary with keys:
   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>
   for details on the format.
 
-If no `ca` is provided, the OpenSSL default trusted CA list will be used.  If
-OpenSSL is not configured with a default trusted CA list, then node.js will use
-a hard-coded list of publicly trusted CAs based on
+If no `ca`, `caFile`, or `caPath` is provided, the OpenSSL default trusted CA
+list will be used.  If OpenSSL is not configured with a default trusted CA list,
+then node.js will use a hard-coded list of publicly trusted CAs based on
 <http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
 
 

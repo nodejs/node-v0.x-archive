@@ -247,10 +247,14 @@ automatically set as a listener for the [secureConnection][] event.  The
     PEM format. (Could be an array of certs). (Required)
 
   - `ca`: An array of strings or `Buffer`s of trusted certificates in PEM
-    format.  If this is omitted the OpenSSL default trusted CA list will be
-    used.  If OpenSSL is not configured with a default trusted CA list, then
-    node.js will use a hard-coded list of well known root CAs.  These are used
-    to authorize connections.
+    format.
+
+  - `caFile`: A string containing the path to a file that contains trusted
+    certificates in PEM format.
+
+  - `caPath`: A string containing the path to a directory that contains trusted
+    certificates.  This directory must be prepared using the OpenSSL c\_rehash
+    utility.
 
   - `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate
     Revocation List)
@@ -340,6 +344,12 @@ automatically set as a listener for the [secureConnection][] event.  The
   - `secureOptions`: Set server options. For example, to disable the SSLv3
     protocol set the `SSL_OP_NO_SSLv3` flag. See [SSL_CTX_set_options]
     for all available options.
+
+If no `ca`, `caFile`, or `caPath` is specified, the OpenSSL default trusted CA
+list will be used.  If OpenSSL is not configured with a default trusted CA list,
+then a hard-coded list of publicly trusted CAs based on
+<http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>
+will be used.
 
 Here is a simple example echo server:
 
