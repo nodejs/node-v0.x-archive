@@ -1175,9 +1175,9 @@ as a result of this chunk.
 
 Call the callback function only when the current chunk is completely
 consumed.  Note that there may or may not be output as a result of any
-particular input chunk. If you supply as the second argument to the
-it will be passed to push method, in other words the following are
-equivalent:
+particular input chunk. If you supply a data chunk as the second argument
+to the callback function it will be passed to push method, in other words
+the following are equivalent:
 
 ```javascript
 transform.prototype._transform = function (data, encoding, callback) {
