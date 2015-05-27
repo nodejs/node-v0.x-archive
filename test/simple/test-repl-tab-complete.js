@@ -211,3 +211,13 @@ testMe.complete(' ', function(error, data) {
 testMe.complete('toSt', function(error, data) {
   assert.deepEqual(data, [['toString'], 'toSt']);
 });
+
+putIn.run(['.clear']);
+
+// make sure tab completion works on context properties
+putIn.run([
+  'var custom = "test";'
+]);
+testMe.complete('cus', function(error, data) {
+  assert.deepEqual(data, [['custom'], 'cus']);
+});
