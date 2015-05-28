@@ -101,7 +101,7 @@ Example: this program that takes the sha1 sum of a file
 
     var shasum = crypto.createHash('sha1');
 
-    var s = fs.ReadStream(filename);
+    var s = fs.createReadStream(filename);
     s.on('data', function(d) {
       shasum.update(d);
     });
