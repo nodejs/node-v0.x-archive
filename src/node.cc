@@ -2934,11 +2934,13 @@ static void PrintHelp() {
          "                       present.\n"
 #endif
 #endif
+#if HAVE_OPENSSL
          "  --enable-ssl2        enable ssl2\n"
          "  --enable-ssl3        enable ssl3\n"
          "  --cipher-list=val    specify the default TLS cipher list\n"
          "  --enable-legacy-cipher-list=val \n"
          "                       val = v0.10.38, v0.10.39, v0.12.2 or v0.12.3\n"
+#endif // HAVE_OPENSSL
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2998,7 +3000,9 @@ static void ParseArgs(int* argc,
   unsigned int new_argc = 1;
   new_v8_argv[0] = argv[0];
   new_argv[0] = argv[0];
+#if HAVE_OPENSSL
   bool using_legacy_cipher_list = false;
+#endif
 
   unsigned int index = 1;
   while (index < nargs && argv[index][0] == '-') {
@@ -3010,10 +3014,12 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
       printf("%s\n", NODE_VERSION);
       exit(0);
+#if HAVE_OPENSSL
     } else if (strcmp(arg, "--enable-ssl2") == 0) {
       SSL2_ENABLE = true;
     } else if (strcmp(arg, "--enable-ssl3") == 0) {
       SSL3_ENABLE = true;
+#endif
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       PrintHelp();
       exit(0);
@@ -3054,6 +3060,7 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--v8-options") == 0) {
       new_v8_argv[new_v8_argc] = "--help";
       new_v8_argc += 1;
+#if HAVE_OPENSSL
     } else if (strncmp(arg, "--cipher-list=", 14) == 0) {
       if (!using_legacy_cipher_list) {
         DEFAULT_CIPHER_LIST = arg + 14;
@@ -3068,6 +3075,7 @@ static void ParseArgs(int* argc,
         fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
         exit(9);
       }
+#endif  // HAVE_OPENSSL
 #if defined(NODE_HAVE_I18N_SUPPORT)
     } else if (strncmp(arg, "--icu-data-dir=", 15) == 0) {
       icu_data_dir = arg + 15;
@@ -3435,6 +3443,7 @@ void Init(int* argc,
     }
   }
 
+#if HAVE_OPENSSL
   const char * cipher_list = getenv("NODE_CIPHER_LIST");
   if (cipher_list != NULL) {
     DEFAULT_CIPHER_LIST = cipher_list;
@@ -3454,6 +3463,7 @@ void Init(int* argc,
       exit(9);
     }
   }
+#endif  // HAVE_OPENSSL
 
 #if defined(NODE_HAVE_I18N_SUPPORT)
   if (icu_data_dir == NULL) {
