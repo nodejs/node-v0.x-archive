@@ -7,11 +7,14 @@ $1/build/tools/make-standalone-toolchain.sh \
     --arch=arm \
     --install-dir=$TOOLCHAIN \
     --platform=android-9
+    --platform=android-16
 export PATH=$TOOLCHAIN/bin:$PATH
 export AR=arm-linux-androideabi-ar
 export CC=arm-linux-androideabi-gcc
 export CXX=arm-linux-androideabi-g++
 export LINK=arm-linux-androideabi-g++
+export CPPFLAGS="-fPIE"
+export LDFLAGS="-fPIE -pie -L$PREFIX/lib"
 
 ./configure \
     --without-snapshot \
