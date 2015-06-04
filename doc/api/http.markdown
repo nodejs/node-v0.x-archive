@@ -457,9 +457,10 @@ automatically parsed with [url.parse()][].
 
 Options:
 
-- `host`: A domain name or IP address of the server to issue the request to.
-  Defaults to `'localhost'`.
-- `hostname`: To support `url.parse()` `hostname` is preferred over `host`
+- `host`: A domain name or IP address of the server to issue the request to,
+  optionally including a port number. Defaults to `'localhost'`.
+- `hostname`: A domain name or IP address, may not include a port. Supports
+  `url.parse()` by preferring `hostname` over `host`
 - `port`: Port of remote server. Defaults to 80.
 - `localAddress`: Local interface to bind for network connections.
 - `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
