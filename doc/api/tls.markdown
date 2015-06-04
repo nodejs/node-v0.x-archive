@@ -413,6 +413,20 @@ Creates a new client connection to the given `port` and `host` (old API) or
   - `path`: Creates unix socket connection to path. If this option is
     specified, `host` and `port` are ignored.
 
+  - `ciphers`: A string describing the ciphers to use or exclude.
+
+    Defaults to
+    `ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL`.
+    Consult the [OpenSSL cipher list format documentation] for details
+    on the format.
+
+	The full list of available ciphers can be obtained via [tls.getCiphers][].
+
+    `ECDHE-RSA-AES128-SHA256`, `DHE-RSA-AES128-SHA256` and
+    `AES128-GCM-SHA256` are TLS v1.2 ciphers and used when Node.js is
+    linked against OpenSSL 1.0.1 or newer, such as the bundled version
+    of OpenSSL.
+
   - `pfx`: A string or `Buffer` containing the private key, certificate and
     CA certs of the client in PFX or PKCS12 format.
 
@@ -907,6 +921,7 @@ The numeric representation of the local port.
 
 [OpenSSL cipher list format documentation]: http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT
 [BEAST attacks]: http://blog.ivanristic.com/2011/10/mitigating-the-beast-attack-on-tls.html
+[tls.getCiphers]: #tls_tls_getciphers
 [tls.createServer]: #tls_tls_createserver_options_secureconnectionlistener
 [tls.createSecurePair]: #tls_tls_createsecurepair_credentials_isserver_requestcert_rejectunauthorized
 [tls.TLSSocket]: #tls_class_tls_tlssocket
