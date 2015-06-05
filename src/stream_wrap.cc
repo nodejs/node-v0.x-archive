@@ -411,6 +411,14 @@ void StreamWrap::Writev(const FunctionCallbackInfo<Value>& args) {
 
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
 
+  if ( NULL == wrap) {
+    // wrap is set to NULL when the handle for the request
+    // is closed. Since the handle is no longer valid return
+    // UV_EBADF to indicate this
+    args.GetReturnValue().Set(UV_EBADF);
+    return;
+  }
+
   assert(args[0]->IsObject());
   assert(args[1]->IsArray());
 
