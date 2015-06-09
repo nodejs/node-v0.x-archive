@@ -414,6 +414,7 @@
   function evalScript(name) {
     var Module = NativeModule.require('module');
     var path = NativeModule.require('path');
+    var util = NativeModule.require('util');
     var cwd = process.cwd();
 
     var module = new Module(name);
@@ -433,6 +434,7 @@
     }
     var result = module._compile(script, name + '-wrapper');
     if (process._print_eval) console.log(result);
+    else if (process._printf_eval) process.stdout.write(util.format(result));
   }
 
   function createWritableStdioStream(fd) {
