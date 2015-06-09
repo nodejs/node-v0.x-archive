@@ -18,7 +18,7 @@
            Manufacturer="$(var.ProductAuthor)"
            UpgradeCode="1d60944c-b9ce-4a71-a7c0-0384eb884baa">
 
-    <Package InstallerVersion="200" Compressed="yes"/>
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"/>
 
     <Media Id="1" Cabinet="media1.cab" EmbedCab="yes"/>
 
