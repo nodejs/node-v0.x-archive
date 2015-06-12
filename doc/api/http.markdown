@@ -472,7 +472,7 @@ Options:
 - `auth`: Basic authentication i.e. `'user:password'` to compute an
   Authorization header.
 - `agent`: Controls [Agent][] behavior. When an Agent is used request will
-  default to `Connection: keep-alive`. Possible values:
+  default to `Connection: close`. Possible values:
  - `undefined` (default): use [global Agent][] for this host and port.
  - `Agent` object: explicitly use the passed in `Agent`.
  - `false`: opts out of connection pooling with an Agent, defaults request to
@@ -580,15 +580,9 @@ Example:
 The HTTP Agent is used for pooling sockets used in HTTP client
 requests.
 
-The HTTP Agent also defaults client requests to using
-Connection:keep-alive. If no pending HTTP requests are waiting on a
-socket to become free the socket is closed. This means that Node's
-pool has the benefit of keep-alive when under load but still does not
-require developers to manually close the HTTP clients using
-KeepAlive.
-
-If you opt into using HTTP KeepAlive, you can create an Agent object
-with that flag set to `true`.  (See the [constructor
+The HTTP Agent defaults client requests to using
+Connection: close. If you opt into using HTTP KeepAlive, you can
+create an Agent object with that flag set to `true`.  (See the [constructor
 options](#http_new_agent_options) below.)  Then, the Agent will keep
 unused sockets in a pool for later use.  They will be explicitly
 marked so as to not keep the Node process running.  However, it is
