@@ -127,6 +127,9 @@ test-all-http1: test-build
 test-all-valgrind: test-build
 	$(PYTHON) tools/test.py --mode=debug,release --valgrind
 
+test-ci:
+	$(PYTHON) tools/test.py -ptap --logfile test.tap --mode=release --arch=$(DESTCPU) simple message internet
+
 test-release: test-build
 	$(PYTHON) tools/test.py --mode=release
 
@@ -417,11 +420,6 @@ bench-idle:
 	./node benchmark/idle_server.js &
 	sleep 1
 	./node benchmark/idle_clients.js &
-
-test-ci:
-	$(PYTHON) tools/test.py -ptap --logfile test.tap --mode=release --arch=$(DESTCPU) simple message internet
-	$(MAKE) jslint
-	$(MAKE) cpplint
 
 jslintfix:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/fixjsstyle.py --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
