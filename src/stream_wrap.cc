@@ -224,6 +224,10 @@ void StreamWrap::WriteBuffer(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
+  if ( NULL == wrap) {
+    args.GetReturnValue().Set(UV_EBADF);
+    return;
+  }
 
   assert(args[0]->IsObject());
   assert(Buffer::HasInstance(args[1]));
@@ -282,6 +286,11 @@ void StreamWrap::WriteStringImpl(const FunctionCallbackInfo<Value>& args) {
   int err;
 
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
+
+  if ( NULL == wrap) {
+    args.GetReturnValue().Set(UV_EBADF);
+    return;
+  }
 
   assert(args[0]->IsObject());
   assert(args[1]->IsString());
@@ -547,6 +556,10 @@ void StreamWrap::SetBlocking(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(env->isolate());
 
   StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
+  if ( NULL == wrap) {
+    args.GetReturnValue().Set(UV_EBADF);
+    return;
+  }
 
   assert(args.Length() > 0);
   int err = uv_stream_set_blocking(wrap->stream(), args[0]->IsTrue());
