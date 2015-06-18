@@ -61,7 +61,7 @@ if /i "%1"=="test-simple"   set test=test-simple&goto arg-ok
 if /i "%1"=="test-message"  set test=test-message&goto arg-ok
 if /i "%1"=="test-gc"       set test=test-gc&set buildnodeweak=1&goto arg-ok
 if /i "%1"=="test-all"      set test=test-all&set buildnodeweak=1&goto arg-ok
-if /i "%1"=="test-ci"       set test=test-ci&set jslint=1&goto arg-ok
+if /i "%1"=="test-ci"       set test=test-ci&goto arg-ok
 if /i "%1"=="test"          set test=test&set jslint=1&goto arg-ok
 @rem Include small-icu support with MSI installer
 if /i "%1"=="msi"           set msi=1&set licensertf=1&set download_arg="--download=all"&set i18n_arg=small-icu&goto arg-ok
