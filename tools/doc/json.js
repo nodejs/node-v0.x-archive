@@ -160,7 +160,14 @@ function doJSON(input, filename, outfile, cb) {
   }
 
   if (outfile) {
-    writeOutputToFile(root, filename, outfile, indexfile, writeToIndexFile);
+    writeOutputToFile(root, filename, outfile, indexfile, function(err, root, sourcefile, outfile) {
+      if (err) {
+        cb(err, root);
+      }
+      else {
+        writeToIndexFile(root, sourcefile, outfile, cb);
+      }
+    });
   }
   else {
     return cb(null, root)
@@ -175,12 +182,7 @@ function writeOutputToFile(obj, sourcefile, outfile, indexfile, cb) {
 }
 
 // make an entry into index file
-function writeToIndexFile(err, root, sourcefile, outfile) {
-  // check if there was an error writing file
-  if (err) {
-    throw new Error('error writing file - '+ e);
-  }
-
+function writeToIndexFile(root, sourcefile, outfile, cb) {
   // default type of an index
   var obj = {"type":"index"};
   var entry = {"source":sourcefile};
@@ -192,12 +194,12 @@ function writeToIndexFile(err, root, sourcefile, outfile) {
       obj = JSON.parse(data.toString());
     }
     catch(e) {
-      throw new Error('invalid json data - '+ e);
+      // invalid json use default obj
     }
   }
   // check if index file is valid
   if (obj.type !== "index") {
-    throw new Error('invalid index file - '+ outfile);
+    cb(new Error('invalid index file - '+ outfile));
   }
   // construct an entry object
   entry.title = root.title;
@@ -212,9 +214,7 @@ function writeToIndexFile(err, root, sourcefile, outfile) {
     obj.chapters = [entry];
   }
   fs.writeFile(outfile, JSON.stringify(obj, null, 2), function(err) {
-    if(err) {
-      throw new Error('error saving file - '+ err);
-    }
+    cb(err);
   });
 }
 
