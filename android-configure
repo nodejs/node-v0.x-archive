@@ -24,6 +24,9 @@ export LDFLAGS="-fPIE -pie -L$PREFIX/lib"
 if [ -d "/usr/bin/python2.7" ]; then
     rm -rf android-toolchain/bin/python2.7
     ln -s /usr/bin/python2.7 android-toolchain/bin/python2.7
+elif [ -d "/usr/lib/python2.7" ]; then
+    rm -rf android-toolchain/bin/python2.7
+    ln -s /usr/lib/python2.7 android-toolchain/bin/python2.7
 else
     echo "WARNING: You don't have python2.7 installed! Your build will fail! \nPlease install python2.7 and rerun this script."
 fi
