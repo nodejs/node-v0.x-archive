@@ -54,7 +54,10 @@ Or system-wide with:
 
 ```sh
 cd /usr/local && tar --strip-components 1 -xzf \
-                    /path/to/node-<version>-<platform>-<arch>.tar.gz
+                    /path/to/node-<version>-<platform>-<arch>.tar.gz \
+                    --exclude='node-*/ChangeLog' \
+                    --exclude='node-*/LICENSE' \
+                    --exclude='node-*/README.md'
 ```
 
 ### To run the tests:
