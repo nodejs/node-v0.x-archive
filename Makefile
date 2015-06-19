@@ -268,6 +268,16 @@ BINARYNAME=$(TARNAME)-$(PLATFORM)-$(ARCH)
 BINARYTAR=$(BINARYNAME).tar.gz
 PKG=out/$(TARNAME).pkg
 PACKAGEMAKER ?= /Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
+LEDATATAR=$(TARNAME)-locales-le.tar
+BEDATATAR=$(TARNAME)-locales-be.tar
+LEDATATGZ=$(LEDATATAR).gz
+BEDATATGZ=$(BEDATATAR).gz
+#ICU_DATA_IN=$(firstword $(wildcard deps/icu/source/data/in/icudt*l.dat))
+#ICU_DATA_SRC=out/Release/gen
+ICU_DATA_SRC=deps/icu/source/data/in
+ICU_DATA_IN=$(firstword $(wildcard $(ICU_DATA_SRC)/icudt*[bl].dat))
+ICU_DATA_BE=$(ICU_DATA_IN:$(ICU_DATA_SRC)/icudt%l.dat=icudt%b.dat)
+ICU_DATA_LE=$(ICU_DATA_IN:$(ICU_DATA_SRC)/icudt%l.dat=icudt%l.dat)
 
 PKGSRC=nodejs-$(DESTCPU)-$(RAWVER).tgz
 ifdef NIGHTLY
@@ -439,3 +449,19 @@ cpplint:
 lint: jslint cpplint
 
 .PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all test-addons build-addons website-upload pkg blog blogclean tar binary release-only bench-http-simple bench-idle bench-all bench bench-misc bench-array bench-buffer bench-net bench-http bench-fs bench-tls
+
+## Build data tarballs
+data-tarballs: $(LEDATATGZ) $(BEDATATGZ)
+
+$(LEDATATGZ) $(BEDATATGZ): node
+#	rm -rf $(BINARYNAME) out/deps out/Release
+#	$(PYTHON) ./configure --download=all --with-intl=full-icu
+	rm -rf $(TARNAME)
+	mkdir $(TARNAME)
+	out/Release/icupkg -tb $(ICU_DATA_IN) $(TARNAME)/$(ICU_DATA_BE)
+	out/Release/icupkg -tl $(ICU_DATA_IN) $(TARNAME)/$(ICU_DATA_LE)
+	tar -cf $(BEDATATAR) $(TARNAME)/$(ICU_DATA_BE)
+	gzip -f -9 $(BEDATATAR)
+	tar -cf $(LEDATATAR) $(TARNAME)/$(ICU_DATA_LE)
+	gzip -f -9 $(LEDATATAR)
+	rm -rf $(TARNAME) $(LEDATATAR) $(BEDATATAR)
