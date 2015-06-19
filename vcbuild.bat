@@ -84,31 +84,41 @@ if defined noperfctr set noperfctr_arg=--without-perfctr& set noperfctr_msi_arg=
 @rem Look for Visual Studio 2013
 if not defined VS120COMNTOOLS goto vc-set-2012
 if not exist "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2012
+if defined msi if not exist "%WIX%\SDK\VS2013" goto vc-set-2012
 call "%VS120COMNTOOLS%\..\..\vc\vcvarsall.bat"
 if not defined VCINSTALLDIR goto msbuild-not-found
 set GYP_MSVS_VERSION=2013
+set PLATFORM_TOOLSET=v120
 goto msbuild-found
 
 :vc-set-2012
 @rem Look for Visual Studio 2012
 if not defined VS110COMNTOOLS goto vc-set-2010
 if not exist "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat" goto vc-set-2010
+if defined msi if not exist "%WIX%\SDK\VS2012" goto vc-set-2010
 call "%VS110COMNTOOLS%\..\..\vc\vcvarsall.bat"
 if not defined VCINSTALLDIR goto msbuild-not-found
 set GYP_MSVS_VERSION=2012
+set PLATFORM_TOOLSET=v110
 goto msbuild-found
 
 :vc-set-2010
 if not defined VS100COMNTOOLS goto msbuild-not-found
 if not exist "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat" goto msbuild-not-found
+if defined msi if not exist "%WIX%\SDK\VS2010" goto wix-not-found
 call "%VS100COMNTOOLS%\..\..\vc\vcvarsall.bat"
 if not defined VCINSTALLDIR goto msbuild-not-found
 set GYP_MSVS_VERSION=2010
+set PLATFORM_TOOLSET=v100
 goto msbuild-found
 
 :msbuild-not-found
 echo Failed to find Visual Studio installation.
 goto exit
+
+:wix-not-found
+echo Build skipped. To generate installer, you need to install Wix.
+goto run
 
 :msbuild-found
 
@@ -156,7 +166,7 @@ set NODE_VERSION=%NODE_VERSION%.%NIGHTLY%
 
 :msibuild
 echo Building node-%NODE_VERSION%
-msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeVersion=%NODE_VERSION% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:PlatformToolset=%PLATFORM_TOOLSET% /p:VisualStudioVersion=%GYP_MSVS_VERSION% /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeVersion=%NODE_VERSION% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
 if defined nosign goto run
