@@ -24,8 +24,16 @@
 
 /*
     These modular groups were literally taken from:
-       * RFC 2412 (groups 1 and 2)
-       * RFC 3526 (groups 5, 14, 15, 16, 17 and 18)
+       * RFC 2412:
+          - group 1 (768 bits)
+          - group 2 (1024 bits)
+          - group 5 (1536 bits)
+       * RFC 3526:
+          - group 14 (2048 bits)
+          - group 15 (3072 bits)
+          - group 16 (4096 bits)
+          - group 17 (6144 bits)
+          - group 18 (8192 bits)
     They all use 2 as a generator.
 */
 
@@ -390,6 +398,7 @@ static const unsigned char group_modp18[] = {
 
 typedef struct {
   const char* name;
+  unsigned int bits;
   const char* prime;
   unsigned int prime_size;
   const char* gen;
@@ -398,14 +407,14 @@ typedef struct {
 
 static const modp_group modp_groups[] = {
 #define V(var) reinterpret_cast<const char*>(var)
-  { "modp1", V(group_modp1), sizeof(group_modp1), V(two_generator), 1 },
-  { "modp2", V(group_modp2), sizeof(group_modp2), V(two_generator), 1 },
-  { "modp5", V(group_modp5), sizeof(group_modp5), V(two_generator), 1 },
-  { "modp14", V(group_modp14), sizeof(group_modp14), V(two_generator), 1 },
-  { "modp15", V(group_modp15), sizeof(group_modp15), V(two_generator), 1 },
-  { "modp16", V(group_modp16), sizeof(group_modp16), V(two_generator), 1 },
-  { "modp17", V(group_modp17), sizeof(group_modp17), V(two_generator), 1 },
-  { "modp18", V(group_modp18), sizeof(group_modp18), V(two_generator), 1 }
+  { "modp1", 768,  V(group_modp1), sizeof(group_modp1), V(two_generator), 1 },
+  { "modp2", 1024, V(group_modp2), sizeof(group_modp2), V(two_generator), 1 },
+  { "modp5", 1536, V(group_modp5), sizeof(group_modp5), V(two_generator), 1 },
+  { "modp14", 2048, V(group_modp14), sizeof(group_modp14), V(two_generator), 1 },
+  { "modp15", 3072, V(group_modp15), sizeof(group_modp15), V(two_generator), 1 },
+  { "modp16", 4096, V(group_modp16), sizeof(group_modp16), V(two_generator), 1 },
+  { "modp17", 6144, V(group_modp17), sizeof(group_modp17), V(two_generator), 1 },
+  { "modp18", 8192, V(group_modp18), sizeof(group_modp18), V(two_generator), 1 }
 #undef V
 };
 

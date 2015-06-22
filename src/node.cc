@@ -2936,6 +2936,7 @@ static void PrintHelp() {
 #endif
          "  --enable-ssl2        enable ssl2\n"
          "  --enable-ssl3        enable ssl3\n"
+         "  --enable-small-dh-groups  enable small dh groups (not recommended)\n"
          "  --cipher-list=val    specify the default TLS cipher list\n"
          "  --enable-legacy-cipher-list=val \n"
          "                       val = v0.10.38, v0.10.39, v0.12.2 or v0.12.3\n"
@@ -2956,6 +2957,7 @@ static void PrintHelp() {
          "                       (will extend linked-in data)\n"
 #endif
 #endif
+         "ENABLE_SMALL_DH_GROUPS enable small dh groups (not recommended)\n"
          "NODE_CIPHER_LIST       Override the default TLS cipher list\n"
          "NODE_LEGACY_CIPHER_LIST=val\n"
          "                       val = v0.10.38, v0.10.39, v0.12.2 or v0.12.3\n"
@@ -3072,6 +3074,8 @@ static void ParseArgs(int* argc,
     } else if (strncmp(arg, "--icu-data-dir=", 15) == 0) {
       icu_data_dir = arg + 15;
 #endif
+    } else if (strcmp(arg, "--enable-small-dh-groups") == 0) {
+      SMALL_DH_GROUPS_ENABLE = true;
     } else {
       // V8 option.  Pass through as-is.
       new_v8_argv[new_v8_argc] = arg;
@@ -3467,6 +3471,11 @@ void Init(int* argc,
                      "(check NODE_ICU_DATA or --icu-data-dir parameters)");
   }
 #endif
+
+  const char *enableSmallDHGroups  = getenv("ENABLE_SMALL_DH_GROUPS");
+  if (enableSmallDHGroups != NULL) {
+    SMALL_DH_GROUPS_ENABLE = true;
+  }
   // The const_cast doesn't violate conceptual const-ness.  V8 doesn't modify
   // the argv array or the elements it points to.
   V8::SetFlagsFromCommandLine(&v8_argc, const_cast<char**>(v8_argv), true);
