@@ -25,6 +25,7 @@
 var common = require('../common');
 var assert = require('assert');
 var util = require('util');
+var spawn = require('child_process').spawn;
 
 try {
   var crypto = require('crypto');
@@ -779,8 +780,8 @@ assert.equal(alice.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
 assert.equal(bob.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
 
 // Ensure specific generator (buffer) works as expected.
-var modp1 = crypto.createDiffieHellmanGroup('modp1');
-var modp1buf = new Buffer([
+var modp14 = crypto.createDiffieHellmanGroup('modp14');
+var modp14buf = new Buffer([
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc9, 0x0f,
   0xda, 0xa2, 0x21, 0x68, 0xc2, 0x34, 0xc4, 0xc6, 0x62, 0x8b,
   0x80, 0xdc, 0x1c, 0xd1, 0x29, 0x02, 0x4e, 0x08, 0x8a, 0x67,
@@ -789,47 +790,63 @@ var modp1buf = new Buffer([
   0x19, 0xb3, 0xcd, 0x3a, 0x43, 0x1b, 0x30, 0x2b, 0x0a, 0x6d,
   0xf2, 0x5f, 0x14, 0x37, 0x4f, 0xe1, 0x35, 0x6d, 0x6d, 0x51,
   0xc2, 0x45, 0xe4, 0x85, 0xb5, 0x76, 0x62, 0x5e, 0x7e, 0xc6,
-  0xf4, 0x4c, 0x42, 0xe9, 0xa6, 0x3a, 0x36, 0x20, 0xff, 0xff,
+  0xf4, 0x4c, 0x42, 0xe9, 0xa6, 0x37, 0xed, 0x6b, 0x0b, 0xff,
+  0x5c, 0xb6, 0xf4, 0x06, 0xb7, 0xed, 0xee, 0x38, 0x6b, 0xfb,
+  0x5a, 0x89, 0x9f, 0xa5, 0xae, 0x9f, 0x24, 0x11, 0x7c, 0x4b,
+  0x1f, 0xe6, 0x49, 0x28, 0x66, 0x51, 0xec, 0xe4, 0x5b, 0x3d,
+  0xc2, 0x00, 0x7c, 0xb8, 0xa1, 0x63, 0xbf, 0x05, 0x98, 0xda,
+  0x48, 0x36, 0x1c, 0x55, 0xd3, 0x9a, 0x69, 0x16, 0x3f, 0xa8,
+  0xfd, 0x24, 0xcf, 0x5f, 0x83, 0x65, 0x5d, 0x23, 0xdc, 0xa3,
+  0xad, 0x96, 0x1c, 0x62, 0xf3, 0x56, 0x20, 0x85, 0x52, 0xbb,
+  0x9e, 0xd5, 0x29, 0x07, 0x70, 0x96, 0x96, 0x6d, 0x67, 0x0c,
+  0x35, 0x4e, 0x4a, 0xbc, 0x98, 0x04, 0xf1, 0x74, 0x6c, 0x08,
+  0xca, 0x18, 0x21, 0x7c, 0x32, 0x90, 0x5e, 0x46, 0x2e, 0x36,
+  0xce, 0x3b, 0xe3, 0x9e, 0x77, 0x2c, 0x18, 0x0e, 0x86, 0x03,
+  0x9b, 0x27, 0x83, 0xa2, 0xec, 0x07, 0xa2, 0x8f, 0xb5, 0xc5,
+  0x5d, 0xf0, 0x6f, 0x4c, 0x52, 0xc9, 0xde, 0x2b, 0xcb, 0xf6,
+  0x95, 0x58, 0x17, 0x18, 0x39, 0x95, 0x49, 0x7c, 0xea, 0x95,
+  0x6a, 0xe5, 0x15, 0xd2, 0x26, 0x18, 0x98, 0xfa, 0x05, 0x10,
+  0x15, 0x72, 0x8e, 0x5a, 0x8a, 0xac, 0xaa, 0x68, 0xff, 0xff,
   0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 ]);
-var exmodp1 = crypto.createDiffieHellman(modp1buf, new Buffer([2]));
-modp1.generateKeys();
-exmodp1.generateKeys();
-var modp1Secret = modp1.computeSecret(exmodp1.getPublicKey()).toString('hex');
-var exmodp1Secret = exmodp1.computeSecret(modp1.getPublicKey()).toString('hex');
-assert.equal(modp1Secret, exmodp1Secret);
-assert.equal(modp1.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
-assert.equal(exmodp1.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
+var exmodp14 = crypto.createDiffieHellman(modp14buf, new Buffer([2]));
+modp14.generateKeys();
+exmodp14.generateKeys();
+var modp14Secret = modp14.computeSecret(exmodp14.getPublicKey()).toString('hex');
+var exmodp14Secret = exmodp14.computeSecret(modp14.getPublicKey()).toString('hex');
+assert.equal(modp14Secret, exmodp14Secret);
+assert.equal(modp14.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
+assert.equal(exmodp14.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
 
 
 // Ensure specific generator (string with encoding) works as expected.
-var exmodp1_2 = crypto.createDiffieHellman(modp1buf, '02', 'hex');
-exmodp1_2.generateKeys();
-modp1Secret = modp1.computeSecret(exmodp1_2.getPublicKey()).toString('hex');
-var exmodp1_2Secret = exmodp1_2.computeSecret(modp1.getPublicKey())
+var exmodp14_2 = crypto.createDiffieHellman(modp14buf, '02', 'hex');
+exmodp14_2.generateKeys();
+modp14Secret = modp14.computeSecret(exmodp14_2.getPublicKey()).toString('hex');
+var exmodp14_2Secret = exmodp14_2.computeSecret(modp14.getPublicKey())
                                .toString('hex');
-assert.equal(modp1Secret, exmodp1_2Secret);
-assert.equal(exmodp1_2.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
+assert.equal(modp14Secret, exmodp14_2Secret);
+assert.equal(exmodp14_2.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
 
 
 // Ensure specific generator (string without encoding) works as expected.
-var exmodp1_3 = crypto.createDiffieHellman(modp1buf, '\x02');
-exmodp1_3.generateKeys();
-modp1Secret = modp1.computeSecret(exmodp1_3.getPublicKey()).toString('hex');
-var exmodp1_3Secret = exmodp1_3.computeSecret(modp1.getPublicKey())
+var exmodp14_3 = crypto.createDiffieHellman(modp14buf, '\x02');
+exmodp14_3.generateKeys();
+modp14Secret = modp14.computeSecret(exmodp14_3.getPublicKey()).toString('hex');
+var exmodp14_3Secret = exmodp14_3.computeSecret(modp14.getPublicKey())
                                .toString('hex');
-assert.equal(modp1Secret, exmodp1_3Secret);
-assert.equal(exmodp1_3.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
+assert.equal(modp14Secret, exmodp14_3Secret);
+assert.equal(exmodp14_3.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
 
 
 // Ensure specific generator (numeric) works as expected.
-var exmodp1_4 = crypto.createDiffieHellman(modp1buf, 2);
-exmodp1_4.generateKeys();
-modp1Secret = modp1.computeSecret(exmodp1_4.getPublicKey()).toString('hex');
-var exmodp1_4Secret = exmodp1_4.computeSecret(modp1.getPublicKey())
+var exmodp14_4 = crypto.createDiffieHellman(modp14buf, 2);
+exmodp14_4.generateKeys();
+modp14Secret = modp14.computeSecret(exmodp14_4.getPublicKey()).toString('hex');
+var exmodp14_4Secret = exmodp14_4.computeSecret(modp14.getPublicKey())
                                .toString('hex');
-assert.equal(modp1Secret, exmodp1_4Secret);
-assert.equal(exmodp1_4.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
+assert.equal(modp14Secret, exmodp14_4Secret);
+assert.equal(exmodp14_4.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
 
 
 var p = 'FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74' +
@@ -838,6 +855,40 @@ var p = 'FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74' +
         'EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF';
 var bad_dh = crypto.createDiffieHellman(p, 'hex');
 assert.equal(bad_dh.verifyError, constants.DH_NOT_SUITABLE_GENERATOR);
+
+function node_output(code, args, env, cb) {
+  var out = '', err = '';
+  var p = spawn(process.execPath, [ '-e', code ].concat(args), { env: env });
+  p.stdout.on('data', function(data) { out += data; });
+  p.stderr.on('data', function(data) { err += data; });
+  p.on('close', function(code, signal) { cb(out, err, code); });
+}
+
+function no_output(out, err, code) {
+  assert.equal(out + err, '');
+  assert.equal(code, 0);
+}
+
+// test if fails on deprecated group
+node_output("require('crypto').getDiffieHellman('modp1')",
+            [], {}, function(out, err, code) {
+              assert.equal(out, '');
+              assert.ok(err.indexOf('Small DH groups disabled') > -1);
+              assert.equal(code, 1);
+            });
+
+// test if the environment variable makes it work
+node_output("require('crypto').getDiffieHellman('modp1')",
+            [], { 'ENABLE_SMALL_DH_GROUPS': '' }, no_output);
+
+// test if the cmdline switch makes it work
+node_output("require('crypto').getDiffieHellman('modp1')",
+            [ '--enable-small-dh-groups' ], {}, no_output);
+
+// test if does not fail on the next group
+node_output("require('crypto').getDiffieHellman('modp2')",
+            [], {}, no_output);
+
 
 // Test RSA encryption/decryption
 (function() {

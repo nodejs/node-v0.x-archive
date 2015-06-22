@@ -77,6 +77,7 @@ namespace node {
 
 bool SSL2_ENABLE = false;
 bool SSL3_ENABLE = false;
+bool SMALL_DH_GROUPS_ENABLE = false;
 const char * DEFAULT_CIPHER_LIST = DEFAULT_CIPHER_LIST_HEAD;
 
 namespace crypto {
@@ -3839,7 +3840,6 @@ bool DiffieHellman::Init(const char* p, int p_len, const char* g, int g_len) {
   return true;
 }
 
-
 void DiffieHellman::DiffieHellmanGroup(
     const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(args.GetIsolate());
@@ -3859,6 +3859,9 @@ void DiffieHellman::DiffieHellmanGroup(
 
     if (strcasecmp(*group_name, it->name) != 0)
       continue;
+
+    if (it->bits < 1024 && !SMALL_DH_GROUPS_ENABLE)
+      return env->ThrowError("Small DH groups disabled (see documentation)");
 
     initialized = diffieHellman->Init(it->prime,
                                       it->prime_size,
@@ -5192,6 +5195,7 @@ void InitCrypto(Handle<Object> target,
 
   NODE_DEFINE_CONSTANT(target, SSL3_ENABLE);
   NODE_DEFINE_CONSTANT(target, SSL2_ENABLE);
+  NODE_DEFINE_CONSTANT(target, SMALL_DH_GROUPS_ENABLE);
 
   NODE_DEFINE_STRING_CONSTANT(env->isolate(), target, DEFAULT_CIPHER_LIST);
   NODE_SET_METHOD(target, "getLegacyCiphers", DefaultCiphers);

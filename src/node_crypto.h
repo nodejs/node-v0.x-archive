@@ -104,6 +104,7 @@ namespace node {
 
 extern bool SSL2_ENABLE;
 extern bool SSL3_ENABLE;
+extern bool SMALL_DH_GROUPS_ENABLE;
 extern const char * DEFAULT_CIPHER_LIST;
 
 namespace crypto {
