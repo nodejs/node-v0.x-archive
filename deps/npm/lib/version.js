@@ -11,6 +11,7 @@ var semver = require("semver")
   , npm = require("./npm.js")
   , git = require("./utils/git.js")
   , assert = require("assert")
+  , lifecycle = require("./utils/lifecycle.js")
 
 version.usage = "npm version [<newversion> | major | minor | patch | prerelease | preminor | premajor ]\n"
               + "\n(run in package dir)\n"
@@ -26,23 +27,19 @@ function version (args, silent, cb_) {
 
   var packagePath = path.join(npm.localPrefix, "package.json")
   fs.readFile(packagePath, function (er, data) {
-    function cb (er) {
-      if (!er && !silent) console.log("v" + data.version)
-      cb_(er)
-    }
-
     if (data) data = data.toString()
     try {
       data = JSON.parse(data)
     }
-    catch (er) {
+    catch (e) {
+      er = e
       data = null
     }
 
     if (!args.length) return dump(data, cb_)
 
     if (er) {
-      log.error("version", "No package.json found")
+      log.error("version", "No valid package.json found")
       return cb_(er)
     }
 
@@ -51,18 +48,34 @@ function version (args, silent, cb_) {
     if (!newVersion) return cb_(version.usage)
     if (data.version === newVersion) return cb_(new Error("Version not changed"))
     data.version = newVersion
+    var lifecycleData = Object.create(data)
+    lifecycleData._id = data.name + "@" + newVersion
 
-    checkGit(function (er, hasGit) {
-      if (er) return cb_(er)
+    var where = npm.prefix
+    chain([
+          [lifecycle, lifecycleData, "preversion", where]
+        , [version_, data, silent]
+        , [lifecycle, lifecycleData, "version", where]
+        , [lifecycle, lifecycleData, "postversion", where] ]
+        , cb_)
+  })
+}
 
-      write(data, "package.json", function (er) {
-        if (er) return cb_(er)
+function version_ (data, silent, cb_) {
+  function cb (er) {
+    if (!er && !silent) console.log("v" + data.version)
+    cb_(er)
+  }
 
-        updateShrinkwrap(newVersion, function (er, hasShrinkwrap) {
-          if (er || !hasGit) return cb(er)
+  checkGit(function (er, hasGit) {
+    if (er) return cb(new Error(er))
 
-          commit(data.version, hasShrinkwrap, cb)
-        })
+    write(data, "package.json", function (er) {
+      if (er) return cb(new Error(er))
+
+      updateShrinkwrap(data.version, function (er, hasShrinkwrap) {
+        if (er || !hasGit) return cb(er)
+        commit(data.version, hasShrinkwrap, cb)
       })
     })
   })
