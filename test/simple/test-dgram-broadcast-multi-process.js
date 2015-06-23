@@ -40,7 +40,7 @@ get_bindAddress: for (var name in networkInterfaces) {
   var interfaces = networkInterfaces[name];
   for(var i = 0; i < interfaces.length; i++) {
     var localInterface = interfaces[i];
-    if (!localInterface.internal && localInterface.family === 'IPv4') {
+    if (!localInterface.internal && localInterface.family === 4) {
       var bindAddress = localInterface.address;
       break get_bindAddress;
     }
