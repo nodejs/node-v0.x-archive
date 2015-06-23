@@ -2566,6 +2566,7 @@ static void PrintHelp() {
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
          "  --enable-ssl2        enable ssl2\n"
          "  --enable-ssl3        enable ssl3\n"
+         "  --enable-small-dh-groups  enable small dh groups (not recommended)\n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2577,6 +2578,7 @@ static void PrintHelp() {
          "NODE_MODULE_CONTEXTS   Set to 1 to load modules in their own\n"
          "                       global contexts.\n"
          "NODE_DISABLE_COLORS    Set to 1 to disable colors in the REPL\n"
+         "ENABLE_SMALL_DH_GROUPS enable small dh groups (not recommended)\n"
          "\n"
          "Documentation can be found at http://nodejs.org/\n");
 }
@@ -2604,6 +2606,9 @@ static void ParseArgs(int argc, char **argv) {
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--enable-ssl3") == 0) {
       SSL3_ENABLE = true;
+      argv[i] = const_cast<char*>("");
+    } else if (strcmp(arg, "--enable-small-dh-groups") == 0) {
+      SMALL_DH_GROUPS_ENABLE = true;
       argv[i] = const_cast<char*>("");
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       PrintHelp();
@@ -2930,6 +2935,12 @@ char** Init(int argc, char *argv[]) {
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);
+
+  const char *enableSmallDHGroups  = getenv("ENABLE_SMALL_DH_GROUPS");
+  if (enableSmallDHGroups != NULL) {
+      SMALL_DH_GROUPS_ENABLE = true;
+  }
+
   // Parse the rest of the args (up to the 'option_end_index' (where '--' was
   // in the command line))
   int v8argc = option_end_index;
