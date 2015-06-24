@@ -91,12 +91,12 @@ Example: compile and execute different scripts in a single existing context.
     var vm = require('vm');
 
     var sandbox = { globalVar: 1 };
-    vm.createContext(sandbox);
+    var contextifiedSandbox = vm.createContext(sandbox);
 
     for (var i = 0; i < 10; ++i) {
-        vm.runInContext('globalVar *= 2;', sandbox);
+        vm.runInContext('globalVar *= 2;', contextifiedSandbox);
     }
-    console.log(util.inspect(sandbox));
+    console.log(util.inspect(contextifiedSandbox));
 
     // { globalVar: 1024 }
 
