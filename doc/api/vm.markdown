@@ -222,14 +222,16 @@ execute the code multiple times. These globals are contained in the sandbox.
       animal: 'cat',
       count: 2
     };
+    
+    var contextifiedSandbox = vm.createContext(sandbox);
 
     var script = new vm.Script('count += 1; name = "kitty"');
 
     for (var i = 0; i < 10; ++i) {
-      script.runInContext(sandbox);
+      script.runInContext(contextifiedSandbox);
     }
 
-    console.log(util.inspect(sandbox));
+    console.log(util.inspect(contextifiedSandbox));
 
     // { animal: 'cat', count: 12, name: 'kitty' }
 
