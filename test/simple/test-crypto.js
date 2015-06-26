@@ -24,6 +24,7 @@
 
 var common = require('../common');
 var assert = require('assert');
+var spawn = require('child_process').spawn;
 
 try {
   var crypto = require('crypto');
@@ -722,6 +723,45 @@ var aSecret = alice.computeSecret(bob.getPublicKey()).toString('hex');
 var bSecret = bob.computeSecret(alice.getPublicKey()).toString('hex');
 assert.equal(aSecret, bSecret);
 
+function node_output(code, args, env, cb) {
+  var out = '', err = '';
+  var p = spawn(process.execPath, [ '-e', code ].concat(args), { env: env });
+  p.stdout.on('data', function(data) { out += data; });
+  p.stderr.on('data', function(data) { err += data; });
+  p.on('close', function(code, signal) { cb(out, err, code); });
+}
+
+function assert_output(contents) {
+  return function(out, err, code) {
+    assert.equal(out.trim(), contents);
+    assert.equal(err, '');
+    assert.equal(code, 0);
+  };
+}
+var assert_no_output = assert_output('');
+
+// test if fails on deprecated group
+node_output("require('crypto').getDiffieHellman('modp1')",
+            [], {}, function(out, err, code) {
+              assert.equal(out, '');
+              assert.ok(err.indexOf('Small DH groups disabled') > -1);
+              assert.notEqual(code, 1);
+            });
+
+// test if the environment variable makes it work
+node_output("require('crypto').getDiffieHellman('modp1');" +
+            "console.log(process.binding('crypto').SMALL_DH_GROUPS_ENABLE)",
+            [], { 'ENABLE_SMALL_DH_GROUPS': '' }, assert_output('1'));
+
+// test if the cmdline switch makes it work
+node_output("require('crypto').getDiffieHellman('modp1');" +
+            "console.log(process.binding('crypto').SMALL_DH_GROUPS_ENABLE)",
+            [ '--enable-small-dh-groups' ], {}, assert_output('1'));
+
+// test if does not fail on the next group
+node_output("require('crypto').getDiffieHellman('modp2');" +
+            "console.log(process.binding('crypto').SMALL_DH_GROUPS_ENABLE)",
+            [], {}, assert_output('0'));
 
 // https://github.com/joyent/node/issues/2338
 assert.throws(function() {

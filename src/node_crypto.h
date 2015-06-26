@@ -47,6 +47,7 @@ namespace node {
 
 extern bool SSL2_ENABLE;
 extern bool SSL3_ENABLE;
+extern bool SMALL_DH_GROUPS_ENABLE;
 
 namespace crypto {
 

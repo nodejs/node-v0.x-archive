@@ -1,8 +1,15 @@
-
 /*
     These modular groups were literally taken from:
-       * RFC 2412 (groups 1 and 2)
-       * RFC 3526 (groups 5, 14, 15, 16, 17 and 18)
+       * RFC 2412:
+          - group 1 (768 bits)
+          - group 2 (1024 bits)
+          - group 5 (1536 bits)
+       * RFC 3526:
+          - group 14 (2048 bits)
+          - group 15 (3072 bits)
+          - group 16 (4096 bits)
+          - group 17 (6144 bits)
+          - group 18 (8192 bits)
     They all use 2 as a generator.
 */
 
@@ -367,6 +374,7 @@ unsigned char group_modp18[] = {
 
 typedef struct {
   const char* name;
+  unsigned int bits;
   unsigned char* prime;
   int prime_size;
   unsigned char* gen;
@@ -374,13 +382,13 @@ typedef struct {
 } modp_group;
 
 modp_group modp_groups[] = {
-  { "modp1", group_modp1, sizeof(group_modp1) / sizeof(group_modp1[0]), two_generator, 1 },
-  { "modp2", group_modp2, sizeof(group_modp2) / sizeof(group_modp2[0]), two_generator, 1 },
-  { "modp5", group_modp5, sizeof(group_modp5) / sizeof(group_modp5[0]), two_generator, 1 },
-  { "modp14", group_modp14, sizeof(group_modp14) / sizeof(group_modp14[0]), two_generator, 1 },
-  { "modp15", group_modp15, sizeof(group_modp15) / sizeof(group_modp15[0]), two_generator, 1 },
-  { "modp16", group_modp16, sizeof(group_modp16) / sizeof(group_modp16[0]), two_generator, 1 },
-  { "modp17", group_modp17, sizeof(group_modp17) / sizeof(group_modp17[0]), two_generator, 1 },
-  { "modp18", group_modp18, sizeof(group_modp18) / sizeof(group_modp18[0]), two_generator, 1 },
-  { NULL, NULL, 0, NULL, 0 }
+  { "modp1", 768, group_modp1, ARRAY_SIZE(group_modp1), two_generator, 1 },
+  { "modp2", 1024, group_modp2, ARRAY_SIZE(group_modp2), two_generator, 1 },
+  { "modp5", 1536, group_modp5, ARRAY_SIZE(group_modp5), two_generator, 1 },
+  { "modp14", 2048, group_modp14, ARRAY_SIZE(group_modp14), two_generator, 1 },
+  { "modp15", 3072, group_modp15, ARRAY_SIZE(group_modp15), two_generator, 1 },
+  { "modp16", 4096, group_modp16, ARRAY_SIZE(group_modp16), two_generator, 1 },
+  { "modp17", 6144, group_modp17, ARRAY_SIZE(group_modp17), two_generator, 1 },
+  { "modp18", 8192, group_modp18, ARRAY_SIZE(group_modp18), two_generator, 1 },
+  { NULL, 0, NULL, 0, NULL, 0 }
 };
