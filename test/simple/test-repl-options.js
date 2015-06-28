@@ -67,7 +67,7 @@ var r2 = repl.start({
   useGlobal: true,
   ignoreUndefined: true,
   eval: evaler,
-  recover: recoverTester,
+  recoverable: recoverTester,
   writer: writer
 });
 assert.equal(r2.input, stream);
