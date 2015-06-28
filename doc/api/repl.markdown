@@ -49,6 +49,8 @@ the following values:
 
  - `eval` - function that will be used to eval each given line. Defaults to
    an async wrapper for `eval()`. See below for an example of a custom `eval`.
+ 
+ - `recoverable` - function that will return a `bool` when passed an error and report if it is recoverable. Use if your `eval` returns none standard errors but you still want the benefits of multiline input.
 
  - `useColors` - a boolean which specifies whether or not the `writer` function
    should output colors. If a different `writer` function is set then this does
