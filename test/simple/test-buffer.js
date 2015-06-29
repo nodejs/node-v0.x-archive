@@ -1187,3 +1187,7 @@ assert.throws(function() {
 
 // Regression test for https://github.com/iojs/io.js/issues/649.
 assert.throws(function() { Buffer(1422561062959).toString('utf8'); });
+
+var b = new Buffer(1).fill(1);
+assert.equal(b.readBits(0, 0, 4), 1);
+assert.equal(b.readBits(0, 4, 4), 0);
