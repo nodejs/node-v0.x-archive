@@ -11,9 +11,34 @@ var debug     = require('debug')('test-node-ssl');
 
 var common = require('../../common');
 
-var SSL2_COMPATIBLE_CIPHERS = 'RC4-MD5';
+// RC4-MD5 is a SSLv2 cipher that can only be used if both ends explictly
+// specify it as allowed. Indeed, MD5 is not available in the default ciphers
+// list.
+// It is a SSLv2 cipher, we use it to test that SSLv2 connections work.
+var RC4_MD5_CIPHER = 'RC4-MD5';
 
-var CMD_LINE_OPTIONS = [ null, "--enable-ssl2", "--enable-ssl3" ];
+// The 'RC4-SHA' cipher is one of the RC4 ciphers that is supported by
+// versions of Node.js < v0.10.40 (before the deprecation of RC4),
+// since both RC4 and SHA are included in the default ciphers list.
+//
+// 'RC4-SHA' is not supported by default with Node.js versions >= 0.10.40
+// since RC4 was deprecated at that time.
+//
+// This specific cipher is used to test that it can be used with current
+// versions of Node.js *only* when both ends explicitly  specify RC4-SHA
+// as the cipher they want to use, or if --enable-legacy-cipher-list=v0.10.38
+// is passed at least to the client or the server.
+//
+// Note also that RC4-SHA is a SSLv3 cipher, not a SSLv2 cipher contrary to
+// RC4-MD5.
+var RC4_SHA_CIPHER = 'RC4-SHA';
+
+var CMD_LINE_OPTIONS = [
+  null,
+  "--enable-ssl2",
+  "--enable-ssl3",
+  "--enable-legacy-cipher-list=v0.10.38"
+];
 
 var SERVER_SSL_PROTOCOLS = [
   null,
@@ -137,6 +162,66 @@ function secureProtocolCompatibleWithSecureOptions(secureProtocol, secureOptions
   return true;
 }
 
+function testSSLv2Setups(serverSetup, clientSetup) {
+  // SSLv2 has to be explicitly specified on both sides to work
+  if (isSsl2Protocol(serverSetup.secureProtocol) &&
+      !isSsl2Protocol(clientSetup.secureProtocol))
+    return false;
+
+  if (isSsl2Protocol(clientSetup.secureProtocol) &&
+    !isSsl2Protocol(serverSetup.secureProtocol))
+    return false;
+
+  var ssl2UsedOnBothSides = isSsl2Protocol(serverSetup.secureProtocol) &&
+                            isSsl2Protocol(clientSetup.secureProtocol);
+  if (ssl2UsedOnBothSides &&
+      ((serverSetup.ciphers !== RC4_MD5_CIPHER) ||
+      (clientSetup.ciphers !== RC4_MD5_CIPHER))) {
+    /*
+     * Default ciphers are not compatible with SSLv2. Both client *and*
+     * server need to specify a SSLv2 compatible cipher to be able to use
+     * SSLv2.
+     */
+    return false;
+  }
+
+  return true;
+}
+
+function usesDefaultCiphers(setup) {
+  assert(typeof setup === 'object', 'setup parameter must be an object');
+  return setup.ciphers == null;
+}
+
+function testRC4LegacyCiphers(serverSetup, clientSetup) {
+
+  // To be able to use a RC4 cipher suite, either both ends specify it (like
+  // for the test using RC4-MD5), or one end pass it explicitly and the other
+  // uses the default ciphers list while passing the
+  // --enable-legacy-cipher-list=v0.10.38 command line option
+  // We're using RC4-SHA as our test cipher suite, because SHA is allowed by
+  // default and not RC4, so we know that we're only testing disabling/enabling
+  // RC4.
+
+  if (serverSetup.ciphers === RC4_SHA_CIPHER) {
+    if (clientSetup.ciphers !== RC4_SHA_CIPHER &&
+        (!usesDefaultCiphers(clientSetup) ||
+         clientSetup.cmdLine !== '--enable-legacy-cipher-list=v0.10.38')) {
+        return false;
+      }
+  }
+
+  if (clientSetup.ciphers === RC4_SHA_CIPHER) {
+    if (serverSetup.ciphers !== RC4_SHA_CIPHER &&
+        (!usesDefaultCiphers(serverSetup) ||
+         serverSetup.cmdLine !== '--enable-legacy-cipher-list=v0.10.38')) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function testSetupsCompatible(serverSetup, clientSetup) {
   debug('Determing test result for:');
   debug(serverSetup);
@@ -169,16 +254,11 @@ function testSetupsCompatible(serverSetup, clientSetup) {
     return false;
   }
 
-  var ssl2Used = isSsl2Protocol(serverSetup.secureProtocol) ||
-                 isSsl2Protocol(clientSetup.secureProtocol);
-  if (ssl2Used &&
-      ((serverSetup.ciphers !== SSL2_COMPATIBLE_CIPHERS) ||
-      (clientSetup.ciphers !== SSL2_COMPATIBLE_CIPHERS))) {
-    /*
-     * Default ciphers are not compatible with SSLv2. Both client *and*
-     * server need to specify a SSLv2 compatible cipher to be able to use
-     * SSLv2.
-     */
+  if (!testSSLv2Setups(serverSetup, clientSetup)) {
+    return false;
+  }
+
+  if (!testRC4LegacyCiphers(serverSetup, clientSetup)) {
     return false;
   }
 
@@ -224,8 +304,14 @@ function createTestsSetups() {
 
           if (isSsl2Protocol(serverSecureProtocol)) {
             var setupWithSsl2Ciphers = xtend(serverSetup);
-            setupWithSsl2Ciphers.ciphers = SSL2_COMPATIBLE_CIPHERS;
+            setupWithSsl2Ciphers.ciphers = RC4_MD5_CIPHER;
             serversSetup.push(setupWithSsl2Ciphers);
+          }
+
+          if (isSsl3Protocol(serverSecureProtocol)) {
+            var setupWithSsl3Ciphers = xtend(serverSetup);
+            setupWithSsl3Ciphers.ciphers = RC4_SHA_CIPHER;
+            serversSetup.push(setupWithSsl3Ciphers);
           }
         }
       });
@@ -246,8 +332,14 @@ function createTestsSetups() {
 
           if (isSsl2Protocol(clientSecureProtocol)) {
             var setupWithSsl2Ciphers = xtend(clientSetup);
-            setupWithSsl2Ciphers.ciphers = SSL2_COMPATIBLE_CIPHERS;
+            setupWithSsl2Ciphers.ciphers = RC4_MD5_CIPHER;
             clientsSetup.push(setupWithSsl2Ciphers);
+          }
+
+          if (isSsl3Protocol(clientSecureProtocol)) {
+            var setupWithSsl3Ciphers = xtend(clientSetup);
+            setupWithSsl3Ciphers.ciphers = RC4_SHA_CIPHER;
+            clientsSetup.push(setupWithSsl3Ciphers);
           }
         }
       });
