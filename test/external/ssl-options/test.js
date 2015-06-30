@@ -162,6 +162,8 @@ function secureProtocolCompatibleWithSecureOptions(secureProtocol, secureOptions
   return true;
 }
 
+// Returns true if the server and client setups passed as parameters
+// would lead to a successful connection, false otherwise.
 function testSSLv2Setups(serverSetup, clientSetup) {
   // SSLv2 has to be explicitly specified on both sides to work
   if (isSsl2Protocol(serverSetup.secureProtocol) &&
@@ -174,17 +176,36 @@ function testSSLv2Setups(serverSetup, clientSetup) {
 
   var ssl2UsedOnBothSides = isSsl2Protocol(serverSetup.secureProtocol) &&
                             isSsl2Protocol(clientSetup.secureProtocol);
-  if (ssl2UsedOnBothSides &&
-      ((serverSetup.ciphers !== RC4_MD5_CIPHER) ||
-      (clientSetup.ciphers !== RC4_MD5_CIPHER))) {
-    /*
-     * Default ciphers are not compatible with SSLv2. Both client *and*
-     * server need to specify a SSLv2 compatible cipher to be able to use
-     * SSLv2.
-     */
+  if (ssl2UsedOnBothSides) {
+    // Even when SSLv2 is specified on both sides, a SSLv2 compatible cipher
+    // has to be used on both sides too.
+
+    // This is the case if for instance RC4-MD5 is passed explicitly
+    // as a cipher option
+    if (serverSetup.ciphers === RC4_MD5_CIPHER &&
+        clientSetup.ciphers === RC4_MD5_CIPHER)
+      return true;
+
+    // It is also the case if the server passes explicitly RC4-MD%
+    // but the client doesn't pass any cipher and passes
+    // --enable-legacy-cipher-list=v0.10.38 on the command line. This basically
+    // keeps the buggy be behavior of clients not using the default ciphers
+    // list when not explicitly passing any cipher, and as a result
+    // allowing RC4 and MD5 to be used.
+    if (serverSetup.ciphers === RC4_MD5_CIPHER &&
+        clientSetup.ciphers === undefined &&
+        clientSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.38')
+      return true;
+
+    // In all other cases, when using SSLv2 on both sides,
+    // the connection should fail.
     return false;
   }
 
+  // When the client nor the server is using SSlv2, by default the connection
+  // should succeed.
+  // Other test functions looking for other incompatibilites between SSL/TLS
+  // options will take care of testing them.
   return true;
 }
 
@@ -193,6 +214,9 @@ function usesDefaultCiphers(setup) {
   return setup.ciphers == null;
 }
 
+
+// Returns true if the server and client setups passed as parameters
+// would lead to a successful connection, false otherwise.
 function testRC4LegacyCiphers(serverSetup, clientSetup) {
 
   // To be able to use a RC4 cipher suite, either both ends specify it (like
@@ -203,22 +227,31 @@ function testRC4LegacyCiphers(serverSetup, clientSetup) {
   // default and not RC4, so we know that we're only testing disabling/enabling
   // RC4.
 
-  if (serverSetup.ciphers === RC4_SHA_CIPHER) {
-    if (clientSetup.ciphers !== RC4_SHA_CIPHER &&
-        (!usesDefaultCiphers(clientSetup) ||
-         clientSetup.cmdLine !== '--enable-legacy-cipher-list=v0.10.38')) {
-        return false;
-      }
+  if (serverSetup.ciphers === RC4_SHA_CIPHER ||
+      clientSetup.ciphers === RC4_SHA_CIPHER) {
+
+    if (serverSetup.ciphers === RC4_SHA_CIPHER &&
+        clientSetup.ciphers === RC4_SHA_CIPHER)
+      return true;
+
+    if (serverSetup.ciphers === RC4_SHA_CIPHER &&
+        usesDefaultCiphers(clientSetup) &&
+        clientSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.38')
+      return true;
+
+    if (clientSetup.ciphers === RC4_SHA_CIPHER &&
+        usesDefaultCiphers(serverSetup) &&
+        serverSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.38')
+      return true;
+
+    // Otherwise, if only one end passes a RC4 cipher suite explicitly,
+    // connection should fail.
+    return false;
   }
 
-  if (clientSetup.ciphers === RC4_SHA_CIPHER) {
-    if (serverSetup.ciphers !== RC4_SHA_CIPHER &&
-        (!usesDefaultCiphers(serverSetup) ||
-         serverSetup.cmdLine !== '--enable-legacy-cipher-list=v0.10.38')) {
-      return false;
-    }
-  }
-
+  // When not using explicitly a RC4 cipher suite, connection should succeed.
+  // Other test functions looking for other incompatibilites between SSL/TLS
+  // options will take care of testing them.
   return true;
 }
 
