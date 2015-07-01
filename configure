@@ -1020,7 +1020,7 @@ config = {
   'PYTHON': sys.executable,
 }
 
-if options.prefix:
+if options.prefix != None:
   config['PREFIX'] = options.prefix
 
 config = '\n'.join(map('='.join, config.iteritems())) + '\n'
