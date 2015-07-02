@@ -23,7 +23,7 @@ var assert = require('assert');
 var fs = require('fs');
 
 try {
-  fs.watch('non-existant-file')
+  fs.watch('non-existent-file');
 } catch (error) {
   assert(error);
   assert(/non-existant-file/.test(error));
