@@ -26,5 +26,5 @@ try {
   fs.watch('non-existent-file');
 } catch (error) {
   assert(error);
-  assert(/non-existant-file/.test(error));
+  assert(/non-existent-file/.test(error));
 }
