@@ -266,6 +266,7 @@ endif
 TARBALL=$(TARNAME).tar.gz
 BINARYNAME=$(TARNAME)-$(PLATFORM)-$(ARCH)
 BINARYTAR=$(BINARYNAME).tar.gz
+BINARYDOC=$(BINARYNAME)/share/doc/$(TARNAME)
 PKG=out/$(TARNAME).pkg
 PACKAGEMAKER ?= /Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
 
@@ -345,9 +346,10 @@ $(BINARYTAR): release-only
 	$(PYTHON) ./configure --prefix=/ --download=all --with-intl=small-icu \
 		--without-snapshot --dest-cpu=$(DESTCPU) --tag=$(TAG) $(CONFIG_FLAGS)
 	$(MAKE) install DESTDIR=$(BINARYNAME) V=$(V) PORTABLE=1
-	cp README.md $(BINARYNAME)
-	cp LICENSE $(BINARYNAME)
-	cp ChangeLog $(BINARYNAME)
+	mkdir -p $(BINARYDOC)
+	cp README.md $(BINARYDOC)
+	cp LICENSE $(BINARYDOC)
+	cp ChangeLog $(BINARYDOC)
 	tar -cf $(BINARYNAME).tar $(BINARYNAME)
 	rm -rf $(BINARYNAME)
 	gzip -f -9 $(BINARYNAME).tar
