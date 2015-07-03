@@ -377,6 +377,15 @@ CPU::CPU() : stepping_(0),
       }
       delete[] processor;
     }
+
+    // elf_platform moved to the model name field in Linux v3.8.
+    if (architecture_ == 7) {
+      char* processor = cpu_info.ExtractField("model name");
+      if (HasListItem(processor, "(v6l)")) {
+        architecture_ = 6;
+      }
+      delete[] processor;
+    }
   }
 
   // Try to extract the list of CPU features from ELF hwcaps.
