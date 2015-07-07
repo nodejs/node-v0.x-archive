@@ -64,7 +64,7 @@ void CPU::FlushICache(void* start, size_t size) {
   // None of this code ends up in the snapshot so there are no issues
   // around whether or not to generate the code when building snapshots.
   Simulator::FlushICache(Isolate::Current()->simulator_i_cache(), start, size);
-#else
+#elif defined(__linux__)
   // Ideally, we would call
   //   syscall(__ARM_NR_cacheflush, start,
   //           reinterpret_cast<intptr_t>(start) + size, 0);
@@ -103,6 +103,10 @@ void CPU::FlushICache(void* start, size_t size) {
         : "0" (beg), "r" (end), "r" (flg), "r" (__ARM_NR_cacheflush)
         : "r3");
   #endif
+#elif defined(__FreeBSD__)
+  __clear_cache(start, reinterpret_cast<char*>(start) + size);
+#else
+#error "No cache flush implementation on this platform"
 #endif
 }
 
