@@ -57,6 +57,7 @@ server.listen(common.PORT, function() {
     common.debug(util.inspect(peerCert));
     assert.equal(peerCert.subject.emailAddress, 'ry@tinyclouds.org');
     assert.equal(peerCert.serialNumber, '9A84ABCFB8A72ABE');
+    assert.equal(peerCert.exponent, '65537 (0x10001)');
     assert.deepEqual(peerCert.infoAccess['OCSP - URI'],
                      [ 'http://ocsp.nodejs.org/' ]);
 
