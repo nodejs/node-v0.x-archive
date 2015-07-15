@@ -1187,3 +1187,9 @@ assert.throws(function() {
 
 // Regression test for https://github.com/iojs/io.js/issues/649.
 assert.throws(function() { Buffer(1422561062959).toString('utf8'); });
+
+// String encoded as CESU-8
+var grinning_face = new Buffer('f09f9880', 'hex').toString();
+var grinning_face_buf = new Buffer(grinning_face, 'cesu-8');
+var grinning_face_hex = grinning_face_buf.toString('hex').toLowerCase();
+assert.equal(grinning_face_hex, 'eda0bdedb880');

@@ -333,6 +333,15 @@ size_t StringBytes::Write(Isolate* isolate,
         len = str->WriteUtf8(buf, buflen, chars_written, WRITE_UTF8_FLAGS);
       break;
 
+    case CESU8:
+      if (is_extern)
+        // TODO(tjfontaine) should this validate invalid surrogate pairs as
+        // well?
+        memcpy(buf, data, len);
+      else
+        len = str->WriteUtf8(buf, buflen, chars_written, WRITE_CESU8_FLAGS);
+      break;
+
     case UCS2:
       if (is_extern)
         memcpy(buf, data, len * 2);
@@ -473,6 +482,10 @@ size_t StringBytes::Size(Isolate* isolate,
 
     case UTF8:
       data_size = str->Utf8Length();
+      break;
+
+    case CESU8:
+      data_size = str->Cesu8Length();
       break;
 
     case UCS2:

@@ -125,11 +125,13 @@ class Latin1 {
 class Utf8 {
  public:
   static inline uchar Length(uchar chr, int previous);
+  static inline uchar CesuLength(uchar chr, int previous);
   static inline unsigned EncodeOneByte(char* out, uint8_t c);
   static inline unsigned Encode(char* out,
                                 uchar c,
                                 int previous,
-                                bool replace_invalid = false);
+                                bool replace_invalid = false,
+                                bool encode_as_cesu_8 = false);
   static uchar CalculateValue(const byte* str,
                               unsigned length,
                               unsigned* cursor);
