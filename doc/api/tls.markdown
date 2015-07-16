@@ -135,20 +135,20 @@ absolutely necessary.
 
 It is possible for the built-in default cipher suite to change from one release
 of Node.js to another. For instance, v0.10.39 uses a different default than
-v0.10.38. Such changes can cause issues with applications written to assume
+v0.10.40. Such changes can cause issues with applications written to assume
 certain specific defaults. To help buffer applications against such changes,
 the `--enable-legacy-cipher-list` command line switch or `NODE_LEGACY_CIPHER_LIST`
 environment variable can be set to specify a specific preset default:
 
-    # Use the v0.10.38 defaults
-    node --enable-legacy-cipher-list=v0.10.38
+    # Use the v0.10.40 defaults
+    node --enable-legacy-cipher-list=v0.10.40
     // or
-    NODE_LEGACY_CIPHER_LIST=v0.10.38
+    NODE_LEGACY_CIPHER_LIST=v0.10.40
 
 Currently, the values supported for the `enable-legacy-cipher-list` switch and
 `NODE_LEGACY_CIPHER_LIST` environment variable include:
 
-    v0.10.38 - To enable the default cipher suite used in v0.10.38
+    v0.10.40 - To enable the default cipher suite used in v0.10.40
 
       ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
 
@@ -156,7 +156,7 @@ These legacy cipher suites are also made available for use via the
 `getLegacyCiphers()` method:
 
     var tls = require('tls');
-    console.log(tls.getLegacyCiphers('v0.10.38'));
+    console.log(tls.getLegacyCiphers('v0.10.40'));
 
 CAUTION: Changes to the default cipher suite are typically made in order to
 strengthen the default security for applications running within Node.js.
@@ -164,12 +164,12 @@ Reverting back to the defaults used by older releases can weaken the security
 of your applications. The legacy cipher suites should only be used if absolutely
 necessary.
 
-NOTE: Due to an error in Node.js v0.10.38, the default cipher list only applied
+NOTE: Due to an error in Node.js v0.10.40, the default cipher list only applied
 to servers using TLS. The default cipher list would _not_ be used by clients.
 This behavior has been changed in v0.10.39 and the default cipher list is now
 used by both the server and client when using TLS. However, when using
-`--enable-legacy-cipher-list=v0.10.38`, Node.js is reverted back to the
-v0.10.38 behavior of only using the default cipher list on the server.
+`--enable-legacy-cipher-list=v0.10.40`, Node.js is reverted back to the
+v0.10.40 behavior of only using the default cipher list on the server.
 
 ### Cipher List Precedence
 
@@ -184,11 +184,11 @@ will override the environment variables. If both happen to be specified, the
 right-most (second one specified) will take precedence. For instance, in the
 example:
 
-    node --cipher-list=ABC --enable-legacy-cipher-list=v0.10.38
+    node --cipher-list=ABC --enable-legacy-cipher-list=v0.10.40
 
-The v0.10.38 default cipher list will be used.
+The v0.10.40 default cipher list will be used.
 
-    node --enable-legacy-cipher-list=v0.10.38 --cipher-list=ABC
+    node --enable-legacy-cipher-list=v0.10.40 --cipher-list=ABC
 
 The custom cipher list will be used.
 
@@ -206,7 +206,7 @@ Example:
 
 Returns a default cipher list used in a previous version of Node.js. The
 version parameter must be a string whose value identifies previous Node.js
-release version. The only value currently supported is `v0.10.38`.
+release version. The only value currently supported is `v0.10.40`.
 
 A TypeError will be thrown if: (a) the `version` is any type other than a
 string, (b) the `version` parameter is not specified, or (c) additional

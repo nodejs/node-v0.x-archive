@@ -2567,7 +2567,7 @@ static void PrintHelp() {
          "  --enable-ssl2        enable ssl2\n"
          "  --enable-ssl3        enable ssl3\n"
          "  --cipher-list=val    specify the default TLS cipher list\n"
-         "  --enable-legacy-cipher-list=v0.10.38 \n"
+         "  --enable-legacy-cipher-list=v0.10.40 \n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2580,7 +2580,7 @@ static void PrintHelp() {
          "                       global contexts.\n"
          "NODE_DISABLE_COLORS    Set to 1 to disable colors in the REPL\n"
          "NODE_CIPHER_LIST       Override the default TLS cipher list\n"
-         "NODE_LEGACY_CIPHER_LIST=v0.10.38\n"
+         "NODE_LEGACY_CIPHER_LIST=v0.10.40\n"
          "\n"
          "Documentation can be found at http://nodejs.org/\n");
 }

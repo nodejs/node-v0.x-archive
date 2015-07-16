@@ -26,7 +26,7 @@ var crypto = process.binding('crypto');
 var common = require('../common');
 var fs = require('fs');
 
-var V1038Ciphers = tls.getLegacyCiphers('v0.10.38');
+var V1038Ciphers = tls.getLegacyCiphers('v0.10.40');
 
 function doTest(checklist, additional_args, env) {
   var options;
@@ -54,13 +54,13 @@ function doTestPrecedence() {
   // test that --enable-legacy-cipher-list takes precedence
   // over NODE_CIPHER_LIST
   doTest(V1038Ciphers,
-         ['--enable-legacy-cipher-list=v0.10.38'],
+         ['--enable-legacy-cipher-list=v0.10.40'],
          {'NODE_CIPHER_LIST': 'XYZ'});
 
   // test that --cipher-list takes precedence over NODE_LEGACY_CIPHER_LIST
   doTest('ABC',
          ['--cipher-list=ABC'],
-         {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
+         {'NODE_LEGACY_CIPHER_LIST': 'v0.10.40'});
 
   // test that --enable-legacy-cipher-list takes precence over both envars
   // note: in this release, there's only one legal value for the legacy
@@ -68,9 +68,9 @@ function doTestPrecedence() {
   //       are supported, this test should be changed to test that the
   //       command line switch actually does override
   doTest(V1038Ciphers,
-         ['--enable-legacy-cipher-list=v0.10.38'],
+         ['--enable-legacy-cipher-list=v0.10.40'],
          {
-           'NODE_LEGACY_CIPHER_LIST': 'v0.10.38',
+           'NODE_LEGACY_CIPHER_LIST': 'v0.10.40',
            'NODE_CIPHER_LIST': 'XYZ'
          });
 
@@ -78,13 +78,13 @@ function doTestPrecedence() {
   doTest(V1038Ciphers,
          [
            '--cipher-list=XYZ',
-           '--enable-legacy-cipher-list=v0.10.38'
+           '--enable-legacy-cipher-list=v0.10.40'
          ]);
 
    // test the right-most command line option takes precedence
    doTest('XYZ',
           [
-            '--enable-legacy-cipher-list=v0.10.38',
+            '--enable-legacy-cipher-list=v0.10.40',
             '--cipher-list=XYZ'
           ]);
 
@@ -92,7 +92,7 @@ function doTestPrecedence() {
     doTest('XYZ',
            [
              '--cipher-list=ABC',
-             '--enable-legacy-cipher-list=v0.10.38',
+             '--enable-legacy-cipher-list=v0.10.40',
              '--cipher-list=XYZ'
            ]);
 
@@ -100,7 +100,7 @@ function doTestPrecedence() {
     // NODE_CIPHER_LIST
     doTest(V1038Ciphers, [],
            {
-             'NODE_LEGACY_CIPHER_LIST': 'v0.10.38',
+             'NODE_LEGACY_CIPHER_LIST': 'v0.10.40',
              'NODE_CIPHER_LIST': 'ABC'
            });
 }
@@ -115,7 +115,7 @@ doTest('ABC', [], {'NODE_CIPHER_LIST':'ABC'});
 doTest('ABC', ['--cipher-list=ABC']);
 
 // Test the --enable-legacy-cipher-list and NODE_LEGACY_CIPHER_LIST envar
-['v0.10.38'].forEach(function(arg) {
+['v0.10.40'].forEach(function(arg) {
   var checklist = tls.getLegacyCiphers(arg);
   // command line switch
   doTest(checklist, ['--enable-legacy-cipher-list=' + arg]);
@@ -136,11 +136,11 @@ assert.throws(function() {tls.getLegacyCiphers(1);}, TypeError);
 // too many parameters
 assert.throws(function() {tls.getLegacyCiphers('abc', 'extra');}, TypeError);
 // ah, just right
-assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.38');});
+assert.doesNotThrow(function() {tls.getLegacyCiphers('v0.10.40');});
 
-// Test to ensure default ciphers are not set when v0.10.38 legacy cipher
+// Test to ensure default ciphers are not set when v0.10.40 legacy cipher
 // switch is used. This is a bit involved... we need to first set up the
-// TLS server, then spawn a second node instance using the v0.10.38 cipher,
+// TLS server, then spawn a second node instance using the v0.10.40 cipher,
 // then connect and check to make sure the options are correct. Since there
 // is no direct way of testing it, an alternate createCredentials shim is
 // created that intercepts the call to createCredentials and checks the
@@ -159,7 +159,7 @@ var fail_if_default_ciphers_set = (
     require('crypto').createCredentials = function(options) {
       used_monkey_patch = true;
       // since node was started with the --enable-legacy-cipher-list
-      // switch equal to v0.10.38, the options.ciphers should be
+      // switch equal to v0.10.40, the options.ciphers should be
       // undefined. If it's not undefined, we have a problem and
       // the test fails
       if (options.ciphers !== undefined) {
@@ -253,19 +253,19 @@ var server = tls.Server(options, function(socket) {
 server.listen(common.PORT, function() {
   // checks to make sure the default ciphers are *not* set
   // because the --enable-legacy-cipher-list switch is set to
-  // v0.10.38
+  // v0.10.40
   doDefaultCipherTest(fail_if_default_ciphers_set,
-                      ['--enable-legacy-cipher-list=v0.10.38']);
+                      ['--enable-legacy-cipher-list=v0.10.40']);
 
   // checks to make sure the default ciphers are *not* set
-  // because the NODE_LEGACY_CIPHER_LIST envar is set to v0.10.38
+  // because the NODE_LEGACY_CIPHER_LIST envar is set to v0.10.40
   doDefaultCipherTest(fail_if_default_ciphers_set,
-                      [], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.38'});
+                      [], {'NODE_LEGACY_CIPHER_LIST': 'v0.10.40'});
 
   // this variant checks to ensure that the default cipher list IS set
   doDefaultCipherTest(fail_if_default_ciphers_not_set, [], {});
 
-  // test that setting the cipher list explicitly to the v0.10.38
+  // test that setting the cipher list explicitly to the v0.10.40
   // string without using the legacy cipher switch causes the
   // default ciphers to be set.
   doDefaultCipherTest(fail_if_default_ciphers_not_set,

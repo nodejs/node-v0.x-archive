@@ -62,7 +62,7 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
-#define DEFAULT_CIPHER_LIST_V10_38 "ECDHE-RSA-AES128-SHA256:"         \
+#define DEFAULT_CIPHER_LIST_V10_40 "ECDHE-RSA-AES128-SHA256:"         \
                                 "AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
 
 #define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES128-SHA256:"           \
@@ -4207,8 +4207,8 @@ const char* LegacyCipherList(const char * ver) {
   if (ver == NULL) {
     return NULL;
   }
-  if (strncmp(ver, "v0.10.38", 8) == 0) {
-    return DEFAULT_CIPHER_LIST_V10_38;
+  if (strncmp(ver, "v0.10.40", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_40;
   } else {
     return NULL;
   }

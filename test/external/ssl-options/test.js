@@ -26,7 +26,7 @@ var RC4_MD5_CIPHER = 'RC4-MD5';
 //
 // This specific cipher is used to test that it can be used with current
 // versions of Node.js *only* when both ends explicitly  specify RC4-SHA
-// as the cipher they want to use, or if --enable-legacy-cipher-list=v0.10.38
+// as the cipher they want to use, or if --enable-legacy-cipher-list=v0.10.40
 // is passed at least to the client or the server.
 //
 // Note also that RC4-SHA is a SSLv3 cipher, not a SSLv2 cipher contrary to
@@ -37,7 +37,7 @@ var CMD_LINE_OPTIONS = [
   null,
   "--enable-ssl2",
   "--enable-ssl3",
-  "--enable-legacy-cipher-list=v0.10.38"
+  "--enable-legacy-cipher-list=v0.10.40"
 ];
 
 var SERVER_SSL_PROTOCOLS = [
@@ -188,13 +188,13 @@ function testSSLv2Setups(serverSetup, clientSetup) {
 
     // It is also the case if the server passes explicitly RC4-MD%
     // but the client doesn't pass any cipher and passes
-    // --enable-legacy-cipher-list=v0.10.38 on the command line. This basically
+    // --enable-legacy-cipher-list=v0.10.40 on the command line. This basically
     // keeps the buggy be behavior of clients not using the default ciphers
     // list when not explicitly passing any cipher, and as a result
     // allowing RC4 and MD5 to be used.
     if (serverSetup.ciphers === RC4_MD5_CIPHER &&
         clientSetup.ciphers === undefined &&
-        clientSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.38')
+        clientSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.40')
       return true;
 
     // In all other cases, when using SSLv2 on both sides,
@@ -222,7 +222,7 @@ function testRC4LegacyCiphers(serverSetup, clientSetup) {
   // To be able to use a RC4 cipher suite, either both ends specify it (like
   // for the test using RC4-MD5), or one end pass it explicitly and the other
   // uses the default ciphers list while passing the
-  // --enable-legacy-cipher-list=v0.10.38 command line option
+  // --enable-legacy-cipher-list=v0.10.40 command line option
   // We're using RC4-SHA as our test cipher suite, because SHA is allowed by
   // default and not RC4, so we know that we're only testing disabling/enabling
   // RC4.
@@ -236,12 +236,12 @@ function testRC4LegacyCiphers(serverSetup, clientSetup) {
 
     if (serverSetup.ciphers === RC4_SHA_CIPHER &&
         usesDefaultCiphers(clientSetup) &&
-        clientSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.38')
+        clientSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.40')
       return true;
 
     if (clientSetup.ciphers === RC4_SHA_CIPHER &&
         usesDefaultCiphers(serverSetup) &&
-        serverSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.38')
+        serverSetup.cmdLine === '--enable-legacy-cipher-list=v0.10.40')
       return true;
 
     // Otherwise, if only one end passes a RC4 cipher suite explicitly,

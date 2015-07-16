@@ -171,17 +171,17 @@
   };
 
   startup.setupLegacyCiphers = function setupLegacyCiphers() {
-    process._usingV1038Ciphers = function _usingV1038Ciphers() {
+    process._usingV1040Ciphers = function _usingV1040Ciphers() {
       // Returns true if the --enable-legacy-cipher-list command line
       // switch, or the NODE_LEGACY_CIPHER_LIST environment variable
-      // are set to v0.10.38 and the DEFAULT_CIPHERS equal the v0.10.38
+      // are set to v0.10.40 and the DEFAULT_CIPHERS equal the v0.10.40
       // list.
       var crypto = process.binding('crypto');
 
       var argv = process.execArgv;
-      if ((argv.indexOf('--enable-legacy-cipher-list=v0.10.38') > -1 ||
-           process.env.NODE_LEGACY_CIPHER_LIST === 'v0.10.38') &&
-          crypto.DEFAULT_CIPHER_LIST === crypto.getLegacyCiphers('v0.10.38')) {
+      if ((argv.indexOf('--enable-legacy-cipher-list=v0.10.40') > -1 ||
+           process.env.NODE_LEGACY_CIPHER_LIST === 'v0.10.40') &&
+          crypto.DEFAULT_CIPHER_LIST === crypto.getLegacyCiphers('v0.10.40')) {
             return true;
       }
 
