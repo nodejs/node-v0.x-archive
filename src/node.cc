@@ -2588,8 +2588,6 @@ static void PrintHelp() {
 // Parse node command line arguments.
 static void ParseArgs(int argc, char **argv) {
   int i;
-  int cipher_list_options = 0;
-  bool using_cipher_list_option = false;
 
   // TODO use parse opts
   for (i = 1; i < argc; i++) {
