@@ -62,6 +62,12 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
+#define DEFAULT_CIPHER_LIST_V10_38 "ECDHE-RSA-AES128-SHA256:"         \
+                                "AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
+
+#define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES128-SHA256:"           \
+                                "AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH"
+
 namespace node {
 
 const char* root_certs[] = {
@@ -4197,16 +4203,30 @@ const char* ToCString(const node::Utf8Value& value) {
   return *value ? *value : "<string conversion failed>";
 }
 
-Handle<Value> DefaultCiphers(const Arguments& args) {
+const char* LegacyCipherList(const char * ver) {
+  if (ver == NULL) {
+    return NULL;
+  }
+  if (strncmp(ver, "v0.10.38", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_38;
+  } else {
+    return NULL;
+  }
+}
+
+Handle<Value> GetLegacyCiphers(const Arguments& args) {
   HandleScope scope;
+
   unsigned int len = args.Length();
   if (len != 1 || !args[0]->IsString()) {
     return ThrowException(
       Exception::TypeError(
         String::New("A single string parameter is required")));
   }
+
   node::Utf8Value key(args[0]);
-  const char * list = legacy_cipher_list(ToCString(key));
+  const char * list = LegacyCipherList(ToCString(key));
+
   if (list != NULL) {
     return scope.Close(v8::String::New(list));
   } else {
@@ -4294,7 +4314,7 @@ void InitCrypto(Handle<Object> target) {
       v8::String::New(DEFAULT_CIPHER_LIST),
       static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete));
 
-  NODE_SET_METHOD(target, "getLegacyCiphers", DefaultCiphers);
+  NODE_SET_METHOD(target, "getLegacyCiphers", GetLegacyCiphers);
 }
 
 }  // namespace crypto

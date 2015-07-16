@@ -2662,7 +2662,7 @@ static void ParseArgs(int argc, char **argv) {
       DEFAULT_CIPHER_LIST = arg + 14;
       argv[i] = const_cast<char*>("");
     } else if (strncmp(arg, "--enable-legacy-cipher-list=", 28) == 0) {
-      const char * legacy_list = legacy_cipher_list(arg+28);
+      const char * legacy_list = crypto::LegacyCipherList(arg+28);
       if (legacy_list != NULL) {
         DEFAULT_CIPHER_LIST = legacy_list;
       } else {
@@ -2957,7 +2957,7 @@ char** Init(int argc, char *argv[]) {
   const char * leg_cipher_id = getenv("NODE_LEGACY_CIPHER_LIST");
   if (leg_cipher_id != NULL) {
     const char * leg_cipher_list =
-      legacy_cipher_list(leg_cipher_id);
+      crypto::LegacyCipherList(leg_cipher_id);
     if (leg_cipher_list != NULL) {
       DEFAULT_CIPHER_LIST = leg_cipher_list;
     } else {
