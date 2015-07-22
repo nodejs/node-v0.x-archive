@@ -14,6 +14,7 @@ test-fs-readfile-error            : PASS,FLAKY
 test-net-GH-5504                  : PASS,FLAKY
 test-stdin-script-child           : PASS,FLAKY
 test-util-debug                   : PASS,FLAKY
+test-signal-unregister            : PASS,FLAKY
 
 [$system==macos]
 test-fs-watch                     : PASS,FLAKY
