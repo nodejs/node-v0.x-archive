@@ -3,7 +3,9 @@
     Stability: 5 - Locked
 
 This module is used for writing unit tests for your applications, you can
-access it with `require('assert')`.
+access it with `require('assert')`.  
+
+involving knowledge :  [http://wiki.commonjs.org/wiki/Unit_Testing/1.0](http://wiki.commonjs.org/wiki/Unit_Testing/1.0) 
 
 ## assert.fail(actual, expected, message, operator)
 
