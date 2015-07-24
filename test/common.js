@@ -22,6 +22,7 @@
 var path = require('path');
 var fs = require('fs');
 var assert = require('assert');
+var Timer = process.binding('timer_wrap').Timer;
 
 exports.testDir = path.dirname(__filename);
 exports.fixturesDir = path.join(exports.testDir, 'fixtures');
@@ -220,9 +221,9 @@ exports.hasMultiLocalhost = function hasMultiLocalhost() {
 };
 
 exports.busyLoop = function busyLoop(time) {
-  var startTime = new Date().getTime();
+  var startTime = Timer.now();
   var stopTime =  startTime + time;
-  while (new Date().getTime() < stopTime) {
+  while (Timer.now() < stopTime) {
     ;
   }
 };
