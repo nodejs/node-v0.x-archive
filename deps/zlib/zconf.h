@@ -203,6 +203,9 @@
 #endif
 #if !defined(STDC) && (defined(MSDOS) || defined(WINDOWS) || defined(WIN32))
 #  define STDC
+#  if _MSC_VER>=1900
+#    define STDC99
+#  endif
 #endif
 #if !defined(STDC) && (defined(OS2) || defined(__HOS_AIX__))
 #  define STDC

@@ -13,6 +13,7 @@
 #include "src/compiler/node-properties-inl.h"
 #include "src/compiler/operator-properties.h"
 #include "src/compiler/operator-properties-inl.h"
+#include <iostream>
 
 namespace v8 {
 namespace internal {
@@ -113,11 +114,14 @@ void StructuredGraphBuilder::Environment::Merge(Environment* other) {
   // Resurrect a dead environment by copying the contents of the other one and
   // placing a singleton merge as the new control dependency.
   if (this->IsMarkedAsUnreachable()) {
+    std::clog << "WARNING: StructuredGraphBuilder::Environment::Merge partially disabled\n";
+    /*
     Node* other_control = other->control_dependency_;
     control_dependency_ = graph()->NewNode(common()->Merge(1), other_control);
     effect_dependency_ = other->effect_dependency_;
     values_ = other->values_;
     return;
+    */
   }
 
   // Create a merge of the control dependencies of both environments and update

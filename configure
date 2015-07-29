@@ -711,7 +711,7 @@ def configure_winsdk(o):
 
   winsdk_dir = os.environ.get('WindowsSdkDir')
 
-  if winsdk_dir and os.path.isfile(winsdk_dir + '\\bin\\ctrpp.exe'):
+  if winsdk_dir and os.path.isfile(winsdk_dir + '\\bin\\x64\\ctrpp.exe'):
     print('Found ctrpp in WinSDK--will build generated files '
           'into tools/msvs/genfiles.')
     o['variables']['node_has_winsdk'] = 'true'
@@ -1035,7 +1035,7 @@ if options.use_ninja:
 elif options.use_xcode:
   gyp_args += ['-f', 'xcode']
 elif flavor == 'win':
-  gyp_args += ['-f', 'msvs', '-G', 'msvs_version=auto']
+  gyp_args += ['-f', 'msvs', '-G', 'msvs_version=2013']
 else:
   gyp_args += ['-f', 'make-' + flavor]
 
