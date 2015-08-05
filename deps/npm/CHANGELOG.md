@@ -1,3 +1,277 @@
+### v2.13.0 (2015-07-02):
+
+#### FORREST IS OUT! LET'S SNEAK IN ALL THE THINGS!
+
+Well, not _everything_. Just a couple of goodies, like the new `npm ping`
+command, and the ability to add files to the commits created by `npm version`
+with the new version hooks. There's also a couple of bugfixes in `npm` itself
+and some of its dependencies. Here we go!
+
+#### YES HELLO THIS IS NPM REGISTRY SORRY NO DOG HERE
+
+Yes, that's right! We now have a dedicated `npm ping` command. It's super simple
+and super easy. You ping. We tell you whether you pinged right by saying hello
+right back. This should help out folks dealing with things like proxy issues or
+other registry-access debugging issues. Give it a shot!
+
+This addresses [#5750](https://github.com/npm/npm/issues/5750), and will help
+with the `npm doctor` stuff descripbed in
+[#6756](https://github.com/npm/npm/issues/6756).
+
+* [`f1f7a85`](https://github.com/npm/npm/commit/f1f7a85)
+  Add ping command to CLI
+  ([@michaelnisi](https://github.com/michaelnisi))
+* [`8cec629`](https://github.com/npm/npm/commit/8cec629)
+  Add ping command to npm-registry-client
+  ([@michaelnisi](https://github.com/michaelnisi))
+* [`0c0c92d`](https://github.com/npm/npm/0c0c92d)
+  Fixed ping command issues (added docs, tests, fixed minor bugs, etc)
+  ([@zkat](https://github.com/zkat))
+
+#### I'VE WANTED THIS FOR `version` SINCE LIKE LITERALLY FOREVER AND A DAY
+
+Seriously! This patch lets you add files to the `version` commit before it's
+made, So you can add additional metadata files, more automated changes to
+`package.json`, or even generate `CHANGELOG.md` automatically pre-commit if
+you're into that sort of thing. I'm so happy this is there I can't even. Do you
+have other fun usecases for this? Tell
+[npmbot (@npmjs)](http://twitter.com/npmjs) about it!
+
+* [`582f170`](https://github.com/npm/npm/commit/582f170)
+  [#8620](https://github.com/npm/npm/issues/8620) version: Allow scripts to add
+  files to the commit.
+  ([@jamestalmage](https://github.com/jamestalmage))
+
+#### ALL YOUR FILE DESCRIPTORS ARE BELONG TO US
+
+We've had problems in the past with things like `EMFILE` errors popping up when
+trying to install packages with a bunch of dependencies. Isaac patched up
+[`graceful-fs`](https://github.com/isaacs/node-graceful-fs) to handle this case
+better, so we should be seeing fewer of those.
+
+* [`022691a`](https://github.com/npm/npm/commit/022691a)
+  `graceful-fs@4.1.2`: Updated so we can monkey patch globally.
+  ([@isaacs](https://github.com/isaacs))
+* [`c9fb0fd`](https://github.com/npm/npm/commit/c9fb0fd)
+  Globally monkey-patch graceful-fs. This should fix some errors when installing
+  packages with lots of dependencies.
+  ([@isaacs](https://github.com/isaacs))
+
+#### READ THE FINE DOCS. THEY'VE IMPROVED
+
+* [`5587d0d`](https://github.com/npm/npm/commit/5587d0d)
+  Nice clarification for `directories.bin`
+  ([@ujane](https://github.com/ujane))
+* [`20673c7`](https://github.com/npm/npm/commit/20673c7)
+  Hey, Windows folks! Check out
+  [`nvm-windows`](https://github.com/coreybutler/nvm-windows)
+  ([@ArtskydJ](https://github.com/ArtskydJ))
+
+#### MORE NUMBERS! MORE VALUE!
+
+* [`5afa2d5`](https://github.com/npm/npm/commit/5afa2d5)
+  `validate-npm-package-name@2.2.2`: Documented package name rules in README
+  ([@zeusdeux](https://github.com/zeusdeux))
+* [`021f4d9`](https://github.com/npm/npm/commit/021f4d9)
+  `rimraf@2.4.1`: [#74](https://github.com/isaacs/rimraf/issues/74) Use async
+  function for bin (to better handle Window's `EBUSY`)
+  ([@isaacs](https://github.com/isaacs))
+* [`5223432`](https://github.com/npm/npm/commit/5223432)
+  `osenv@0.1.3`: Use `os.homedir()` polyfill for more reliable output. io.js
+  added the function and the polyfill does a better job than the prior solution.
+  ([@sindresorhus](https://github.com/sindresorhus))
+* [`8ebbc90`](https://github.com/npm/npm/commit/8ebbc90)
+  `npm-cache-filename@1.0.2`: Make sure different git references get different
+  cache folders. This should prevent `foo/bar#v1.0` and `foo/bar#master` from
+  sharing the same cache folder.
+  ([@tomekwi](https://github.com/tomekwi))
+* [`367b854`](https://github.com/npm/npm/commit/367b854)
+  `lru-cache@2.6.5`: Minor test/typo changes
+  ([@isaacs](https://github.com/isaacs))
+* [`9fcae61`](https://github.com/npm/npm/commit/9fcae61)
+  `glob@5.0.13`: Tiny doc change + stop firing 'match' events for ignored items.
+  ([@isaacs](https://github.com/isaacs))
+
+#### OH AND ONE MORE THING
+
+* [`7827249`](https://github.com/npm/npm/commit/7827249)
+  `PeerDependencies` errors now include the package version.
+  ([@NickHeiner](https://github.com/NickHeiner))
+
+### v2.12.1 (2015-06-25):
+
+#### HEY WHERE DID EVERYBODY GO
+
+I keep [hearing some commotion](https://github.com/npm/npm/releases/tag/v3.0.0).
+Is there something going on? Like, a party or something? Anyway, here's a small
+release with at least two significant bug fixes, at least one of which some of
+you have been waiting for for quite a while.
+
+#### REMEMBER WHEN I SAID "REMEMBER WHEN I SAID THAT THING ABOUT PERMISSIONS?"?
+
+`npm@2.12.0` has a change that introduces a fix for a permissions problem
+whereby the `_locks` directory in the cache directory can up being owned by
+root. The fix in 2.12.0 takes care of that problem, but introduces a new
+problem for Windows users where npm tries to call `process.getuid()`, which
+doesn't exist on Windows. It was easy enough to fix (but more or less
+impossible to test, thanks to all the external dependencies involved with
+permissions and platforms and whatnot), but as a result, Windows users might
+want to skip `npm@2.12.0` and go straight to `npm@2.12.1`. Sorry about that!
+
+* [`7e5da23`](https://github.com/npm/npm/commit/7e5da238ee869201fdb9027c27b79b0f76b440a8)
+  When using the new, "fixed" cache directory creator, be extra-careful to not
+  call `process.getuid()` on platforms that lack it.
+  ([@othiym23](https://github.com/othiym23))
+
+#### WHEW! ALL DONE FIXING GIT FOREVER!
+
+New npm CLI team hero [@zkat](https://github.com/zkat) has finally (FINALLY)
+fixed the regression somebody (hi!) introduced a couple months ago whereby git
+URLs of the format `git+ssh://user@githost.com:org/repo.git` suddenly stopped
+working, and also started being saved (and cached) incorrectly. I am 100% sure
+there are absolutely no more bugs in the git caching code at all ever. Mm hm.
+Yep. Pretty sure. Maybe. Hmm... I hope.
+
+*Sighs audibly.*
+
+[Let us know](http://github.com/npm/npm/issues/new) if we broke something else
+with this fix.
+
+* [`94ca4a7`](https://github.com/npm/npm/commit/94ca4a711619ba8e40ce3d20bc42b13cdb7611b7)
+  [#8031](https://github.com/npm/npm/issues/8031) Even though
+  `git+ssh://user@githost.com:org/repo.git` isn't a URL, treat it like one for
+  the purposes of npm. ([@zkat](https://github.com/zkat))
+* [`e7f56e5`](https://github.com/npm/npm/commit/e7f56e5a97fcf1c52d5c5bee71303b0126129815)
+  [#8031](https://github.com/npm/npm/issues/8031) `normalize-git-url@2.0.0`:
+  Handle git URLs (and URL-like remote refs) in a manner consistent with npm's
+  docs. ([@zkat](https://github.com/zkat))
+
+#### YEP, THERE ARE STILL DEPENDENCY UPGRADES
+
+* [`679bf47`](https://github.com/npm/npm/commit/679bf4745ac2cfbb01c9ce273e189807fd04fa33)
+  [#40](http://github.com/npm/read-installed/issues/40) `read-installed@4.0.1`:
+  Handle prerelease versions in top-level dependencies not in `package.json`
+  without marking those packages as invalid.
+  ([@benjamn](https://github.com/benjamn))
+* [`3a67410`](https://github.com/npm/npm/commit/3a6741068c9119174c920496778aeee870ebdac0)
+  `tap@1.3.1` ([@isaacs](https://github.com/isaacs))
+* [`151904a`](https://github.com/npm/npm/commit/151904af39dc24567f8c98529a2a64a4dbcc960a)
+  `nopt@3.0.3` ([@isaacs](https://github.com/isaacs))
+
+### v2.12.0 (2015-06-18):
+
+#### REMEMBER WHEN I SAID THAT THING ABOUT PERMISSIONS?
+
+About [a million people](https://github.com/npm/npm/issues?utf8=%E2%9C%93&q=is%3Aissue+EACCES+_locks)
+have filed issues related to having a tough time using npm after they've run
+npm once or twice with sudo. "Don't worry about it!" I said. "We've fixed all
+those permissions problems ages ago! Use this one weird trick and you'll never
+have to deal with this again!"
+
+Well, uh, if you run npm with root the first time you run npm on a machine, it
+turns out that the directory npm uses to store lockfiles ends up being owned by
+the wrong user (almost always root), and that can, well, it can cause problems
+sometimes. By which I mean every time you run npm without being root it'll barf
+with `EACCES` errors. Whoops!
+
+This is an obnoxious regression, and to prevent it from recurring, we've made
+it so that the cache, cached git remotes, and the lockfile directories are all
+created and maintained using the same utilty module, which not only creates the
+relevant paths with the correct permissions, but will fix the permissions on
+those directories (if it can) when it notices that they're broken. An `npm
+install` run as root ought to be sufficient to fix things up (and if that
+doesn't work, first tell us about it, and then run `sudo chown -R $(whoami)
+$HOME/.npm`)
+
+Also, I apologize for inadvertently gaslighting any of you by claiming this bug
+wasn't actually a bug. I do think we've got this permanently dealt with now,
+but I'll be paying extra-close attention to permissions issues related to the
+cache for a while.
+
+* [`85d1a53`](https://github.com/npm/npm/commit/85d1a53d7b5e0fc04823187e522ae3711ede61fa)
+  Set permissions on lock directory to the owner of the process.
+  ([@othiym23](https://github.com/othiym23))
+
+#### I WENT TO NODECONF AND ALL I GOT WAS THIS LOUSY SPDX T-SHIRT
+
+That's not literally true. We spent very little time discussing SPDX,
+[@kemitchell](https://github.com/kemitchell) is a champ, and I had a lot of fun
+playing drum & bass to a mostly empty Boogie Barn and only ended up with one
+moderately severe cold for my pains. Another winner of a NodeConf! (I would
+probably wear a SPDX T-shirt if somebody gave me one, though.)
+
+A bunch of us did have a spirited discussion of the basics of open-source
+intellectual property, and the convergence of me,
+[@kemitchell](https://github.com/kemitchell), and
+[@jandrieu](https://github.com/jandrieu) in one place allowed us to hammmer out
+a small but significant issue that had been bedeviling early adopters of the
+new SPDX expression syntax in `package.json` license fields: how to deal with
+packages that are left without a license on purpose.
+
+Refer to [the docs](https://github.com/npm/npm/blob/16a3dd545b10f8a2464e2037506ce39124739b41/doc/files/package.json.md#license)
+for the specifics, but the short version is that instead of using
+`LicenseRef-LICENSE` for proprietary licenses, you can now use either
+`UNLICENSED` if you want to make it clear that you don't _want_ your software
+to be licensed (and want npm to stop warning you about this), or `SEE LICENSE
+IN <filename>` if there's a license with custom text you want to use. At some
+point in the near term, we'll be updating npm to verify that the mentioned
+file actually exists, but for now you're all on the honor system.
+
+* [`4827fc7`](https://github.com/npm/npm/commit/4827fc784117c17f35dd9b51b21d1eff6094f661)
+  [#8557](https://github.com/npm/npm/issues/8557)
+  `normalize-package-data@2.2.1`: Allow `UNLICENSED` and `SEE LICENSE IN
+  <filename>` in "license" field of `package.json`.
+  ([@kemitchell](https://github.com/kemitchell))
+* [`16a3dd5`](https://github.com/npm/npm/commit/16a3dd545b10f8a2464e2037506ce39124739b41)
+  [#8557](https://github.com/npm/npm/issues/8557) Document the new accepted
+  values for the "license" field.
+  ([@kemitchell](https://github.com/kemitchell))
+* [`8155311`](https://github.com/npm/npm/commit/81553119350deaf199e79e38e35b52a5c8ad206c)
+  [#8557](https://github.com/npm/npm/issues/8557) `init-package-json@1.7.0`:
+  Support new "license" field values at init time.
+  ([@kemitchell](https://github.com/kemitchell))
+
+#### SMALLISH BUG FIXES
+
+* [`9d8cac9`](https://github.com/npm/npm/commit/9d8cac94a258db648a2b1069b1c8c6529c79d013)
+  [#8548](https://github.com/npm/npm/issues/8548) Remove extraneous newline
+  from `npm view` output, making it easier to use in shell scripts.
+  ([@eush77](https://github.com/eush77))
+* [`765fd4b`](https://github.com/npm/npm/commit/765fd4bfca8ea3e2a4a399765b17eec40a3d893d)
+  [#8521](https://github.com/npm/npm/issues/8521) When checking for outdated
+  packages, or updating packages, raise an error when the registry is
+  unreachable instead of silently "succeeding".
+  ([@ryantemple](https://github.com/ryantemple))
+
+#### SMALLERISH DOCUMENTATION TWEAKS
+
+* [`5018335`](https://github.com/npm/npm/commit/5018335ce1754a9f771954ecbc1a93acde9b8c0a)
+  [#8365](https://github.com/npm/npm/issues/8365) Add details about which git
+  environment variables are whitelisted by npm.
+  ([@nmalaguti](https://github.com/nmalaguti))
+* [`bed9edd`](https://github.com/npm/npm/commit/bed9edddfdcc6d22a80feab33b53e4ef9172ec72)
+  [#8554](https://github.com/npm/npm/issues/8554) Fix typo in version docs.
+  ([@rainyday](https://github.com/rainyday))
+
+#### WELL, I GUESS THERE ARE MORE DEPENDENCY UPGRADES
+
+* [`7ce2f06`](https://github.com/npm/npm/commit/7ce2f06f6f34d469b1d2e248084d4f3fef10c05e)
+  `request@2.58.0`: Refactor tunneling logic, and use `extend` instead of
+  abusing `util._extend`. ([@simov](https://github.com/simov))
+* [`e6c6195`](https://github.com/npm/npm/commit/e6c61954aad42e20eec49745615c7640b2026a6c)
+  `nock@2.6.0`: Refined interception behavior.
+  ([@pgte](https://github.com/pgte))
+* [`9583cc3`](https://github.com/npm/npm/commit/9583cc3cb192c2fced006927cfba7cd37b588605)
+  `fstream-npm@1.0.3`: Ensure that `main` entry in `package.json` is always
+  included in the bundled package tarball.
+  ([@coderhaoxin](https://github.com/coderhaoxin))
+* [`df89493`](https://github.com/npm/npm/commit/df894930f2716adac28740b29b2e863170919990)
+  `fstream@1.0.7` ([@isaacs](https://github.com/isaacs))
+* [`9744049`](https://github.com/npm/npm/commit/974404934758124aa8ae5b54f7d5257c3bd6b588)
+  `dezalgo@1.0.3`: `dezalgo` should be usable in the browser, and can be now
+  that `asap` has been upgraded to be browserifiable.
+  ([@mvayngrib](https://github.com/mvayngrib))
+
 ### v2.11.3 (2015-06-11):
 
 This was a very quiet week. This release was done by
@@ -15,19 +289,19 @@ NodeConf Adventure!
 
 * [`9f439da`](https://github.com/npm/npm/commit/9f439da)
   `spdx@0.4.1`: License range updates
-  (@kemitchell)[https://github.com/kemitchell]
+  ([@kemitchell](https://github.com/kemitchell))
 * [`2dd055b`](https://github.com/npm/npm/commit/2dd055b)
   `normalize-package-data@2.2.1`: Fixes a crashing bug when the package.json
   `scripts` property is not an object.
-  (@iarna)[https://github.com/iarna]
+  ([@iarna](https://github.com/iarna))
 * [`e02e85d`](https://github.com/npm/npm/commit/e02e85d)
   `osenv@0.1.2`: Switches to using the `os-tmpdir` module instead of
   `os.tmpdir()` for greate consistency in behavior between node versions.
-  (@iarna)[https://github.com/iarna]
+  ([@iarna](https://github.com/iarna))
 * [`a6f0265`](https://github.com/npm/npm/commit/a6f0265)
-  `ini@1.3.4` (@isaacs)[https://github.com/isaacs]
+  `ini@1.3.4` ([@isaacs](https://github.com/isaacs))
 * [`7395977`](https://github.com/npm/npm/commit/7395977)
-  `rimraf@2.4.0` (@isaacs)[https://github.com/isaacs]
+  `rimraf@2.4.0` ([@isaacs](https://github.com/isaacs))
 
 ### v2.11.2 (2015-06-04):
 
