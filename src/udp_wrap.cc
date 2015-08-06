@@ -450,7 +450,7 @@ void UDPWrap::OnRecv(uv_udp_t* handle,
      base = static_cast<char*>(realloc(buf->base, nread));
     // If realloc fails, fallback to old pointer
     // safe since we are always shrinking the buffer
-    if(base == NULL)
+    if (base == NULL)
         base = buf->base;
   } else {
     free(buf->base);
