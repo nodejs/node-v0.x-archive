@@ -2566,6 +2566,8 @@ static void PrintHelp() {
          "  --max-stack-size=val set max v8 stack size (bytes)\n"
          "  --enable-ssl2        enable ssl2\n"
          "  --enable-ssl3        enable ssl3\n"
+         "  --cipher-list=val    specify the default TLS cipher list\n"
+         "  --enable-legacy-cipher-list=v0.10.40 \n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2577,6 +2579,8 @@ static void PrintHelp() {
          "NODE_MODULE_CONTEXTS   Set to 1 to load modules in their own\n"
          "                       global contexts.\n"
          "NODE_DISABLE_COLORS    Set to 1 to disable colors in the REPL\n"
+         "NODE_CIPHER_LIST       Override the default TLS cipher list\n"
+         "NODE_LEGACY_CIPHER_LIST=v0.10.40\n"
          "\n"
          "Documentation can be found at http://nodejs.org/\n");
 }
@@ -2652,6 +2656,18 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--throw-deprecation") == 0) {
       argv[i] = const_cast<char*>("");
       throw_deprecation = true;
+    } else if (strncmp(arg, "--cipher-list=", 14) == 0) {
+      DEFAULT_CIPHER_LIST = arg + 14;
+      argv[i] = const_cast<char*>("");
+    } else if (strncmp(arg, "--enable-legacy-cipher-list=", 28) == 0) {
+      const char * legacy_list = crypto::LegacyCipherList(arg+28);
+      if (legacy_list != NULL) {
+        DEFAULT_CIPHER_LIST = legacy_list;
+      } else {
+        fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
+        exit(9);
+      }
+      argv[i] = const_cast<char*>("");
     } else if (argv[i][0] != '-') {
       break;
     }
@@ -2927,6 +2943,26 @@ char** Init(int argc, char *argv[]) {
 
   // Make inherited handles noninheritable.
   uv_disable_stdio_inheritance();
+
+  // set the cipher list from the environment variable first,
+  // the command line switch will override if specified.
+  const char * cipher_list = getenv("NODE_CIPHER_LIST");
+  if (cipher_list != NULL) {
+    DEFAULT_CIPHER_LIST = cipher_list;
+  }
+
+  // Setting NODE_LEGACY_CIPHER_LIST will override the NODE_CIPHER_LIST
+  const char * leg_cipher_id = getenv("NODE_LEGACY_CIPHER_LIST");
+  if (leg_cipher_id != NULL) {
+    const char * leg_cipher_list =
+      crypto::LegacyCipherList(leg_cipher_id);
+    if (leg_cipher_list != NULL) {
+      DEFAULT_CIPHER_LIST = leg_cipher_list;
+    } else {
+      fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
+      exit(9);
+    }
+  }
 
   // Parse a few arguments which are specific to Node.
   node::ParseArgs(argc, argv);

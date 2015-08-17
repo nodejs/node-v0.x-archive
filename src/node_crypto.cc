@@ -62,6 +62,12 @@ static const int X509_NAME_FLAGS = ASN1_STRFLGS_ESC_CTRL
                                  | XN_FLAG_SEP_MULTILINE
                                  | XN_FLAG_FN_SN;
 
+#define DEFAULT_CIPHER_LIST_V10_40 "ECDHE-RSA-AES128-SHA256:"         \
+                                "AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
+
+#define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES128-SHA256:"           \
+                                "AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH"
+
 namespace node {
 
 const char* root_certs[] = {
@@ -71,6 +77,7 @@ const char* root_certs[] = {
 
 bool SSL2_ENABLE = false;
 bool SSL3_ENABLE = false;
+const char * DEFAULT_CIPHER_LIST = DEFAULT_CIPHER_LIST_HEAD;
 
 namespace crypto {
 
@@ -802,7 +809,7 @@ size_t ClientHelloParser::Write(const uint8_t* data, size_t len) {
   HandleScope scope;
 
   assert(state_ != kEnded);
-  
+
   // Just accumulate data, everything will be pushed to BIO later
   if (state_ == kPaused) return 0;
 
@@ -4190,6 +4197,43 @@ static void array_push_back(const TypeName* md,
   arr->Set(arr->Length(), String::New(from));
 }
 
+// borrowed from v8
+// (see http://v8.googlecode.com/svn/trunk/samples/shell.cc)
+const char* ToCString(const node::Utf8Value& value) {
+  return *value ? *value : "<string conversion failed>";
+}
+
+const char* LegacyCipherList(const char * ver) {
+  if (ver == NULL) {
+    return NULL;
+  }
+  if (strncmp(ver, "v0.10.40", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_40;
+  } else {
+    return NULL;
+  }
+}
+
+Handle<Value> GetLegacyCiphers(const Arguments& args) {
+  HandleScope scope;
+
+  unsigned int len = args.Length();
+  if (len != 1 || !args[0]->IsString()) {
+    return ThrowException(
+      Exception::TypeError(
+        String::New("A single string parameter is required")));
+  }
+
+  node::Utf8Value key(args[0]);
+  const char * list = LegacyCipherList(ToCString(key));
+
+  if (list != NULL) {
+    return scope.Close(v8::String::New(list));
+  } else {
+    return ThrowException(Exception::Error(String::New(
+      "Unknown legacy cipher list")));
+  }
+}
 
 Handle<Value> GetCiphers(const Arguments& args) {
   HandleScope scope;
@@ -4264,6 +4308,13 @@ void InitCrypto(Handle<Object> target) {
 
   NODE_DEFINE_CONSTANT(target, SSL3_ENABLE);
   NODE_DEFINE_CONSTANT(target, SSL2_ENABLE);
+
+  (target)->ForceSet(
+      v8::String::New("DEFAULT_CIPHER_LIST"),
+      v8::String::New(DEFAULT_CIPHER_LIST),
+      static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete));
+
+  NODE_SET_METHOD(target, "getLegacyCiphers", GetLegacyCiphers);
 }
 
 }  // namespace crypto

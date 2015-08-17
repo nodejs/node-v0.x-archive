@@ -27,6 +27,7 @@
 #include "node_object_wrap.h"
 #include "v8.h"
 
+#include <string.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -47,6 +48,7 @@ namespace node {
 
 extern bool SSL2_ENABLE;
 extern bool SSL3_ENABLE;
+extern const char * DEFAULT_CIPHER_LIST;
 
 namespace crypto {
 
@@ -294,6 +296,7 @@ class Connection : ObjectWrap {
   friend class SecureContext;
 };
 
+const char* LegacyCipherList(const char * ver);
 bool EntropySource(unsigned char* buffer, size_t length);
 void InitCrypto(v8::Handle<v8::Object> target);
 
