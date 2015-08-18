@@ -29,6 +29,12 @@ make
 make install
 ```
 
+Where ``/path/to/python`` should be replaced by the actual path to your Python interpreter. If unsure, you can use:
+
+```which python```
+
+To determine which Python your shell is using.
+
 Prerequisites (Windows only):
 
     * Python 2.6 or 2.7
