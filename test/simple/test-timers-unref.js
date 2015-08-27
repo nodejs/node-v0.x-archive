@@ -58,7 +58,16 @@ check_unref = setInterval(function() {
 // Should not assert on args.Holder()->InternalFieldCount() > 0. See #4261.
 (function() {
   var t = setInterval(function() {}, 1);
-  process.nextTick(t.unref.bind({}));
+  assert.throws(
+    function() {
+      t.unref.bind({})();
+    },
+    function(err) {
+      if ((err instanceof Error) && /Trying to call/.test(err))
+        return true;
+    },
+    "Timeout should throw exception for non timeout context call"
+  );
   process.nextTick(t.unref.bind(t));
 })();
 
