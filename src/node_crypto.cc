@@ -71,6 +71,7 @@ const char* root_certs[] = {
 
 bool SSL2_ENABLE = false;
 bool SSL3_ENABLE = false;
+bool SMALL_DH_GROUPS_ENABLE = false;
 
 namespace crypto {
 
@@ -3538,6 +3539,9 @@ class DiffieHellman : public ObjectWrap {
     }
 
     if (it->name != NULL) {
+      if (it->bits < 1024 && !SMALL_DH_GROUPS_ENABLE)
+        return ThrowException(Exception::Error(
+          String::New("Small DH groups disabled (see documentation)")));
       diffieHellman->Init(it->prime, it->prime_size,
               it->gen, it->gen_size);
     } else {
@@ -4264,6 +4268,7 @@ void InitCrypto(Handle<Object> target) {
 
   NODE_DEFINE_CONSTANT(target, SSL3_ENABLE);
   NODE_DEFINE_CONSTANT(target, SSL2_ENABLE);
+  NODE_DEFINE_CONSTANT(target, SMALL_DH_GROUPS_ENABLE);
 }
 
 }  // namespace crypto
