@@ -615,7 +615,7 @@ measured in bytes.
 
     var util = require('util');
 
-    console.log(util.inspect(process.memoryUsage()));
+    console.log(process.memoryUsage());
 
 This will generate:
 
