@@ -6,6 +6,7 @@ NINJA ?= ninja
 DESTDIR ?=
 SIGN ?=
 PREFIX ?= /usr/local
+FLAKY_TESTS ?= run
 
 NODE ?= ./node
 
@@ -127,6 +128,9 @@ test-all-http1: test-build
 test-all-valgrind: test-build
 	$(PYTHON) tools/test.py --mode=debug,release --valgrind
 
+test-ci:
+	$(PYTHON) tools/test.py -p tap --logfile test.tap --mode=release --arch=$(DESTCPU) --flaky-tests=$(FLAKY_TESTS) simple message internet
+
 test-release: test-build
 	$(PYTHON) tools/test.py --mode=release
 
@@ -154,12 +158,13 @@ test-npm: node
 	cd deps/npm ; npm_config_cache="$(shell pwd)/npm-cache" \
 	     npm_config_prefix="$(shell pwd)/npm-prefix" \
 	     npm_config_tmp="$(shell pwd)/npm-tmp" \
-	     ../../node cli.js install
+	     PATH="../../:${PATH}" node cli.js install
 	cd deps/npm ; npm_config_cache="$(shell pwd)/npm-cache" \
 	     npm_config_prefix="$(shell pwd)/npm-prefix" \
 	     npm_config_tmp="$(shell pwd)/npm-tmp" \
-	     ../../node cli.js run-script test-all && \
-	     ../../node cli.js prune --prod && \
+	     PATH="../../:${PATH}" node cli.js run-script test-legacy && \
+	     PATH="../../:${PATH}" node cli.js run-script test && \
+	     PATH="../../:${PATH}" node cli.js prune --prod && \
 	     cd ../.. && \
 	     rm -rf npm-cache npm-tmp npm-prefix
 
@@ -238,6 +243,11 @@ docopen: out/doc/api/all.html
 
 docclean:
 	-rm -rf out/doc
+
+run-ci:
+	$(PYTHON) ./configure --without-snapshot $(CONFIG_FLAGS)
+	$(MAKE)
+	$(MAKE) test-ci
 
 RAWVER=$(shell $(PYTHON) tools/getnodeversion.py)
 VERSION=v$(RAWVER)
@@ -438,4 +448,9 @@ cpplint:
 
 lint: jslint cpplint
 
-.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean check uninstall install install-includes install-bin all staticlib dynamiclib test test-all test-addons build-addons website-upload pkg blog blogclean tar binary release-only bench-http-simple bench-idle bench-all bench bench-misc bench-array bench-buffer bench-net bench-http bench-fs bench-tls
+.PHONY: lint cpplint jslint bench clean docopen docclean doc dist distclean \
+	check uninstall install install-includes install-bin all staticlib \
+	dynamiclib test test-all test-addons build-addons website-upload pkg \
+	blog blogclean tar binary release-only bench-http-simple bench-idle \
+	bench-all bench bench-misc bench-array bench-buffer bench-net \
+	bench-http bench-fs bench-tls run-ci

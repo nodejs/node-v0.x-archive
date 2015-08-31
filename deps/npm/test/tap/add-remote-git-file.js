@@ -2,7 +2,6 @@ var fs = require('fs')
 var resolve = require('path').resolve
 var url = require('url')
 
-var chain = require('slide').chain
 var osenv = require('osenv')
 var mkdirp = require('mkdirp')
 var rimraf = require('rimraf')
@@ -17,6 +16,11 @@ var repo = resolve(__dirname, 'add-remote-git-file-repo')
 var git
 var cloneURL = 'git+file://' + resolve(pkg, 'child.git')
 
+var pjChild = JSON.stringify({
+  name: 'child',
+  version: '1.0.3'
+}, null, 2) + '\n'
+
 test('setup', function (t) {
   bootstrap()
   setup(function (er, r) {
@@ -29,7 +33,7 @@ test('setup', function (t) {
 test('cache from repo', function (t) {
   process.chdir(pkg)
   var addRemoteGit = require('../../lib/cache/add-remote-git.js')
-  addRemoteGit(cloneURL, false, function (er, data) {
+  addRemoteGit(cloneURL, function (er, data) {
     t.ifError(er, 'cached via git')
     t.equal(
       url.parse(data._resolved).protocol,
@@ -46,11 +50,6 @@ test('clean', function (t) {
   t.end()
 })
 
-var pjChild = JSON.stringify({
-  name: 'child',
-  version: '1.0.3'
-}, null, 2) + '\n'
-
 function bootstrap () {
   cleanup()
   mkdirp.sync(pkg)
@@ -62,25 +61,13 @@ function setup (cb) {
   npm.load({ registry: common.registry, loglevel: 'silent' }, function () {
     git = require('../../lib/utils/git.js')
 
-    var opts = {
-      cwd: repo,
-      env: process.env
-    }
-
-    chain(
-      [
-        git.chainableExec(['init'], opts),
-        git.chainableExec(['config', 'user.name', 'PhantomFaker'], opts),
-        git.chainableExec(['config', 'user.email', 'nope@not.real'], opts),
-        git.chainableExec(['add', 'package.json'], opts),
-        git.chainableExec(['commit', '-m', 'stub package'], opts),
-        git.chainableExec(
-          ['clone', '--bare', repo, 'child.git'],
-          { cwd: pkg, env: process.env }
-        )
-      ],
-      cb
-    )
+    common.makeGitRepo({
+      path: repo,
+      commands: [git.chainableExec(
+        ['clone', '--bare', repo, 'child.git'],
+        { cwd: pkg, env: process.env }
+      )]
+    }, cb)
   })
 }
 

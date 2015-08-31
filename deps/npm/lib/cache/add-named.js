@@ -12,12 +12,23 @@ var path = require("path")
   , addRemoteTarball = require("./add-remote-tarball.js")
   , cachedPackageRoot = require("./cached-package-root.js")
   , mapToRegistry = require("../utils/map-to-registry.js")
-  , warnStrict = require("../utils/warn-deprecated.js")("engineStrict")
 
 
 module.exports = addNamed
 
 function getOnceFromRegistry (name, from, next, done) {
+  function fixName(err, data, json, resp) {
+    // this is only necessary until npm/npm-registry-client#80 is fixed
+    if (err && err.pkgid && err.pkgid !== name) {
+      err.message = err.message.replace(
+        new RegExp(': ' + err.pkgid.replace(/(\W)/g, '\\$1') + '$'),
+        ': ' + name
+      )
+      err.pkgid = name
+    }
+    next(err, data, json, resp)
+  }
+
   mapToRegistry(name, npm.config, function (er, uri, auth) {
     if (er) return done(er)
 
@@ -26,7 +37,7 @@ function getOnceFromRegistry (name, from, next, done) {
     if (!next) return log.verbose(from, key, "already in flight; waiting")
     else log.verbose(from, key, "not in flight; fetching")
 
-    npm.registry.get(uri, { auth : auth }, next)
+    npm.registry.get(uri, { auth : auth }, fixName)
   })
 }
 
@@ -35,20 +46,23 @@ function addNamed (name, version, data, cb_) {
   assert(typeof cb_ === "function", "must have callback")
 
   var key = name + "@" + version
-  log.verbose("addNamed", key)
+  log.silly("addNamed", key)
 
   function cb (er, data) {
     if (data && !data._fromGithub) data._from = key
     cb_(er, data)
   }
 
-  log.silly("addNamed", "semver.valid", semver.valid(version))
-  log.silly("addNamed", "semver.validRange", semver.validRange(version))
-  var fn = ( semver.valid(version, true) ? addNameVersion
-           : semver.validRange(version, true) ? addNameRange
-           : addNameTag
-           )
-  fn(name, version, data, cb)
+  if (semver.valid(version, true)) {
+    log.verbose('addNamed', JSON.stringify(version), 'is a plain semver version for', name)
+    addNameVersion(name, version, data, cb)
+  } else if (semver.validRange(version, true)) {
+    log.verbose('addNamed', JSON.stringify(version), 'is a valid semver range for', name)
+    addNameRange(name, version, data, cb)
+  } else {
+    log.verbose('addNamed', JSON.stringify(version), 'is being treated as a dist-tag for', name)
+    addNameTag(name, version, data, cb)
+  }
 }
 
 function addNameTag (name, tag, data, cb) {
@@ -92,12 +106,6 @@ function engineFilter (data) {
   Object.keys(data.versions || {}).forEach(function (v) {
     var eng = data.versions[v].engines
     if (!eng) return
-    if (data.versions[v].engineStrict) {
-      warnStrict([
-        "Per-package engineStrict (found in package.json for "+data.name+")",
-        "won't be used in npm 3+. Use the config setting `engine-strict` instead."
-      ], data.name)
-    }
     if (!strict && !data.versions[v].engineStrict) return
     if (eng.node && !semver.satisfies(nodev, eng.node, true)
         || eng.npm && !semver.satisfies(npmv, eng.npm, true)) {

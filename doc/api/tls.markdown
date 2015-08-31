@@ -25,8 +25,10 @@ To create a self-signed certificate with the CSR, do this:
 
 Alternatively you can send the CSR to a Certificate Authority for signing.
 
-(TODO: docs on creating a CA, for now interested users should just look at
-`test/fixtures/keys/Makefile` in the Node source code)
+For Perfect Forward Secrecy, it is required to generate Diffie-Hellman
+parameters:
+
+    openssl dhparam -outform PEM -out dhparam.pem 2048
 
 To create .pfx or .p12, do this:
 
@@ -134,6 +136,81 @@ the character "E" appended to the traditional abbreviations):
 Ephemeral methods may have some performance drawbacks, because key generation
 is expensive.
 
+## Modifying the Default Cipher Suite
+
+Node.js is built with a default suite of enabled and disabled ciphers.
+Currently, the default cipher suite is:
+
+    ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:
+    DHE-RSA-AES256-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:
+    HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA
+
+This default can be overridden entirely using the `--cipher-list` command line
+switch or `NODE_CIPHER_LIST` environment variable. For instance:
+
+    node --cipher-list=ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384
+
+Setting the environment variable would have the same effect:
+
+    NODE_CIPHER_LIST=ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384
+
+CAUTION: The default cipher suite has been carefully selected to reflect current
+security best practices and risk mitigation. Changing the default cipher suite
+can have a significant impact on the security of an application. The
+`--cipher-list` and `NODE_CIPHER_LIST` options should only be used if
+absolutely necessary.
+
+### Using Legacy Default Cipher Suite ###
+
+It is possible for the built-in default cipher suite to change from one release
+of Node.js to another. For instance, v0.10.38 uses a different default than
+v0.12.2. Such changes can cause issues with applications written to assume
+certain specific defaults. To help buffer applications against such changes,
+the `--enable-legacy-cipher-list` command line switch or `NODE_LEGACY_CIPHER_LIST`
+environment variable can be set to specify a specific preset default:
+
+    # Use the v0.10.38 defaults
+    node --enable-legacy-cipher-list=v0.10.38
+    // or
+    NODE_LEGACY_CIPHER_LIST=v0.10.38
+
+    # Use the v0.12.2 defaults
+    node --enable-legacy-cipher-list=v0.12.2
+    // or
+    NODE_LEGACY_CIPHER_LIST=v0.12.2
+
+Currently, the values supported for the `enable-legacy-cipher-list` switch and
+`NODE_LEGACY_CIPHER_LIST` environment variable include:
+
+    v0.10.38 - To enable the default cipher suite used in v0.10.38
+
+      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
+
+    v0.10.39 - To enable the default cipher suite used in v0.10.39
+
+      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH
+
+    v0.12.2 - To enable the default cipher suite used in v0.12.2
+
+      ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:
+      HIGH:!MD5:!aNULL
+
+    v.0.12.3 - To enable the default cipher suite used in v0.12.3
+
+      ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:
+      !RC4:!MD5:!aNULL
+
+These legacy cipher suites are also made available for use via the
+`getLegacyCiphers()` method:
+
+    var tls = require('tls');
+    console.log(tls.getLegacyCiphers('v0.10.38'));
+
+CAUTION: Changes to the default cipher suite are typically made in order to
+strengthen the default security for applications running within Node.js.
+Reverting back to the defaults used by older releases can weaken the security
+of your applications. The legacy cipher suites should only be used if absolutely
+necessary.
 
 ## tls.getCiphers()
 
@@ -144,6 +221,12 @@ Example:
     var ciphers = tls.getCiphers();
     console.log(ciphers); // ['AES128-SHA', 'AES256-SHA', ...]
 
+## tls.getLegacyCiphers(version)
+
+Returns the legacy default cipher suite for the specified Node.js release.
+
+Example:
+    var cipher_suite = tls.getLegacyCiphers('v0.10.38');
 
 ## tls.createServer(options[, secureConnectionListener])
 
@@ -170,31 +253,20 @@ automatically set as a listener for the [secureConnection][] event.  The
   - `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate
     Revocation List)
 
-  - `ciphers`: A string describing the ciphers to use or exclude.
+  - `ciphers`: A string describing the ciphers to use or exclude, separated by
+    `:`. The default cipher suite is:
 
-    To mitigate [BEAST attacks] it is recommended that you use this option in
-    conjunction with the `honorCipherOrder` option described below to
-    prioritize the non-CBC cipher.
+        ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:
+        DHE-RSA-AES256-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:
+        HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA
 
-    Defaults to
-    `ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL`.
-    Consult the [OpenSSL cipher list format documentation] for details
-    on the format.
-
-    `ECDHE-RSA-AES128-SHA256`, `DHE-RSA-AES128-SHA256` and
-    `AES128-GCM-SHA256` are TLS v1.2 ciphers and used when node.js is
-    linked against OpenSSL 1.0.1 or newer, such as the bundled version
-    of OpenSSL.  Note that it is still possible for a TLS v1.2 client
-    to negotiate a weaker cipher unless `honorCipherOrder` is enabled.
-
-    `RC4` is used as a fallback for clients that speak on older version of
-    the TLS protocol.  `RC4` has in recent years come under suspicion and
-    should be considered compromised for anything that is truly sensitive.
-    It is speculated that state-level actors possess the ability to break it.
-
-    **NOTE**: Previous revisions of this section suggested `AES256-SHA` as an
-    acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
-    susceptible to [BEAST attacks]. Do *not* use it.
+    The default cipher suite prefers ECDHE and DHE ciphers for Perfect Forward
+    secrecy, while offering *some* backward compatibility. Old clients which
+    rely on insecure and deprecated RC4 or DES-based ciphers (like Internet
+    Explorer 6) aren't able to complete the handshake with the default
+    configuration. If you absolutely must support these clients, the
+    [TLS recommendations] may offer a compatible cipher suite. For more details
+    on the format, see the [OpenSSL cipher list format documentation].
 
   - `ecdhCurve`: A string describing a named curve to use for ECDH key agreement
     or false to disable ECDH.
@@ -212,7 +284,7 @@ automatically set as a listener for the [secureConnection][] event.  The
     times out.
 
   - `honorCipherOrder` : When choosing a cipher, use the server's preferences
-    instead of the client preferences.
+    instead of the client preferences. Default: `true`.
 
     Although, this option is disabled by default, it is *recommended* that you
     use this option in conjunction with the `ciphers` option to mitigate
@@ -340,6 +412,20 @@ Creates a new client connection to the given `port` and `host` (old API) or
 
   - `path`: Creates unix socket connection to path. If this option is
     specified, `host` and `port` are ignored.
+
+  - `ciphers`: A string describing the ciphers to use or exclude.
+
+    Defaults to
+    `ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL`.
+    Consult the [OpenSSL cipher list format documentation] for details
+    on the format.
+
+	The full list of available ciphers can be obtained via [tls.getCiphers][].
+
+    `ECDHE-RSA-AES128-SHA256`, `DHE-RSA-AES128-SHA256` and
+    `AES128-GCM-SHA256` are TLS v1.2 ciphers and used when Node.js is
+    linked against OpenSSL 1.0.1 or newer, such as the bundled version
+    of OpenSSL.
 
   - `pfx`: A string or `Buffer` containing the private key, certificate and
     CA certs of the client in PFX or PKCS12 format.
@@ -498,7 +584,7 @@ encrypted data, and one reads/writes cleartext data.
 Generally the encrypted one is piped to/from an incoming encrypted data stream,
 and the cleartext one is used as a replacement for the initial encrypted stream.
 
- - `credentials`: A secure context object from tls.createSecureContext( ... )
+ - `context`: A secure context object from tls.createSecureContext( ... )
 
  - `isServer`: A boolean indicating whether this tls connection should be
    opened as a server or a client.
@@ -680,6 +766,11 @@ This is an encrypted stream.
 A proxy to the underlying socket's bytesWritten accessor, this will return
 the total bytes written to the socket, *including the TLS overhead*.
 
+## Class: CleartextStream
+
+The CleartextStream class in Node.js version v0.10.39 and prior has been
+deprecated and removed.
+
 ## Class: tls.TLSSocket
 
 This is a wrapped version of [net.Socket][] that does transparent encryption
@@ -835,6 +926,7 @@ The numeric representation of the local port.
 
 [OpenSSL cipher list format documentation]: http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT
 [BEAST attacks]: http://blog.ivanristic.com/2011/10/mitigating-the-beast-attack-on-tls.html
+[tls.getCiphers]: #tls_tls_getciphers
 [tls.createServer]: #tls_tls_createserver_options_secureconnectionlistener
 [tls.createSecurePair]: #tls_tls_createsecurepair_credentials_isserver_requestcert_rejectunauthorized
 [tls.TLSSocket]: #tls_class_tls_tlssocket
@@ -853,5 +945,6 @@ The numeric representation of the local port.
 [ECDHE]: https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman
 [asn1.js]: http://npmjs.org/package/asn1.js
 [OCSP request]: http://en.wikipedia.org/wiki/OCSP_stapling
+[TLS recommendations]: https://wiki.mozilla.org/Security/Server_Side_TLS
 [SSL_CTX_set_options]: https://www.openssl.org/docs/ssl/SSL_CTX_set_options.html
 [CVE-2014-3566]: https://access.redhat.com/articles/1232123

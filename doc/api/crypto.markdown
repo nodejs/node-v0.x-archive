@@ -101,7 +101,7 @@ Example: this program that takes the sha1 sum of a file
 
     var shasum = crypto.createHash('sha1');
 
-    var s = fs.ReadStream(filename);
+    var s = fs.createReadStream(filename);
     s.on('data', function(d) {
       shasum.update(d);
     });
@@ -529,7 +529,7 @@ Example (obtaining a shared secret):
 
 ## crypto.createECDH(curve_name)
 
-Creates a Elliptic Curve (EC) Diffie-Hellman key exchange object using a
+Creates an Elliptic Curve (EC) Diffie-Hellman key exchange object using a
 predefined curve specified by `curve_name` string.
 
 ## Class: ECDH

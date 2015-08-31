@@ -436,7 +436,11 @@ static void scandir_cb(uv_fs_t* req) {
 
   while (UV_EOF != uv_fs_scandir_next(req, &dent)) {
     ASSERT(strcmp(dent.name, "file1") == 0 || strcmp(dent.name, "file2") == 0);
-    ASSERT(dent.type == UV_DIRENT_FILE || dent.type == UV_DIRENT_UNKNOWN);
+#ifdef HAVE_DIRENT_TYPES
+    ASSERT(dent.type == UV_DIRENT_FILE);
+#else
+    ASSERT(dent.type == UV_DIRENT_UNKNOWN);
+#endif
   }
   scandir_cb_count++;
   ASSERT(req->path);
@@ -568,7 +572,17 @@ TEST_IMPL(fs_file_loop) {
   loop = uv_default_loop();
 
   unlink("test_symlink");
-  uv_fs_symlink(loop, &req, "test_symlink", "test_symlink", 0, NULL);
+  r = uv_fs_symlink(loop, &req, "test_symlink", "test_symlink", 0, NULL);
+#ifdef _WIN32
+  /*
+   * Windows XP and Server 2003 don't support symlinks; we'll get UV_ENOTSUP.
+   * Starting with vista they are supported, but only when elevated, otherwise
+   * we'll see UV_EPERM.
+   */
+  if (r == UV_ENOTSUP || r == UV_EPERM)
+    return 0;
+#endif
+  ASSERT(r == 0);
   uv_fs_req_cleanup(&req);
 
   r = uv_fs_open(loop, &req, "test_symlink", O_RDONLY, 0, NULL);
@@ -865,7 +879,11 @@ TEST_IMPL(fs_async_dir) {
   ASSERT(scandir_req.ptr);
   while (UV_EOF != uv_fs_scandir_next(&scandir_req, &dent)) {
     ASSERT(strcmp(dent.name, "file1") == 0 || strcmp(dent.name, "file2") == 0);
-    ASSERT(dent.type == UV_DIRENT_FILE || dent.type == UV_DIRENT_UNKNOWN);
+#ifdef HAVE_DIRENT_TYPES
+    ASSERT(dent.type == UV_DIRENT_FILE);
+#else
+    ASSERT(dent.type == UV_DIRENT_UNKNOWN);
+#endif
   }
   uv_fs_req_cleanup(&scandir_req);
   ASSERT(!scandir_req.ptr);
@@ -1076,7 +1094,8 @@ TEST_IMPL(fs_fstat) {
 #elif defined(__sun) || \
       defined(_BSD_SOURCE) || \
       defined(_SVID_SOURCE) || \
-      defined(_XOPEN_SOURCE)
+      defined(_XOPEN_SOURCE) || \
+      defined(_DEFAULT_SOURCE)
   ASSERT(s->st_atim.tv_sec == t.st_atim.tv_sec);
   ASSERT(s->st_atim.tv_nsec == t.st_atim.tv_nsec);
   ASSERT(s->st_mtim.tv_sec == t.st_mtim.tv_sec);
@@ -1137,6 +1156,7 @@ TEST_IMPL(fs_access) {
 
   /* Setup. */
   unlink("test_file");
+  rmdir("test_dir");
 
   loop = uv_default_loop();
 
@@ -1180,6 +1200,16 @@ TEST_IMPL(fs_access) {
   ASSERT(req.result == 0);
   uv_fs_req_cleanup(&req);
 
+  /* Directory access */
+  r = uv_fs_mkdir(loop, &req, "test_dir", 0777, NULL);
+  ASSERT(r == 0);
+  uv_fs_req_cleanup(&req);
+
+  r = uv_fs_access(loop, &req, "test_dir", W_OK, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
   /*
    * Run the loop just to check we don't have make any extraneous uv_ref()
    * calls. This should drop out immediately.
@@ -1188,6 +1218,7 @@ TEST_IMPL(fs_access) {
 
   /* Cleanup. */
   unlink("test_file");
+  rmdir("test_dir");
 
   MAKE_VALGRIND_HAPPY();
   return 0;
@@ -1285,6 +1316,65 @@ TEST_IMPL(fs_chmod) {
   uv_run(loop, UV_RUN_DEFAULT);
 
   /* Cleanup. */
+  unlink("test_file");
+
+  MAKE_VALGRIND_HAPPY();
+  return 0;
+}
+
+
+TEST_IMPL(fs_unlink_readonly) {
+  int r;
+  uv_fs_t req;
+  uv_file file;
+
+  /* Setup. */
+  unlink("test_file");
+
+  loop = uv_default_loop();
+
+  r = uv_fs_open(loop,
+                 &req,
+                 "test_file",
+                 O_RDWR | O_CREAT,
+                 S_IWUSR | S_IRUSR,
+                 NULL);
+  ASSERT(r >= 0);
+  ASSERT(req.result >= 0);
+  file = req.result;
+  uv_fs_req_cleanup(&req);
+
+  iov = uv_buf_init(test_buf, sizeof(test_buf));
+  r = uv_fs_write(loop, &req, file, &iov, 1, -1, NULL);
+  ASSERT(r == sizeof(test_buf));
+  ASSERT(req.result == sizeof(test_buf));
+  uv_fs_req_cleanup(&req);
+
+  close(file);
+
+  /* Make the file read-only */
+  r = uv_fs_chmod(loop, &req, "test_file", 0400, NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
+  check_permission("test_file", 0400);
+
+  /* Try to unlink the file */
+  r = uv_fs_unlink(loop, &req, "test_file", NULL);
+  ASSERT(r == 0);
+  ASSERT(req.result == 0);
+  uv_fs_req_cleanup(&req);
+
+  /*
+  * Run the loop just to check we don't have make any extraneous uv_ref()
+  * calls. This should drop out immediately.
+  */
+  uv_run(loop, UV_RUN_DEFAULT);
+
+  /* Cleanup. */
+  uv_fs_chmod(loop, &req, "test_file", 0600, NULL);
+  uv_fs_req_cleanup(&req);
   unlink("test_file");
 
   MAKE_VALGRIND_HAPPY();
@@ -1685,7 +1775,11 @@ TEST_IMPL(fs_symlink_dir) {
   ASSERT(scandir_req.ptr);
   while (UV_EOF != uv_fs_scandir_next(&scandir_req, &dent)) {
     ASSERT(strcmp(dent.name, "file1") == 0 || strcmp(dent.name, "file2") == 0);
-    ASSERT(dent.type == UV_DIRENT_FILE || dent.type == UV_DIRENT_UNKNOWN);
+#ifdef HAVE_DIRENT_TYPES
+    ASSERT(dent.type == UV_DIRENT_FILE);
+#else
+    ASSERT(dent.type == UV_DIRENT_UNKNOWN);
+#endif
   }
   uv_fs_req_cleanup(&scandir_req);
   ASSERT(!scandir_req.ptr);
@@ -1705,7 +1799,11 @@ TEST_IMPL(fs_symlink_dir) {
   ASSERT(scandir_req.ptr);
   while (UV_EOF != uv_fs_scandir_next(&scandir_req, &dent)) {
     ASSERT(strcmp(dent.name, "file1") == 0 || strcmp(dent.name, "file2") == 0);
-    ASSERT(dent.type == UV_DIRENT_FILE || dent.type == UV_DIRENT_UNKNOWN);
+#ifdef HAVE_DIRENT_TYPES
+    ASSERT(dent.type == UV_DIRENT_FILE);
+#else
+    ASSERT(dent.type == UV_DIRENT_UNKNOWN);
+#endif
   }
   uv_fs_req_cleanup(&scandir_req);
   ASSERT(!scandir_req.ptr);

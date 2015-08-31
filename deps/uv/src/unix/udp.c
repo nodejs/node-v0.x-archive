@@ -89,6 +89,9 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
   uv_udp_send_t* req;
   QUEUE* q;
 
+  assert(!(handle->flags & UV_UDP_PROCESSING));
+  handle->flags |= UV_UDP_PROCESSING;
+
   while (!QUEUE_EMPTY(&handle->write_completed_queue)) {
     q = QUEUE_HEAD(&handle->write_completed_queue);
     QUEUE_REMOVE(q);
@@ -100,7 +103,7 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
     handle->send_queue_count--;
 
     if (req->bufs != req->bufsml)
-      free(req->bufs);
+      uv__free(req->bufs);
     req->bufs = NULL;
 
     if (req->send_cb == NULL)
@@ -121,6 +124,8 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
     if (!uv__io_active(&handle->io_watcher, UV__POLLIN))
       uv__handle_stop(handle);
   }
+
+  handle->flags &= ~UV_UDP_PROCESSING;
 }
 
 
@@ -399,7 +404,7 @@ int uv__udp_send(uv_udp_send_t* req,
 
   req->bufs = req->bufsml;
   if (nbufs > ARRAY_SIZE(req->bufsml))
-    req->bufs = malloc(nbufs * sizeof(bufs[0]));
+    req->bufs = uv__malloc(nbufs * sizeof(bufs[0]));
 
   if (req->bufs == NULL)
     return -ENOMEM;
@@ -410,10 +415,11 @@ int uv__udp_send(uv_udp_send_t* req,
   QUEUE_INSERT_TAIL(&handle->write_queue, &req->queue);
   uv__handle_start(handle);
 
-  if (empty_queue)
+  if (empty_queue && !(handle->flags & UV_UDP_PROCESSING)) {
     uv__udp_sendmsg(handle);
-  else
+  } else {
     uv__io_start(handle->loop, &handle->io_watcher, UV__POLLOUT);
+  }
 
   return 0;
 }
@@ -565,6 +571,10 @@ int uv_udp_open(uv_udp_t* handle, uv_os_sock_t sock) {
   if (handle->io_watcher.fd != -1)
     return -EALREADY;  /* FIXME(bnoordhuis) Should be -EBUSY. */
 
+  err = uv__nonblock(sock, 1);
+  if (err)
+    return err;
+
   err = uv__set_reuse(sock);
   if (err)
     return err;
@@ -597,8 +607,35 @@ int uv_udp_set_membership(uv_udp_t* handle,
   }
 }
 
+static int uv__setsockopt(uv_udp_t* handle,
+                         int option4,
+                         int option6,
+                         const void* val,
+                         size_t size) {
+  int r;
 
-static int uv__setsockopt_maybe_char(uv_udp_t* handle, int option, int val) {
+  if (handle->flags & UV_HANDLE_IPV6)
+    r = setsockopt(handle->io_watcher.fd,
+                   IPPROTO_IPV6,
+                   option6,
+                   val,
+                   size);
+  else
+    r = setsockopt(handle->io_watcher.fd,
+                   IPPROTO_IP,
+                   option4,
+                   val,
+                   size);
+  if (r)
+    return -errno;
+
+  return 0;
+}
+
+static int uv__setsockopt_maybe_char(uv_udp_t* handle,
+                                     int option4,
+                                     int option6,
+                                     int val) {
 #if defined(__sun) || defined(_AIX)
   char arg = val;
 #else
@@ -608,10 +645,7 @@ static int uv__setsockopt_maybe_char(uv_udp_t* handle, int option, int val) {
   if (val < 0 || val > 255)
     return -EINVAL;
 
-  if (setsockopt(handle->io_watcher.fd, IPPROTO_IP, option, &arg, sizeof(arg)))
-    return -errno;
-
-  return 0;
+  return uv__setsockopt(handle, option4, option6, &arg, sizeof(arg));
 }
 
 
@@ -632,20 +666,70 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
   if (ttl < 1 || ttl > 255)
     return -EINVAL;
 
-  if (setsockopt(handle->io_watcher.fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)))
-    return -errno;
+/*
+ * On Solaris and derivatives such as SmartOS, the length of socket options
+ * is sizeof(int) for IP_TTL and IPV6_UNICAST_HOPS,
+ * so hardcode the size of these options on this platform,
+ * and use the general uv__setsockopt_maybe_char call on other platforms.
+ */
+#if defined(__sun) || defined(_AIX)
+  return uv__setsockopt(handle,
+                        IP_TTL,
+                        IPV6_UNICAST_HOPS,
+                        &ttl,
+                        sizeof(ttl));
+#endif /* defined(__sun) || defined(_AIX) */
 
-  return 0;
+  return uv__setsockopt_maybe_char(handle,
+                                   IP_TTL,
+                                   IPV6_UNICAST_HOPS,
+                                   ttl);
 }
 
 
 int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl) {
-  return uv__setsockopt_maybe_char(handle, IP_MULTICAST_TTL, ttl);
+/*
+ * On Solaris and derivatives such as SmartOS, the length of socket options
+ * is sizeof(int) for IPV6_MULTICAST_HOPS and sizeof(char) for
+ * IP_MULTICAST_TTL, so hardcode the size of the option in the IPv6 case,
+ * and use the general uv__setsockopt_maybe_char call otherwise.
+ */
+#if defined(__sun) || defined(_AIX)
+  if (handle->flags & UV_HANDLE_IPV6)
+    return uv__setsockopt(handle,
+                          IP_MULTICAST_TTL,
+                          IPV6_MULTICAST_HOPS,
+                          &ttl,
+                          sizeof(ttl));
+#endif /* defined(__sun) || defined(_AIX) */
+
+  return uv__setsockopt_maybe_char(handle,
+                                   IP_MULTICAST_TTL,
+                                   IPV6_MULTICAST_HOPS,
+                                   ttl);
 }
 
 
 int uv_udp_set_multicast_loop(uv_udp_t* handle, int on) {
-  return uv__setsockopt_maybe_char(handle, IP_MULTICAST_LOOP, on);
+/*
+ * On Solaris and derivatives such as SmartOS, the length of socket options
+ * is sizeof(int) for IPV6_MULTICAST_LOOP and sizeof(char) for
+ * IP_MULTICAST_LOOP, so hardcode the size of the option in the IPv6 case,
+ * and use the general uv__setsockopt_maybe_char call otherwise.
+ */
+#if defined(__sun) || defined(_AIX)
+  if (handle->flags & UV_HANDLE_IPV6)
+    return uv__setsockopt(handle,
+                          IP_MULTICAST_LOOP,
+                          IPV6_MULTICAST_LOOP,
+                          &on,
+                          sizeof(on));
+#endif /* defined(__sun) || defined(_AIX) */
+
+  return uv__setsockopt_maybe_char(handle,
+                                   IP_MULTICAST_LOOP,
+                                   IPV6_MULTICAST_LOOP,
+                                   on);
 }
 
 int uv_udp_set_multicast_interface(uv_udp_t* handle, const char* interface_addr) {

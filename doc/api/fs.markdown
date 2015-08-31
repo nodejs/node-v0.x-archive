@@ -775,6 +775,10 @@ on Unix systems, it never was.
 
 Returns a new ReadStream object (See `Readable Stream`).
 
+Be aware that, unlike the default value set for `highWaterMark` on a
+readable stream (16kB), the stream returned by this method has a
+default value of 64kB for the same parameter.
+
 `options` is an object with the following defaults:
 
     { flags: 'r',
@@ -796,6 +800,9 @@ there's an error.  It is your responsibility to close it and make sure
 there's no file descriptor leak.  If `autoClose` is set to true (default
 behavior), on `error` or `end` the file descriptor will be closed
 automatically.
+
+`mode` sets the file mode (permission and sticky bits), but only if the
+file was created.
 
 An example to read the last 10 bytes of a file which is 100 bytes long:
 
@@ -820,7 +827,7 @@ Returns a new WriteStream object (See `Writable Stream`).
 `options` is an object with the following defaults:
 
     { flags: 'w',
-      encoding: null,
+      defaultEncoding: 'utf8',
       fd: null,
       mode: 0666 }
 

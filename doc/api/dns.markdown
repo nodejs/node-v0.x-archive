@@ -81,7 +81,7 @@ See [supported `getaddrinfo` flags](#dns_supported_getaddrinfo_flags) below for
 more information on supported flags.
 
 The callback has arguments `(err, address, family)`.  The `address` argument
-is a string representation of a IP v4 or v6 address. The `family` argument
+is a string representation of an IP v4 or v6 address. The `family` argument
 is either the integer 4 or 6 and denotes the family of `address` (not
 necessarily the value initially passed to `lookup`).
 
@@ -155,7 +155,7 @@ attribute (e.g. `[{'priority': 10, 'exchange': 'mx.example.com'},...]`).
 ## dns.resolveTxt(hostname, callback)
 
 The same as `dns.resolve()`, but only for text queries (`TXT` records).
-`addresses` is an 2-d array of the text records available for `hostname` (e.g.,
+`addresses` is a 2-d array of the text records available for `hostname` (e.g.,
 `[ ['v=spf1 ip4:0.0.0.0 ', '~all' ] ]`). Each sub-array contains TXT chunks of
 one record. Depending on the use case, the could be either joined together or
 treated separately.
@@ -259,8 +259,9 @@ The following flags can be passed as hints to `dns.lookup`.
 of addresses supported by the current system. For example, IPv4 addresses
 are only returned if the current system has at least one IPv4 address
 configured. Loopback addresses are not considered.
-- `dns.V4MAPPED`: If the IPv6 family was specified, but no IPv6 addresses
-were found, then return IPv4 mapped IPv6 addresses.
+- `dns.V4MAPPED`: If the IPv6 family was specified, but no IPv6 addresses were
+found, then return IPv4 mapped IPv6 addresses. Note that it is not supported
+on some operating systems (e.g FreeBSD 10.1).
 
 ## Implementation considerations
 

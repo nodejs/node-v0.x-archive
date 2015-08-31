@@ -13,7 +13,7 @@ AR=		ar r
 CFLAGS= $(INCLUDES) $(CFLAG)
 
 GENERAL=Makefile
-TEST=evp_test.c
+TEST=evp_test.c evp_extra_test.c
 TESTDATA=evptests.txt
 APPS=
 
@@ -85,6 +85,8 @@ tests:
 
 lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
+
+update: depend
 
 depend:
 	@[ -n "$(MAKEDEPEND)" ] # should be set by upper Makefile...

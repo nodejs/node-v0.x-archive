@@ -693,7 +693,7 @@ void JSObject::SetNormalizedProperty(Handle<JSObject> object,
                                      Handle<Name> name,
                                      Handle<Object> value,
                                      PropertyDetails details) {
-  DCHECK(!object->HasFastProperties());
+  CHECK(!object->HasFastProperties());
   Handle<NameDictionary> property_dictionary(object->property_dictionary());
 
   if (!name->IsUniqueName()) {
@@ -3560,11 +3560,6 @@ void JSObject::LookupRealNamedProperty(Handle<Name> name,
 
 void JSObject::LookupRealNamedPropertyInPrototypes(Handle<Name> name,
                                                    LookupResult* result) {
-  if (name->IsOwn()) {
-    result->NotFound();
-    return;
-  }
-
   DisallowHeapAllocation no_gc;
   Isolate* isolate = GetIsolate();
   for (PrototypeIterator iter(isolate, this); !iter.IsAtEnd(); iter.Advance()) {
@@ -4735,9 +4730,15 @@ void JSObject::MigrateSlowToFast(Handle<JSObject> object,
 
 
 void JSObject::ResetElements(Handle<JSObject> object) {
-  Heap* heap = object->GetIsolate()->heap();
-  CHECK(object->map() != heap->sloppy_arguments_elements_map());
-  object->set_elements(object->map()->GetInitialElements());
+  Isolate* isolate = object->GetIsolate();
+  CHECK(object->map() != isolate->heap()->sloppy_arguments_elements_map());
+  if (object->map()->has_dictionary_elements()) {
+    Handle<SeededNumberDictionary> new_elements =
+        SeededNumberDictionary::New(isolate, 0);
+    object->set_elements(*new_elements);
+  } else {
+    object->set_elements(object->map()->GetInitialElements());
+  }
 }
 
 
@@ -6112,7 +6113,7 @@ void JSReceiver::LookupOwn(
   }
 
   js_object->LookupOwnRealNamedProperty(name, result);
-  if (result->IsFound() || name->IsOwn() || !search_hidden_prototypes) return;
+  if (result->IsFound() || !search_hidden_prototypes) return;
 
   PrototypeIterator iter(GetIsolate(), js_object);
   if (!iter.GetCurrent()->IsJSReceiver()) return;
@@ -6131,10 +6132,6 @@ void JSReceiver::Lookup(Handle<Name> name, LookupResult* result) {
        !iter.IsAtEnd(); iter.Advance()) {
     JSReceiver::cast(iter.GetCurrent())->LookupOwn(name, result, false);
     if (result->IsFound()) return;
-    if (name->IsOwn()) {
-      result->NotFound();
-      return;
-    }
   }
   result->NotFound();
 }
@@ -6874,25 +6871,26 @@ MaybeHandle<Object> JSObject::GetAccessor(Handle<JSObject> object,
   // interceptor calls.
   AssertNoContextChange ncc(isolate);
 
-  // Check access rights if needed.
-  if (object->IsAccessCheckNeeded() &&
-      !isolate->MayNamedAccess(object, name, v8::ACCESS_HAS)) {
-    isolate->ReportFailedAccessCheck(object, v8::ACCESS_HAS);
-    RETURN_EXCEPTION_IF_SCHEDULED_EXCEPTION(isolate, Object);
-    return isolate->factory()->undefined_value();
-  }
-
   // Make the lookup and include prototypes.
   uint32_t index = 0;
   if (name->AsArrayIndex(&index)) {
     for (PrototypeIterator iter(isolate, object,
                                 PrototypeIterator::START_AT_RECEIVER);
          !iter.IsAtEnd(); iter.Advance()) {
-      if (PrototypeIterator::GetCurrent(iter)->IsJSObject() &&
-          JSObject::cast(*PrototypeIterator::GetCurrent(iter))
-              ->HasDictionaryElements()) {
-        JSObject* js_object =
-            JSObject::cast(*PrototypeIterator::GetCurrent(iter));
+      Handle<Object> current = PrototypeIterator::GetCurrent(iter);
+      // Check access rights if needed.
+      if (current->IsAccessCheckNeeded() &&
+          !isolate->MayNamedAccess(Handle<JSObject>::cast(current), name,
+                                   v8::ACCESS_HAS)) {
+        isolate->ReportFailedAccessCheck(Handle<JSObject>::cast(current),
+                                         v8::ACCESS_HAS);
+        RETURN_EXCEPTION_IF_SCHEDULED_EXCEPTION(isolate, Object);
+        return isolate->factory()->undefined_value();
+      }
+
+      if (current->IsJSObject() &&
+          Handle<JSObject>::cast(current)->HasDictionaryElements()) {
+        JSObject* js_object = JSObject::cast(*current);
         SeededNumberDictionary* dictionary = js_object->element_dictionary();
         int entry = dictionary->FindEntry(index);
         if (entry != SeededNumberDictionary::kNotFound) {
@@ -6906,21 +6904,37 @@ MaybeHandle<Object> JSObject::GetAccessor(Handle<JSObject> object,
       }
     }
   } else {
-    for (PrototypeIterator iter(isolate, object,
-                                PrototypeIterator::START_AT_RECEIVER);
-         !iter.IsAtEnd(); iter.Advance()) {
-      LookupResult result(isolate);
-      JSReceiver::cast(*PrototypeIterator::GetCurrent(iter))
-          ->LookupOwn(name, &result);
-      if (result.IsFound()) {
-        if (result.IsReadOnly()) return isolate->factory()->undefined_value();
-        if (result.IsPropertyCallbacks()) {
-          Object* obj = result.GetCallbackObject();
-          if (obj->IsAccessorPair()) {
-            return handle(AccessorPair::cast(obj)->GetComponent(component),
-                          isolate);
+    LookupIterator it(object, name, LookupIterator::SKIP_INTERCEPTOR);
+    for (; it.IsFound(); it.Next()) {
+      switch (it.state()) {
+        case LookupIterator::NOT_FOUND:
+        case LookupIterator::INTERCEPTOR:
+          UNREACHABLE();
+
+        case LookupIterator::ACCESS_CHECK:
+          if (it.HasAccess(v8::ACCESS_HAS)) continue;
+          isolate->ReportFailedAccessCheck(it.GetHolder<JSObject>(),
+                                           v8::ACCESS_HAS);
+          RETURN_EXCEPTION_IF_SCHEDULED_EXCEPTION(isolate, Object);
+          return isolate->factory()->undefined_value();
+
+        case LookupIterator::JSPROXY:
+          return isolate->factory()->undefined_value();
+
+        case LookupIterator::PROPERTY:
+          if (!it.HasProperty()) continue;
+          switch (it.property_kind()) {
+            case LookupIterator::DATA:
+              continue;
+            case LookupIterator::ACCESSOR: {
+              Handle<Object> maybe_pair = it.GetAccessors();
+              if (maybe_pair->IsAccessorPair()) {
+                return handle(
+                    AccessorPair::cast(*maybe_pair)->GetComponent(component),
+                    isolate);
+              }
+            }
           }
-        }
       }
     }
   }
@@ -9012,36 +9026,7 @@ template <typename Char>
 static inline bool CompareRawStringContents(const Char* const a,
                                             const Char* const b,
                                             int length) {
-  int i = 0;
-#ifndef V8_HOST_CAN_READ_UNALIGNED
-  // If this architecture isn't comfortable reading unaligned ints
-  // then we have to check that the strings are aligned before
-  // comparing them blockwise.
-  const int kAlignmentMask = sizeof(uint32_t) - 1;  // NOLINT
-  uintptr_t pa_addr = reinterpret_cast<uintptr_t>(a);
-  uintptr_t pb_addr = reinterpret_cast<uintptr_t>(b);
-  if (((pa_addr & kAlignmentMask) | (pb_addr & kAlignmentMask)) == 0) {
-#endif
-    const int kStepSize = sizeof(int) / sizeof(Char);  // NOLINT
-    int endpoint = length - kStepSize;
-    // Compare blocks until we reach near the end of the string.
-    for (; i <= endpoint; i += kStepSize) {
-      uint32_t wa = *reinterpret_cast<const uint32_t*>(a + i);
-      uint32_t wb = *reinterpret_cast<const uint32_t*>(b + i);
-      if (wa != wb) {
-        return false;
-      }
-    }
-#ifndef V8_HOST_CAN_READ_UNALIGNED
-  }
-#endif
-  // Compare the remaining characters that didn't fit into a block.
-  for (; i < length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
+  return CompareChars(a, b, length) == 0;
 }
 
 

@@ -17,7 +17,7 @@ The four relevant files are:
 
 * per-project config file (/path/to/my/project/.npmrc)
 * per-user config file (~/.npmrc)
-* global config file ($PREFIX/npmrc)
+* global config file ($PREFIX/etc/npmrc)
 * npm builtin config file (/path/to/npm/npmrc)
 
 All npm config files are an ini-formatted list of `key = value`
@@ -35,6 +35,11 @@ example:
 
     key[] = "first value"
     key[] = "second value"
+
+**NOTE:** Because local (per-project or per-user) `.npmrc` files can contain
+sensitive credentials, they must be readable and writable _only_ by your user
+account (i.e. must have a mode of `0600`), otherwise they _will be ignored by
+npm!_
 
 ### Per-project config file
 

@@ -342,6 +342,14 @@ void SignalHandler::HandleProfilerSignal(int signal, siginfo_t* info,
     // We require a fully initialized and entered isolate.
     return;
   }
+
+  // ISSUE-14576: To avoid deadlock, return if there is a thread lock
+  if (Isolate::GetProcessWideMutexPointer()->TryLock()) {
+    Isolate::GetProcessWideMutexPointer()->Unlock();
+  } else {
+    return;
+  }
+
   if (v8::Locker::IsActive() &&
       !isolate->thread_manager()->IsLockedByCurrentThread()) {
     return;
@@ -550,7 +558,7 @@ class SamplerThread : public base::Thread {
           sampler->DoSample();
         }
       }
-      base::OS::Sleep(interval_);
+      base::OS::Sleep(base::TimeDelta::FromMilliseconds(interval_));
     }
   }
 

@@ -13,43 +13,6 @@ var tmp = path.resolve(pkg, 'tmp')
 
 var opts = { cwd: pkg }
 
-function testOutput (t, command, er, code, stdout, stderr) {
-  var lines
-
-  if (er)
-    throw er
-
-  if (stderr)
-    throw new Error('npm ' + command + ' stderr: ' + stderr.toString())
-
-  lines = stdout.trim().split('\n')
-  stdout = lines.filter(function (line) {
-    return line.trim() !== '' && line[0] !== '>'
-  }).join(';')
-
-  t.equal(stdout, command)
-  t.end()
-}
-
-function writeMetadata (object) {
-  fs.writeFileSync(
-    path.resolve(pkg, 'package.json'),
-    JSON.stringify(object, null, 2) + '\n'
-  )
-}
-
-function cleanup () {
-  rimraf.sync(pkg)
-}
-
-test('setup', function (t) {
-  cleanup()
-  mkdirp.sync(cache)
-  mkdirp.sync(tmp)
-  writeMetadata(fullyPopulated)
-  t.end()
-})
-
 var fullyPopulated = {
   'name': 'runscript',
   'version': '1.2.3',
@@ -91,6 +54,44 @@ var both = {
   }
 }
 
+
+function testOutput (t, command, er, code, stdout, stderr) {
+  var lines
+
+  if (er)
+    throw er
+
+  if (stderr)
+    throw new Error('npm ' + command + ' stderr: ' + stderr.toString())
+
+  lines = stdout.trim().split('\n')
+  stdout = lines.filter(function (line) {
+    return line.trim() !== '' && line[0] !== '>'
+  }).join(';')
+
+  t.equal(stdout, command)
+  t.end()
+}
+
+function writeMetadata (object) {
+  fs.writeFileSync(
+    path.resolve(pkg, 'package.json'),
+    JSON.stringify(object, null, 2) + '\n'
+  )
+}
+
+function cleanup () {
+  rimraf.sync(pkg)
+}
+
+test('setup', function (t) {
+  cleanup()
+  mkdirp.sync(cache)
+  mkdirp.sync(tmp)
+  writeMetadata(fullyPopulated)
+  t.end()
+})
+
 test('npm run-script start', function (t) {
   common.npm(['run-script', 'start'], opts, testOutput.bind(null, t, 'start'))
 })
@@ -109,6 +110,10 @@ test('npm run-script with args that contain single quotes', function (t) {
 
 test('npm run-script with args that contain double quotes', function (t) {
   common.npm(['run-script', 'start', '--', 'what"s "up"?'], opts, testOutput.bind(null, t, 'what"s "up"?'))
+})
+
+test('npm run-script with args that contain ticks', function (t) {
+  common.npm(['run-script', 'start', '--', 'what\'s \'up\'?'], opts, testOutput.bind(null, t, 'what\'s \'up\'?'))
 })
 
 test('npm run-script with pre script', function (t) {

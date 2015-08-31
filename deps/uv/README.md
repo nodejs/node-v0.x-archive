@@ -46,15 +46,6 @@ SemVer. libuv will keep a stable ABI across major releases.
 
 ## Documentation
 
- * [include/uv.h](https://github.com/libuv/libuv/blob/master/include/uv.h)
-   &mdash; API documentation in the form of detailed header comments.
- * [An Introduction to libuv](http://nikhilm.github.com/uvbook/) &mdash; An
-   overview of libuv with tutorials.
- * [LXJS 2012 talk](http://www.youtube.com/watch?v=nGn60vDSxQ4) - High-level
-   introductory talk about libuv.
- * [Tests and benchmarks](https://github.com/libuv/libuv/tree/master/test) -
-   API specification and usage examples.
-
 ### Official API documentation
 
 Located in the docs/ subdirectory. It uses the [Sphinx](http://sphinx-doc.org/)
@@ -81,18 +72,22 @@ NOTE: Windows users need to use make.bat instead of plain 'make'.
 
 Documentation can be browsed online [here](http://docs.libuv.org).
 
+The [tests and benchmarks](https://github.com/libuv/libuv/tree/master/test)
+also serve as API specification and usage examples.
+
 ### Other resources
 
  * [An Introduction to libuv](http://nikhilm.github.com/uvbook/)
    &mdash; An overview of libuv with tutorials.
  * [LXJS 2012 talk](http://www.youtube.com/watch?v=nGn60vDSxQ4)
    &mdash; High-level introductory talk about libuv.
- * [Tests and benchmarks](https://github.com/libuv/libuv/tree/master/test)
-   &mdash; API specification and usage examples.
  * [libuv-dox](https://github.com/thlorenz/libuv-dox)
    &mdash; Documenting types and methods of libuv, mostly by reading uv.h.
  * [learnuv](https://github.com/thlorenz/learnuv)
    &mdash; Learn uv for fun and profit, a self guided workshop to libuv.
+
+These resources are not handled by libuv maintainers and might be out of
+date. Please verify it before opening new issues.
 
 ## Build Instructions
 
@@ -122,8 +117,6 @@ To have GYP generate build script for another system, checkout GYP into the
 project tree manually:
 
     $ git clone https://chromium.googlesource.com/external/gyp.git build/gyp
-    OR
-    $ svn co http://gyp.googlecode.com/svn/trunk build/gyp
 
 ### Unix
 
@@ -162,6 +155,15 @@ Run:
 Note for UNIX users: compile your project with `-D_LARGEFILE_SOURCE` and
 `-D_FILE_OFFSET_BITS=64`. GYP builds take care of that automatically.
 
+### Using Ninja
+
+To use ninja for build on ninja supported platforms, run:
+
+    $ ./gyp_uv.py -f ninja
+    $ ninja -C out/Debug     #for debug build OR
+    $ ninja -C out/Release
+
+
 ### Running tests
 
 Run:
@@ -182,6 +184,18 @@ Linux using the GCC toolchain.
 OS X using the GCC or XCode toolchain.
 
 Solaris 121 and later using GCC toolchain.
+
+AIX 6 and later using GCC toolchain (see notes).
+
+### AIX Notes
+
+AIX support for filesystem events requires the non-default IBM `bos.ahafs`
+package to be installed.  This package provides the AIX Event Infrastructure
+that is detected by `autoconf`.
+[IBM documentation](http://www.ibm.com/developerworks/aix/library/au-aix_event_infrastructure/)
+describes the package in more detail.
+
+AIX support for filesystem events is not compiled when building with `gyp`.
 
 ## Patches
 

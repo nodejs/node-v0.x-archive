@@ -15166,10 +15166,12 @@ class RegExpInterruptionThread : public v8::base::Thread {
     for (regexp_interruption_data.loop_count = 0;
          regexp_interruption_data.loop_count < 7;
          regexp_interruption_data.loop_count++) {
-      v8::base::OS::Sleep(50);  // Wait a bit before requesting GC.
+      // Wait a bit before requesting GC.
+      v8::base::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(50));
       reinterpret_cast<i::Isolate*>(isolate_)->stack_guard()->RequestGC();
     }
-    v8::base::OS::Sleep(50);  // Wait a bit before terminating.
+    // Wait a bit before terminating.
+    v8::base::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(50));
     v8::V8::TerminateExecution(isolate_);
   }
 
@@ -21516,7 +21518,7 @@ class ThreadInterruptTest {
       struct sigaction action;
 
       // Ensure that we'll enter waiting condition
-      v8::base::OS::Sleep(100);
+      v8::base::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(100));
 
       // Setup signal handler
       memset(&action, 0, sizeof(action));
@@ -21527,7 +21529,7 @@ class ThreadInterruptTest {
       kill(getpid(), SIGCHLD);
 
       // Ensure that if wait has returned because of error
-      v8::base::OS::Sleep(100);
+      v8::base::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(100));
 
       // Set value and signal semaphore
       test_->sem_value_ = 1;
@@ -22733,32 +22735,6 @@ TEST(ScriptNameAndLineNumber) {
   CHECK_EQ(url, *utf8_name);
   int line_number = script->GetUnboundScript()->GetLineNumber(0);
   CHECK_EQ(13, line_number);
-}
-
-
-Local<v8::Context> call_eval_context;
-Local<v8::Function> call_eval_bound_function;
-static void CallEval(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  v8::Context::Scope scope(call_eval_context);
-  args.GetReturnValue().Set(
-      call_eval_bound_function->Call(call_eval_context->Global(), 0, NULL));
-}
-
-
-TEST(CrossActivationEval) {
-  LocalContext env;
-  v8::Isolate* isolate = env->GetIsolate();
-  v8::HandleScope scope(isolate);
-  {
-    call_eval_context = v8::Context::New(isolate);
-    v8::Context::Scope scope(call_eval_context);
-    call_eval_bound_function =
-        Local<Function>::Cast(CompileRun("eval.bind(this, '1')"));
-  }
-  env->Global()->Set(v8_str("CallEval"),
-      v8::FunctionTemplate::New(isolate, CallEval)->GetFunction());
-  Local<Value> result = CompileRun("CallEval();");
-  CHECK_EQ(result, v8::Integer::New(isolate, 1));
 }
 
 
