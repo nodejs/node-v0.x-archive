@@ -3,7 +3,7 @@ npm-config(7) -- More than you probably want to know about npm configuration
 
 ## DESCRIPTION
 
-npm gets its configuration values from 6 sources, in this priority:
+npm gets its configuration values from the following sources, sorted by priority:
 
 ### Command Line Flags
 
@@ -243,8 +243,13 @@ If true, then only prints color codes for tty file descriptors.
 * Default: Infinity
 * Type: Number
 
-The depth to go when recursing directories for `npm ls` and
-`npm cache ls`.
+The depth to go when recursing directories for `npm ls`,
+`npm cache ls`, and `npm outdated`.
+
+For `npm outdated`, a setting of `Infinity` will be treated as `0`
+since that gives more useful information.  To show the outdated status
+of all packages and dependents, use a large integer value,
+e.g., `npm outdated --depth 9999`
 
 ### description
 
@@ -384,6 +389,17 @@ The string that starts all the debugging log output.
 A proxy to use for outgoing https requests. If the `HTTPS_PROXY` or
 `https_proxy` or `HTTP_PROXY` or `http_proxy` environment variables are set,
 proxy settings will be honored by the underlying `request` library.
+
+### if-present
+
+* Default: false
+* Type: Boolean
+
+If true, npm will not exit with an error code when `run-script` is invoked for
+a script that isn't defined in the `scripts` section of `package.json`. This
+option can be used when it's desirable to optionally run a script when it's
+present and fail if the script fails. This is useful, for example, when running
+scripts that may only apply for some builds in an otherwise generic CI setup.
 
 ### ignore-scripts
 
@@ -787,6 +803,19 @@ it will install the specified tag.
 
 Also the tag that is added to the package@version specified by the `npm
 tag` command, if no explicit tag is given.
+
+### tag-version-prefix
+
+* Default: `"v"`
+* Type: String
+
+If set, alters the prefix used when tagging a new version when performing a
+version increment using  `npm-version`. To remove the prefix altogether, set it
+to the empty string: `""`.
+
+Because other tools may rely on the convention that npm version tags look like
+`v1.0.0`, _only use this property if it is absolutely necessary_. In
+particular, use care when overriding this setting for public packages.
 
 ### tmp
 

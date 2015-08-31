@@ -88,7 +88,12 @@ void uv__stream_init(uv_loop_t* loop,
   stream->write_queue_size = 0;
 
   if (loop->emfile_fd == -1) {
-    err = uv__open_cloexec("/", O_RDONLY);
+    err = uv__open_cloexec("/dev/null", O_RDONLY);
+    if (err < 0)
+        /* In the rare case that "/dev/null" isn't mounted open "/"
+         * instead.
+         */
+        err = uv__open_cloexec("/", O_RDONLY);
     if (err >= 0)
       loop->emfile_fd = err;
   }
@@ -226,7 +231,6 @@ static void uv__stream_osx_select_cb(uv_async_t* handle) {
   /* Get and reset stream's events */
   events = s->events;
   ACCESS_ONCE(int, s->events) = 0;
-  uv_sem_post(&s->async_sem);
 
   assert(events != 0);
   assert(events == (events & (UV__POLLIN | UV__POLLOUT)));
@@ -237,6 +241,14 @@ static void uv__stream_osx_select_cb(uv_async_t* handle) {
 
   if ((events & UV__POLLOUT) && uv__io_active(&stream->io_watcher, UV__POLLOUT))
     uv__stream_io(stream->loop, &stream->io_watcher, UV__POLLOUT);
+
+  if (stream->flags & UV_CLOSING)
+    return;
+
+  /* NOTE: It is important to do it here, otherwise `select()` might be called
+   * before the actual `uv__read()`, leading to the blocking syscall
+   */
+  uv_sem_post(&s->async_sem);
 }
 
 
@@ -244,7 +256,7 @@ static void uv__stream_osx_cb_close(uv_handle_t* async) {
   uv__stream_select_t* s;
 
   s = container_of(async, uv__stream_select_t, async);
-  free(s);
+  uv__free(s);
 }
 
 
@@ -301,10 +313,10 @@ int uv__stream_try_select(uv_stream_t* stream, int* fd) {
   if (fds[1] > max_fd)
     max_fd = fds[1];
 
-  sread_sz = (max_fd + NBBY) / NBBY;
+  sread_sz = ROUND_UP(max_fd + 1, sizeof(uint32_t) * NBBY) / NBBY;
   swrite_sz = sread_sz;
 
-  s = malloc(sizeof(*s) + sread_sz + swrite_sz);
+  s = uv__malloc(sizeof(*s) + sread_sz + swrite_sz);
   if (s == NULL) {
     err = -ENOMEM;
     goto failed_malloc;
@@ -363,7 +375,7 @@ failed_close_sem_init:
   return err;
 
 failed_async_init:
-  free(s);
+  uv__free(s);
 
 failed_malloc:
   uv__close(fds[0]);
@@ -375,6 +387,10 @@ failed_malloc:
 
 
 int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
+#if defined(__APPLE__)
+  int enable;
+#endif
+
   assert(fd >= 0);
   stream->flags |= flags;
 
@@ -386,6 +402,15 @@ int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
     if ((stream->flags & UV_TCP_KEEPALIVE) && uv__tcp_keepalive(fd, 1, 60))
       return -errno;
   }
+
+#if defined(__APPLE__)
+  enable = 1;
+  if (setsockopt(fd, SOL_SOCKET, SO_OOBINLINE, &enable, sizeof(enable)) &&
+      errno != ENOTSOCK &&
+      errno != EINVAL) {
+    return -errno;
+  }
+#endif
 
   stream->io_watcher.fd = fd;
 
@@ -587,7 +612,7 @@ done:
     /* All read, free */
     assert(queued_fds->offset > 0);
     if (--queued_fds->offset == 0) {
-      free(queued_fds);
+      uv__free(queued_fds);
       server->queued_fds = NULL;
     } else {
       /* Shift rest */
@@ -685,7 +710,7 @@ static void uv__write_req_finish(uv_write_t* req) {
    */
   if (req->error == 0) {
     if (req->bufs != req->bufsml)
-      free(req->bufs);
+      uv__free(req->bufs);
     req->bufs = NULL;
   }
 
@@ -896,7 +921,7 @@ static void uv__write_callbacks(uv_stream_t* stream) {
     if (req->bufs != NULL) {
       stream->write_queue_size -= uv__write_req_size(req);
       if (req->bufs != req->bufsml)
-        free(req->bufs);
+        uv__free(req->bufs);
       req->bufs = NULL;
     }
 
@@ -961,8 +986,8 @@ static int uv__stream_queue_fd(uv_stream_t* stream, int fd) {
   queued_fds = stream->queued_fds;
   if (queued_fds == NULL) {
     queue_size = 8;
-    queued_fds = malloc((queue_size - 1) * sizeof(*queued_fds->fds) +
-                        sizeof(*queued_fds));
+    queued_fds = uv__malloc((queue_size - 1) * sizeof(*queued_fds->fds) +
+                            sizeof(*queued_fds));
     if (queued_fds == NULL)
       return -ENOMEM;
     queued_fds->size = queue_size;
@@ -972,9 +997,9 @@ static int uv__stream_queue_fd(uv_stream_t* stream, int fd) {
     /* Grow */
   } else if (queued_fds->size == queued_fds->offset) {
     queue_size = queued_fds->size + 8;
-    queued_fds = realloc(queued_fds,
-                         (queue_size - 1) * sizeof(*queued_fds->fds) +
-                             sizeof(*queued_fds));
+    queued_fds = uv__realloc(queued_fds,
+                             (queue_size - 1) * sizeof(*queued_fds->fds) +
+                              sizeof(*queued_fds));
 
     /*
      * Allocation failure, report back.
@@ -1339,7 +1364,7 @@ int uv_write2(uv_write_t* req,
 
   req->bufs = req->bufsml;
   if (nbufs > ARRAY_SIZE(req->bufsml))
-    req->bufs = malloc(nbufs * sizeof(bufs[0]));
+    req->bufs = uv__malloc(nbufs * sizeof(bufs[0]));
 
   if (req->bufs == NULL)
     return -ENOMEM;
@@ -1427,7 +1452,7 @@ int uv_try_write(uv_stream_t* stream,
   QUEUE_REMOVE(&req.queue);
   uv__req_unregister(stream->loop, &req);
   if (req.bufs != req.bufsml)
-    free(req.bufs);
+    uv__free(req.bufs);
   req.bufs = NULL;
 
   /* Do not poll for writable, if we wasn't before calling this */
@@ -1564,7 +1589,7 @@ void uv__stream_close(uv_stream_t* handle) {
     queued_fds = handle->queued_fds;
     for (i = 0; i < queued_fds->offset; i++)
       uv__close(queued_fds->fds[i]);
-    free(handle->queued_fds);
+    uv__free(handle->queued_fds);
     handle->queued_fds = NULL;
   }
 
@@ -1573,5 +1598,8 @@ void uv__stream_close(uv_stream_t* handle) {
 
 
 int uv_stream_set_blocking(uv_stream_t* handle, int blocking) {
-  return UV_ENOSYS;
+  /* Don't need to check the file descriptor, uv__nonblock()
+   * will fail with EBADF if it's not valid.
+   */
+  return uv__nonblock(uv__stream_fd(handle), !blocking);
 }

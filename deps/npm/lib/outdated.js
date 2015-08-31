@@ -36,12 +36,24 @@ var path = require("path")
   , npa = require("npm-package-arg")
   , readInstalled = require("read-installed")
   , long = npm.config.get("long")
+  , log = require("npmlog")
 
 function outdated (args, silent, cb) {
   if (typeof cb !== "function") cb = silent, silent = false
   var dir = path.resolve(npm.dir, "..")
+
+  // default depth for `outdated` is 0 (cf. `ls`)
+  if (npm.config.get("depth") === Infinity) npm.config.set("depth", 0)
+
   outdated_(args, dir, {}, 0, function (er, list) {
+    if (!list) list = []
     if (er || silent || list.length === 0) return cb(er, list)
+    list.sort(function(a, b) {
+      var aa = a[1].toLowerCase()
+        , bb = b[1].toLowerCase()
+      return aa === bb ? 0
+           : aa < bb ? -1 : 1
+    })
     if (npm.config.get("json")) {
       console.log(makeJSON(list))
     } else if (npm.config.get("parseable")) {
@@ -295,7 +307,10 @@ function shouldUpdate (args, dir, dep, has, req, depth, cb, type) {
   }
 
   if (args.length && args.indexOf(dep) === -1) return skip()
-  if (npa(req).type === "git") return doIt("git", "git")
+  var parsed = npa(dep + '@' + req)
+  if (parsed.type === "git" || (parsed.hosted && parsed.hosted.type === "github")) {
+    return doIt("git", "git")
+  }
 
   // search for the latest package
   mapToRegistry(dep, npm.config, function (er, uri, auth) {
@@ -304,8 +319,35 @@ function shouldUpdate (args, dir, dep, has, req, depth, cb, type) {
     npm.registry.get(uri, { auth : auth }, updateDeps)
   })
 
+  function updateLocalDeps (latestRegistryVersion) {
+    readJson(path.resolve(parsed.spec, 'package.json'), function (er, localDependency) {
+      if (er) return cb()
+
+      var wanted = localDependency.version
+      var latest = localDependency.version
+
+      if (latestRegistryVersion) {
+        latest = latestRegistryVersion
+        if (semver.lt(wanted, latestRegistryVersion)) {
+          wanted = latestRegistryVersion
+          req = dep + '@' + latest
+        }
+      }
+
+      if (curr.version !== wanted) {
+        doIt(wanted, latest)
+      } else {
+        skip()
+      }
+    })
+  }
+
   function updateDeps (er, d) {
-    if (er) return cb()
+    if (er) {
+      if (parsed.type !== 'local') return cb()
+      return updateLocalDeps()
+    }
+
     if (!d || !d["dist-tags"] || !d.versions) return cb()
     var l = d.versions[d["dist-tags"].latest]
     if (!l) return cb()
@@ -346,6 +388,8 @@ function shouldUpdate (args, dir, dep, has, req, depth, cb, type) {
       if (!curr || dFromUrl && cFromUrl && d._from !== curr.from
           || d.version !== curr.version
           || d.version !== l.version) {
+        if (parsed.type === 'local') return updateLocalDeps(l.version)
+
         doIt(d.version, l.version)
       }
       else {

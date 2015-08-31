@@ -40,6 +40,7 @@ function ls (args, silent, cb) {
   var opt = { depth: depth, log: log.warn, dev: true }
   readInstalled(dir, opt, function (er, data) {
     pruneNestedExtraneous(data)
+    filterByEnv(data)
     var bfs = bfsify(data, args)
       , lite = getLite(bfs)
 
@@ -86,6 +87,21 @@ function pruneNestedExtraneous (data, visited) {
       pruneNestedExtraneous(data.dependencies[i], visited)
     }
   }
+}
+
+function filterByEnv (data) {
+  var dev = npm.config.get("dev")
+  var production = npm.config.get("production")
+  if (dev === production) return
+  var dependencies = {}
+  var devDependencies = data.devDependencies || []
+  Object.keys(data.dependencies).forEach(function (name) {
+    var keys = Object.keys(devDependencies)
+    if (production && keys.indexOf(name) !== -1) return
+    if (dev && keys.indexOf(name) === -1) return
+    dependencies[name] = data.dependencies[name]
+  })
+  data.dependencies = dependencies
 }
 
 function alphasort (a, b) {
@@ -277,8 +293,11 @@ function makeArchy_ (data, long, dir, depth, parent, d) {
 
   // add giturl to name@version
   if (data._resolved) {
-    if (npa(data._resolved).type === "git")
-      out.label += " (" + data._resolved + ")"
+    var type = npa(data._resolved).type
+    var isGit = type === 'git' || type === 'hosted'
+    if (isGit) {
+      out.label += ' (' + data._resolved + ')'
+    }
   }
 
   if (long) {

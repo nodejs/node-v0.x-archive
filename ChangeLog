@@ -1,4 +1,123 @@
-2015.02.06, Version 0.12.0 (Stable)
+2015.07.09, Version 0.12.7 (Stable)
+
+* openssl: upgrade to 1.0.1p
+
+* npm: upgrade to 2.11.3
+
+* V8: cherry-pick JitCodeEvent patch from upstream (Ben Noordhuis)
+
+* win,msi: create npm folder in AppData directory (Steven Rockarts)
+
+
+2015.07.03, Version 0.12.6 (Stable), 0be9a77bb18ec15b4fb6a1fb0762f313b7351201
+
+* V8: fix out-of-band write in utf8 decoder
+
+
+2015.06.22, Version 0.12.5 (Stable), 61c6abf00898fe00eb7fcf2c23ba0b01cf12034c
+
+* openssl: upgrade to 1.0.1o (Addressing multiple CVEs)
+
+* npm: upgrade to 2.11.2
+
+* uv: upgrade to 1.6.1
+
+* V8: avoid deadlock when profiling is active (Dmitri Melikyan)
+
+* install: fix source path for openssl headers (Oguz Bastemur)
+
+* install: make sure opensslconf.h is overwritten (Oguz Bastemur)
+
+* timers: fix timeout when added in timer's callback (Julien Gilli)
+
+* windows: broadcast WM_SETTINGCHANGE after install (Mathias Küsel)
+
+
+2015.05.22, Version 0.12.4 (Stable), 0a604e92e258c5ee2752d763e50721e35053f135
+
+* npm: upgrade to 2.10.1
+
+* V8: revert v8 Array.prototype.values() removal (cjihrig)
+
+* win: bring back xp/2k3 support (Bert Belder)
+
+
+2015.05.13, Version 0.12.3 (Stable), 03431c7d7b4b4a3054ca8ae2cfa8009e3e84a2c7
+
+* V8: update to 3.28.71.19
+
+* uv: upgrade to 1.5.0
+
+* npm: upgrade to 2.9.1
+
+* V8: don't busy loop in v8 cpu profiler thread (Mike Tunnicliffe)
+
+* V8: fix issue with let bindings in for loops (adamk)
+
+* debugger: don't spawn child process in remote mode (Jackson Tian)
+
+* net: do not set V4MAPPED on FreeBSD (Julien Gilli)
+
+* repl: make 'Unexpected token' errors recoverable (Julien Gilli)
+
+* src: backport ignore ENOTCONN on shutdown race (Ben Noordhuis)
+
+* src: fix backport of SIGINT crash fix on FreeBSD (Julien Gilli)
+
+
+2015.03.31, Version 0.12.2 (Stable), 523d445705027438b83b8d5958c9beeb1c8711d9
+
+* uv: Upgrade to 1.4.2
+
+* npm: Upgrade to 2.7.4
+
+* V8: do not add extra newline in log file (Julien Gilli)
+
+* V8: Fix --max_old_space_size=4096 integer overflow (Andrei Sedoi)
+
+* asyncwrap: fix constructor condition for early ret (Trevor Norris)
+
+* buffer: align chunks on 8-byte boundary (Fedor Indutny)
+
+* buffer: fix pool offset adjustment (Trevor Norris)
+
+* build: fix use of strict aliasing (Trevor Norris)
+
+* console: allow Object.prototype fields as labels (Colin Ihrig)
+
+* fs: make F_OK/R_OK/W_OK/X_OK not writable (Jackson Tian)
+
+* fs: properly handle fd passed to truncate() (Bruno Jouhier)
+
+* http: fix assert on data/end after socket error (Fedor Indutny)
+
+* lib: fix max size check in Buffer constructor (Ben Noordhuis)
+
+* lib: fix stdio/ipc sync i/o regression (Ben Noordhuis)
+
+* module: replace NativeModule.require (Herbert Vojčík)
+
+* net: allow port 0 in connect() (cjihrig)
+
+* net: unref timer in parent sockets (Fedor Indutny)
+
+* path: refactor for performance and consistency (Nathan Woltman)
+
+* smalloc: extend user API (Trevor Norris)
+
+* src: fix for SIGINT crash on FreeBSD (Fedor Indutny)
+
+* src: fix builtin modules failing with --use-strict (Julien Gilli)
+
+* watchdog: fix timeout for early polling return (Saúl Ibarra Corretgé)
+
+
+2015.03.23, Version 0.12.1 (Stable), 0034086b49f22cfde765a7e9f55db25f8eb310b6
+
+* openssl: upgrade to 1.0.1m (Addressing multiple CVES)
+
+
+2015.02.06, Version 0.12.0 (Stable), 2b18916ff054309a07408719b62e2b6a4f1e056a
 
 * npm: Upgrade to 2.5.1
 
@@ -946,6 +1065,48 @@
 * util: custom `inspect()` method may return an Object (Nathan Rajlich)
 
 * console: `console.dir()` bypasses inspect() methods (Nathan Rajlich)
+
+
+2015.07.09, Version 0.10.40 (Maintenance), 0439a28d519fb6efe228074b0588a59452fc1677
+
+* openssl: upgrade to 1.0.1p
+
+* V8: back-port JitCodeEvent patch from upstream (Ben Noordhuis)
+
+* win,msi: create npm folder in AppData directory (Steven Rockarts)
+
+
+2015.06.18, Version 0.10.39 (Maintenance), 615a35ccd2cb5cba80901862aefe51a940995f44
+
+* openssl: upgrade to 1.0.1o (Addressing multiple CVEs)
+
+* install: fix source path for openssl headers (Oguz Bastemur)
+
+* install: make sure opensslconf.h is overwritten (Oguz Bastemur)
+
+* timers: fix timeout when added in timer's callback (Julien Gilli)
+
+* windows: broadcast WM_SETTINGCHANGE after install (Mathias Küsel)
+
+
+2015.03.23, Version 0.10.38 (Maintenance), 0b5731a63cc40c4fe9275c79158fe0a5dd4d1609
+
+* openssl: upgrade to 1.0.1m (Addressing multiple CVEs)
+
+
+2015.03.11, Version 0.10.37 (Maintenance), 7d6b5b1d5ba726331f9ccaaae59af7cd53eee82e
+
+* uv: update to 0.10.36 (CVE-2015-0278)
+
+* domains: fix stack clearing after error handled (Jonas Dohse)
+
+* buffer: reword Buffer.concat error message (Chris Dickinson)
+
+* console: allow Object.prototype fields as labels (Julien Gilli)
+
+* V8: log version in profiler log file (Ben Noordhuis)
+
+* http: fix performance regression for GET requests (Florin-Cristian Gavrila)
 
 
 2015.01.26, Version 0.10.36 (Stable), 09b482886bdd3d863c3d4e7d71264eac0daaf9e1
@@ -2641,7 +2802,7 @@
   - Support for parallel use of the cache folder
   - Retry on registry timeouts or network failures (Trent Mick)
   - Reduce 'engines' failures to a warning
-  - Use new zsh completion if aviailable (Jeremy Cantrell)
+  - Use new zsh completion if available (Jeremy Cantrell)
 
 * Fix #3577 Un-break require('sys')
 

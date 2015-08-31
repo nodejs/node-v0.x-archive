@@ -52,11 +52,11 @@
 # include <CoreServices/CoreServices.h>
 #endif
 
-#define STATIC_ASSERT(expr)                                                   \
-  void uv__static_assert(int static_assert_failed[1 - 2 * !(expr)])
-
 #define ACCESS_ONCE(type, var)                                                \
   (*(volatile type*) &(var))
+
+#define ROUND_UP(a, b)                                                        \
+  ((a) % (b) ? ((a) + (b)) - ((a) % (b)) : (a))
 
 #define UNREACHABLE()                                                         \
   do {                                                                        \
@@ -143,7 +143,8 @@ enum {
   UV_TCP_NODELAY          = 0x400,  /* Disable Nagle. */
   UV_TCP_KEEPALIVE        = 0x800,  /* Turn on keep-alive. */
   UV_TCP_SINGLE_ACCEPT    = 0x1000, /* Only accept() when idle. */
-  UV_HANDLE_IPV6          = 0x10000 /* Handle is bound to a IPv6 socket. */
+  UV_HANDLE_IPV6          = 0x10000, /* Handle is bound to a IPv6 socket. */
+  UV_UDP_PROCESSING       = 0x20000  /* Handle is running the send callback queue. */
 };
 
 /* loop flags */
@@ -224,7 +225,7 @@ void uv__signal_loop_cleanup(uv_loop_t* loop);
 /* platform specific */
 uint64_t uv__hrtime(uv_clocktype_t type);
 int uv__kqueue_init(uv_loop_t* loop);
-int uv__platform_loop_init(uv_loop_t* loop, int default_loop);
+int uv__platform_loop_init(uv_loop_t* loop);
 void uv__platform_loop_delete(uv_loop_t* loop);
 void uv__platform_invalidate_fd(uv_loop_t* loop, int fd);
 

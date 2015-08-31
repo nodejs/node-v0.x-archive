@@ -43,9 +43,10 @@ after packing it up into a tarball (b).
     it installs the current package context (ie, the current working
     directory) as a global package.
 
-    By default, `npm install` will install all modules listed as
-    dependencies. With the `--production` flag,
-    npm will not install modules listed in `devDependencies`.
+    By default, `npm install` will install all modules listed as dependencies.
+    With the `--production` flag (or when the `NODE_ENV` environment variable
+    is set to `production`), npm will not install modules listed in
+    `devDependencies`.
 
 * `npm install <folder>`:
 
@@ -154,24 +155,12 @@ after packing it up into a tarball (b).
           npm install sax@">=0.1.0 <0.2.0"
           npm install @myorg/privatepackage@">=0.1.0 <0.2.0"
 
-* `npm install <githubname>/<githubrepo>`:
-
-    Install the package at `https://github.com/githubname/githubrepo" by
-    attempting to clone it using `git`.
-
-    Example:
-
-          npm install mygithubuser/myproject
-
-   To reference a package in a git repo that is not on GitHub, see git
-   remote urls below.
-
 * `npm install <git remote url>`:
 
     Install a package by cloning a git remote url.  The format of the git
     url is:
 
-          <protocol>://[<user>@]<hostname><separator><path>[#<commit-ish>]
+          <protocol>://[<user>[:<password>]@]<hostname>[:<port>][:/]<path>[#<commit-ish>]
 
     `<protocol>` is one of `git`, `git+ssh`, `git+http`, or
     `git+https`.  If no `<commit-ish>` is specified, then `master` is
@@ -182,6 +171,53 @@ after packing it up into a tarball (b).
           git+ssh://git@github.com:npm/npm.git#v1.0.27
           git+https://isaacs@github.com/npm/npm.git
           git://github.com/npm/npm.git#v1.0.27
+
+* `npm install <githubname>/<githubrepo>[#<commit-ish>]`:
+* `npm install github:<githubname>/<githubrepo>[#<commit-ish>]`:
+
+    Install the package at `https://github.com/githubname/githubrepo` by
+    attempting to clone it using `git`.
+
+    If you don't specify a *commit-ish* then `master` will be used.
+
+    Examples:
+
+          npm install mygithubuser/myproject
+          npm install github:mygithubuser/myproject
+
+* `npm install gist:[<githubname>/]<gistID>[#<commit-ish>]`:
+
+    Install the package at `https://gist.github.com/gistID` by attempting to
+    clone it using `git`. The GitHub username associated with the gist is
+    optional and will not be saved in `package.json` if `--save` is used.
+
+    If you don't specify a *commit-ish* then `master` will be used.
+
+    Example:
+
+          npm install gist:101a11beef
+
+* `npm install bitbucket:<bitbucketname>/<bitbucketrepo>[#<commit-ish>]`:
+
+    Install the package at `https://bitbucket.org/bitbucketname/bitbucketrepo`
+    by attempting to clone it using `git`.
+
+    If you don't specify a *commit-ish* then `master` will be used.
+
+    Example:
+
+          npm install bitbucket:mybitbucketuser/myproject
+
+* `npm install gitlab:<gitlabname>/<gitlabrepo>[#<commit-ish>]`:
+
+    Install the package at `https://gitlab.com/gitlabname/gitlabrepo`
+    by attempting to clone it using `git`.
+
+    If you don't specify a *commit-ish* then `master` will be used.
+
+    Example:
+
+          npm install gitlab:mygitlabuser/myproject
 
 You may combine multiple arguments, and even multiple types of arguments.
 For example:

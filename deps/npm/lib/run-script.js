@@ -13,7 +13,6 @@ runScript.completion = function (opts, cb) {
 
   // see if there's already a package specified.
   var argv = opts.conf.argv.remain
-    , installedShallow = require("./utils/completion/installed-shallow.js")
 
   if (argv.length >= 4) return cb()
 
@@ -41,33 +40,11 @@ runScript.completion = function (opts, cb) {
     })
   }
 
-  // complete against the installed-shallow, and the pwd's scripts.
-  // but only packages that have scripts
-  var installed
-    , scripts
-  installedShallow(opts, function (d) {
-    return d.scripts
-  }, function (er, inst) {
-    installed = inst
-    next()
-  })
-
-  if (npm.config.get("global")) {
-    scripts = []
-    next()
-  }
-  else readJson(path.join(npm.localPrefix, "package.json"), function (er, d) {
+  readJson(path.join(npm.localPrefix, "package.json"), function (er, d) {
     if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     d = d || {}
-    scripts = Object.keys(d.scripts || {})
-    next()
+    cb(null, Object.keys(d.scripts || {}))
   })
-
-  function next () {
-    if (!installed || !scripts) return
-
-    cb(null, scripts.concat(installed))
-  }
 }
 
 function runScript (args, cb) {
@@ -84,31 +61,56 @@ function runScript (args, cb) {
 
 function list(cb) {
   var json = path.join(npm.localPrefix, "package.json")
+  var cmdList = [ "publish", "install", "uninstall"
+                , "test", "stop", "start", "restart"
+                ].reduce(function (l, p) {
+                  return l.concat(["pre" + p, p, "post" + p])
+                }, [])
   return readJson(json, function(er, d) {
     if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     if (er) d = {}
-    var scripts = Object.keys(d.scripts || {})
+    var allScripts = Object.keys(d.scripts || {})
+    var scripts = []
+    var runScripts = []
+    allScripts.forEach(function (script) {
+      if (cmdList.indexOf(script) !== -1) scripts.push(script)
+      else runScripts.push(script)
+    })
 
     if (log.level === "silent") {
-      return cb(null, scripts)
+      return cb(null, allScripts)
     }
 
     if (npm.config.get("json")) {
       console.log(JSON.stringify(d.scripts || {}, null, 2))
-      return cb(null, scripts)
+      return cb(null, allScripts)
     }
 
-    var s = ":"
-    var prefix = ""
-    if (!npm.config.get("parseable")) {
-      s = "\n    "
-      prefix = "  "
-      console.log("Available scripts in the %s package:", d.name)
+    if (npm.config.get("parseable")) {
+      allScripts.forEach(function(script) {
+        console.log(script + ":" + d.scripts[script])
+      })
+      return cb(null, allScripts)
+    }
+
+    var s = "\n    "
+    var prefix = "  "
+    if (scripts.length) {
+      console.log("Lifecycle scripts included in %s:", d.name)
     }
     scripts.forEach(function(script) {
       console.log(prefix + script + s + d.scripts[script])
     })
-    return cb(null, scripts)
+    if (!scripts.length && runScripts.length) {
+      console.log("Scripts available in %s via `npm run-script`:", d.name)
+    }
+    else if (runScripts.length) {
+      console.log("\navailable via `npm run-script`:")
+    }
+    runScripts.forEach(function(script) {
+      console.log(prefix + script + s + d.scripts[script])
+    })
+    return cb(null, allScripts)
   })
 }
 
@@ -116,7 +118,7 @@ function run (pkg, wd, cmd, args, cb) {
   if (!pkg.scripts) pkg.scripts = {}
 
   var cmds
-  if (cmd === "restart") {
+  if (cmd === "restart" && !pkg.scripts.restart) {
     cmds = [
       "prestop", "stop", "poststop",
       "restart",
@@ -134,6 +136,8 @@ function run (pkg, wd, cmd, args, cb) {
           log.verbose("run-script using default platform env: env (Unix)")
           pkg.scripts[cmd] = "env"
         }
+      } else if (npm.config.get("if-present")) {
+        return cb(null);
       } else {
         return cb(new Error("missing script: " + cmd))
       }
@@ -162,8 +166,7 @@ function run (pkg, wd, cmd, args, cb) {
 function joinArgs (args) {
   var joinedArgs = ""
   args.forEach(function(arg) {
-    if (arg.match(/[ '"]/)) arg = '"' + arg.replace(/"/g, '\\"') + '"'
-    joinedArgs += " " + arg
+    joinedArgs += ' "' + arg.replace(/"/g, '\\"') + '"'
   })
   return joinedArgs
 }

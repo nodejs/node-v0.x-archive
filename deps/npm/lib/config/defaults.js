@@ -32,12 +32,6 @@ function validateSemver (data, k, val) {
   data[k] = semver.valid(val)
 }
 
-function validateTag (data, k, val) {
-  val = ("" + val).trim()
-  if (!val || semver.validRange(val)) return false
-  data[k] = val
-}
-
 function validateStream (data, k, val) {
   if (!(val instanceof Stream)) return false
   data[k] = val
@@ -46,10 +40,6 @@ function validateStream (data, k, val) {
 nopt.typeDefs.semver = { type: semver, validate: validateSemver }
 nopt.typeDefs.Stream = { type: Stream, validate: validateStream }
 nopt.typeDefs.Umask = { type: Umask, validate: validateUmask }
-
-// Don't let --tag=1.2.3 ever be a thing
-var tag = {}
-nopt.typeDefs.tag = { type: tag, validate: validateTag }
 
 nopt.invalidHandler = function (k, val, type) {
   log.warn("invalid config", k + "=" + JSON.stringify(val))
@@ -60,9 +50,6 @@ nopt.invalidHandler = function (k, val, type) {
   }
 
   switch (type) {
-    case tag:
-      log.warn("invalid config", "Tag must not be a SemVer range")
-      break
     case Umask:
       log.warn("invalid config", "Must be umask, octal number in range 0000..0777")
       break
@@ -160,6 +147,7 @@ Object.defineProperty(exports, "defaults", {get: function () {
     , group : process.platform === "win32" ? 0
             : process.env.SUDO_GID || (process.getgid && process.getgid())
     , heading: "npm"
+    , "if-present": false
     , "ignore-scripts": false
     , "init-module": path.resolve(home, ".npm-init.js")
     , "init-author-name" : ""
@@ -208,6 +196,7 @@ Object.defineProperty(exports, "defaults", {get: function () {
     , spin: true
     , "strict-ssl": true
     , tag : "latest"
+    , "tag-version-prefix" : "v"
     , tmp : temp
     , unicode : true
     , "unsafe-perm" : process.platform === "win32"
@@ -262,6 +251,7 @@ exports.types =
   , "https-proxy" : [null, url]
   , "user-agent" : String
   , "heading": String
+  , "if-present": Boolean
   , "ignore-scripts": Boolean
   , "init-module": path
   , "init-author-name" : String
@@ -310,7 +300,7 @@ exports.types =
   , "sign-git-tag": Boolean
   , spin: ["always", Boolean]
   , "strict-ssl": Boolean
-  , tag : tag
+  , tag : String
   , tmp : path
   , unicode : Boolean
   , "unsafe-perm" : Boolean
@@ -319,15 +309,26 @@ exports.types =
   , userconfig : path
   , umask: Umask
   , version : Boolean
+  , "tag-version-prefix" : String
   , versions : Boolean
   , viewer: String
   , _exit : Boolean
   }
 
-function getLocalAddresses() {
-  Object.keys(os.networkInterfaces()).map(function (nic) {
-    return os.networkInterfaces()[nic].filter(function (addr) {
-      return addr.family === "IPv4"
+function getLocalAddresses () {
+  var interfaces
+  // #8094: some environments require elevated permissions to enumerate
+  // interfaces, and synchronously throw EPERM when run without
+  // elevated privileges
+  try {
+    interfaces = os.networkInterfaces()
+  } catch (e) {
+    interfaces = {}
+  }
+
+  return Object.keys(interfaces).map(function (nic) {
+    return interfaces[nic].filter(function (addr) {
+      return addr.family === 'IPv4'
     })
     .map(function (addr) {
       return addr.address

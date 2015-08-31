@@ -15,8 +15,10 @@ valid second argument to semver.inc (one of "patch", "minor", "major",
 "prepatch", "preminor", "premajor", "prerelease"). In the second case,
 the existing version will be incremented by 1 in the specified field.
 
-If run in a git repo, it will also create a version commit and tag, and
-fail if the repo is not clean.
+If run in a git repo, it will also create a version commit and tag, and fail if
+the repo is not clean.  This behavior is controlled by `git-tag-version` (see
+below), and can be disabled on the command line by running `npm
+--no-git-tag-version version`
 
 If supplied with `--message` (shorthand: `-m`) config option, npm will
 use it as a commit message when creating a version commit.  If the
@@ -38,9 +40,28 @@ in your git config for this to work properly.  For example:
 
     Enter passphrase:
 
+If "preversion", "version", "postversion" in the "scripts" property of
+the package.json, it will execute by running `npm version`. preversion
+and version ware executed before bump the package version, postversion
+was executed after bump the package version. For example to run `npm version`
+after passed all test:
+
+    "scripts": { "preversion": "npm test" }
+
+## CONFIGURATION
+
+### git-tag-version
+
+* Default: true
+* Type: Boolean
+
+Commit and tag the version change.
 
 ## SEE ALSO
 
 * npm-init(1)
+* npm-run-script(1)
+* npm-scripts(7)
 * package.json(5)
 * semver(7)
+* config(7)

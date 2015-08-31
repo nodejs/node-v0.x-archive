@@ -141,17 +141,20 @@ var serverKey = loadPEM('agent2-key');
 var serverCert = loadPEM('agent2-cert');
 
 
-function runClient(options, cb) {
+function runClient(prefix, port, options, cb) {
 
   // Client can connect in three ways:
   // - Self-signed cert
   // - Certificate, but not signed by CA.
   // - Certificate signed by CA.
 
-  var args = ['s_client', '-connect', '127.0.0.1:' + common.PORT];
+  var args = ['s_client', '-connect', '127.0.0.1:' + port];
 
+  // for the performance issue in s_client on Windows
+  if (process.platform === 'win32')
+    args.push('-no_rand_screen');
 
-  console.log('  connecting with', options.name);
+  console.log(prefix + '  connecting with', options.name);
 
   switch (options.name) {
     case 'agent1':
@@ -192,7 +195,7 @@ function runClient(options, cb) {
       break;
 
     default:
-      throw new Error('Unknown agent name');
+      throw new Error(prefix + 'Unknown agent name');
   }
 
   // To test use: openssl s_client -connect localhost:8000
@@ -209,17 +212,17 @@ function runClient(options, cb) {
     out += d;
 
     if (!goodbye && /_unauthed/g.test(out)) {
-      console.error('  * unauthed');
+      console.error(prefix + '  * unauthed');
       goodbye = true;
-      client.stdin.end('goodbye\n');
+      client.kill();
       authed = false;
       rejected = false;
     }
 
     if (!goodbye && /_authed/g.test(out)) {
-      console.error('  * authed');
+      console.error(prefix + '  * authed');
       goodbye = true;
-      client.stdin.end('goodbye\n');
+      client.kill();
       authed = true;
       rejected = false;
     }
@@ -228,15 +231,17 @@ function runClient(options, cb) {
   //client.stdout.pipe(process.stdout);
 
   client.on('exit', function(code) {
-    //assert.equal(0, code, options.name +
+    //assert.equal(0, code, prefix + options.name +
     //      ": s_client exited with error code " + code);
     if (options.shouldReject) {
-      assert.equal(true, rejected, options.name +
+      assert.equal(true, rejected, prefix + options.name +
           ' NOT rejected, but should have been');
     } else {
-      assert.equal(false, rejected, options.name +
+      assert.equal(false, rejected, prefix + options.name +
           ' rejected, but should NOT have been');
-      assert.equal(options.shouldAuth, authed);
+      assert.equal(options.shouldAuth, authed, prefix +
+          options.name + ' authed is ' + authed +
+          ' but should have been ' + options.shouldAuth);
     }
 
     cb();
@@ -246,11 +251,12 @@ function runClient(options, cb) {
 
 // Run the tests
 var successfulTests = 0;
-function runTest(testIndex) {
+function runTest(port, testIndex) {
+  var prefix = testIndex + ' ';
   var tcase = testCases[testIndex];
   if (!tcase) return;
 
-  console.error("Running '%s'", tcase.title);
+  console.error(prefix + "Running '%s'", tcase.title);
 
   var cas = tcase.CAs.map(loadPEM);
 
@@ -278,10 +284,16 @@ function runTest(testIndex) {
 
   var renegotiated = false;
   var server = tls.Server(serverOptions, function handleConnection(c) {
+    c.on('error', function(e) {
+      // child.kill() leads ECONNRESET errro in the TLS connection of
+      // openssl s_client via spawn(). A Test result is already
+      // checked by the data of client.stdout before child.kill() so
+      // these tls errors can be ignored.
+    });
     if (tcase.renegotiate && !renegotiated) {
       renegotiated = true;
       setTimeout(function() {
-        console.error('- connected, renegotiating');
+        console.error(prefix + '- connected, renegotiating');
         c.write('\n_renegotiating\n');
         return c.renegotiate({
           requestCert: true,
@@ -297,11 +309,11 @@ function runTest(testIndex) {
 
     connections++;
     if (c.authorized) {
-      console.error('- authed connection: ' +
+      console.error(prefix + '- authed connection: ' +
                     c.getPeerCertificate().subject.CN);
       c.write('\n_authed\n');
     } else {
-      console.error('- unauthed connection: %s', c.authorizationError);
+      console.error(prefix + '- unauthed connection: %s', c.authorizationError);
       c.write('\n_unauthed\n');
     }
   });
@@ -309,27 +321,43 @@ function runTest(testIndex) {
   function runNextClient(clientIndex) {
     var options = tcase.clients[clientIndex];
     if (options) {
-      runClient(options, function() {
+      runClient(prefix + clientIndex + ' ', port, options, function() {
         runNextClient(clientIndex + 1);
       });
     } else {
       server.close();
       successfulTests++;
-      runTest(testIndex + 1);
+      runTest(port, nextTest++);
     }
   }
 
-  server.listen(common.PORT, function() {
+  server.listen(port, function() {
     if (tcase.debug) {
-      console.error('TLS server running on port ' + common.PORT);
+      console.error(prefix + 'TLS server running on port ' + port);
     } else {
-      runNextClient(0);
+      if (tcase.renegotiate) {
+        runNextClient(0);
+      } else {
+        var clientsCompleted = 0;
+        for (var i = 0; i < tcase.clients.length; i++) {
+          runClient(prefix + i + ' ', port, tcase.clients[i], function() {
+            clientsCompleted++;
+            if (clientsCompleted === tcase.clients.length) {
+              server.close();
+              successfulTests++;
+              runTest(port, nextTest++);
+            }
+          });
+        }
+      }
     }
   });
 }
 
 
-runTest(0);
+var nextTest = 0;
+runTest(common.PORT, nextTest++);
+runTest(common.PORT + 1, nextTest++);
 
 
 process.on('exit', function() {

@@ -10,14 +10,22 @@ Those are actually required, and your package won&#39;t install without
 them.  The name and version together form an identifier that is assumed
 to be completely unique.  Changes to the package should come along with
 changes to the version.</p>
-<p>The name is what your thing is called.  Some tips:</p>
+<p>The name is what your thing is called.</p>
+<p>Some rules:</p>
 <ul>
+<li>The name must be shorter than 214 characters. This includes the scope for
+scoped packages.</li>
+<li>The name can&#39;t start with a dot or an underscore.</li>
+<li>New packages must not have uppercase letters in the name.</li>
+<li>The name ends up being part of a URL, an argument on the command line, and a
+folder name. Therefore, the name can&#39;t contain any non-URL-safe characters.</li>
+</ul>
+<p>Some tips:</p>
+<ul>
+<li>Don&#39;t use the same name as a core Node module.</li>
 <li>Don&#39;t put &quot;js&quot; or &quot;node&quot; in the name.  It&#39;s assumed that it&#39;s js, since you&#39;re
 writing a package.json file, and you can specify the engine using the &quot;engines&quot;
 field.  (See below.)</li>
-<li>The name ends up being part of a URL, an argument on the command line, and a
-folder name. Any name with non-url-safe characters will be rejected.
-Also, it can&#39;t start with a dot or an underscore.</li>
 <li>The name will probably be passed as an argument to require(), so it should
 be something short, but also reasonably descriptive.</li>
 <li>You may want to check the npm registry to see if there&#39;s something by that name
@@ -52,7 +60,7 @@ been published somewhere else, and spit at you.</p>
 issues should be reported. These are helpful for people who encounter issues
 with your package.</p>
 <p>It should look like this:</p>
-<pre><code>{ &quot;url&quot; : &quot;http://github.com/owner/project/issues&quot;
+<pre><code>{ &quot;url&quot; : &quot;https://github.com/owner/project/issues&quot;
 , &quot;email&quot; : &quot;project@hostname.com&quot;
 }
 </code></pre><p>You can specify either one or both values. If you want to provide only a url,
@@ -61,16 +69,44 @@ you can specify the value for &quot;bugs&quot; as a simple string instead of an 
 <h2 id="license">license</h2>
 <p>You should specify a license for your package so that people know how they are
 permitted to use it, and any restrictions you&#39;re placing on it.</p>
-<p>The simplest way, assuming you&#39;re using a common license such as BSD-3-Clause
-or MIT, is to just specify the standard SPDX ID of the license you&#39;re using,
-like this:</p>
+<p>If you&#39;re using a common license such as BSD-2-Clause or MIT, add a
+current SPDX license identifier for the license you&#39;re using, like this:</p>
 <pre><code>{ &quot;license&quot; : &quot;BSD-3-Clause&quot; }
 </code></pre><p>You can check <a href="https://spdx.org/licenses/">the full list of SPDX license IDs</a>.
 Ideally you should pick one that is
 <a href="http://opensource.org/licenses/alphabetical">OSI</a> approved.</p>
-<p>It&#39;s also a good idea to include a LICENSE file at the top level in
-your package.</p>
-<h2 id="people-fields-author-contributors">people fields: author, contributors</h2>
+<p>If your package is licensed under multiple common licenses, use an <a href="http://npmjs.com/package/spdx">SPDX license
+expression syntax version 2.0 string</a>, like this:</p>
+<pre><code>{ &quot;license&quot; : &quot;(ISC OR GPL-3.0)&quot; }
+</code></pre><p>If you are using a license that hasn&#39;t been assigned an SPDX identifier, or if
+you are using a custom license, use the following valid SPDX expression:</p>
+<pre><code>{ &quot;license&quot; : &quot;LicenseRef-LICENSE&quot; }
+</code></pre><p>Then include a LICENSE file at the top level of the package.</p>
+<p>Some old packages used license objects or a &quot;licenses&quot; property containing an
+array of license objects:</p>
+<pre><code>// Not valid metadata
+{ &quot;license&quot; :
+  { &quot;type&quot; : &quot;ISC&quot;
+  , &quot;url&quot; : &quot;http://opensource.org/licenses/ISC&quot;
+  }
+}
+
+// Not valid metadata
+{ &quot;licenses&quot; :
+  [
+    { &quot;type&quot;: &quot;MIT&quot;
+    , &quot;url&quot;: &quot;http://www.opensource.org/licenses/mit-license.php&quot;
+    }
+  , { &quot;type&quot;: &quot;Apache-2.0&quot;
+    , &quot;url&quot;: &quot;http://opensource.org/licenses/apache2.0.php&quot;
+    }
+  ]
+}
+</code></pre><p>Those styles are now deprecated. Instead, use SPDX expressions, like this:</p>
+<pre><code>{ &quot;license&quot;: &quot;ISC&quot; }
+
+{ &quot;license&quot;: &quot;(MIT OR Apache-2.0)&quot; }
+</code></pre><h2 id="people-fields-author-contributors">people fields: author, contributors</h2>
 <p>The &quot;author&quot; is one person.  &quot;contributors&quot; is an array of people.  A &quot;person&quot;
 is an object with a &quot;name&quot; field and optionally &quot;url&quot; and &quot;email&quot;, like this:</p>
 <pre><code>{ &quot;name&quot; : &quot;Barney Rubble&quot;
@@ -78,7 +114,7 @@ is an object with a &quot;name&quot; field and optionally &quot;url&quot; and &q
 , &quot;url&quot; : &quot;http://barnyrubble.tumblr.com/&quot;
 }
 </code></pre><p>Or you can shorten that all into a single string, and npm will parse it for you:</p>
-<pre><code>&quot;Barney Rubble &lt;b@rubble.com&gt; (http://barnyrubble.tumblr.com/)
+<pre><code>&quot;Barney Rubble &lt;b@rubble.com&gt; (http://barnyrubble.tumblr.com/)&quot;
 </code></pre><p>Both email and url are optional either way.</p>
 <p>npm also sets a top-level &quot;maintainers&quot; field with your npm user info.</p>
 <h2 id="files">files</h2>
@@ -150,7 +186,7 @@ compressed.  The number dictates which man section the file is installed into.</
 <h2 id="directories">directories</h2>
 <p>The CommonJS <a href="http://wiki.commonjs.org/wiki/Packages/1.0">Packages</a> spec details a
 few ways that you can indicate the structure of your package using a <code>directories</code>
-object. If you look at <a href="http://registry.npmjs.org/npm/latest">npm&#39;s package.json</a>,
+object. If you look at <a href="https://registry.npmjs.org/npm/latest">npm&#39;s package.json</a>,
 you&#39;ll see that it has directories for doc, lib, and man.</p>
 <p>In the future, this information may be used in other creative ways.</p>
 <h3 id="directories-lib">directories.lib</h3>
@@ -175,17 +211,26 @@ command will be able to find you.</p>
 <p>Do it like this:</p>
 <pre><code>&quot;repository&quot; :
   { &quot;type&quot; : &quot;git&quot;
-  , &quot;url&quot; : &quot;http://github.com/npm/npm.git&quot;
+  , &quot;url&quot; : &quot;https://github.com/npm/npm.git&quot;
   }
 
 &quot;repository&quot; :
   { &quot;type&quot; : &quot;svn&quot;
-  , &quot;url&quot; : &quot;http://v8.googlecode.com/svn/trunk/&quot;
+  , &quot;url&quot; : &quot;https://v8.googlecode.com/svn/trunk/&quot;
   }
 </code></pre><p>The URL should be a publicly available (perhaps read-only) url that can be handed
 directly to a VCS program without any modification.  It should not be a url to an
 html project page that you put in your browser.  It&#39;s for computers.</p>
-<h2 id="scripts">scripts</h2>
+<p>For GitHub, GitHub gist, Bitbucket, or GitLab repositories you can use the same
+shortcut syntax you use for <code>npm install</code>:</p>
+<pre><code>&quot;repository&quot;: &quot;npm/npm&quot;
+
+&quot;repository&quot;: &quot;gist:11081aaa281&quot;
+
+&quot;repository&quot;: &quot;bitbucket:example/repo&quot;
+
+&quot;repository&quot;: &quot;gitlab:another/repo&quot;
+</code></pre><h2 id="scripts">scripts</h2>
 <p>The &quot;scripts&quot; property is a dictionary containing script commands that are run
 at various times in the lifecycle of your package.  The key is the lifecycle
 event, and the value is the command to run at that point.</p>
@@ -318,7 +363,7 @@ can consume the functionality without requiring them to compile it
 themselves.  In dev mode (ie, locally running <code>npm install</code>), it&#39;ll
 run this script as well, so that you can test it easily.</p>
 <h2 id="peerdependencies">peerDependencies</h2>
-<p>In some cases, you want to express the compatibility of your package with an
+<p>In some cases, you want to express the compatibility of your package with a
 host tool or library, while not necessarily doing a <code>require</code> of this host.
 This is usually referred to as a <em>plugin</em>. Notably, your module may be exposing
 a specific interface, expected and specified by the host documentation.</p>
@@ -331,12 +376,17 @@ a specific interface, expected and specified by the host documentation.</p>
   }
 }
 </code></pre><p>This ensures your package <code>tea-latte</code> can be installed <em>along</em> with the second
-major version of the host package <code>tea</code> only. The host package is automatically
-installed if needed. <code>npm install tea-latte</code> could possibly yield the following
-dependency graph:</p>
+major version of the host package <code>tea</code> only. <code>npm install tea-latte</code> could
+possibly yield the following dependency graph:</p>
 <pre><code>├── tea-latte@1.3.5
 └── tea@2.2.0
-</code></pre><p>Trying to install another plugin with a conflicting requirement will cause an
+</code></pre><p><strong>NOTE: npm versions 1 and 2 will automatically install <code>peerDependencies</code> if
+they are not explicitly depended upon higher in the dependency tree. In the
+next major version of npm (npm@3), this will no longer be the case. You will
+receive a warning that the peerDependency is not installed instead.</strong> The
+behavior in npms 1 &amp; 2 was frequently confusing and could easily put you into
+dependency hell, a situation that npm is designed to avoid as much as possible.</p>
+<p>Trying to install another plugin with a conflicting requirement will cause an
 error. For this reason, make sure your plugin requirement is as broad as
 possible, and not to lock it down to specific patch versions.</p>
 <p>Assuming the host complies with <a href="http://semver.org/">semver</a>, only changes in
@@ -385,6 +435,7 @@ are capable of properly installing your program.  For example:</p>
 </code></pre><p>Note that, unless the user has set the <code>engine-strict</code> config flag, this
 field is advisory only.</p>
 <h2 id="enginestrict">engineStrict</h2>
+<p><strong>NOTE: This feature is deprecated and will be removed in npm 3.0.0.</strong></p>
 <p>If you are sure that your module will <em>definitely not</em> run properly on
 versions of Node/npm other than those specified in the <code>engines</code> object,
 then you can set <code>&quot;engineStrict&quot;: true</code> in your package.json file.
@@ -392,8 +443,7 @@ This will override the user&#39;s <code>engine-strict</code> config setting.</p>
 <p>Please do not do this unless you are really very very sure.  If your
 engines object is something overly restrictive, you can quite easily and
 inadvertently lock yourself into obscurity and prevent your users from
-updating to new versions of Node.  Consider this choice carefully.  If
-people abuse it, it will be removed in a future version of npm.</p>
+updating to new versions of Node.  Consider this choice carefully.</p>
 <h2 id="os">os</h2>
 <p>You can specify which operating systems your
 module will run on:</p>

@@ -35,9 +35,18 @@ static uv_spinlock_t termios_spinlock = UV_SPINLOCK_INITIALIZER;
 
 
 int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, int fd, int readable) {
+  uv_handle_type type;
   int flags;
   int newfd;
   int r;
+
+  /* File descriptors that refer to files cannot be monitored with epoll.
+   * That restriction also applies to character devices like /dev/random
+   * (but obviously not /dev/tty.)
+   */
+  type = uv_guess_handle(fd);
+  if (type == UV_FILE || type == UV_UNKNOWN_HANDLE)
+    return -EINVAL;
 
   flags = 0;
   newfd = -1;
@@ -54,7 +63,7 @@ int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, int fd, int readable) {
    * different struct file, hence changing its properties doesn't affect
    * other processes.
    */
-  if (isatty(fd)) {
+  if (type == UV_TTY) {
     r = uv__open_cloexec("/dev/tty", O_RDWR);
 
     if (r < 0) {
@@ -98,19 +107,39 @@ skip:
     uv__nonblock(fd, 1);
 
   uv__stream_open((uv_stream_t*) tty, fd, flags);
-  tty->mode = 0;
+  tty->mode = UV_TTY_MODE_NORMAL;
 
   return 0;
 }
 
+static void uv__tty_make_raw(struct termios* tio) {
+  assert(tio != NULL);
 
-int uv_tty_set_mode(uv_tty_t* tty, int mode) {
-  struct termios raw;
+#ifdef __sun
+  /*
+   * This implementation of cfmakeraw for Solaris and derivatives is taken from
+   * http://www.perkin.org.uk/posts/solaris-portability-cfmakeraw.html.
+   */
+  tio->c_iflag &= ~(IMAXBEL | IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR |
+                    IGNCR | ICRNL | IXON);
+  tio->c_oflag &= ~OPOST;
+  tio->c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+  tio->c_cflag &= ~(CSIZE | PARENB);
+  tio->c_cflag |= CS8;
+#else
+  cfmakeraw(tio);
+#endif /* #ifdef __sun */
+}
+
+int uv_tty_set_mode(uv_tty_t* tty, uv_tty_mode_t mode) {
+  struct termios tmp;
   int fd;
 
-  fd = uv__stream_fd(tty);
+  if (tty->mode == (int) mode)
+    return 0;
 
-  if (mode && tty->mode == 0) {  /* on */
+  fd = uv__stream_fd(tty);
+  if (tty->mode == UV_TTY_MODE_NORMAL && mode != UV_TTY_MODE_NORMAL) {
     if (tcgetattr(fd, &tty->orig_termios))
       return -errno;
 
@@ -121,27 +150,30 @@ int uv_tty_set_mode(uv_tty_t* tty, int mode) {
       orig_termios_fd = fd;
     }
     uv_spinlock_unlock(&termios_spinlock);
-
-    raw = tty->orig_termios;
-    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag |= (ONLCR);
-    raw.c_cflag |= (CS8);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-
-    /* Put terminal in raw mode after draining */
-    if (tcsetattr(fd, TCSADRAIN, &raw))
-      return -errno;
-
-    tty->mode = 1;
-  } else if (mode == 0 && tty->mode) {  /* off */
-    /* Put terminal in original mode after flushing */
-    if (tcsetattr(fd, TCSAFLUSH, &tty->orig_termios))
-      return -errno;
-    tty->mode = 0;
   }
 
+  tmp = tty->orig_termios;
+  switch (mode) {
+    case UV_TTY_MODE_NORMAL:
+      break;
+    case UV_TTY_MODE_RAW:
+      tmp.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+      tmp.c_oflag |= (ONLCR);
+      tmp.c_cflag |= (CS8);
+      tmp.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+      tmp.c_cc[VMIN] = 1;
+      tmp.c_cc[VTIME] = 0;
+      break;
+    case UV_TTY_MODE_IO:
+      uv__tty_make_raw(&tmp);
+      break;
+  }
+
+  /* Apply changes after draining */
+  if (tcsetattr(fd, TCSADRAIN, &tmp))
+    return -errno;
+
+  tty->mode = mode;
   return 0;
 }
 
@@ -214,8 +246,10 @@ uv_handle_type uv_guess_handle(uv_file file) {
  * critical section when the signal was raised.
  */
 int uv_tty_reset_mode(void) {
+  int saved_errno;
   int err;
 
+  saved_errno = errno;
   if (!uv_spinlock_trylock(&termios_spinlock))
     return -EBUSY;  /* In uv_tty_set_mode(). */
 
@@ -225,5 +259,7 @@ int uv_tty_reset_mode(void) {
       err = -errno;
 
   uv_spinlock_unlock(&termios_spinlock);
+  errno = saved_errno;
+
   return err;
 }

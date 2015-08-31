@@ -20,7 +20,7 @@ Add, remove, and enumerate distribution tags on a package:
 
 * ls:
   Show all of the dist-tags for a package, defaulting to the package in
-  the curren prefix.
+  the current prefix.
 
 A tag can be used when installing packages as a reference to a version instead
 of using a specific version number:
@@ -33,7 +33,8 @@ When installing dependencies, a preferred tagged version may be specified:
 
 This also applies to `npm dedupe`.
 
-Publishing a package always sets the "latest" tag to the published version.
+Publishing a package sets the "latest" tag to the published version unless the
+`--tag` option is used. For example, `npm publish --tag=beta`.
 
 ## PURPOSE
 

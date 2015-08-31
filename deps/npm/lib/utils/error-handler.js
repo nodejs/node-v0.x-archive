@@ -12,6 +12,7 @@ var cbCalled = false
   , rollbacks = npm.rollbacks
   , chain = require("slide").chain
   , writeStream = require("fs-write-stream-atomic")
+  , nameValidator = require("validate-npm-package-name")
 
 
 process.on("exit", function (code) {
@@ -216,8 +217,21 @@ function errorHandler (er) {
   case "E404":
     var msg = [er.message]
     if (er.pkgid && er.pkgid !== "-") {
-      msg.push("", "'"+er.pkgid+"' is not in the npm registry."
-              ,"You should bug the author to publish it (or use the name yourself!)")
+      msg.push("", "'" + er.pkgid + "' is not in the npm registry.")
+
+      var valResult = nameValidator(er.pkgid)
+
+      if (valResult.validForNewPackages) {
+        msg.push("You should bug the author to publish it (or use the name yourself!)")
+      } else {
+        msg.push("Your package name is not valid, because", "")
+
+        var errorsArray = (valResult.errors || []).concat(valResult.warnings || [])
+        errorsArray.forEach(function(item, idx) {
+          msg.push(" " + (idx + 1) + ". " + item)
+        })
+      }
+
       if (er.parent) {
         msg.push("It was specified as a dependency of '"+er.parent+"'")
       }
@@ -287,6 +301,7 @@ function errorHandler (er) {
   case "ECONNRESET":
   case "ENOTFOUND":
   case "ETIMEDOUT":
+  case "EAI_FAIL":
     log.error("network", [er.message
               ,"This is most likely not a problem with npm itself"
               ,"and is related to network connectivity."
@@ -304,11 +319,15 @@ function errorHandler (er) {
     break
 
   case "ETARGET":
-    log.error("notarget", [er.message
+    var msg = [er.message
               ,"This is most likely not a problem with npm itself."
               ,"In most cases you or one of your dependencies are requesting"
               ,"a package version that doesn't exist."
-              ].join("\n"))
+              ]
+      if (er.parent) {
+        msg.push("\nIt was specified as a dependency of '"+er.parent+"'\n")
+      }
+      log.error("notarget", msg.join("\n"))
     break
 
   case "ENOTSUP":
@@ -350,7 +369,7 @@ function errorHandler (er) {
   default:
     log.error("", er.message || er)
     log.error("", ["", "If you need help, you may report this error at:"
-                  ,"    <http://github.com/npm/npm/issues>"
+                  ,"    <https://github.com/npm/npm/issues>"
                   ].join("\n"))
     break
   }

@@ -18,8 +18,9 @@ function prefixGitArgs () {
 }
 
 function execGit (args, options, cb) {
-  log.info("git", args)
-  return exec(git, prefixGitArgs().concat(args || []), options, cb)
+  log.info('git', args)
+  var fullArgs = prefixGitArgs().concat(args || [])
+  return exec(git, fullArgs, options, cb)
 }
 
 function spawnGit (args, options) {

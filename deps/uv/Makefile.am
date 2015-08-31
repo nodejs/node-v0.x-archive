@@ -34,6 +34,8 @@ libuv_la_SOURCES = src/fs-poll.c \
                    src/version.c
 
 if SUNOS
+# Can't be turned into a CC_CHECK_CFLAGS in configure.ac, it makes compilers
+# on other platforms complain that the argument is unused during compilation.
 libuv_la_CFLAGS += -pthread
 endif
 
@@ -43,7 +45,7 @@ include_HEADERS += include/uv-win.h include/tree.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/win \
                -DWIN32_LEAN_AND_MEAN \
                -D_WIN32_WINNT=0x0600
-LIBS += -lws2_32 -lpsapi -liphlpapi -lshell32
+LIBS += -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv
 libuv_la_SOURCES += src/win/async.c \
                     src/win/atomicops-inl.h \
                     src/win/core.c \
@@ -81,7 +83,6 @@ else  # WINNT
 
 include_HEADERS += include/uv-unix.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/unix
-libuv_la_CFLAGS += -g --std=gnu89 -pedantic -Wall -Wextra -Wno-unused-parameter
 libuv_la_SOURCES += src/unix/async.c \
                    src/unix/atomic-ops.h \
                    src/unix/core.c \
@@ -107,7 +108,24 @@ libuv_la_SOURCES += src/unix/async.c \
 endif  # WINNT
 
 EXTRA_DIST = test/fixtures/empty_file \
-             test/fixtures/load_error.node
+             test/fixtures/load_error.node \
+             include \
+             test \
+             docs \
+             img \
+             samples \
+             android-configure \
+             CONTRIBUTING.md \
+             LICENSE \
+             README.md \
+             checksparse.sh \
+             vcbuild.bat \
+             Makefile.mingw \
+             common.gypi \
+             gyp_uv.py \
+             uv.gyp
+
+
 
 TESTS = test/run-tests
 check_PROGRAMS = test/run-tests
@@ -147,6 +165,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-getnameinfo.c \
                          test/test-getsockname.c \
                          test/test-handle-fileno.c \
+                         test/test-homedir.c \
                          test/test-hrtime.c \
                          test/test-idle.c \
                          test/test-ip4-addr.c \
@@ -159,6 +178,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-loop-close.c \
                          test/test-loop-stop.c \
                          test/test-loop-time.c \
+                         test/test-loop-configure.c \
                          test/test-multiple-listen.c \
                          test/test-mutexes.c \
                          test/test-osx-select.c \
@@ -166,12 +186,15 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-ping-pong.c \
                          test/test-pipe-bind-error.c \
                          test/test-pipe-connect-error.c \
+                         test/test-pipe-connect-prepare.c \
                          test/test-pipe-getsockname.c \
                          test/test-pipe-sendmsg.c \
                          test/test-pipe-server-close.c \
                          test/test-pipe-close-stdout-read-stdin.c \
+                         test/test-pipe-set-non-blocking.c \
                          test/test-platform-output.c \
                          test/test-poll-close.c \
+                         test/test-poll-close-doesnt-corrupt-stack.c \
                          test/test-poll-closesocket.c \
                          test/test-poll.c \
                          test/test-process-title.c \
@@ -201,9 +224,11 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-tcp-read-stop.c \
                          test/test-tcp-shutdown-after-write.c \
                          test/test-tcp-unexpected-read.c \
+                         test/test-tcp-oob.c \
                          test/test-tcp-write-to-half-open-connection.c \
                          test/test-tcp-write-after-connect.c \
                          test/test-tcp-writealot.c \
+                         test/test-tcp-write-fail.c \
                          test/test-tcp-try-write.c \
                          test/test-tcp-write-queue-order.c \
                          test/test-thread-equal.c \
@@ -274,7 +299,6 @@ endif
 
 if DRAGONFLY
 include_HEADERS += include/uv-bsd.h
-libuv_la_SOURCES += src/unix/kqueue.c src/unix/freebsd.c
 endif
 
 if FREEBSD
@@ -284,6 +308,7 @@ endif
 
 if LINUX
 include_HEADERS += include/uv-linux.h
+libuv_la_CFLAGS += -D_GNU_SOURCE
 libuv_la_SOURCES += src/unix/linux-core.c \
                     src/unix/linux-inotify.c \
                     src/unix/linux-syscalls.c \

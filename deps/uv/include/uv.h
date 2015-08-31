@@ -138,6 +138,7 @@ extern "C" {
   XX(EOF, "end of file")                                                      \
   XX(ENXIO, "no such device or address")                                      \
   XX(EMLINK, "too many links")                                                \
+  XX(EHOSTDOWN, "host is down")                                               \
 
 #define UV_HANDLE_TYPE_MAP(XX)                                                \
   XX(ASYNC, async)                                                            \
@@ -242,6 +243,16 @@ typedef enum {
 
 UV_EXTERN unsigned int uv_version(void);
 UV_EXTERN const char* uv_version_string(void);
+
+typedef void* (*uv_malloc_func)(size_t size);
+typedef void* (*uv_realloc_func)(void* ptr, size_t size);
+typedef void* (*uv_calloc_func)(size_t count, size_t size);
+typedef void (*uv_free_func)(void* ptr);
+
+UV_EXTERN int uv_replace_allocator(uv_malloc_func malloc_func,
+                                   uv_realloc_func realloc_func,
+                                   uv_calloc_func calloc_func,
+                                   uv_free_func free_func);
 
 UV_EXTERN uv_loop_t* uv_default_loop(void);
 UV_EXTERN int uv_loop_init(uv_loop_t* loop);
@@ -628,10 +639,29 @@ struct uv_tty_s {
   UV_TTY_PRIVATE_FIELDS
 };
 
+typedef enum {
+  /* Initial/normal terminal mode */
+  UV_TTY_MODE_NORMAL,
+  /* Raw input mode (On Windows, ENABLE_WINDOW_INPUT is also enabled) */
+  UV_TTY_MODE_RAW,
+  /* Binary-safe I/O mode for IPC (Unix-only) */
+  UV_TTY_MODE_IO
+} uv_tty_mode_t;
+
 UV_EXTERN int uv_tty_init(uv_loop_t*, uv_tty_t*, uv_file fd, int readable);
-UV_EXTERN int uv_tty_set_mode(uv_tty_t*, int mode);
+UV_EXTERN int uv_tty_set_mode(uv_tty_t*, uv_tty_mode_t mode);
 UV_EXTERN int uv_tty_reset_mode(void);
 UV_EXTERN int uv_tty_get_winsize(uv_tty_t*, int* width, int* height);
+
+#ifdef __cplusplus
+extern "C++" {
+
+inline int uv_tty_set_mode(uv_tty_t* handle, int mode) {
+  return uv_tty_set_mode(handle, static_cast<uv_tty_mode_t>(mode));
+}
+
+}
+#endif
 
 UV_EXTERN uv_handle_type uv_guess_handle(uv_file file);
 
@@ -656,8 +686,11 @@ UV_EXTERN void uv_pipe_connect(uv_connect_t* req,
                                const char* name,
                                uv_connect_cb cb);
 UV_EXTERN int uv_pipe_getsockname(const uv_pipe_t* handle,
-                                  char* buf,
-                                  size_t* len);
+                                  char* buffer,
+                                  size_t* size);
+UV_EXTERN int uv_pipe_getpeername(const uv_pipe_t* handle,
+                                  char* buffer,
+                                  size_t* size);
 UV_EXTERN void uv_pipe_pending_instances(uv_pipe_t* handle, int count);
 UV_EXTERN int uv_pipe_pending_count(uv_pipe_t* handle);
 UV_EXTERN uv_handle_type uv_pipe_pending_type(uv_pipe_t* handle);
@@ -753,6 +786,7 @@ struct uv_getaddrinfo_s {
   UV_REQ_FIELDS
   /* read-only */
   uv_loop_t* loop;
+  /* struct addrinfo* addrinfo is marked as private, but it really isn't. */
   UV_GETADDRINFO_PRIVATE_FIELDS
 };
 
@@ -775,6 +809,7 @@ struct uv_getnameinfo_s {
   UV_REQ_FIELDS
   /* read-only */
   uv_loop_t* loop;
+  /* host and service are marked as private, but they really aren't. */
   UV_GETNAMEINFO_PRIVATE_FIELDS
 };
 
@@ -1002,6 +1037,8 @@ typedef struct {
 } uv_rusage_t;
 
 UV_EXTERN int uv_getrusage(uv_rusage_t* rusage);
+
+UV_EXTERN int uv_os_homedir(char* buffer, size_t* size);
 
 UV_EXTERN int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count);
 UV_EXTERN void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count);
@@ -1241,7 +1278,9 @@ UV_EXTERN int uv_fs_poll_start(uv_fs_poll_t* handle,
                                const char* path,
                                unsigned int interval);
 UV_EXTERN int uv_fs_poll_stop(uv_fs_poll_t* handle);
-UV_EXTERN int uv_fs_poll_getpath(uv_fs_poll_t* handle, char* buf, size_t* len);
+UV_EXTERN int uv_fs_poll_getpath(uv_fs_poll_t* handle,
+                                 char* buffer,
+                                 size_t* size);
 
 
 struct uv_signal_s {
@@ -1298,8 +1337,8 @@ UV_EXTERN int uv_fs_event_start(uv_fs_event_t* handle,
                                 unsigned int flags);
 UV_EXTERN int uv_fs_event_stop(uv_fs_event_t* handle);
 UV_EXTERN int uv_fs_event_getpath(uv_fs_event_t* handle,
-                                  char* buf,
-                                  size_t* len);
+                                  char* buffer,
+                                  size_t* size);
 
 UV_EXTERN int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr);
 UV_EXTERN int uv_ip6_addr(const char* ip, int port, struct sockaddr_in6* addr);

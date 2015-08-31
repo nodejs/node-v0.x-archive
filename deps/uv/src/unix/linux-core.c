@@ -33,7 +33,6 @@
 #include <sys/prctl.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
-#include <signal.h>
 #include <fcntl.h>
 #include <time.h>
 
@@ -75,7 +74,7 @@ static void read_speeds(unsigned int numcpus, uv_cpu_info_t* ci);
 static unsigned long read_cpufreq(unsigned int cpunum);
 
 
-int uv__platform_loop_init(uv_loop_t* loop, int default_loop) {
+int uv__platform_loop_init(uv_loop_t* loop) {
   int fd;
 
   fd = uv__epoll_create1(UV__EPOLL_CLOEXEC);
@@ -131,28 +130,43 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
    *
    * We pass in a dummy epoll_event, to work around a bug in old kernels.
    */
-  if (loop->backend_fd >= 0)
+  if (loop->backend_fd >= 0) {
+    /* Work around a bug in kernels 3.10 to 3.19 where passing a struct that
+     * has the EPOLLWAKEUP flag set generates spurious audit syslog warnings.
+     */
+    memset(&dummy, 0, sizeof(dummy));
     uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, &dummy);
+  }
 }
 
 
 void uv__io_poll(uv_loop_t* loop, int timeout) {
+  /* A bug in kernels < 2.6.37 makes timeouts larger than ~30 minutes
+   * effectively infinite on 32 bits architectures.  To avoid blocking
+   * indefinitely, we cap the timeout and poll again if necessary.
+   *
+   * Note that "30 minutes" is a simplification because it depends on
+   * the value of CONFIG_HZ.  The magic constant assumes CONFIG_HZ=1200,
+   * that being the largest value I have seen in the wild (and only once.)
+   */
+  static const int max_safe_timeout = 1789569;
+  static int no_epoll_pwait;
+  static int no_epoll_wait;
   struct uv__epoll_event events[1024];
   struct uv__epoll_event* pe;
   struct uv__epoll_event e;
+  int real_timeout;
   QUEUE* q;
   uv__io_t* w;
-  sigset_t* pset;
-  sigset_t set;
+  sigset_t sigset;
+  uint64_t sigmask;
   uint64_t base;
-  uint64_t diff;
   int nevents;
   int count;
   int nfds;
   int fd;
   int op;
   int i;
-  static int no_epoll_wait;
 
   if (loop->nfds == 0) {
     assert(QUEUE_EMPTY(&loop->watcher_queue));
@@ -194,34 +208,49 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     w->events = w->pevents;
   }
 
-  pset = NULL;
+  sigmask = 0;
   if (loop->flags & UV_LOOP_BLOCK_SIGPROF) {
-    pset = &set;
-    sigemptyset(pset);
-    sigaddset(pset, SIGPROF);
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGPROF);
+    sigmask |= 1 << (SIGPROF - 1);
   }
 
   assert(timeout >= -1);
   base = loop->time;
   count = 48; /* Benchmarks suggest this gives the best throughput. */
+  real_timeout = timeout;
 
   for (;;) {
-    if (no_epoll_wait || pset != NULL) {
+    /* See the comment for max_safe_timeout for an explanation of why
+     * this is necessary.  Executive summary: kernel bug workaround.
+     */
+    if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
+      timeout = max_safe_timeout;
+
+    if (sigmask != 0 && no_epoll_pwait != 0)
+      if (pthread_sigmask(SIG_BLOCK, &sigset, NULL))
+        abort();
+
+    if (no_epoll_wait != 0 || (sigmask != 0 && no_epoll_pwait == 0)) {
       nfds = uv__epoll_pwait(loop->backend_fd,
                              events,
                              ARRAY_SIZE(events),
                              timeout,
-                             pset);
+                             sigmask);
+      if (nfds == -1 && errno == ENOSYS)
+        no_epoll_pwait = 1;
     } else {
       nfds = uv__epoll_wait(loop->backend_fd,
                             events,
                             ARRAY_SIZE(events),
                             timeout);
-      if (nfds == -1 && errno == ENOSYS) {
+      if (nfds == -1 && errno == ENOSYS)
         no_epoll_wait = 1;
-        continue;
-      }
     }
+
+    if (sigmask != 0 && no_epoll_pwait != 0)
+      if (pthread_sigmask(SIG_UNBLOCK, &sigset, NULL))
+        abort();
 
     /* Update loop->time unconditionally. It's tempting to skip the update when
      * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
@@ -231,10 +260,21 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
     if (nfds == 0) {
       assert(timeout != -1);
+
+      timeout = real_timeout - timeout;
+      if (timeout > 0)
+        continue;
+
       return;
     }
 
     if (nfds == -1) {
+      if (errno == ENOSYS) {
+        /* epoll_wait() or epoll_pwait() failed, try the other system call. */
+        assert(no_epoll_wait == 0 || no_epoll_pwait == 0);
+        continue;
+      }
+
       if (errno != EINTR)
         abort();
 
@@ -327,11 +367,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 update_timeout:
     assert(timeout > 0);
 
-    diff = loop->time - base;
-    if (diff >= (uint64_t) timeout)
+    real_timeout -= (loop->time - base);
+    if (real_timeout <= 0)
       return;
 
-    timeout -= diff;
+    timeout = real_timeout;
   }
 }
 
@@ -383,10 +423,13 @@ void uv_loadavg(double avg[3]) {
 int uv_exepath(char* buffer, size_t* size) {
   ssize_t n;
 
-  if (buffer == NULL || size == NULL)
+  if (buffer == NULL || size == NULL || *size == 0)
     return -EINVAL;
 
-  n = readlink("/proc/self/exe", buffer, *size - 1);
+  n = *size - 1;
+  if (n > 0)
+    n = readlink("/proc/self/exe", buffer, n);
+
   if (n == -1)
     return -errno;
 
@@ -501,7 +544,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
   assert(numcpus != (unsigned int) -1);
   assert(numcpus != 0);
 
-  ci = calloc(numcpus, sizeof(*ci));
+  ci = uv__calloc(numcpus, sizeof(*ci));
   if (ci == NULL)
     return -ENOMEM;
 
@@ -573,7 +616,7 @@ static int read_models(unsigned int numcpus, uv_cpu_info_t* ci) {
     if (model_idx < numcpus) {
       if (strncmp(buf, model_marker, sizeof(model_marker) - 1) == 0) {
         model = buf + sizeof(model_marker) - 1;
-        model = strndup(model, strlen(model) - 1);  /* Strip newline. */
+        model = uv__strndup(model, strlen(model) - 1);  /* Strip newline. */
         if (model == NULL) {
           fclose(fp);
           return -ENOMEM;
@@ -592,7 +635,7 @@ static int read_models(unsigned int numcpus, uv_cpu_info_t* ci) {
 #endif
       if (strncmp(buf, model_marker, sizeof(model_marker) - 1) == 0) {
         model = buf + sizeof(model_marker) - 1;
-        model = strndup(model, strlen(model) - 1);  /* Strip newline. */
+        model = uv__strndup(model, strlen(model) - 1);  /* Strip newline. */
         if (model == NULL) {
           fclose(fp);
           return -ENOMEM;
@@ -623,7 +666,7 @@ static int read_models(unsigned int numcpus, uv_cpu_info_t* ci) {
     inferred_model = ci[model_idx - 1].model;
 
   while (model_idx < numcpus) {
-    model = strndup(inferred_model, strlen(inferred_model));
+    model = uv__strndup(inferred_model, strlen(inferred_model));
     if (model == NULL)
       return -ENOMEM;
     ci[model_idx++].model = model;
@@ -733,10 +776,10 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
   int i;
 
   for (i = 0; i < count; i++) {
-    free(cpu_infos[i].model);
+    uv__free(cpu_infos[i].model);
   }
 
-  free(cpu_infos);
+  uv__free(cpu_infos);
 }
 
 
@@ -770,7 +813,7 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
   if (*count == 0)
     return 0;
 
-  *addresses = malloc(*count * sizeof(**addresses));
+  *addresses = uv__malloc(*count * sizeof(**addresses));
   if (!(*addresses))
     return -ENOMEM;
 
@@ -790,7 +833,7 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
     if (ent->ifa_addr->sa_family == PF_PACKET)
       continue;
 
-    address->name = strdup(ent->ifa_name);
+    address->name = uv__strdup(ent->ifa_name);
 
     if (ent->ifa_addr->sa_family == AF_INET6) {
       address->address.address6 = *((struct sockaddr_in6*) ent->ifa_addr);
@@ -840,10 +883,10 @@ void uv_free_interface_addresses(uv_interface_address_t* addresses,
   int i;
 
   for (i = 0; i < count; i++) {
-    free(addresses[i].name);
+    uv__free(addresses[i].name);
   }
 
-  free(addresses);
+  uv__free(addresses);
 }
 
 

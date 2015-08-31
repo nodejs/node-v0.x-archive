@@ -2070,7 +2070,7 @@ static void OnFatalError(const char* location, const char* message) {
 
 NO_RETURN void FatalError(const char* location, const char* message) {
   OnFatalError(location, message);
-  // to supress compiler warning
+  // to suppress compiler warning
   abort();
 }
 
@@ -2785,6 +2785,13 @@ static void AtExit() {
 
 static void SignalExit(int signo) {
   uv_tty_reset_mode();
+#ifdef __FreeBSD__
+  // FreeBSD has a nasty bug, see RegisterSignalHandler for details
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = SIG_DFL;
+  CHECK_EQ(sigaction(signo, &sa, NULL), 0);
+#endif
   raise(signo);
 }
 
@@ -2929,6 +2936,9 @@ static void PrintHelp() {
 #endif
          "  --enable-ssl2        enable ssl2\n"
          "  --enable-ssl3        enable ssl3\n"
+         "  --cipher-list=val    specify the default TLS cipher list\n"
+         "  --enable-legacy-cipher-list=val \n"
+         "                       val = v0.10.38, v0.10.39, v0.12.2 or v0.12.3\n"
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
@@ -2946,6 +2956,9 @@ static void PrintHelp() {
          "                       (will extend linked-in data)\n"
 #endif
 #endif
+         "NODE_CIPHER_LIST       Override the default TLS cipher list\n"
+         "NODE_LEGACY_CIPHER_LIST=val\n"
+         "                       val = v0.10.38, v0.10.39, v0.12.2 or v0.12.3\n"
          "\n"
          "Documentation can be found at http://nodejs.org/\n");
 }
@@ -2985,6 +2998,7 @@ static void ParseArgs(int* argc,
   unsigned int new_argc = 1;
   new_v8_argv[0] = argv[0];
   new_argv[0] = argv[0];
+  bool using_legacy_cipher_list = false;
 
   unsigned int index = 1;
   while (index < nargs && argv[index][0] == '-') {
@@ -3040,6 +3054,20 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--v8-options") == 0) {
       new_v8_argv[new_v8_argc] = "--help";
       new_v8_argc += 1;
+    } else if (strncmp(arg, "--cipher-list=", 14) == 0) {
+      if (!using_legacy_cipher_list) {
+        DEFAULT_CIPHER_LIST = arg + 14;
+      }
+    } else if (strncmp(arg, "--enable-legacy-cipher-list=", 28) == 0) {
+      // use the original v0.10.x/v0.12.x cipher lists
+      const char * legacy_list = legacy_cipher_list(arg+28);
+      if (legacy_list != NULL) {
+        using_legacy_cipher_list = true;
+        DEFAULT_CIPHER_LIST = legacy_list;
+      } else {
+        fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
+        exit(9);
+      }
 #if defined(NODE_HAVE_I18N_SUPPORT)
     } else if (strncmp(arg, "--icu-data-dir=", 15) == 0) {
       icu_data_dir = arg + 15;
@@ -3163,7 +3191,12 @@ static void RegisterSignalHandler(int signal,
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_handler = handler;
+#ifndef __FreeBSD__
+  // FreeBSD has a nasty bug with SA_RESETHAND reseting the SA_SIGINFO, that is
+  // in turn set for a libthr wrapper. This leads to a crash.
+  // Work around the issue by manually setting SIG_DFL in the signal handler
   sa.sa_flags = reset_handler ? SA_RESETHAND : 0;
+#endif
   sigfillset(&sa.sa_mask);
   CHECK_EQ(sigaction(signal, &sa, NULL), 0);
 }
@@ -3399,6 +3432,26 @@ void Init(int* argc,
     if (strncmp(v8_argv[i], "--prof", sizeof("--prof") - 1) == 0) {
       v8_is_profiling = true;
       break;
+    }
+  }
+
+  const char * cipher_list = getenv("NODE_CIPHER_LIST");
+  if (cipher_list != NULL) {
+    DEFAULT_CIPHER_LIST = cipher_list;
+  }
+  // Allow the NODE_LEGACY_CIPHER_LIST envar to override the other
+  // cipher list options. NODE_LEGACY_CIPHER_LIST=v0.10.38 will use
+  // the cipher list from v0.10.38, NODE_LEGACY_CIPHER_LIST=v0.12.2 will
+  // use the cipher list from v0.12.2
+  const char * leg_cipher_id = getenv("NODE_LEGACY_CIPHER_LIST");
+  if (leg_cipher_id != NULL) {
+    const char * leg_cipher_list =
+      legacy_cipher_list(leg_cipher_id);
+    if (leg_cipher_list != NULL) {
+      DEFAULT_CIPHER_LIST = leg_cipher_list;
+    } else {
+      fprintf(stderr, "Error: An unknown legacy cipher list was specified\n");
+      exit(9);
     }
   }
 

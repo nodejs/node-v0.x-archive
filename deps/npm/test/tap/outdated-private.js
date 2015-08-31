@@ -13,6 +13,39 @@ var pkgLocalPrivate = path.resolve(pkg, "local-private")
 var pkgScopedLocalPrivate = path.resolve(pkg, "another-local-private")
 var pkgLocalUnderscore = path.resolve(pkg, "underscore")
 
+var pjParent = JSON.stringify({
+  name         : "outdated-private",
+  version      : "1.0.0",
+  dependencies : {
+    "local-private" : "file:local-private",
+    "@scoped/another-local-private" : "file:another-local-private",
+    "underscore" : "file:underscore"
+  }
+}, null, 2) + "\n"
+
+var pjLocalPrivate = JSON.stringify({
+  name         : "local-private",
+  version      : "1.0.0",
+  private      : true
+}, null, 2) + "\n"
+
+var pjLocalPrivateBumped = JSON.stringify({
+  name         : "local-private",
+  version      : "1.1.0",
+  private      : true
+}, null, 2) + "\n"
+
+var pjScopedLocalPrivate = JSON.stringify({
+  name         : "@scoped/another-local-private",
+  version      : "1.0.0",
+  private      : true
+}, null, 2) + "\n"
+
+var pjLocalUnderscore = JSON.stringify({
+  name         : "underscore",
+  version      : "1.3.1"
+}, null, 2) + "\n"
+
 test("setup", function (t) {
   bootstrap()
   t.end()
@@ -31,15 +64,16 @@ test("outdated ignores private modules", function (t) {
       function () {
         npm.install(".", function (err) {
           t.ifError(err, "install success")
+          bumpLocalPrivate()
           npm.outdated(function (er, d) {
             t.ifError(er, "outdated success")
             t.deepEqual(d, [[
               path.resolve(__dirname, "outdated-private"),
               "underscore",
               "1.3.1",
-              "1.3.1",
               "1.5.1",
-              "file:underscore"
+              "1.5.1",
+              "underscore@1.5.1"
             ]])
             s.close()
           })
@@ -54,33 +88,6 @@ test("cleanup", function (t) {
   t.end()
 })
 
-var pjParent = JSON.stringify({
-  name         : "outdated-private",
-  version      : "1.0.0",
-  dependencies : {
-    "local-private" : "file:local-private",
-    "@scoped/another-local-private" : "file:another-local-private",
-    "underscore" : "file:underscore"
-  }
-}, null, 2) + "\n"
-
-var pjLocalPrivate = JSON.stringify({
-  name         : "local-private",
-  version      : "1.0.0",
-  private      : true
-}, null, 2) + "\n"
-
-var pjScopedLocalPrivate = JSON.stringify({
-  name         : "@scoped/another-local-private",
-  version      : "1.0.0",
-  private      : true
-}, null, 2) + "\n"
-
-var pjLocalUnderscore = JSON.stringify({
-  name         : "underscore",
-  version      : "1.3.1"
-}, null, 2) + "\n"
-
 function bootstrap () {
   mkdirp.sync(pkg)
   fs.writeFileSync(path.resolve(pkg, "package.json"), pjParent)
@@ -93,6 +100,10 @@ function bootstrap () {
 
   mkdirp.sync(pkgLocalUnderscore)
   fs.writeFileSync(path.resolve(pkgLocalUnderscore, "package.json"), pjLocalUnderscore)
+}
+
+function bumpLocalPrivate () {
+  fs.writeFileSync(path.resolve(pkgLocalPrivate, "package.json"), pjLocalPrivateBumped)
 }
 
 function cleanup () {

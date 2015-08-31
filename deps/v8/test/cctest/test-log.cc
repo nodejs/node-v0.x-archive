@@ -42,6 +42,7 @@
 #include "src/natives.h"
 #include "src/utils.h"
 #include "src/v8threads.h"
+#include "src/version.h"
 #include "src/vm-state-inl.h"
 #include "test/cctest/cctest.h"
 
@@ -185,7 +186,7 @@ class LoopingJsThread : public LoopingThread {
             "var j; for (var i=0; i<10000; ++i) { j = Math.sin(i); }");
       }
       context.Dispose();
-      i::OS::Sleep(1);
+      i::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(1));
     }
   }
 };
@@ -205,7 +206,7 @@ class LoopingNonJsThread : public LoopingThread {
     SignalRunning();
     while (IsRunning()) {
       i = std::sin(i);
-      i::OS::Sleep(1);
+      i::OS::Sleep(v8::base::TimeDelta::FromMilliseconds(1));
     }
   }
 };
@@ -492,4 +493,18 @@ TEST(EquivalenceOfLoggingAndTraversal) {
     fflush(stdout);
     CHECK(false);
   }
+}
+
+TEST(LogVersion) {
+  ScopedLoggerInitializer initialize_logger;
+  bool exists = false;
+  i::Vector<const char> log(
+      i::ReadFile(initialize_logger.StopLoggingGetTempFile(), &exists, true));
+  CHECK(exists);
+  i::EmbeddedVector<char, 100> ref_data;
+  i::SNPrintF(ref_data, "v8-version,%d,%d,%d,%d,%d", i::Version::GetMajor(),
+              i::Version::GetMinor(), i::Version::GetBuild(),
+              i::Version::GetPatch(), i::Version::IsCandidate());
+  CHECK_NE(NULL, StrNStr(log.start(), ref_data.start(), log.length()));
+  log.Dispose();
 }

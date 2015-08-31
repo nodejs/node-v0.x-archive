@@ -15,7 +15,7 @@ Clear a tag that is no longer in use from the package.</p>
 </li>
 <li><p>ls:
 Show all of the dist-tags for a package, defaulting to the package in
-the curren prefix.</p>
+the current prefix.</p>
 </li>
 </ul>
 <p>A tag can be used when installing packages as a reference to a version instead
@@ -24,7 +24,8 @@ of using a specific version number:</p>
 </code></pre><p>When installing dependencies, a preferred tagged version may be specified:</p>
 <pre><code>npm install --tag &lt;tag&gt;
 </code></pre><p>This also applies to <code>npm dedupe</code>.</p>
-<p>Publishing a package always sets the &quot;latest&quot; tag to the published version.</p>
+<p>Publishing a package sets the &quot;latest&quot; tag to the published version unless the
+<code>--tag</code> option is used. For example, <code>npm publish --tag=beta</code>.</p>
 <h2 id="purpose">PURPOSE</h2>
 <p>Tags can be used to provide an alias instead of version numbers.  For
 example, <code>npm</code> currently uses the tag &quot;next&quot; to identify the upcoming

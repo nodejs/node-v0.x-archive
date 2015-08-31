@@ -1373,7 +1373,6 @@ void PromotionQueue::Initialize() {
   front_ = rear_ =
       reinterpret_cast<intptr_t*>(heap_->new_space()->ToSpaceEnd());
   emergency_stack_ = NULL;
-  guard_ = false;
 }
 
 
@@ -1971,14 +1970,15 @@ class ScavengingVisitor : public StaticVisitorBase {
 
     HeapObject* target = NULL;  // Initialization to please compiler.
     if (allocation.To(&target)) {
+      // Order is important here: Set the promotion limit before storing a
+      // filler for double alignment or migrating the object. Otherwise we
+      // may end up overwriting promotion queue entries when we migrate the
+      // object.
+      heap->promotion_queue()->SetNewLimit(heap->new_space()->top());
+
       if (alignment != kObjectAlignment) {
         target = EnsureDoubleAligned(heap, target, allocation_size);
       }
-
-      // Order is important here: Set the promotion limit before migrating
-      // the object. Otherwise we may end up overwriting promotion queue
-      // entries when we migrate the object.
-      heap->promotion_queue()->SetNewLimit(heap->new_space()->top());
 
       // Order is important: slot might be inside of the target if target
       // was allocated over a dead object and slot comes from the store
@@ -2834,7 +2834,7 @@ void Heap::CreateInitialObjects() {
 
   // Allocate the dictionary of intrinsic function names.
   Handle<NameDictionary> intrinsic_names =
-      NameDictionary::New(isolate(), Runtime::kNumFunctions, TENURED);
+      NameDictionary::New(isolate(), Runtime::kNumFunctions);
   Runtime::InitializeIntrinsicFunctionNames(isolate(), intrinsic_names);
   set_intrinsic_function_names(*intrinsic_names);
 
@@ -4828,10 +4828,10 @@ bool Heap::ConfigureHeap(int max_semi_space_size, int max_old_space_size,
     max_semi_space_size_ = max_semi_space_size * MB;
   }
   if (max_old_space_size > 0) {
-    max_old_generation_size_ = max_old_space_size * MB;
+    max_old_generation_size_ = static_cast<intptr_t>(max_old_space_size) * MB;
   }
   if (max_executable_size > 0) {
-    max_executable_size_ = max_executable_size * MB;
+    max_executable_size_ = static_cast<intptr_t>(max_executable_size) * MB;
   }
 
   // If max space size flags are specified overwrite the configuration.
@@ -4839,10 +4839,11 @@ bool Heap::ConfigureHeap(int max_semi_space_size, int max_old_space_size,
     max_semi_space_size_ = FLAG_max_semi_space_size * MB;
   }
   if (FLAG_max_old_space_size > 0) {
-    max_old_generation_size_ = FLAG_max_old_space_size * MB;
+    max_old_generation_size_ =
+        static_cast<intptr_t>(FLAG_max_old_space_size) * MB;
   }
   if (FLAG_max_executable_size > 0) {
-    max_executable_size_ = FLAG_max_executable_size * MB;
+    max_executable_size_ = static_cast<intptr_t>(FLAG_max_executable_size) * MB;
   }
 
   if (FLAG_stress_compaction) {

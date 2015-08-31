@@ -8954,9 +8954,6 @@ class Name: public HeapObject {
   // Conversion.
   inline bool AsArrayIndex(uint32_t* index);
 
-  // Whether name can only name own properties.
-  inline bool IsOwn();
-
   DECLARE_CAST(Name)
 
   DECLARE_PRINTER(Name)
@@ -9032,10 +9029,6 @@ class Symbol: public Name {
   // [is_private]: whether this is a private symbol.
   DECL_BOOLEAN_ACCESSORS(is_private)
 
-  // [is_own]: whether this is an own symbol, that is, only used to designate
-  // own properties of objects.
-  DECL_BOOLEAN_ACCESSORS(is_own)
-
   DECLARE_CAST(Symbol)
 
   // Dispatched behavior.
@@ -9051,7 +9044,6 @@ class Symbol: public Name {
 
  private:
   static const int kPrivateBit = 0;
-  static const int kOwnBit = 1;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(Symbol);
 };
@@ -9321,22 +9313,33 @@ class String: public Name {
   static inline int NonAsciiStart(const char* chars, int length) {
     const char* start = chars;
     const char* limit = chars + length;
-#ifdef V8_HOST_CAN_READ_UNALIGNED
-    DCHECK(unibrow::Utf8::kMaxOneByteChar == 0x7F);
-    const uintptr_t non_ascii_mask = kUintptrAllBitsSet / 0xFF * 0x80;
-    while (chars + sizeof(uintptr_t) <= limit) {
-      if (*reinterpret_cast<const uintptr_t*>(chars) & non_ascii_mask) {
-        return static_cast<int>(chars - start);
+
+    if (length >= kIntptrSize) {
+      // Check unaligned bytes.
+      while (!IsAligned(reinterpret_cast<intptr_t>(chars), sizeof(uintptr_t))) {
+        if (static_cast<uint8_t>(*chars) > unibrow::Utf8::kMaxOneByteChar) {
+          return static_cast<int>(chars - start);
+        }
+        ++chars;
       }
-      chars += sizeof(uintptr_t);
+      // Check aligned words.
+      DCHECK(unibrow::Utf8::kMaxOneByteChar == 0x7F);
+      const uintptr_t non_ascii_mask = kUintptrAllBitsSet / 0xFF * 0x80;
+      while (chars + sizeof(uintptr_t) <= limit) {
+        if (*reinterpret_cast<const uintptr_t*>(chars) & non_ascii_mask) {
+          return static_cast<int>(chars - start);
+        }
+        chars += sizeof(uintptr_t);
+      }
     }
-#endif
+    // Check remaining unaligned bytes.
     while (chars < limit) {
       if (static_cast<uint8_t>(*chars) > unibrow::Utf8::kMaxOneByteChar) {
         return static_cast<int>(chars - start);
       }
       ++chars;
     }
+
     return static_cast<int>(chars - start);
   }
 
