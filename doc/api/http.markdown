@@ -15,6 +15,7 @@ HTTP message headers are represented by an object like this:
     { 'content-length': '123',
       'content-type': 'text/plain',
       'connection': 'keep-alive',
+      'host': 'mysite.com',
       'accept': '*/*' }
 
 Keys are lowercased. Values are not modified.
@@ -24,6 +25,29 @@ HTTP API is very low-level. It deals with stream handling and message
 parsing only. It parses a message into headers and body but it does not
 parse the actual headers or the body.
 
+Defined headers that allow multiple values are concatenated with a `,`
+character, except for the `set-cookie` and `cookie` headers which are
+represented as an array of values.  Headers such as `content-length`
+which can only have a single value are parsed accordingly, and only a
+single value is represented on the parsed object.
+
+The raw headers as they were received are retained in the `rawHeaders`
+property, which is an array of `[key, value, key2, value2, ...]`.  For
+example, the previous message header object might have a `rawHeaders`
+list like the following:
+
+    [ 'ConTent-Length', '123456',
+      'content-LENGTH', '123',
+      'content-type', 'text/plain',
+      'CONNECTION', 'keep-alive',
+      'Host', 'mysite.com',
+      'accepT', '*/*' ]
+
+## http.METHODS
+
+* {Array}
+
+A list of the HTTP methods that are supported by the parser.
 
 ## http.STATUS_CODES
 
@@ -35,12 +59,12 @@ Found'`.
 
 ## http.createServer([requestListener])
 
-Returns a new web server object.
+Returns a new instance of [http.Server](#http_class_http_server).
 
 The `requestListener` is a function which is automatically
 added to the `'request'` event.
 
-## http.createClient([port], [host])
+## http.createClient([port][, host])
 
 This function is **deprecated**; please use [http.request()][] instead.
 Constructs a new HTTP client. `port` and `host` refer to the server to be
@@ -63,17 +87,17 @@ an instance of [http.ServerResponse][].
 
 `function (socket) { }`
 
- When a new TCP stream is established. `socket` is an object of type
- `net.Socket`. Usually users will not want to access this event. In
- particular, the socket will not emit `readable` events because of how
- the protocol parser attaches to the socket. The `socket` can also be
- accessed at `request.connection`.
+When a new TCP stream is established. `socket` is an object of type
+`net.Socket`. Usually users will not want to access this event. In
+particular, the socket will not emit `readable` events because of how
+the protocol parser attaches to the socket. The `socket` can also be
+accessed at `request.connection`.
 
 ### Event: 'close'
 
 `function () { }`
 
- Emitted when the server closes.
+Emitted when the server closes.
 
 ### Event: 'checkContinue'
 
@@ -131,12 +155,12 @@ sent to the server on that socket.
 
 `function (exception, socket) { }`
 
-If a client connection emits an 'error' event - it will forwarded here.
+If a client connection emits an 'error' event, it will be forwarded here.
 
 `socket` is the `net.Socket` object that the error originated from.
 
 
-### server.listen(port, [hostname], [backlog], [callback])
+### server.listen(port[, hostname][, backlog][, callback])
 
 Begin accepting connections on the specified port and hostname.  If the
 hostname is omitted, the server will accept connections directed to any
@@ -153,7 +177,7 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'][] event.  See also [net.Server.listen(port)][].
 
 
-### server.listen(path, [callback])
+### server.listen(path[, callback])
 
 Start a UNIX socket server listening for connections on the given `path`.
 
@@ -161,7 +185,7 @@ This function is asynchronous. The last parameter `callback` will be added as
 a listener for the ['listening'][] event.  See also [net.Server.listen(path)][].
 
 
-### server.listen(handle, [callback])
+### server.listen(handle[, callback])
 
 * `handle` {Object}
 * `callback` {Function}
@@ -251,11 +275,11 @@ After this event, no more events will be emitted on the response object.
 Sends a HTTP/1.1 100 Continue message to the client, indicating that
 the request body should be sent. See the ['checkContinue'][] event on `Server`.
 
-### response.writeHead(statusCode, [reasonPhrase], [headers])
+### response.writeHead(statusCode[, statusMessage][, headers])
 
 Sends a response header to the request. The status code is a 3-digit HTTP
 status code, like `404`. The last argument, `headers`, are the response headers.
-Optionally one can give a human-readable `reasonPhrase` as the second
+Optionally one can give a human-readable `statusMessage` as the second
 argument.
 
 Example:
@@ -271,7 +295,7 @@ be called before [response.end()][] is called.
 If you call [response.write()][] or [response.end()][] before calling this, the
 implicit/mutable headers will be calculated and call this function for you.
 
-Note: that Content-Length is given in bytes not characters. The above example
+Note that Content-Length is given in bytes not characters. The above example
 works because the string `'hello world'` contains only single byte characters.
 If the body contains higher coded characters then `Buffer.byteLength()`
 should be used to determine the number of bytes in a given encoding.
@@ -305,6 +329,20 @@ Example:
 
 After response header was sent to the client, this property indicates the
 status code which was sent out.
+
+### response.statusMessage
+
+When using implicit headers (not calling `response.writeHead()` explicitly), this property
+controls the status message that will be sent to the client when the headers get
+flushed. If this is left as `undefined` then the standard message for the status
+code will be used.
+
+Example:
+
+    response.statusMessage = 'Not found';
+
+After response header was sent to the client, this property indicates the
+status message which was sent out.
 
 ### response.setHeader(name, value)
 
@@ -351,7 +389,7 @@ Example:
     response.removeHeader("Content-Encoding");
 
 
-### response.write(chunk, [encoding])
+### response.write(chunk[, encoding][, callback])
 
 If this method is called and [response.writeHead()][] has not been called,
 it will switch to implicit header mode and flush the implicit headers.
@@ -361,7 +399,8 @@ be called multiple times to provide successive parts of the body.
 
 `chunk` can be a string or a buffer. If `chunk` is a string,
 the second parameter specifies how to encode it into a byte stream.
-By default the `encoding` is `'utf8'`.
+By default the `encoding` is `'utf8'`. The last parameter `callback`
+will be called when this chunk of data is flushed.
 
 **Note**: This is the raw HTTP body and has nothing to do with
 higher-level multi-part body encodings that may be used.
@@ -374,7 +413,7 @@ first chunk of body.
 
 Returns `true` if the entire data was flushed successfully to the kernel
 buffer. Returns `false` if all or part of the data was queued in user memory.
-`'drain'` will be emitted when the buffer is again free.
+`'drain'` will be emitted when the buffer is free again.
 
 ### response.addTrailers(headers)
 
@@ -395,18 +434,20 @@ emit trailers, with a list of the header fields in its value. E.g.,
     response.end();
 
 
-### response.end([data], [encoding])
+### response.end([data][, encoding][, callback])
 
 This method signals to the server that all of the response headers and body
 have been sent; that server should consider this message complete.
 The method, `response.end()`, MUST be called on each
 response.
 
-If `data` is specified, it is equivalent to calling `response.write(data, encoding)`
-followed by `response.end()`.
+If `data` is specified, it is equivalent to calling
+`response.write(data, encoding)` followed by `response.end(callback)`.
 
+If `callback` is specified, it will be called when the response stream
+is finished.
 
-## http.request(options, [callback])
+## http.request(options[, callback])
 
 Node maintains several connections per server to make HTTP requests.
 This function allows one to transparently issue requests.
@@ -416,6 +457,7 @@ automatically parsed with [url.parse()][].
 
 Options:
 
+- `protocol`: Protocol to use. Defaults to `'http:'`.
 - `host`: A domain name or IP address of the server to issue the request to.
   Defaults to `'localhost'`.
 - `hostname`: To support `url.parse()` `hostname` is preferred over `host`
@@ -424,7 +466,9 @@ Options:
 - `socketPath`: Unix Domain Socket (use one of host:port or socketPath)
 - `method`: A string specifying the HTTP request method. Defaults to `'GET'`.
 - `path`: Request path. Defaults to `'/'`. Should include query string if any.
-  E.G. `'/index.html?page=12'`
+  E.G. `'/index.html?page=12'`. An exception is thrown when the request path
+  contains illegal characters. Currently, only spaces are rejected but that
+  may change in the future.
 - `headers`: An object containing request headers.
 - `auth`: Basic authentication i.e. `'user:password'` to compute an
   Authorization header.
@@ -434,6 +478,11 @@ Options:
  - `Agent` object: explicitly use the passed in `Agent`.
  - `false`: opts out of connection pooling with an Agent, defaults request to
    `Connection: close`.
+- `keepAlive`: {Boolean} Keep sockets around in a pool to be used
+  by other requests in the future. Default = `false`
+- `keepAliveMsecs`: {Integer} When using HTTP KeepAlive, how often to
+  send TCP KeepAlive packets over sockets being kept alive.  Default =
+  `1000`.  Only relevant if `keepAlive` is set to `true`.
 
 The optional `callback` parameter will be added as a one time listener for
 the ['response'][] event.
@@ -444,19 +493,32 @@ upload a file with a POST request, then write to the `ClientRequest` object.
 
 Example:
 
+    var postData = querystring.stringify({
+      'msg' : 'Hello World!'
+    });
+
     var options = {
       hostname: 'www.google.com',
       port: 80,
       path: '/upload',
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': postData.length
+      }
     };
 
     var req = http.request(options, function(res) {
       console.log('STATUS: ' + res.statusCode);
       console.log('HEADERS: ' + JSON.stringify(res.headers));
       res.setEncoding('utf8');
+      var data = '';
       res.on('data', function (chunk) {
-        console.log('BODY: ' + chunk);
+        console.log('PARTIAL BODY: ' + chunk);
+        data += chunk;
+      });
+      res.on('end', function() {
+        console.log('COMPLETE BODY: ' + data);  
       });
     });
 
@@ -465,9 +527,14 @@ Example:
     });
 
     // write data to request body
-    req.write('data\n');
-    req.write('data\n');
+    req.write(postData);
     req.end();
+
+The `res` object handed off to the callback function passed into to
+`http.request` is an instance of [http.IncomingMessage], which is an
+instance of a Readable Stream. The content of a successful response will be
+delivered using zero or more `data` events followed by a closing `end`
+event.
 
 Note that in the example `req.end()` was called. With `http.request()` one
 must always call `req.end()` to signify that you're done with the request -
@@ -492,7 +559,7 @@ There are a few special headers that should be noted.
 * Sending an Authorization header will override using the `auth` option
   to compute basic authentication.
 
-## http.get(options, [callback])
+## http.get(options[, callback])
 
 Since most requests are GET requests without bodies, Node provides this
 convenience method. The only difference between this method and `http.request()`
@@ -502,6 +569,8 @@ Example:
 
     http.get("http://www.google.com/index.html", function(res) {
       console.log("Got response: " + res.statusCode);
+      // consume response body
+      res.resume();
     }).on('error', function(e) {
       console.log("Got error: " + e.message);
     });
@@ -509,22 +578,29 @@ Example:
 
 ## Class: http.Agent
 
-In node 0.5.3+ there is a new implementation of the HTTP Agent which is used
-for pooling sockets used in HTTP client requests.
+The HTTP Agent is used for pooling sockets used in HTTP client
+requests.
 
-Previously, a single agent instance helped pool for a single host+port. The
-current implementation now holds sockets for any number of hosts.
+The HTTP Agent also defaults client requests to using
+Connection:keep-alive. If no pending HTTP requests are waiting on a
+socket to become free the socket is closed. This means that Node's
+pool has the benefit of keep-alive when under load but still does not
+require developers to manually close the HTTP clients using
+KeepAlive.
 
-The current HTTP Agent also defaults client requests to using
-Connection:keep-alive. If no pending HTTP requests are waiting on a socket
-to become free the socket is closed. This means that node's pool has the
-benefit of keep-alive when under load but still does not require developers
-to manually close the HTTP clients using keep-alive.
+If you opt into using HTTP KeepAlive, you can create an Agent object
+with that flag set to `true`.  (See the [constructor
+options](#http_new_agent_options) below.)  Then, the Agent will keep
+unused sockets in a pool for later use.  They will be explicitly
+marked so as to not keep the Node process running.  However, it is
+still a good idea to explicitly [`destroy()`](#http_agent_destroy)
+KeepAlive agents when they are no longer in use, so that the Sockets
+will be shut down.
 
-Sockets are removed from the agent's pool when the socket emits either a
-"close" event or a special "agentRemove" event. This means that if you intend
-to keep one HTTP request open for a long time and don't want it to stay in the
-pool you can do something along the lines of:
+Sockets are removed from the agent's pool when the socket emits either
+a "close" event or a special "agentRemove" event. This means that if
+you intend to keep one HTTP request open for a long time and don't
+want it to stay in the pool you can do something along the lines of:
 
     http.get(options, function(res) {
       // Do stuff
@@ -532,26 +608,90 @@ pool you can do something along the lines of:
       socket.emit("agentRemove");
     });
 
-Alternatively, you could just opt out of pooling entirely using `agent:false`:
+Alternatively, you could just opt out of pooling entirely using
+`agent:false`:
 
-    http.get({hostname:'localhost', port:80, path:'/', agent:false}, function (res) {
-      // Do stuff
+    http.get({
+      hostname: 'localhost',
+      port: 80,
+      path: '/',
+      agent: false  // create a new agent just for this one request
+    }, function (res) {
+      // Do stuff with response
     })
+
+### new Agent([options])
+
+* `options` {Object} Set of configurable options to set on the agent.
+  Can have the following fields:
+  * `keepAlive` {Boolean} Keep sockets around in a pool to be used by
+    other requests in the future. Default = `false`
+  * `keepAliveMsecs` {Integer} When using HTTP KeepAlive, how often
+    to send TCP KeepAlive packets over sockets being kept alive.
+    Default = `1000`.  Only relevant if `keepAlive` is set to `true`.
+  * `maxSockets` {Number} Maximum number of sockets to allow per
+    host.  Default = `Infinity`.
+  * `maxFreeSockets` {Number} Maximum number of sockets to leave open
+    in a free state.  Only relevant if `keepAlive` is set to `true`.
+    Default = `256`.
+
+The default `http.globalAgent` that is used by `http.request` has all
+of these values set to their respective defaults.
+
+To configure any of them, you must create your own `Agent` object.
+
+```javascript
+var http = require('http');
+var keepAliveAgent = new http.Agent({ keepAlive: true });
+options.agent = keepAliveAgent;
+http.request(options, onResponseCallback);
+```
 
 ### agent.maxSockets
 
-By default set to 5. Determines how many concurrent sockets the agent can have
-open per host.
+By default set to Infinity. Determines how many concurrent sockets the agent
+can have open per origin. Origin is either a 'host:port' or
+'host:port:localAddress' combination.
+
+### agent.maxFreeSockets
+
+By default set to 256.  For Agents supporting HTTP KeepAlive, this
+sets the maximum number of sockets that will be left open in the free
+state.
 
 ### agent.sockets
 
-An object which contains arrays of sockets currently in use by the Agent. Do not
-modify.
+An object which contains arrays of sockets currently in use by the
+Agent.  Do not modify.
+
+### agent.freeSockets
+
+An object which contains arrays of sockets currently awaiting use by
+the Agent when HTTP KeepAlive is used.  Do not modify.
 
 ### agent.requests
 
 An object which contains queues of requests that have not yet been assigned to
 sockets. Do not modify.
+
+### agent.destroy()
+
+Destroy any sockets that are currently in use by the agent.
+
+It is usually not necessary to do this.  However, if you are using an
+agent with KeepAlive enabled, then it is best to explicitly shut down
+the agent when you know that it will no longer be used.  Otherwise,
+sockets may hang open for quite a long time before the server
+terminates them.
+
+### agent.getName(options)
+
+Get a unique name for a set of request options, to determine whether a
+connection can be reused.  In the http agent, this returns
+`host:port:localAddress`.  In the https agent, the name includes the
+CA, cert, ciphers, and other HTTPS/TLS-specific options that determine
+socket reusability.
+
 
 ## http.globalAgent
 
@@ -590,7 +730,7 @@ which has been transmitted are equal or not.
 The request implements the [Writable Stream][] interface. This is an
 [EventEmitter][] with the following events:
 
-### Event 'response'
+### Event: 'response'
 
 `function (response) { }`
 
@@ -729,7 +869,19 @@ Emitted when the server sends a '100 Continue' HTTP response, usually because
 the request contained 'Expect: 100-continue'. This is an instruction that
 the client should send the request body.
 
-### request.write(chunk, [encoding])
+### request.flushHeaders()
+
+Flush the request headers.
+
+For efficiency reasons, node.js normally buffers the request headers until you
+call `request.end()` or write the first chunk of request data.  It then tries
+hard to pack the request headers and data into a single TCP packet.
+
+That's usually what you want (it saves a TCP round-trip) but not when the first
+data isn't sent until possibly much later.  `request.flush()` lets you bypass
+the optimization and kickstart the request.
+
+### request.write(chunk[, encoding][, callback])
 
 Sends a chunk of the body.  By calling this method
 many times, the user can stream a request body to a
@@ -742,21 +894,27 @@ The `chunk` argument should be a [Buffer][] or a string.
 The `encoding` argument is optional and only applies when `chunk` is a string.
 Defaults to `'utf8'`.
 
+The `callback` argument is optional and will be called when this chunk of data
+is flushed.
 
-### request.end([data], [encoding])
+### request.end([data][, encoding][, callback])
 
 Finishes sending the request. If any parts of the body are
 unsent, it will flush them to the stream. If the request is
 chunked, this will send the terminating `'0\r\n\r\n'`.
 
 If `data` is specified, it is equivalent to calling
-`request.write(data, encoding)` followed by `request.end()`.
+`request.write(data, encoding)` followed by `request.end(callback)`.
+
+If `callback` is specified, it will be called when the request stream
+is finished.
 
 ### request.abort()
 
-Aborts a request.  (New since v0.3.8.)
+Marks the request as aborting. Calling this will cause remaining data
+in the response to be dropped and the socket to be destroyed.
 
-### request.setTimeout(timeout, [callback])
+### request.setTimeout(timeout[, callback])
 
 Once a socket is assigned to this request and is connected
 [socket.setTimeout()][] will be called.
@@ -766,7 +924,7 @@ Once a socket is assigned to this request and is connected
 Once a socket is assigned to this request and is connected
 [socket.setNoDelay()][] will be called.
 
-### request.setSocketKeepAlive([enable], [initialDelay])
+### request.setSocketKeepAlive([enable][, initialDelay])
 
 Once a socket is assigned to this request and is connected
 [socket.setKeepAlive()][] will be called.
@@ -786,7 +944,7 @@ following additional events, methods, and properties.
 
 `function () { }`
 
-Indicates that the underlaying connection was closed.
+Indicates that the underlying connection was closed.
 Just like `'end'`, this event occurs only once per response.
 
 ### message.httpVersion
@@ -812,9 +970,36 @@ Example:
     //   accept: '*/*' }
     console.log(request.headers);
 
+### message.rawHeaders
+
+The raw request/response headers list exactly as they were received.
+
+Note that the keys and values are in the same list.  It is *not* a
+list of tuples.  So, the even-numbered offsets are key values, and the
+odd-numbered offsets are the associated values.
+
+Header names are not lowercased, and duplicates are not merged.
+
+    // Prints something like:
+    //
+    // [ 'user-agent',
+    //   'this is invalid because there can be only one',
+    //   'User-Agent',
+    //   'curl/7.22.0',
+    //   'Host',
+    //   '127.0.0.1:8000',
+    //   'ACCEPT',
+    //   '*/*' ]
+    console.log(request.rawHeaders);
+
 ### message.trailers
 
-The request/response trailers object. Only populated after the 'end' event.
+The request/response trailers object. Only populated at the 'end' event.
+
+### message.rawTrailers
+
+The raw request/response trailer keys and values exactly as they were
+received.  Only populated at the 'end' event.
 
 ### message.setTimeout(msecs, callback)
 
@@ -870,6 +1055,12 @@ you can use the `require('querystring').parse` function, or pass
 
 The 3-digit HTTP response status code. E.G. `404`.
 
+### message.statusMessage
+
+**Only valid for response obtained from `http.ClientRequest`.**
+
+The HTTP response status message (reason phrase). E.G. `OK` or `Internal Server Error`.
+
 ### message.socket
 
 The `net.Socket` object associated with the connection.
@@ -885,8 +1076,8 @@ authentication details.
 [Agent]: #http_class_http_agent
 [Buffer]: buffer.html#buffer_buffer
 [EventEmitter]: events.html#events_class_events_eventemitter
-[Readable Stream]: stream.html#stream_readable_stream
-[Writable Stream]: stream.html#stream_writable_stream
+[Readable Stream]: stream.html#stream_class_stream_readable
+[Writable Stream]: stream.html#stream_class_stream_writable
 [global Agent]: #http_http_globalagent
 [http.ClientRequest]: #http_class_http_clientrequest
 [http.IncomingMessage]: #http_http_incomingmessage

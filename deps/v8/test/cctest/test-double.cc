@@ -1,13 +1,38 @@
 // Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are
+// met:
+//
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above
+//       copyright notice, this list of conditions and the following
+//       disclaimer in the documentation and/or other materials provided
+//       with the distribution.
+//     * Neither the name of Google Inc. nor the names of its
+//       contributors may be used to endorse or promote products derived
+//       from this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "platform.h"
-#include "cctest.h"
-#include "diy-fp.h"
-#include "double.h"
+#include "src/base/platform/platform.h"
+#include "src/diy-fp.h"
+#include "src/double.h"
+#include "test/cctest/cctest.h"
 
 
 using namespace v8::internal;
@@ -24,6 +49,7 @@ TEST(Uint64Conversions) {
   uint64_t max_double64 = V8_2PART_UINT64_C(0x7fefffff, ffffffff);
   CHECK_EQ(1.7976931348623157e308, Double(max_double64).value());
 }
+
 
 TEST(AsDiyFp) {
   uint64_t ordered = V8_2PART_UINT64_C(0x01234567, 89ABCDEF);
@@ -79,7 +105,7 @@ TEST(IsDenormal) {
 TEST(IsSpecial) {
   CHECK(Double(V8_INFINITY).IsSpecial());
   CHECK(Double(-V8_INFINITY).IsSpecial());
-  CHECK(Double(OS::nan_value()).IsSpecial());
+  CHECK(Double(v8::base::OS::nan_value()).IsSpecial());
   uint64_t bits = V8_2PART_UINT64_C(0xFFF12345, 00000000);
   CHECK(Double(bits).IsSpecial());
   // Denormals are not special:
@@ -102,7 +128,7 @@ TEST(IsSpecial) {
 TEST(IsInfinite) {
   CHECK(Double(V8_INFINITY).IsInfinite());
   CHECK(Double(-V8_INFINITY).IsInfinite());
-  CHECK(!Double(OS::nan_value()).IsInfinite());
+  CHECK(!Double(v8::base::OS::nan_value()).IsInfinite());
   CHECK(!Double(0.0).IsInfinite());
   CHECK(!Double(-0.0).IsInfinite());
   CHECK(!Double(1.0).IsInfinite());

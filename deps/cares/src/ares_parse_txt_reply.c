@@ -17,9 +17,6 @@
 
 #include "ares_setup.h"
 
-#ifdef HAVE_SYS_SOCKET_H
-#  include <sys/socket.h>
-#endif
 #ifdef HAVE_NETINET_IN_H
 #  include <netinet/in.h>
 #endif
@@ -41,9 +38,6 @@
 #ifdef HAVE_STRINGS_H
 #  include <strings.h>
 #endif
-
-#include <stdlib.h>
-#include <string.h>
 
 #include "ares.h"
 #include "ares_dns.h"
@@ -112,6 +106,11 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
       rr_class = DNS_RR_CLASS (aptr);
       rr_len = DNS_RR_LEN (aptr);
       aptr += RRFIXEDSZ;
+      if (aptr + rr_len > abuf + alen)
+        {
+          status = ARES_EBADRESP;
+          break;
+        }
 
       /* Check if we are really looking at a TXT record */
       if (rr_class == C_IN && rr_type == T_TXT)
@@ -134,8 +133,6 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
                   break;
                 }
 
-              ++strptr;
-
               /* Allocate storage for this TXT answer appending it to the list */
               txt_curr = ares_malloc_data(ARES_DATATYPE_TXT_REPLY);
               if (!txt_curr)
@@ -153,6 +150,7 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
                 }
               txt_last = txt_curr;
 
+              txt_curr->record_start = strptr == aptr;
               txt_curr->length = substr_len;
               txt_curr->txt = malloc (substr_len + 1/* Including null byte */);
               if (txt_curr->txt == NULL)
@@ -160,6 +158,8 @@ ares_parse_txt_reply (const unsigned char *abuf, int alen,
                   status = ARES_ENOMEM;
                   break;
                 }
+
+              ++strptr;
               memcpy ((char *) txt_curr->txt, strptr, substr_len);
 
               /* Make sure we NULL-terminate */

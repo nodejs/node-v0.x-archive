@@ -1,36 +1,13 @@
 // Copyright 2011 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "scanner-character-streams.h"
+#include "src/scanner-character-streams.h"
 
-#include "handles.h"
-#include "unicode-inl.h"
+#include "src/handles.h"
+#include "src/unicode-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -45,6 +22,7 @@ BufferedUtf16CharacterStream::BufferedUtf16CharacterStream()
   buffer_cursor_ = buffer_;
   buffer_end_ = buffer_;
 }
+
 
 BufferedUtf16CharacterStream::~BufferedUtf16CharacterStream() { }
 
@@ -77,8 +55,8 @@ void BufferedUtf16CharacterStream::SlowPushBack(uc16 character) {
     buffer_cursor_ = buffer_end_;
   }
   // Ensure that there is room for at least one pushback.
-  ASSERT(buffer_cursor_ > buffer_);
-  ASSERT(pos_ > 0);
+  DCHECK(buffer_cursor_ > buffer_);
+  DCHECK(pos_ > 0);
   buffer_[--buffer_cursor_ - buffer_] = character;
   if (buffer_cursor_ == buffer_) {
     pushback_limit_ = NULL;
@@ -100,7 +78,7 @@ bool BufferedUtf16CharacterStream::ReadBlock() {
     if (buffer_cursor_ < buffer_end_) return true;
     // Otherwise read a new block.
   }
-  unsigned length = FillBuffer(pos_, kBufferSize);
+  unsigned length = FillBuffer(pos_);
   buffer_end_ = buffer_ + length;
   return length > 0;
 }
@@ -113,6 +91,7 @@ unsigned BufferedUtf16CharacterStream::SlowSeekForward(unsigned delta) {
   return BufferSeekForward(delta);
 }
 
+
 // ----------------------------------------------------------------------------
 // GenericStringUtf16CharacterStream
 
@@ -123,9 +102,7 @@ GenericStringUtf16CharacterStream::GenericStringUtf16CharacterStream(
     unsigned end_position)
     : string_(data),
       length_(end_position) {
-  ASSERT(end_position >= start_position);
-  buffer_cursor_ = buffer_;
-  buffer_end_ = buffer_;
+  DCHECK(end_position >= start_position);
   pos_ = start_position;
 }
 
@@ -141,9 +118,9 @@ unsigned GenericStringUtf16CharacterStream::BufferSeekForward(unsigned delta) {
 }
 
 
-unsigned GenericStringUtf16CharacterStream::FillBuffer(unsigned from_pos,
-                                                      unsigned length) {
+unsigned GenericStringUtf16CharacterStream::FillBuffer(unsigned from_pos) {
   if (from_pos >= length_) return 0;
+  unsigned length = kBufferSize;
   if (from_pos + length > length_) {
     length = length_ - from_pos;
   }
@@ -178,8 +155,7 @@ unsigned Utf8ToUtf16CharacterStream::BufferSeekForward(unsigned delta) {
 }
 
 
-unsigned Utf8ToUtf16CharacterStream::FillBuffer(unsigned char_position,
-                                                unsigned length) {
+unsigned Utf8ToUtf16CharacterStream::FillBuffer(unsigned char_position) {
   static const unibrow::uchar kMaxUtf16Character = 0xffff;
   SetRawPosition(char_position);
   if (raw_character_position_ != char_position) {
@@ -188,7 +164,7 @@ unsigned Utf8ToUtf16CharacterStream::FillBuffer(unsigned char_position,
     return 0u;
   }
   unsigned i = 0;
-  while (i < length - 1) {
+  while (i < kBufferSize - 1) {
     if (raw_data_pos_ == raw_data_length_) break;
     unibrow::uchar c = raw_data_[raw_data_pos_];
     if (c <= unibrow::Utf8::kMaxOneByteChar) {
@@ -211,11 +187,11 @@ unsigned Utf8ToUtf16CharacterStream::FillBuffer(unsigned char_position,
 
 
 static const byte kUtf8MultiByteMask = 0xC0;
-static const byte kUtf8MultiByteCharStart = 0xC0;
 static const byte kUtf8MultiByteCharFollower = 0x80;
 
 
 #ifdef DEBUG
+static const byte kUtf8MultiByteCharStart = 0xC0;
 static bool IsUtf8MultiCharacterStart(byte first_byte) {
   return (first_byte & kUtf8MultiByteMask) == kUtf8MultiByteCharStart;
 }
@@ -232,12 +208,12 @@ static bool IsUtf8MultiCharacterFollower(byte later_byte) {
 static inline void Utf8CharacterBack(const byte* buffer, unsigned* cursor) {
   byte character = buffer[--*cursor];
   if (character > unibrow::Utf8::kMaxOneByteChar) {
-    ASSERT(IsUtf8MultiCharacterFollower(character));
+    DCHECK(IsUtf8MultiCharacterFollower(character));
     // Last byte of a multi-byte character encoding. Step backwards until
     // pointing to the first byte of the encoding, recognized by having the
     // top two bits set.
     while (IsUtf8MultiCharacterFollower(buffer[--*cursor])) { }
-    ASSERT(IsUtf8MultiCharacterStart(buffer[*cursor]));
+    DCHECK(IsUtf8MultiCharacterStart(buffer[*cursor]));
   }
 }
 
@@ -253,7 +229,7 @@ static inline void Utf8CharacterForward(const byte* buffer, unsigned* cursor) {
     //  110..... - (0xCx, 0xDx) one additional byte (minimum).
     //  1110.... - (0xEx) two additional bytes.
     //  11110... - (0xFx) three additional bytes (maximum).
-    ASSERT(IsUtf8MultiCharacterStart(character));
+    DCHECK(IsUtf8MultiCharacterStart(character));
     // Additional bytes is:
     // 1 if value in range 0xC0 .. 0xDF.
     // 2 if value in range 0xE0 .. 0xEF.
@@ -262,7 +238,7 @@ static inline void Utf8CharacterForward(const byte* buffer, unsigned* cursor) {
     unsigned additional_bytes =
         ((0x3211u) >> (((character - 0xC0) >> 2) & 0xC)) & 0x03;
     *cursor += additional_bytes;
-    ASSERT(!IsUtf8MultiCharacterFollower(buffer[1 + additional_bytes]));
+    DCHECK(!IsUtf8MultiCharacterFollower(buffer[1 + additional_bytes]));
   }
 }
 
@@ -278,12 +254,12 @@ void Utf8ToUtf16CharacterStream::SetRawPosition(unsigned target_position) {
       int old_pos = raw_data_pos_;
       Utf8CharacterBack(raw_data_, &raw_data_pos_);
       raw_character_position_--;
-      ASSERT(old_pos - raw_data_pos_ <= 4);
+      DCHECK(old_pos - raw_data_pos_ <= 4);
       // Step back over both code units for surrogate pairs.
       if (old_pos - raw_data_pos_ == 4) raw_character_position_--;
     } while (raw_character_position_ > target_position);
     // No surrogate pair splitting.
-    ASSERT(raw_character_position_ == target_position);
+    DCHECK(raw_character_position_ == target_position);
     return;
   }
   // Spool forwards in the utf8 buffer.
@@ -292,11 +268,11 @@ void Utf8ToUtf16CharacterStream::SetRawPosition(unsigned target_position) {
     int old_pos = raw_data_pos_;
     Utf8CharacterForward(raw_data_, &raw_data_pos_);
     raw_character_position_++;
-    ASSERT(raw_data_pos_ - old_pos <= 4);
+    DCHECK(raw_data_pos_ - old_pos <= 4);
     if (raw_data_pos_ - old_pos == 4) raw_character_position_++;
   }
   // No surrogate pair splitting.
-  ASSERT(raw_character_position_ == target_position);
+  DCHECK(raw_character_position_ == target_position);
 }
 
 

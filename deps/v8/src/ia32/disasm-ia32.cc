@@ -1,39 +1,16 @@
 // Copyright 2011 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #include <assert.h>
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
 
-#include "v8.h"
+#include "src/v8.h"
 
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
 
-#include "disasm.h"
+#include "src/disasm.h"
 
 namespace disasm {
 
@@ -234,7 +211,7 @@ void InstructionTable::CopyTable(const ByteMnemonic bm[],
     InstructionDesc* id = &instructions_[bm[i].b];
     id->mnem = bm[i].mnem;
     id->op_order_ = bm[i].op_order_;
-    ASSERT_EQ(NO_INSTR, id->type);  // Information not already entered.
+    DCHECK_EQ(NO_INSTR, id->type);  // Information not already entered.
     id->type = type;
   }
 }
@@ -246,7 +223,7 @@ void InstructionTable::SetTableRange(InstructionType type,
                                      const char* mnem) {
   for (byte b = start; b <= end; b++) {
     InstructionDesc* id = &instructions_[b];
-    ASSERT_EQ(NO_INSTR, id->type);  // Information not already entered.
+    DCHECK_EQ(NO_INSTR, id->type);  // Information not already entered.
     id->mnem = mnem;
     id->type = type;
   }
@@ -256,7 +233,7 @@ void InstructionTable::SetTableRange(InstructionType type,
 void InstructionTable::AddJumpConditionalShort() {
   for (byte b = 0x70; b <= 0x7F; b++) {
     InstructionDesc* id = &instructions_[b];
-    ASSERT_EQ(NO_INSTR, id->type);  // Information not already entered.
+    DCHECK_EQ(NO_INSTR, id->type);  // Information not already entered.
     id->mnem = jump_conditional_mnem[b & 0x0F];
     id->type = JUMP_CONDITIONAL_SHORT_INSTR;
   }
@@ -380,7 +357,7 @@ void DisassemblerIA32::AppendToBuffer(const char* format, ...) {
   v8::internal::Vector<char> buf = tmp_buffer_ + tmp_buffer_pos_;
   va_list args;
   va_start(args, format);
-  int result = v8::internal::OS::VSNPrintF(buf, format, args);
+  int result = v8::internal::VSNPrintF(buf, format, args);
   va_end(args);
   tmp_buffer_pos_ += result;
 }
@@ -407,10 +384,11 @@ int DisassemblerIA32::PrintRightOperandHelper(
           return 2;
         } else if (base == ebp) {
           int32_t disp = *reinterpret_cast<int32_t*>(modrmp + 2);
-          AppendToBuffer("[%s*%d+0x%x]",
+          AppendToBuffer("[%s*%d%s0x%x]",
                          (this->*register_name)(index),
                          1 << scale,
-                         disp);
+                         disp < 0 ? "-" : "+",
+                         disp < 0 ? -disp : disp);
           return 6;
         } else if (index != esp && base != ebp) {
           // [base+index*scale]
@@ -434,23 +412,30 @@ int DisassemblerIA32::PrintRightOperandHelper(
         byte sib = *(modrmp + 1);
         int scale, index, base;
         get_sib(sib, &scale, &index, &base);
-        int disp =
-            mod == 2 ? *reinterpret_cast<int32_t*>(modrmp + 2) : *(modrmp + 2);
+        int disp = mod == 2 ? *reinterpret_cast<int32_t*>(modrmp + 2)
+                            : *reinterpret_cast<int8_t*>(modrmp + 2);
         if (index == base && index == rm /*esp*/ && scale == 0 /*times_1*/) {
-          AppendToBuffer("[%s+0x%x]", (this->*register_name)(rm), disp);
+          AppendToBuffer("[%s%s0x%x]",
+                         (this->*register_name)(rm),
+                         disp < 0 ? "-" : "+",
+                         disp < 0 ? -disp : disp);
         } else {
-          AppendToBuffer("[%s+%s*%d+0x%x]",
+          AppendToBuffer("[%s+%s*%d%s0x%x]",
                          (this->*register_name)(base),
                          (this->*register_name)(index),
                          1 << scale,
-                         disp);
+                         disp < 0 ? "-" : "+",
+                         disp < 0 ? -disp : disp);
         }
         return mod == 2 ? 6 : 3;
       } else {
         // No sib.
-        int disp =
-            mod == 2 ? *reinterpret_cast<int32_t*>(modrmp + 1) : *(modrmp + 1);
-        AppendToBuffer("[%s+0x%x]", (this->*register_name)(rm), disp);
+        int disp = mod == 2 ? *reinterpret_cast<int32_t*>(modrmp + 1)
+                            : *reinterpret_cast<int8_t*>(modrmp + 1);
+        AppendToBuffer("[%s%s0x%x]",
+                       (this->*register_name)(rm),
+                       disp < 0 ? "-" : "+",
+                       disp < 0 ? -disp : disp);
         return mod == 2 ? 5 : 2;
       }
       break;
@@ -543,83 +528,101 @@ int DisassemblerIA32::PrintImmediateOp(byte* data) {
 
 // Returns number of bytes used, including *data.
 int DisassemblerIA32::F7Instruction(byte* data) {
-  ASSERT_EQ(0xF7, *data);
-  byte modrm = *(data+1);
+  DCHECK_EQ(0xF7, *data);
+  byte modrm = *++data;
   int mod, regop, rm;
   get_modrm(modrm, &mod, &regop, &rm);
-  if (mod == 3 && regop != 0) {
-    const char* mnem = NULL;
-    switch (regop) {
-      case 2: mnem = "not"; break;
-      case 3: mnem = "neg"; break;
-      case 4: mnem = "mul"; break;
-      case 5: mnem = "imul"; break;
-      case 7: mnem = "idiv"; break;
-      default: UnimplementedInstruction();
-    }
-    AppendToBuffer("%s %s", mnem, NameOfCPURegister(rm));
-    return 2;
-  } else if (mod == 3 && regop == eax) {
-    int32_t imm = *reinterpret_cast<int32_t*>(data+2);
-    AppendToBuffer("test %s,0x%x", NameOfCPURegister(rm), imm);
-    return 6;
-  } else if (regop == eax) {
-    AppendToBuffer("test ");
-    int count = PrintRightOperand(data+1);
-    int32_t imm = *reinterpret_cast<int32_t*>(data+1+count);
-    AppendToBuffer(",0x%x", imm);
-    return 1+count+4 /*int32_t*/;
-  } else {
-    UnimplementedInstruction();
-    return 2;
+  const char* mnem = NULL;
+  switch (regop) {
+    case 0:
+      mnem = "test";
+      break;
+    case 2:
+      mnem = "not";
+      break;
+    case 3:
+      mnem = "neg";
+      break;
+    case 4:
+      mnem = "mul";
+      break;
+    case 5:
+      mnem = "imul";
+      break;
+    case 6:
+      mnem = "div";
+      break;
+    case 7:
+      mnem = "idiv";
+      break;
+    default:
+      UnimplementedInstruction();
   }
+  AppendToBuffer("%s ", mnem);
+  int count = PrintRightOperand(data);
+  if (regop == 0) {
+    AppendToBuffer(",0x%x", *reinterpret_cast<int32_t*>(data + count));
+    count += 4;
+  }
+  return 1 + count;
 }
+
 
 int DisassemblerIA32::D1D3C1Instruction(byte* data) {
   byte op = *data;
-  ASSERT(op == 0xD1 || op == 0xD3 || op == 0xC1);
-  byte modrm = *(data+1);
+  DCHECK(op == 0xD1 || op == 0xD3 || op == 0xC1);
+  byte modrm = *++data;
   int mod, regop, rm;
   get_modrm(modrm, &mod, &regop, &rm);
   int imm8 = -1;
-  int num_bytes = 2;
-  if (mod == 3) {
-    const char* mnem = NULL;
-    switch (regop) {
-      case kROL: mnem = "rol"; break;
-      case kROR: mnem = "ror"; break;
-      case kRCL: mnem = "rcl"; break;
-      case kRCR: mnem = "rcr"; break;
-      case kSHL: mnem = "shl"; break;
-      case KSHR: mnem = "shr"; break;
-      case kSAR: mnem = "sar"; break;
-      default: UnimplementedInstruction();
-    }
-    if (op == 0xD1) {
-      imm8 = 1;
-    } else if (op == 0xC1) {
-      imm8 = *(data+2);
-      num_bytes = 3;
-    } else if (op == 0xD3) {
-      // Shift/rotate by cl.
-    }
-    ASSERT_NE(NULL, mnem);
-    AppendToBuffer("%s %s,", mnem, NameOfCPURegister(rm));
-    if (imm8 > 0) {
-      AppendToBuffer("%d", imm8);
-    } else {
-      AppendToBuffer("cl");
-    }
-  } else {
-    UnimplementedInstruction();
+  const char* mnem = NULL;
+  switch (regop) {
+    case kROL:
+      mnem = "rol";
+      break;
+    case kROR:
+      mnem = "ror";
+      break;
+    case kRCL:
+      mnem = "rcl";
+      break;
+    case kRCR:
+      mnem = "rcr";
+      break;
+    case kSHL:
+      mnem = "shl";
+      break;
+    case KSHR:
+      mnem = "shr";
+      break;
+    case kSAR:
+      mnem = "sar";
+      break;
+    default:
+      UnimplementedInstruction();
   }
-  return num_bytes;
+  AppendToBuffer("%s ", mnem);
+  int count = PrintRightOperand(data);
+  if (op == 0xD1) {
+    imm8 = 1;
+  } else if (op == 0xC1) {
+    imm8 = *(data + 1);
+    count++;
+  } else if (op == 0xD3) {
+    // Shift/rotate by cl.
+  }
+  if (imm8 >= 0) {
+    AppendToBuffer(",%d", imm8);
+  } else {
+    AppendToBuffer(",cl");
+  }
+  return 1 + count;
 }
 
 
 // Returns number of bytes used, including *data.
 int DisassemblerIA32::JumpShort(byte* data) {
-  ASSERT_EQ(0xEB, *data);
+  DCHECK_EQ(0xEB, *data);
   byte b = *(data+1);
   byte* dest = data + static_cast<int8_t>(b) + 2;
   AppendToBuffer("jmp %s", NameOfAddress(dest));
@@ -629,7 +632,7 @@ int DisassemblerIA32::JumpShort(byte* data) {
 
 // Returns number of bytes used, including *data.
 int DisassemblerIA32::JumpConditional(byte* data, const char* comment) {
-  ASSERT_EQ(0x0F, *data);
+  DCHECK_EQ(0x0F, *data);
   byte cond = *(data+1) & 0x0F;
   byte* dest = data + *reinterpret_cast<int32_t*>(data+2) + 6;
   const char* mnem = jump_conditional_mnem[cond];
@@ -657,7 +660,7 @@ int DisassemblerIA32::JumpConditionalShort(byte* data, const char* comment) {
 
 // Returns number of bytes used, including *data.
 int DisassemblerIA32::SetCC(byte* data) {
-  ASSERT_EQ(0x0F, *data);
+  DCHECK_EQ(0x0F, *data);
   byte cond = *(data+1) & 0x0F;
   const char* mnem = set_conditional_mnem[cond];
   AppendToBuffer("%s ", mnem);
@@ -668,7 +671,7 @@ int DisassemblerIA32::SetCC(byte* data) {
 
 // Returns number of bytes used, including *data.
 int DisassemblerIA32::CMov(byte* data) {
-  ASSERT_EQ(0x0F, *data);
+  DCHECK_EQ(0x0F, *data);
   byte cond = *(data + 1) & 0x0F;
   const char* mnem = conditional_move_mnem[cond];
   int op_size = PrintOperands(mnem, REG_OPER_OP_ORDER, data + 2);
@@ -679,7 +682,7 @@ int DisassemblerIA32::CMov(byte* data) {
 // Returns number of bytes used, including *data.
 int DisassemblerIA32::FPUInstruction(byte* data) {
   byte escape_opcode = *data;
-  ASSERT_EQ(0xD8, escape_opcode & 0xF8);
+  DCHECK_EQ(0xD8, escape_opcode & 0xF8);
   byte modrm_byte = *(data+1);
 
   if (modrm_byte >= 0xC0) {
@@ -697,6 +700,7 @@ int DisassemblerIA32::MemoryFPUInstruction(int escape_opcode,
   switch (escape_opcode) {
     case 0xD9: switch (regop) {
         case 0: mnem = "fld_s"; break;
+        case 2: mnem = "fst_s"; break;
         case 3: mnem = "fstp_s"; break;
         case 7: mnem = "fstcw"; break;
         default: UnimplementedInstruction();
@@ -742,7 +746,14 @@ int DisassemblerIA32::RegisterFPUInstruction(int escape_opcode,
 
   switch (escape_opcode) {
     case 0xD8:
-      UnimplementedInstruction();
+      has_register = true;
+      switch (modrm_byte & 0xF8) {
+        case 0xC0: mnem = "fadd_i"; break;
+        case 0xE0: mnem = "fsub_i"; break;
+        case 0xC8: mnem = "fmul_i"; break;
+        case 0xF0: mnem = "fdiv_i"; break;
+        default: UnimplementedInstruction();
+      }
       break;
 
     case 0xD9:
@@ -766,6 +777,7 @@ int DisassemblerIA32::RegisterFPUInstruction(int escape_opcode,
             case 0xEE: mnem = "fldz"; break;
             case 0xF0: mnem = "f2xm1"; break;
             case 0xF1: mnem = "fyl2x"; break;
+            case 0xF4: mnem = "fxtract"; break;
             case 0xF5: mnem = "fprem1"; break;
             case 0xF7: mnem = "fincstp"; break;
             case 0xF8: mnem = "fprem"; break;
@@ -814,6 +826,7 @@ int DisassemblerIA32::RegisterFPUInstruction(int escape_opcode,
       has_register = true;
       switch (modrm_byte & 0xF8) {
         case 0xC0: mnem = "ffree"; break;
+        case 0xD0: mnem = "fst"; break;
         case 0xD8: mnem = "fstp"; break;
         default: UnimplementedInstruction();
       }
@@ -861,7 +874,6 @@ static const char* F0Mnem(byte f0byte) {
   switch (f0byte) {
     case 0x18: return "prefetch";
     case 0xA2: return "cpuid";
-    case 0x31: return "rdtsc";
     case 0xBE: return "movsx_b";
     case 0xBF: return "movsx_w";
     case 0xB6: return "movzx_b";
@@ -869,7 +881,9 @@ static const char* F0Mnem(byte f0byte) {
     case 0xAF: return "imul";
     case 0xA5: return "shld";
     case 0xAD: return "shrd";
+    case 0xAC: return "shrd";  // 3-operand version.
     case 0xAB: return "bts";
+    case 0xBD: return "bsr";
     default: return NULL;
   }
 }
@@ -931,13 +945,13 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
 
     case SHORT_IMMEDIATE_INSTR: {
       byte* addr = reinterpret_cast<byte*>(*reinterpret_cast<int32_t*>(data+1));
-      AppendToBuffer("%s eax, %s", idesc.mnem, NameOfAddress(addr));
+      AppendToBuffer("%s eax,%s", idesc.mnem, NameOfAddress(addr));
       data += 5;
       break;
     }
 
     case BYTE_IMMEDIATE_INSTR: {
-      AppendToBuffer("%s al, 0x%x", idesc.mnem, data[1]);
+      AppendToBuffer("%s al,0x%x", idesc.mnem, data[1]);
       data += 2;
       break;
     }
@@ -957,17 +971,18 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
         data += 3;
         break;
 
-      case 0x69:  // fall through
-      case 0x6B:
-        { int mod, regop, rm;
-          get_modrm(*(data+1), &mod, &regop, &rm);
-          int32_t imm =
-              *data == 0x6B ? *(data+2) : *reinterpret_cast<int32_t*>(data+2);
-          AppendToBuffer("imul %s,%s,0x%x",
-                         NameOfCPURegister(regop),
-                         NameOfCPURegister(rm),
-                         imm);
-          data += 2 + (*data == 0x6B ? 1 : 4);
+      case 0x6B: {
+        data++;
+        data += PrintOperands("imul", REG_OPER_OP_ORDER, data);
+        AppendToBuffer(",%d", *data);
+        data++;
+      } break;
+
+      case 0x69: {
+        data++;
+        data += PrintOperands("imul", REG_OPER_OP_ORDER, data);
+        AppendToBuffer(",%d", *reinterpret_cast<int32_t*>(data));
+        data += 4;
         }
         break;
 
@@ -996,6 +1011,7 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
         { byte f0byte = data[1];
           const char* f0mnem = F0Mnem(f0byte);
           if (f0byte == 0x18) {
+            data += 2;
             int mod, regop, rm;
             get_modrm(*data, &mod, &regop, &rm);
             const char* suffix[] = {"nta", "1", "2", "3"};
@@ -1031,14 +1047,49 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
                            NameOfXMMRegister(regop),
                            NameOfXMMRegister(rm));
             data++;
-          } else if (f0byte == 0x57) {
+          } else if (f0byte >= 0x53 && f0byte <= 0x5F) {
+            const char* const pseudo_op[] = {
+              "rcpps",
+              "andps",
+              "andnps",
+              "orps",
+              "xorps",
+              "addps",
+              "mulps",
+              "cvtps2pd",
+              "cvtdq2ps",
+              "subps",
+              "minps",
+              "divps",
+              "maxps",
+            };
+
             data += 2;
             int mod, regop, rm;
             get_modrm(*data, &mod, &regop, &rm);
-            AppendToBuffer("xorps %s,%s",
-                           NameOfXMMRegister(regop),
+            AppendToBuffer("%s %s,",
+                           pseudo_op[f0byte - 0x53],
+                           NameOfXMMRegister(regop));
+            data += PrintRightXMMOperand(data);
+          } else if (f0byte == 0x50) {
+            data += 2;
+            int mod, regop, rm;
+            get_modrm(*data, &mod, &regop, &rm);
+            AppendToBuffer("movmskps %s,%s",
+                           NameOfCPURegister(regop),
                            NameOfXMMRegister(rm));
             data++;
+          } else if (f0byte== 0xC6) {
+            // shufps xmm, xmm/m128, imm8
+            data += 2;
+            int mod, regop, rm;
+            get_modrm(*data, &mod, &regop, &rm);
+            int8_t imm8 = static_cast<int8_t>(data[1]);
+            AppendToBuffer("shufps %s,%s,%d",
+                            NameOfXMMRegister(rm),
+                            NameOfXMMRegister(regop),
+                            static_cast<int>(imm8));
+            data += 2;
           } else if ((f0byte & 0xF0) == 0x80) {
             data += JumpConditional(data, branch_hint);
           } else if (f0byte == 0xBE || f0byte == 0xBF || f0byte == 0xB6 ||
@@ -1049,22 +1100,26 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
             data += SetCC(data);
           } else if ((f0byte & 0xF0) == 0x40) {
             data += CMov(data);
-          } else {
+          } else if (f0byte == 0xAB || f0byte == 0xA5 || f0byte == 0xAD) {
+            // shrd, shld, bts
             data += 2;
-            if (f0byte == 0xAB || f0byte == 0xA5 || f0byte == 0xAD) {
-              // shrd, shld, bts
-              AppendToBuffer("%s ", f0mnem);
-              int mod, regop, rm;
-              get_modrm(*data, &mod, &regop, &rm);
-              data += PrintRightOperand(data);
-              if (f0byte == 0xAB) {
-                AppendToBuffer(",%s", NameOfCPURegister(regop));
-              } else {
-                AppendToBuffer(",%s,cl", NameOfCPURegister(regop));
-              }
+            AppendToBuffer("%s ", f0mnem);
+            int mod, regop, rm;
+            get_modrm(*data, &mod, &regop, &rm);
+            data += PrintRightOperand(data);
+            if (f0byte == 0xAB) {
+              AppendToBuffer(",%s", NameOfCPURegister(regop));
             } else {
-              UnimplementedInstruction();
+              AppendToBuffer(",%s,cl", NameOfCPURegister(regop));
             }
+          } else if (f0byte == 0xBD) {
+            data += 2;
+            int mod, regop, rm;
+            get_modrm(*data, &mod, &regop, &rm);
+            AppendToBuffer("%s %s,", f0mnem, NameOfCPURegister(regop));
+            data += PrintRightOperand(data);
+          } else {
+            UnimplementedInstruction();
           }
         }
         break;
@@ -1170,6 +1225,13 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
           AppendToBuffer("mov_w ");
           data += PrintRightOperand(data);
           AppendToBuffer(",%s", NameOfCPURegister(regop));
+        } else if (*data == 0xC7) {
+          data++;
+          AppendToBuffer("%s ", "mov_w");
+          data += PrintRightOperand(data);
+          int imm = *reinterpret_cast<int16_t*>(data);
+          AppendToBuffer(",0x%x", imm);
+          data += 2;
         } else if (*data == 0x0F) {
           data++;
           if (*data == 0x38) {
@@ -1220,8 +1282,8 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
               get_modrm(*data, &mod, &regop, &rm);
               int8_t imm8 = static_cast<int8_t>(data[1]);
               AppendToBuffer("extractps %s,%s,%d",
-                             NameOfCPURegister(regop),
-                             NameOfXMMRegister(rm),
+                             NameOfCPURegister(rm),
+                             NameOfXMMRegister(regop),
                              static_cast<int>(imm8));
               data += 2;
             } else if (*data == 0x22) {
@@ -1329,7 +1391,7 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
             int mod, regop, rm;
             get_modrm(*data, &mod, &regop, &rm);
             int8_t imm8 = static_cast<int8_t>(data[1]);
-            ASSERT(regop == esi || regop == edx);
+            DCHECK(regop == esi || regop == edx);
             AppendToBuffer("%s %s,%d",
                            (regop == esi) ? "psllq" : "psrlq",
                            NameOfXMMRegister(rm),
@@ -1439,6 +1501,7 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
         data += D1D3C1Instruction(data);
         break;
 
+      case 0xD8:  // fall through
       case 0xD9:  // fall through
       case 0xDA:  // fall through
       case 0xDB:  // fall through
@@ -1551,13 +1614,13 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
             get_modrm(*data, &mod, &regop, &rm);
             AppendToBuffer("cvtss2sd %s,", NameOfXMMRegister(regop));
             data += PrintRightXMMOperand(data);
-          } else  if (b2 == 0x6F) {
+          } else if (b2 == 0x6F) {
             data += 3;
             int mod, regop, rm;
             get_modrm(*data, &mod, &regop, &rm);
             AppendToBuffer("movdqu %s,", NameOfXMMRegister(regop));
             data += PrintRightXMMOperand(data);
-          } else  if (b2 == 0x7F) {
+          } else if (b2 == 0x7F) {
             AppendToBuffer("movdqu ");
             data += 3;
             int mod, regop, rm;
@@ -1595,23 +1658,22 @@ int DisassemblerIA32::InstructionDecode(v8::internal::Vector<char> out_buffer,
   if (instr_len == 0) {
     printf("%02x", *data);
   }
-  ASSERT(instr_len > 0);  // Ensure progress.
+  DCHECK(instr_len > 0);  // Ensure progress.
 
   int outp = 0;
   // Instruction bytes.
   for (byte* bp = instr; bp < data; bp++) {
-    outp += v8::internal::OS::SNPrintF(out_buffer + outp,
-                                       "%02x",
-                                       *bp);
+    outp += v8::internal::SNPrintF(out_buffer + outp,
+                                   "%02x",
+                                   *bp);
   }
   for (int i = 6 - instr_len; i >= 0; i--) {
-    outp += v8::internal::OS::SNPrintF(out_buffer + outp,
-                                       "  ");
+    outp += v8::internal::SNPrintF(out_buffer + outp, "  ");
   }
 
-  outp += v8::internal::OS::SNPrintF(out_buffer + outp,
-                                     " %s",
-                                     tmp_buffer_.start());
+  outp += v8::internal::SNPrintF(out_buffer + outp,
+                                 " %s",
+                                 tmp_buffer_.start());
   return instr_len;
 }  // NOLINT (function is too long)
 
@@ -1635,7 +1697,7 @@ static const char* xmm_regs[8] = {
 
 
 const char* NameConverter::NameOfAddress(byte* addr) const {
-  v8::internal::OS::SNPrintF(tmp_buffer_, "%p", addr);
+  v8::internal::SNPrintF(tmp_buffer_, "%p", addr);
   return tmp_buffer_.start();
 }
 

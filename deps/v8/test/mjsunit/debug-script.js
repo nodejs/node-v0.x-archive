@@ -25,8 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --expose-debug-as debug --expose-gc --noparallel-recompilation
-// Flags: --send-idle-notification
+// Flags: --expose-debug-as debug --expose-gc --send-idle-notification
 
 // Get the Debug object exposed from the debug context global object.
 Debug = debug.Debug;
@@ -60,10 +59,9 @@ for (i = 0; i < scripts.length; i++) {
 }
 
 // This has to be updated if the number of native scripts change.
-assertEquals(14, named_native_count);
-// If no snapshot is used, only the 'gc' extension is loaded.
-// If snapshot is used, all extensions are cached in the snapshot.
-assertTrue(extension_count == 1 || extension_count == 5);
+assertTrue(named_native_count == 25 || named_native_count == 26);
+// Only the 'gc' extension is loaded.
+assertEquals(1, extension_count);
 // This script and mjsunit.js has been loaded.  If using d8, d8 loads
 // a normal script during startup too.
 assertTrue(normal_count == 2 || normal_count == 3);

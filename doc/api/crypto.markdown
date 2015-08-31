@@ -12,6 +12,30 @@ It also offers a set of wrappers for OpenSSL's hash, hmac, cipher,
 decipher, sign and verify methods.
 
 
+## crypto.setEngine(engine[, flags])
+
+Load and set engine for some/all OpenSSL functions (selected by flags).
+
+`engine` could be either an id or a path to the to the engine's shared library.
+
+`flags` is optional and has `ENGINE_METHOD_ALL` value by default. It could take
+one of or mix of following flags (defined in `constants` module):
+
+* `ENGINE_METHOD_RSA`
+* `ENGINE_METHOD_DSA`
+* `ENGINE_METHOD_DH`
+* `ENGINE_METHOD_RAND`
+* `ENGINE_METHOD_ECDH`
+* `ENGINE_METHOD_ECDSA`
+* `ENGINE_METHOD_CIPHERS`
+* `ENGINE_METHOD_DIGESTS`
+* `ENGINE_METHOD_STORE`
+* `ENGINE_METHOD_PKEY_METH`
+* `ENGINE_METHOD_PKEY_ASN1_METH`
+* `ENGINE_METHOD_ALL`
+* `ENGINE_METHOD_NONE`
+
+
 ## crypto.getCiphers()
 
 Returns an array with the names of the supported ciphers.
@@ -33,6 +57,8 @@ Example:
 
 
 ## crypto.createCredentials(details)
+
+    Stability: 0 - Deprecated. Use [tls.createSecureContext][] instead.
 
 Creates a credentials object, with the optional details being a
 dictionary with keys:
@@ -75,7 +101,7 @@ Example: this program that takes the sha1 sum of a file
 
     var shasum = crypto.createHash('sha1');
 
-    var s = fs.ReadStream(filename);
+    var s = fs.createReadStream(filename);
     s.on('data', function(d) {
       shasum.update(d);
     });
@@ -96,7 +122,7 @@ digest.  The legacy `update` and `digest` methods are also supported.
 
 Returned by `crypto.createHash`.
 
-### hash.update(data, [input_encoding])
+### hash.update(data[, input_encoding])
 
 Updates the hash content with the given `data`, the encoding of which
 is given in `input_encoding` and can be `'utf8'`, `'ascii'` or
@@ -162,8 +188,18 @@ which must be a `'binary'` encoded string or a [buffer](buffer.html).
 
 It is a [stream](stream.html) that is both readable and writable.  The
 written data is used to compute the hash.  Once the writable side of
-the stream is ended, use the `read()` method to get the computed hash
-digest.  The legacy `update` and `digest` methods are also supported.
+the stream is ended, use the `read()` method to get the enciphered
+contents.  The legacy `update` and `final` methods are also supported.
+
+Note: `createCipher` derives keys with the OpenSSL function [EVP_BytesToKey][]
+with the digest algorithm set to MD5, one iteration, and no salt. The lack of
+salt allows dictionary attacks as the same password always creates the same key.
+The low iteration count and non-cryptographically secure hash algorithm allow
+passwords to be tested very rapidly.
+
+In line with OpenSSL's recommendation to use pbkdf2 instead of EVP_BytesToKey it
+is recommended you derive a key and iv yourself with [crypto.pbkdf2][] and to
+then use [createCipheriv()][] to create the cipher stream.
 
 ## crypto.createCipheriv(algorithm, key, iv)
 
@@ -188,7 +224,7 @@ writable.  The written plain text data is used to produce the
 encrypted data on the readable side.  The legacy `update` and `final`
 methods are also supported.
 
-### cipher.update(data, [input_encoding], [output_encoding])
+### cipher.update(data[, input_encoding][, output_encoding])
 
 Updates the cipher with `data`, the encoding of which is given in
 `input_encoding` and can be `'utf8'`, `'ascii'` or `'binary'`.  If no
@@ -219,6 +255,19 @@ multiple of the cipher's block size or `final` will fail.  Useful for
 non-standard padding, e.g. using `0x0` instead of PKCS padding. You
 must call this before `cipher.final`.
 
+### cipher.getAuthTag()
+
+For authenticated encryption modes (currently supported: GCM), this
+method returns a `Buffer` that represents the _authentication tag_ that
+has been computed from the given data. Should be called after
+encryption has been completed using the `final` method!
+
+### cipher.setAAD(buffer)
+
+For authenticated encryption modes (currently supported: GCM), this
+method sets the value used for the additional authenticated data (AAD) input
+parameter.
+
 
 ## crypto.createDecipher(algorithm, password)
 
@@ -241,7 +290,7 @@ writable.  The written enciphered data is used to produce the
 plain-text data on the the readable side.  The legacy `update` and
 `final` methods are also supported.
 
-### decipher.update(data, [input_encoding], [output_encoding])
+### decipher.update(data[, input_encoding][, output_encoding])
 
 Updates the decipher with `data`, which is encoded in `'binary'`,
 `'base64'` or `'hex'`.  If no encoding is provided, then a buffer is
@@ -269,6 +318,21 @@ removing it. Can only work if the input data's length is a multiple of
 the ciphers block size. You must call this before streaming data to
 `decipher.update`.
 
+### decipher.setAuthTag(buffer)
+
+For authenticated encryption modes (currently supported: GCM), this
+method must be used to pass in the received _authentication tag_.
+If no tag is provided or if the ciphertext has been tampered with,
+`final` will throw, thus indicating that the ciphertext should
+be discarded due to failed authentication.
+
+### decipher.setAAD(buffer)
+
+For authenticated encryption modes (currently supported: GCM), this
+method sets the value used for the additional authenticated data (AAD) input
+parameter.
+
+
 ## crypto.createSign(algorithm)
 
 Creates and returns a signing object, with the given algorithm.  On
@@ -291,11 +355,18 @@ written, the `sign` method will return the signature.  The legacy
 Updates the sign object with data.  This can be called many times
 with new data as it is streamed.
 
-### sign.sign(private_key, [output_format])
+### sign.sign(private_key[, output_format])
 
 Calculates the signature on all the updated data passed through the
-sign.  `private_key` is a string containing the PEM encoded private
-key for signing.
+sign.
+
+`private_key` can be an object or a string. If `private_key` is a string, it is
+treated as the key with no passphrase.
+
+`private_key`:
+
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : A string of passphrase for the private key
 
 Returns the signature in `output_format` which can be `'binary'`,
 `'hex'` or `'base64'`. If no encoding is provided, then a buffer is
@@ -326,7 +397,7 @@ supported.
 Updates the verifier object with data.  This can be called many times
 with new data as it is streamed.
 
-### verifier.verify(object, signature, [signature_format])
+### verifier.verify(object, signature[, signature_format])
 
 Verifies the signed data by using the `object` and `signature`.
 `object` is  a string containing a PEM encoded object, which can be
@@ -341,22 +412,38 @@ the data and public key.
 Note: `verifier` object can not be used after `verify()` method has been
 called.
 
-## crypto.createDiffieHellman(prime_length)
+## crypto.createDiffieHellman(prime_length[, generator])
 
 Creates a Diffie-Hellman key exchange object and generates a prime of
-the given bit length. The generator used is `2`.
+`prime_length` bits and using an optional specific numeric `generator`.
+If no `generator` is specified, then `2` is used.
 
-## crypto.createDiffieHellman(prime, [encoding])
+## crypto.createDiffieHellman(prime[, prime_encoding][, generator][, generator_encoding])
 
-Creates a Diffie-Hellman key exchange object using the supplied prime.
-The generator used is `2`. Encoding can be `'binary'`, `'hex'`, or
-`'base64'`.  If no encoding is specified, then a buffer is expected.
+Creates a Diffie-Hellman key exchange object using the supplied `prime` and an
+optional specific `generator`.
+`generator` can be a number, string, or Buffer.
+If no `generator` is specified, then `2` is used.
+`prime_encoding` and `generator_encoding` can be `'binary'`, `'hex'`, or `'base64'`.
+If no `prime_encoding` is specified, then a Buffer is expected for `prime`.
+If no `generator_encoding` is specified, then a Buffer is expected for `generator`.
 
 ## Class: DiffieHellman
 
 The class for creating Diffie-Hellman key exchanges.
 
 Returned by `crypto.createDiffieHellman`.
+
+### diffieHellman.verifyError
+
+A bit field containing any warnings and/or errors as a result of a check performed
+during initialization. The following values are valid for this property
+(defined in `constants` module):
+
+* `DH_CHECK_P_NOT_SAFE_PRIME`
+* `DH_CHECK_P_NOT_PRIME`
+* `DH_UNABLE_TO_CHECK_GENERATOR`
+* `DH_NOT_SUITABLE_GENERATOR`
 
 ### diffieHellman.generateKeys([encoding])
 
@@ -365,7 +452,7 @@ the public key in the specified encoding. This key should be
 transferred to the other party. Encoding can be `'binary'`, `'hex'`,
 or `'base64'`.  If no encoding is provided, then a buffer is returned.
 
-### diffieHellman.computeSecret(other_public_key, [input_encoding], [output_encoding])
+### diffieHellman.computeSecret(other_public_key[, input_encoding][, output_encoding])
 
 Computes the shared secret using `other_public_key` as the other
 party's public key and returns the computed shared secret. Supplied
@@ -384,7 +471,7 @@ then a buffer is returned.
 
 ### diffieHellman.getGenerator([encoding])
 
-Returns the Diffie-Hellman prime in the specified encoding, which can
+Returns the Diffie-Hellman generator in the specified encoding, which can
 be `'binary'`, `'hex'`, or `'base64'`. If no encoding is provided,
 then a buffer is returned.
 
@@ -400,13 +487,13 @@ Returns the Diffie-Hellman private key in the specified encoding,
 which can be `'binary'`, `'hex'`, or `'base64'`. If no encoding is
 provided, then a buffer is returned.
 
-### diffieHellman.setPublicKey(public_key, [encoding])
+### diffieHellman.setPublicKey(public_key[, encoding])
 
 Sets the Diffie-Hellman public key. Key encoding can be `'binary'`,
 `'hex'` or `'base64'`. If no encoding is provided, then a buffer is
 expected.
 
-### diffieHellman.setPrivateKey(private_key, [encoding])
+### diffieHellman.setPrivateKey(private_key[, encoding])
 
 Sets the Diffie-Hellman private key. Key encoding can be `'binary'`,
 `'hex'` or `'base64'`. If no encoding is provided, then a buffer is
@@ -440,17 +527,108 @@ Example (obtaining a shared secret):
     /* alice_secret and bob_secret should be the same */
     console.log(alice_secret == bob_secret);
 
-## crypto.pbkdf2(password, salt, iterations, keylen, callback)
+## crypto.createECDH(curve_name)
 
-Asynchronous PBKDF2 applies pseudorandom function HMAC-SHA1 to derive
-a key of given length from the given password, salt and iterations.
-The callback gets two arguments `(err, derivedKey)`.
+Creates an Elliptic Curve (EC) Diffie-Hellman key exchange object using a
+predefined curve specified by `curve_name` string.
 
-## crypto.pbkdf2Sync(password, salt, iterations, keylen)
+## Class: ECDH
+
+The class for creating EC Diffie-Hellman key exchanges.
+
+Returned by `crypto.createECDH`.
+
+### ECDH.generateKeys([encoding[, format]])
+
+Generates private and public EC Diffie-Hellman key values, and returns
+the public key in the specified format and encoding. This key should be
+transferred to the other party.
+
+Format specifies point encoding and can be `'compressed'`, `'uncompressed'`, or
+`'hybrid'`. If no format is provided - the point will be returned in
+`'uncompressed'` format.
+
+Encoding can be `'binary'`, `'hex'`, or `'base64'`. If no encoding is provided,
+then a buffer is returned.
+
+### ECDH.computeSecret(other_public_key[, input_encoding][, output_encoding])
+
+Computes the shared secret using `other_public_key` as the other
+party's public key and returns the computed shared secret. Supplied
+key is interpreted using specified `input_encoding`, and secret is
+encoded using specified `output_encoding`. Encodings can be
+`'binary'`, `'hex'`, or `'base64'`. If the input encoding is not
+provided, then a buffer is expected.
+
+If no output encoding is given, then a buffer is returned.
+
+### ECDH.getPublicKey([encoding[, format]])
+
+Returns the EC Diffie-Hellman public key in the specified encoding and format.
+
+Format specifies point encoding and can be `'compressed'`, `'uncompressed'`, or
+`'hybrid'`. If no format is provided - the point will be returned in
+`'uncompressed'` format.
+
+Encoding can be `'binary'`, `'hex'`, or `'base64'`. If no encoding is provided,
+then a buffer is returned.
+
+### ECDH.getPrivateKey([encoding])
+
+Returns the EC Diffie-Hellman private key in the specified encoding,
+which can be `'binary'`, `'hex'`, or `'base64'`. If no encoding is
+provided, then a buffer is returned.
+
+### ECDH.setPublicKey(public_key[, encoding])
+
+Sets the EC Diffie-Hellman public key. Key encoding can be `'binary'`,
+`'hex'` or `'base64'`. If no encoding is provided, then a buffer is
+expected.
+
+### ECDH.setPrivateKey(private_key[, encoding])
+
+Sets the EC Diffie-Hellman private key. Key encoding can be `'binary'`,
+`'hex'` or `'base64'`. If no encoding is provided, then a buffer is
+expected.
+
+Example (obtaining a shared secret):
+
+    var crypto = require('crypto');
+    var alice = crypto.createECDH('secp256k1');
+    var bob = crypto.createECDH('secp256k1');
+
+    alice.generateKeys();
+    bob.generateKeys();
+
+    var alice_secret = alice.computeSecret(bob.getPublicKey(), null, 'hex');
+    var bob_secret = bob.computeSecret(alice.getPublicKey(), null, 'hex');
+
+    /* alice_secret and bob_secret should be the same */
+    console.log(alice_secret == bob_secret);
+
+## crypto.pbkdf2(password, salt, iterations, keylen[, digest], callback)
+
+Asynchronous PBKDF2 function.  Applies the selected HMAC digest function
+(default: SHA1) to derive a key of the requested length from the password,
+salt and number of iterations.  The callback gets two arguments:
+`(err, derivedKey)`.
+
+Example:
+
+    crypto.pbkdf2('secret', 'salt', 4096, 512, 'sha256', function(err, key) {
+      if (err)
+        throw err;
+      console.log(key.toString('hex'));  // 'c5e478d...1469e50'
+    });
+
+You can get a list of supported digest functions with
+[crypto.getHashes()](#crypto_crypto_gethashes).
+
+## crypto.pbkdf2Sync(password, salt, iterations, keylen[, digest])
 
 Synchronous PBKDF2 function.  Returns derivedKey or throws error.
 
-## crypto.randomBytes(size, [callback])
+## crypto.randomBytes(size[, callback])
 
 Generates cryptographically strong pseudo-random data. Usage:
 
@@ -474,7 +652,7 @@ accumulated entropy to generate cryptographically strong data. In other words,
 `crypto.randomBytes` without callback will not block even if all entropy sources
 are drained.
 
-## crypto.pseudoRandomBytes(size, [callback])
+## crypto.pseudoRandomBytes(size[, callback])
 
 Generates *non*-cryptographically strong pseudo-random data. The data
 returned will be unique if it is sufficiently long, but is not
@@ -483,6 +661,61 @@ function should never be used where unpredictability is important,
 such as in the generation of encryption keys.
 
 Usage is otherwise identical to `crypto.randomBytes`.
+
+## Class: Certificate
+
+The class used for working with signed public key & challenges. The most
+common usage for this series of functions is when dealing with the `<keygen>`
+element. http://www.openssl.org/docs/apps/spkac.html
+
+Returned by `crypto.Certificate`.
+
+### Certificate.verifySpkac(spkac)
+
+Returns true of false based on the validity of the SPKAC.
+
+### Certificate.exportChallenge(spkac)
+
+Exports the encoded public key from the supplied SPKAC.
+
+### Certificate.exportPublicKey(spkac)
+
+Exports the encoded challenge associated with the SPKAC.
+
+## crypto.publicEncrypt(public_key, buffer)
+
+Encrypts `buffer` with `public_key`. Only RSA is currently supported.
+
+`public_key` can be an object or a string. If `public_key` is a string, it is
+treated as the key with no passphrase and will use `RSA_PKCS1_OAEP_PADDING`.
+
+`public_key`:
+
+* `key` : A string holding the PEM encoded private key
+* `padding` : An optional padding value, one of the following:
+  * `constants.RSA_NO_PADDING`
+  * `constants.RSA_PKCS1_PADDING`
+  * `constants.RSA_PKCS1_OAEP_PADDING`
+
+NOTE: All paddings are defined in `constants` module.
+
+## crypto.privateDecrypt(private_key, buffer)
+
+Decrypts `buffer` with `private_key`.
+
+`private_key` can be an object or a string. If `private_key` is a string, it is
+treated as the key with no passphrase and will use `RSA_PKCS1_OAEP_PADDING`.
+
+`private_key`:
+
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : An optional string of passphrase for the private key
+* `padding` : An optional padding value, one of the following:
+  * `constants.RSA_NO_PADDING`
+  * `constants.RSA_PKCS1_PADDING`
+  * `constants.RSA_PKCS1_OAEP_PADDING`
+
+NOTE: All paddings are defined in `constants` module.
 
 ## crypto.DEFAULT_ENCODING
 
@@ -529,6 +762,9 @@ temporary measure.
 [createCipher()]: #crypto_crypto_createcipher_algorithm_password
 [createCipheriv()]: #crypto_crypto_createcipheriv_algorithm_key_iv
 [crypto.createDiffieHellman()]: #crypto_crypto_creatediffiehellman_prime_encoding
+[tls.createSecureContext]: tls.html#tls_tls_createsecurecontext_details
 [diffieHellman.setPublicKey()]: #crypto_diffiehellman_setpublickey_public_key_encoding
 [RFC 2412]: http://www.rfc-editor.org/rfc/rfc2412.txt
 [RFC 3526]: http://www.rfc-editor.org/rfc/rfc3526.txt
+[crypto.pbkdf2]: #crypto_crypto_pbkdf2_password_salt_iterations_keylen_callback
+[EVP_BytesToKey]: https://www.openssl.org/docs/crypto/EVP_BytesToKey.html

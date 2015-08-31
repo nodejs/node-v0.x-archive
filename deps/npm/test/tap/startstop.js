@@ -1,78 +1,65 @@
+var fs = require('graceful-fs')
+var path = require('path')
+
+var mkdirp = require('mkdirp')
+var osenv = require('osenv')
+var rimraf = require('rimraf')
+var test = require('tap').test
+
 var common = require('../common-tap')
-  , test = require('tap').test
-  , path = require('path')
-  , spawn = require('child_process').spawn
-  , rimraf = require('rimraf')
-  , mkdirp = require('mkdirp')
-  , pkg = __dirname + '/startstop'
-  , cache = pkg + '/cache'
-  , tmp = pkg + '/tmp'
-  , node = process.execPath
-  , npm = path.resolve(__dirname, '../../cli.js')
 
-function run (command, t, parse) {
-  var c = ''
-    , e = ''
-    , node = process.execPath
-    , child = spawn(node, [npm, command], {
-      cwd: pkg
-    })
+var pkg = path.resolve(__dirname, 'startstop')
 
-    child.stderr.on('data', function (chunk) {
-      e += chunk
-    })
+var EXEC_OPTS = { cwd: pkg }
 
-    child.stdout.on('data', function (chunk) {
-      c += chunk
-    })
-
-    child.stdout.on('end', function () {
-      if (e) {
-        throw new Error('npm ' + command + ' stderr: ' + e.toString())
-      }
-      if (parse) {
-        // custom parsing function
-        c = parse(c)
-        t.equal(c.actual, c.expected)
-        t.end()
-        return
-      }
-
-      c = c.trim().split('\n')
-      c = c[c.length - 1]
-      t.equal(c, command)
-      t.end()
-    })
-
+var json = {
+  name: 'startstop',
+  version: '1.2.3',
+  scripts: {
+    start: 'node -e \"console.log(\'start\')\"',
+    stop: 'node -e \"console.log(\'stop\')\"'
+  }
 }
 
-function cleanup () {
-  rimraf.sync(pkg + '/cache')
-  rimraf.sync(pkg + '/tmp')
+function testOutput (t, command, er, code, stdout, stderr) {
+  t.notOk(code, 'npm ' + command + ' exited with code 0')
+
+  if (stderr) throw new Error('npm ' + command + ' stderr: ' + stderr.toString())
+
+  stdout = stdout.trim().split(/\n|\r/)
+  stdout = stdout[stdout.length - 1]
+  t.equal(stdout, command)
+  t.end()
 }
 
 test('setup', function (t) {
   cleanup()
-  mkdirp.sync(pkg + '/cache')
-  mkdirp.sync(pkg + '/tmp')
+  mkdirp.sync(pkg)
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify(json, null, 2)
+  )
   t.end()
-
 })
 
 test('npm start', function (t) {
-  run('start', t)
+  common.npm(['start'], EXEC_OPTS, testOutput.bind(null, t, 'start'))
 })
 
 test('npm stop', function (t) {
-  run('stop', t)
+  common.npm(['stop'], EXEC_OPTS, testOutput.bind(null, t, 'stop'))
 })
 
 test('npm restart', function (t) {
-  run ('restart', t, function (output) {
-    output = output.split('\n').filter(function (val) {
+  common.npm(['restart'], EXEC_OPTS, function (er, c, stdout) {
+    if (er) throw er
+
+    var output = stdout.split('\n').filter(function (val) {
       return val.match(/^s/)
     })
-    return {actual: output, expected: output}
+
+    t.same(output.sort(), ['start', 'stop'].sort())
+    t.end()
   })
 })
 
@@ -80,3 +67,8 @@ test('cleanup', function (t) {
   cleanup()
   t.end()
 })
+
+function cleanup () {
+  process.chdir(osenv.tmpdir())
+  rimraf.sync(pkg)
+}

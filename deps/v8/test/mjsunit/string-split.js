@@ -66,6 +66,23 @@ assertArrayEquals(["div", "#i", "d", ".class"], "div#id.class".split(/(?=[d#.])/
 
 assertArrayEquals(["a", "b", "c"], "abc".split(/(?=.)/));
 
+assertArrayEquals(["Wenige", "sind", "auserwählt."],
+                  "Wenige sind auserwählt.".split(" "));
+
+assertArrayEquals([], "Wenige sind auserwählt.".split(" ", 0));
+
+assertArrayEquals(["Wenige"], "Wenige sind auserwählt.".split(" ", 1));
+
+assertArrayEquals(["Wenige", "sind"], "Wenige sind auserwählt.".split(" ", 2));
+
+assertArrayEquals(["Wenige", "sind", "auserwählt."],
+                  "Wenige sind auserwählt.".split(" ", 3));
+
+assertArrayEquals(["Wenige sind auserw", "hlt."],
+                  "Wenige sind auserwählt.".split("ä"));
+
+assertArrayEquals(["Wenige sind ", "."],
+                  "Wenige sind auserwählt.".split("auserwählt"));
 
 /* "ab".split(/((?=.))/)
  *
@@ -128,3 +145,22 @@ for (var i = 0; i < 128; i++) {
   assertEquals(1, split_chars[i].length);
   assertEquals(i, split_chars[i].charCodeAt(0));
 }
+
+// Check that the separator is converted to string before returning due to
+// limit == 0.
+var counter = 0;
+var separator = { toString: function() { counter++; return "b"; }};
+assertEquals([], "abc".split(separator, 0));
+assertEquals(1, counter);
+
+// Check that the subject is converted to string before the separator.
+counter = 0;
+var subject = { toString: function() { assertEquals(0, counter);
+                                       counter++;
+                                       return "abc"; }};
+separator = { toString: function() { assertEquals(1, counter);
+                                     counter++;
+                                     return "b"; }};
+
+assertEquals(["a", "c"], String.prototype.split.call(subject, separator));
+assertEquals(2, counter);

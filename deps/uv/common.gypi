@@ -3,11 +3,9 @@
     'visibility%': 'hidden',         # V8's visibility setting
     'target_arch%': 'ia32',          # set v8's target architecture
     'host_arch%': 'ia32',            # set v8's host architecture
-    'library%': 'static_library',    # allow override to 'shared_library' for DLL/.so builds
+    'uv_library%': 'static_library', # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',  # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',  # we do enable multicore compiles, but not using the V8 way
-    'gcc_version%': 'unknown',
-    'clang%': 0,
   },
 
   'target_defaults': {
@@ -19,7 +17,7 @@
         'msvs_settings': {
           'VCCLCompilerTool': {
             'target_conditions': [
-              ['library=="static_library"', {
+              ['uv_library=="static_library"', {
                 'RuntimeLibrary': 1, # static debug
               }, {
                 'RuntimeLibrary': 3, # DLL debug
@@ -56,7 +54,7 @@
         'msvs_settings': {
           'VCCLCompilerTool': {
             'target_conditions': [
-              ['library=="static_library"', {
+              ['uv_library=="static_library"', {
                 'RuntimeLibrary': 0, # static release
               }, {
                 'RuntimeLibrary': 2, # debug release
@@ -130,7 +128,7 @@
           }]
         ]
       }],
-      [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+      ['OS in "freebsd linux openbsd solaris android"', {
         'cflags': [ '-Wall' ],
         'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
         'target_conditions': [
@@ -143,17 +141,22 @@
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],
           }],
+          [ 'target_arch=="x32"', {
+            'cflags': [ '-mx32' ],
+            'ldflags': [ '-mx32' ],
+          }],
           [ 'OS=="linux"', {
             'cflags': [ '-ansi' ],
           }],
           [ 'OS=="solaris"', {
             'cflags': [ '-pthreads' ],
             'ldflags': [ '-pthreads' ],
-          }, {
+          }],
+          [ 'OS not in "solaris android"', {
             'cflags': [ '-pthread' ],
             'ldflags': [ '-pthread' ],
           }],
-          [ 'visibility=="hidden" and (clang==1 or gcc_version >= 40)', {
+          [ 'visibility=="hidden"', {
             'cflags': [ '-fvisibility=hidden' ],
           }],
         ],

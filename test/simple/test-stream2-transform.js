@@ -81,7 +81,7 @@ test('writable side consumption', function(t) {
   t.equal(tx._readableState.length, 10);
   t.equal(transformed, 10);
   t.equal(tx._transformState.writechunk.length, 5);
-  t.same(tx._writableState.buffer.map(function(c) {
+  t.same(tx._writableState.getBuffer().map(function(c) {
     return c.chunk.length;
   }), [6, 7, 8, 9, 10]);
 
@@ -104,6 +104,28 @@ test('passthrough', function(t) {
   t.end();
 });
 
+test('object passthrough', function (t) {
+  var pt = new PassThrough({ objectMode: true });
+
+  pt.write(1);
+  pt.write(true);
+  pt.write(false);
+  pt.write(0);
+  pt.write('foo');
+  pt.write('');
+  pt.write({ a: 'b'});
+  pt.end();
+
+  t.equal(pt.read(), 1);
+  t.equal(pt.read(), true);
+  t.equal(pt.read(), false);
+  t.equal(pt.read(), 0);
+  t.equal(pt.read(), 'foo');
+  t.equal(pt.read(), '');
+  t.same(pt.read(), { a: 'b'});
+  t.end();
+});
+
 test('simple transform', function(t) {
   var pt = new Transform;
   pt._transform = function(c, e, cb) {
@@ -123,6 +145,32 @@ test('simple transform', function(t) {
   t.equal(pt.read(5).toString(), 'xxxxx');
   t.equal(pt.read(5).toString(), 'xxxxx');
   t.equal(pt.read(5).toString(), 'x');
+  t.end();
+});
+
+test('simple object transform', function(t) {
+  var pt = new Transform({ objectMode: true });
+  pt._transform = function(c, e, cb) {
+    pt.push(JSON.stringify(c));
+    cb();
+  };
+
+  pt.write(1);
+  pt.write(true);
+  pt.write(false);
+  pt.write(0);
+  pt.write('foo');
+  pt.write('');
+  pt.write({ a: 'b'});
+  pt.end();
+
+  t.equal(pt.read(), '1');
+  t.equal(pt.read(), 'true');
+  t.equal(pt.read(), 'false');
+  t.equal(pt.read(), '0');
+  t.equal(pt.read(), '"foo"');
+  t.equal(pt.read(), '""');
+  t.equal(pt.read(), '{"a":"b"}');
   t.end();
 });
 
@@ -262,8 +310,7 @@ test('complex transform', function(t) {
         pt.end();
         t.end();
       });
-      t.equal(pt.read().toString(), 'abc');
-      t.equal(pt.read().toString(), 'def');
+      t.equal(pt.read().toString(), 'abcdef');
       t.equal(pt.read(), null);
     });
   });
@@ -423,6 +470,8 @@ test('object transform (json parse)', function(t) {
   });
 
   jp.end();
+  // read one more time to get the 'end' event
+  jp.read();
 
   process.nextTick(function() {
     t.ok(ended);
@@ -463,6 +512,8 @@ test('object transform (json stringify)', function(t) {
   });
 
   js.end();
+  // read one more time to get the 'end' event
+  js.read();
 
   process.nextTick(function() {
     t.ok(ended);

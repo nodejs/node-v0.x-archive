@@ -1,61 +1,60 @@
 // Copyright 2006-2008 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-#include <stdarg.h>
+#include "src/checks.h"
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "platform.h"
+namespace v8 {
+namespace internal {
 
-// TODO(isolates): is it necessary to lift this?
-static int fatal_error_handler_nesting_depth = 0;
+intptr_t HeapObjectTagMask() { return kHeapObjectTagMask; }
 
-// Contains protection against recursive calls (faults while handling faults).
-extern "C" void V8_Fatal(const char* file, int line, const char* format, ...) {
-  fflush(stdout);
-  fflush(stderr);
-  fatal_error_handler_nesting_depth++;
-  // First time we try to print an error message
-  if (fatal_error_handler_nesting_depth < 2) {
-    i::OS::PrintError("\n\n#\n# Fatal error in %s, line %d\n# ", file, line);
-    va_list arguments;
-    va_start(arguments, format);
-    i::OS::VPrintError(format, arguments);
-    va_end(arguments);
-    i::OS::PrintError("\n#\n\n");
+} }  // namespace v8::internal
+
+
+static bool CheckEqualsStrict(volatile double* exp, volatile double* val) {
+  v8::internal::DoubleRepresentation exp_rep(*exp);
+  v8::internal::DoubleRepresentation val_rep(*val);
+  if (std::isnan(exp_rep.value) && std::isnan(val_rep.value)) return true;
+  return exp_rep.bits == val_rep.bits;
+}
+
+
+void CheckEqualsHelper(const char* file, int line, const char* expected_source,
+                       double expected, const char* value_source,
+                       double value) {
+  // Force values to 64 bit memory to truncate 80 bit precision on IA32.
+  volatile double* exp = new double[1];
+  *exp = expected;
+  volatile double* val = new double[1];
+  *val = value;
+  if (!CheckEqualsStrict(exp, val)) {
+    V8_Fatal(file, line,
+             "CHECK_EQ(%s, %s) failed\n#   Expected: %f\n#   Found: %f",
+             expected_source, value_source, *exp, *val);
   }
-  // First two times we may try to print a stack dump.
-  if (fatal_error_handler_nesting_depth < 3) {
-    if (i::FLAG_stack_trace_on_abort) {
-      // Call this one twice on double fault
-      i::Isolate::Current()->PrintStack();
-    }
+  delete[] exp;
+  delete[] val;
+}
+
+
+void CheckNonEqualsHelper(const char* file, int line,
+                          const char* expected_source, double expected,
+                          const char* value_source, double value) {
+  // Force values to 64 bit memory to truncate 80 bit precision on IA32.
+  volatile double* exp = new double[1];
+  *exp = expected;
+  volatile double* val = new double[1];
+  *val = value;
+  if (CheckEqualsStrict(exp, val)) {
+    V8_Fatal(file, line,
+             "CHECK_EQ(%s, %s) failed\n#   Expected: %f\n#   Found: %f",
+             expected_source, value_source, *exp, *val);
   }
-  i::OS::Abort();
+  delete[] exp;
+  delete[] val;
 }
 
 
@@ -87,24 +86,3 @@ void CheckNonEqualsHelper(const char* file,
              unexpected_source, value_source, *value_str);
   }
 }
-
-
-void API_Fatal(const char* location, const char* format, ...) {
-  i::OS::PrintError("\n#\n# Fatal error in %s\n# ", location);
-  va_list arguments;
-  va_start(arguments, format);
-  i::OS::VPrintError(format, arguments);
-  va_end(arguments);
-  i::OS::PrintError("\n#\n\n");
-  i::OS::Abort();
-}
-
-
-namespace v8 { namespace internal {
-
-  bool EnableSlowAsserts() { return FLAG_enable_slow_asserts; }
-
-  intptr_t HeapObjectTagMask() { return kHeapObjectTagMask; }
-
-} }  // namespace v8::internal
-

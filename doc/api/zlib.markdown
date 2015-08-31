@@ -144,10 +144,17 @@ Returns a new [Unzip](#zlib_class_zlib_unzip) object with an
 Not exported by the `zlib` module. It is documented here because it is the base
 class of the compressor/decompressor classes.
 
-### zlib.flush(callback)
+### zlib.flush([kind], callback)
+
+`kind` defaults to `zlib.Z_FULL_FLUSH`.
 
 Flush pending data. Don't call this frivolously, premature flushes negatively
 impact the effectiveness of the compression algorithm.
+
+### zlib.params(level, strategy, callback)
+
+Dynamically update the compression level and compression strategy.
+Only applicable to deflate algorithm.
 
 ### zlib.reset()
 
@@ -187,37 +194,45 @@ the header.
 
 <!--type=misc-->
 
-All of these take a string or buffer as the first argument, and call the
-supplied callback with `callback(error, result)`.  The
-compression/decompression engine is created using the default settings
-in all convenience methods.  To supply different options, use the
-zlib classes directly.
+All of these take a string or buffer as the first argument, an optional second
+argument to supply options to the zlib classes and will call the supplied
+callback with `callback(error, result)`.
 
-## zlib.deflate(buf, callback)
+Every method has a `*Sync` counterpart, which accept the same arguments, but
+without a callback.
+
+## zlib.deflate(buf[, options], callback)
+## zlib.deflateSync(buf[, options])
 
 Compress a string with Deflate.
 
-## zlib.deflateRaw(buf, callback)
+## zlib.deflateRaw(buf[, options], callback)
+## zlib.deflateRawSync(buf[, options])
 
 Compress a string with DeflateRaw.
 
-## zlib.gzip(buf, callback)
+## zlib.gzip(buf[, options], callback)
+## zlib.gzipSync(buf[, options])
 
 Compress a string with Gzip.
 
-## zlib.gunzip(buf, callback)
+## zlib.gunzip(buf[, options], callback)
+## zlib.gunzipSync(buf[, options])
 
 Decompress a raw Buffer with Gunzip.
 
-## zlib.inflate(buf, callback)
+## zlib.inflate(buf[, options], callback)
+## zlib.inflateSync(buf[, options])
 
 Decompress a raw Buffer with Inflate.
 
-## zlib.inflateRaw(buf, callback)
+## zlib.inflateRaw(buf[, options], callback)
+## zlib.inflateRawSync(buf[, options])
 
 Decompress a raw Buffer with InflateRaw.
 
-## zlib.unzip(buf, callback)
+## zlib.unzip(buf[, options], callback)
+## zlib.unzipSync(buf[, options])
 
 Decompress a raw Buffer with Unzip.
 
@@ -225,8 +240,7 @@ Decompress a raw Buffer with Unzip.
 
 <!--type=misc-->
 
-Each class takes an options object.  All options are optional.  (The
-convenience methods use the default settings for all options.)
+Each class takes an options object.  All options are optional.
 
 Note that some options are only relevant when compressing, and are
 ignored by the decompression classes.

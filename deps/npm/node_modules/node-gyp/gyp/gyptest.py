@@ -13,7 +13,7 @@ import optparse
 import subprocess
 import sys
 
-class CommandRunner:
+class CommandRunner(object):
   """
   Executor class for commands, including "commands" implemented by
   Python functions.
@@ -117,7 +117,7 @@ class CommandRunner:
     return self.execute(command, stdout, stderr)
 
 
-class Unbuffered:
+class Unbuffered(object):
   def __init__(self, fp):
     self.fp = fp
   def write(self, arg):
@@ -176,7 +176,7 @@ def main(argv=None):
   if opts.path:
     extra_path = [os.path.abspath(p) for p in opts.path]
     extra_path = os.pathsep.join(extra_path)
-    os.environ['PATH'] += os.pathsep + extra_path
+    os.environ['PATH'] = extra_path + os.pathsep + os.environ['PATH']
 
   if not args:
     if not opts.all:
@@ -224,7 +224,7 @@ def main(argv=None):
       'win32':    ['msvs', 'ninja'],
       'linux2':   ['make', 'ninja'],
       'linux3':   ['make', 'ninja'],
-      'darwin':   ['make', 'ninja', 'xcode'],
+      'darwin':   ['make', 'ninja', 'xcode', 'xcode-ninja'],
     }[sys.platform]
 
   for format in format_list:

@@ -9,15 +9,23 @@ ARM Ltd.
 Hewlett-Packard Development Company, LP
 Igalia, S.L.
 Joyent, Inc.
+Bloomberg Finance L.P.
+NVIDIA Corporation
+BlackBerry Limited
+Opera Software ASA
+Intel Corporation
 
 Akinori MUSHA <knu@FreeBSD.org>
 Alexander Botero-Lowry <alexbl@FreeBSD.org>
 Alexander Karpinsky <homm86@gmail.com>
+Alexandre Rames <alexandre.rames@arm.com>
 Alexandre Vassalotti <avassalotti@gmail.com>
 Andreas Anyuru <andreas.anyuru@gmail.com>
+Baptiste Afsa <baptiste.afsa@arm.com>
 Bert Belder <bertbelder@gmail.com>
 Burcu Dogan <burcujdogan@gmail.com>
 Craig Schlenter <craig.schlenter@gmail.com>
+Chunyang Dai <chunyang.dai@intel.com>
 Daniel Andersson <kodandersson@gmail.com>
 Daniel James <dnljms@gmail.com>
 Derek J Conrod <dconrod@codeaurora.org>
@@ -27,6 +35,7 @@ Fedor Indutny <fedor@indutny.com>
 Filipe David Manana <fdmanana@gmail.com>
 Haitao Feng <haitao.feng@intel.com>
 Ioseb Dzmanashvili <ioseb.dzmanashvili@gmail.com>
+Jacob Bramley <jacob.bramley@arm.com>
 Jan de Mooij <jandemooij@gmail.com>
 Jay Freeman <saurik@saurik.com>
 James Pike <g00gle@chilon.net>
@@ -34,6 +43,7 @@ Joel Stanley <joel.stan@gmail.com>
 John Jozwiak <jjozwiak@codeaurora.org>
 Jonathan Liu <net147@gmail.com>
 Kun Zhang <zhangk@codeaurora.org>
+Luis Reis <luis.m.reis@gmail.com>
 Martyn Capewell <martyn.capewell@arm.com>
 Mathias Bynens <mathias@qiwi.be>
 Matt Hanselman <mjhanselman@gmail.com>
@@ -45,15 +55,19 @@ Paolo Giarrusso <p.giarrusso@gmail.com>
 Patrick Gansterer <paroga@paroga.com>
 Peter Varga <pvarga@inf.u-szeged.hu>
 Rafal Krypa <rafal@krypa.net>
+Rajeev R Krithivasan <rkrithiv@codeaurora.org>
 Rene Rebe <rene@exactcode.de>
 Robert Mustacchi <rm@fingolfin.org>
 Rodolph Perfetta <rodolph.perfetta@arm.com>
 Ryan Dahl <coldredlemur@gmail.com>
-Sandro Santilli	<strk@keybit.net>
+Sandro Santilli <strk@keybit.net>
 Sanjoy Das <sanjoy@playingwithpointers.com>
 Subrato K De <subratokde@codeaurora.org>
 Tobias Burnus <burnus@net-b.de>
+Vincent Belliard <vincent.belliard@arm.com>
 Vlad Burlik <vladbph@gmail.com>
+Weiliang Lin<weiliang.lin@intel.com>
+Xi Qian <xi.qian@intel.com>
 Yuqiang Xian <yuqiang.xian@intel.com>
 Zaheer Ahmad <zahmad@codeaurora.org>
 Zhongping Wang <kewpie.w.zp@gmail.com>

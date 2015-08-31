@@ -1,16 +1,17 @@
-
 exports = module.exports = lifecycle
 exports.cmd = cmd
+exports.makeEnv = makeEnv
 
 var log = require("npmlog")
-  , spawn = require("child_process").spawn
-  , npm = require("../npm.js")
-  , path = require("path")
-  , fs = require("graceful-fs")
-  , chain = require("slide").chain
-  , Stream = require("stream").Stream
-  , PATH = "PATH"
-  , uidNumber = require("uid-number")
+var spawn = require("./spawn")
+var npm = require("../npm.js")
+var path = require("path")
+var fs = require("graceful-fs")
+var chain = require("slide").chain
+var Stream = require("stream").Stream
+var PATH = "PATH"
+var uidNumber = require("uid-number")
+var umask = require("./umask")
 
 // windows calls it's path "Path" usually, but this is not guaranteed.
 if (process.platform === "win32") {
@@ -71,11 +72,6 @@ function lifecycle_ (pkg, stage, wd, env, unsafe, failOk, cb) {
     , p = wd.split("node_modules")
     , acc = path.resolve(p.shift())
 
-  // first add the directory containing the `node` executable currently
-  // running, so that any lifecycle script that invoke "node" will execute
-  // this same one.
-  pathArr.unshift(path.dirname(process.execPath))
-
   p.forEach(function (pp) {
     pathArr.unshift(path.join(acc, "node_modules", ".bin"))
     acc = path.join(acc, "node_modules", pp)
@@ -96,24 +92,23 @@ function lifecycle_ (pkg, stage, wd, env, unsafe, failOk, cb) {
     env.npm_lifecycle_script = pkg.scripts[stage]
   }
 
-  if (failOk) {
-    cb = (function (cb_) { return function (er) {
-      if (er) log.warn("continuing anyway", er.message)
-      cb_()
-    }})(cb)
-  }
-
-  if (npm.config.get("force")) {
-    cb = (function (cb_) { return function (er) {
-      if (er) log.info("forced, continuing", er)
-      cb_()
-    }})(cb)
+  function done (er) {
+    if (er) {
+      if (npm.config.get("force")) {
+        log.info("forced, continuing", er)
+        er = null
+      } else if (failOk) {
+        log.warn("continuing anyway", er.message)
+        er = null
+      }
+    }
+    cb(er)
   }
 
   chain
     ( [ packageLifecycle && [runPackageLifecycle, pkg, env, wd, unsafe]
       , [runHookLifecycle, pkg, env, wd, unsafe] ]
-    , cb )
+    , done )
 }
 
 function validWd (d, cb) {
@@ -161,7 +156,12 @@ function runCmd (note, cmd, pkg, env, stage, wd, unsafe, cb) {
   var user = unsafe ? null : npm.config.get("user")
     , group = unsafe ? null : npm.config.get("group")
 
-  console.log(note)
+  if (log.level !== 'silent') {
+    if (npm.spinner.int) {
+      npm.config.get("logstream").write("\r \r")
+    }
+    console.log(note)
+  }
   log.verbose("unsafe-perm in lifecycle", unsafe)
 
   if (process.platform === "win32") {
@@ -199,18 +199,23 @@ function runCmd_ (cmd, pkg, env, wd, stage, unsafe, uid, gid, cb_) {
   var shFlag = "-c"
 
   if (process.platform === "win32") {
-    sh = "cmd"
+    sh = process.env.comspec || "cmd"
     shFlag = "/c"
     conf.windowsVerbatimArguments = true
   }
 
   var proc = spawn(sh, [shFlag, cmd], conf)
+  proc.on("error", procError)
   proc.on("close", function (code, signal) {
     if (signal) {
       process.kill(process.pid, signal);
     } else if (code) {
       var er = new Error("Exit status " + code)
     }
+    procError(er)
+  })
+
+  function procError (er) {
     if (er && !npm.ROLLBACK) {
       log.info(pkg._id, "Failed to exec "+stage+" script")
       er.message = pkg._id + " "
@@ -230,7 +235,7 @@ function runCmd_ (cmd, pkg, env, wd, stage, unsafe, uid, gid, cb_) {
       return cb()
     }
     cb(er)
-  })
+  }
 }
 
 
@@ -312,7 +317,9 @@ function makeEnv (data, prefix, env) {
     }
     var value = npm.config.get(i)
     if (value instanceof Stream || Array.isArray(value)) return
+    if (i.match(/umask/)) value = umask.toString(value)
     if (!value) value = ""
+    else if (typeof value === "number") value = "" + value
     else if (typeof value !== "string") value = JSON.stringify(value)
 
     value = -1 !== value.indexOf("\n")
@@ -343,13 +350,9 @@ function makeEnv (data, prefix, env) {
 
 function cmd (stage) {
   function CMD (args, cb) {
-    if (args.length) {
-      chain(args.map(function (p) {
-        return [npm.commands, "run-script", [p, stage]]
-      }), cb)
-    } else npm.commands["run-script"]([stage], cb)
+    npm.commands["run-script"]([stage].concat(args), cb)
   }
-  CMD.usage = "npm "+stage+" <name>"
+  CMD.usage = "npm "+stage+" [-- <args>]"
   var installedShallow = require("./completion/installed-shallow.js")
   CMD.completion = function (opts, cb) {
     installedShallow(opts, function (d) {

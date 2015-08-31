@@ -25,17 +25,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <v8.h>
-#include "cctest.h"
-#include "debug.h"
+#include "include/v8.h"
+#include "test/cctest/cctest.h"
 
+#include "include/libplatform/libplatform.h"
+#include "src/debug.h"
+#include "test/cctest/print-extension.h"
+#include "test/cctest/profiler-extension.h"
+#include "test/cctest/trace-extension.h"
+
+enum InitializationState {kUnset, kUnintialized, kInitialized};
+static InitializationState initialization_state_  = kUnset;
+static bool disable_automatic_dispose_ = false;
 
 CcTest* CcTest::last_ = NULL;
+bool CcTest::initialize_called_ = false;
+bool CcTest::isolate_used_ = false;
+v8::Isolate* CcTest::isolate_ = NULL;
 
 
 CcTest::CcTest(TestFunction* callback, const char* file, const char* name,
-               const char* dependency, bool enabled)
-    : callback_(callback), name_(name), dependency_(dependency), prev_(last_) {
+               const char* dependency, bool enabled, bool initialize)
+    : callback_(callback), name_(name), dependency_(dependency),
+      enabled_(enabled), initialize_(initialize), prev_(last_) {
   // Find the base name of this test (const_cast required on Windows).
   char *basename = strrchr(const_cast<char *>(file), '/');
   if (!basename) {
@@ -51,9 +63,49 @@ CcTest::CcTest(TestFunction* callback, const char* file, const char* name,
   if (extension) *extension = 0;
   // Install this test in the list of tests
   file_ = basename;
-  enabled_ = enabled;
   prev_ = last_;
   last_ = this;
+}
+
+
+void CcTest::Run() {
+  if (!initialize_) {
+    CHECK(initialization_state_ != kInitialized);
+    initialization_state_ = kUnintialized;
+    CHECK(CcTest::isolate_ == NULL);
+  } else {
+    CHECK(initialization_state_ != kUnintialized);
+    initialization_state_ = kInitialized;
+    if (isolate_ == NULL) {
+      isolate_ = v8::Isolate::New();
+    }
+    isolate_->Enter();
+  }
+  callback_();
+  if (initialize_) {
+    isolate_->Exit();
+  }
+}
+
+
+v8::Local<v8::Context> CcTest::NewContext(CcTestExtensionFlags extensions,
+                                          v8::Isolate* isolate) {
+    const char* extension_names[kMaxExtensions];
+    int extension_count = 0;
+  #define CHECK_EXTENSION_FLAG(Name, Id) \
+    if (extensions.Contains(Name##_ID)) extension_names[extension_count++] = Id;
+    EXTENSION_LIST(CHECK_EXTENSION_FLAG)
+  #undef CHECK_EXTENSION_FLAG
+    v8::ExtensionConfiguration config(extension_count, extension_names);
+    v8::Local<v8::Context> context = v8::Context::New(isolate, &config);
+    CHECK(!context.IsEmpty());
+    return context;
+}
+
+
+void CcTest::DisableAutomaticDispose() {
+  CHECK_EQ(kUnintialized, initialization_state_);
+  disable_automatic_dispose_ = true;
 }
 
 
@@ -69,13 +121,48 @@ static void PrintTestList(CcTest* current) {
 }
 
 
+class CcTestArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
+  virtual void* Allocate(size_t length) { return malloc(length); }
+  virtual void* AllocateUninitialized(size_t length) { return malloc(length); }
+  virtual void Free(void* data, size_t length) { free(data); }
+  // TODO(dslomov): Remove when v8:2823 is fixed.
+  virtual void Free(void* data) { UNREACHABLE(); }
+};
+
+
+static void SuggestTestHarness(int tests) {
+  if (tests == 0) return;
+  printf("Running multiple tests in sequence is deprecated and may cause "
+         "bogus failure.  Consider using tools/run-tests.py instead.\n");
+}
+
+
 int main(int argc, char* argv[]) {
+  v8::V8::InitializeICU();
+  v8::Platform* platform = v8::platform::CreateDefaultPlatform();
+  v8::V8::InitializePlatform(platform);
+
   v8::internal::FlagList::SetFlagsFromCommandLine(&argc, argv, true);
+
+  CcTestArrayBufferAllocator array_buffer_allocator;
+  v8::V8::SetArrayBufferAllocator(&array_buffer_allocator);
+
+  i::PrintExtension print_extension;
+  v8::RegisterExtension(&print_extension);
+  i::ProfilerExtension profiler_extension;
+  v8::RegisterExtension(&profiler_extension);
+  i::TraceExtension trace_extension;
+  v8::RegisterExtension(&trace_extension);
+
   int tests_run = 0;
   bool print_run_count = true;
   for (int i = 1; i < argc; i++) {
     char* arg = argv[i];
     if (strcmp(arg, "--list") == 0) {
+      // TODO(svenpanne) Serializer::enabled() and Serializer::code_address_map_
+      // are fundamentally broken, so we can't unconditionally initialize and
+      // dispose V8.
+      v8::V8::Initialize();
       PrintTestList(CcTest::last());
       print_run_count = false;
 
@@ -93,8 +180,8 @@ int main(int argc, char* argv[]) {
           if (test->enabled()
               && strcmp(test->file(), file) == 0
               && strcmp(test->name(), name) == 0) {
+            SuggestTestHarness(tests_run++);
             test->Run();
-            tests_run++;
           }
           test = test->prev();
         }
@@ -107,8 +194,8 @@ int main(int argc, char* argv[]) {
           if (test->enabled()
               && (strcmp(test->file(), file_or_name) == 0
                   || strcmp(test->name(), file_or_name) == 0)) {
+            SuggestTestHarness(tests_run++);
             test->Run();
-            tests_run++;
           }
           test = test->prev();
         }
@@ -118,7 +205,11 @@ int main(int argc, char* argv[]) {
   }
   if (print_run_count && tests_run != 1)
     printf("Ran %i tests.\n", tests_run);
-  v8::V8::Dispose();
+  CcTest::TearDown();
+  // TODO(svenpanne) See comment above.
+  // if (!disable_automatic_dispose_) v8::V8::Dispose();
+  v8::V8::ShutdownPlatform();
+  delete platform;
   return 0;
 }
 

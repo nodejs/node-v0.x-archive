@@ -25,11 +25,11 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "global-handles.h"
-#include "snapshot.h"
-#include "cctest.h"
+#include "src/global-handles.h"
+#include "src/snapshot.h"
+#include "test/cctest/cctest.h"
 
 using namespace v8::internal;
 
@@ -107,8 +107,9 @@ static int64_t TimeFromYearMonthDay(DateCache* date_cache,
   return (result + day - 1) * DateCache::kMsPerDay;
 }
 
+
 static void CheckDST(int64_t time) {
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = CcTest::i_isolate();
   DateCache* date_cache = isolate->date_cache();
   int64_t actual = date_cache->ToLocal(time);
   int64_t expected = time + date_cache->GetLocalOffsetFromOS() +
@@ -119,8 +120,8 @@ static void CheckDST(int64_t time) {
 
 TEST(DaylightSavingsTime) {
   LocalContext context;
-  v8::HandleScope scope;
-  Isolate* isolate = Isolate::Current();
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope scope(isolate);
   DateCacheMock::Rule rules[] = {
     {0, 2, 0, 10, 0, 3600},  // DST from March to November in any year.
     {2010, 2, 0, 7, 20, 3600},  // DST from March to August 20 in 2010.
@@ -133,7 +134,7 @@ TEST(DaylightSavingsTime) {
   DateCacheMock* date_cache =
     new DateCacheMock(local_offset_ms, rules, ARRAY_SIZE(rules));
 
-  isolate->set_date_cache(date_cache);
+  reinterpret_cast<Isolate*>(isolate)->set_date_cache(date_cache);
 
   int64_t start_of_2010 = TimeFromYearMonthDay(date_cache, 2010, 0, 1);
   int64_t start_of_2011 = TimeFromYearMonthDay(date_cache, 2011, 0, 1);
@@ -165,4 +166,26 @@ TEST(DaylightSavingsTime) {
   CheckDST(august_20 + 2 * 3600);
   CheckDST(august_20 + 2 * 3600 - 1000);
   CheckDST(august_20);
+}
+
+
+TEST(DateCacheVersion) {
+  FLAG_allow_natives_syntax = true;
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::Isolate::Scope isolate_scope(isolate);
+  v8::HandleScope scope(isolate);
+  v8::Handle<v8::Context> context = v8::Context::New(isolate);
+  v8::Context::Scope context_scope(context);
+  v8::Handle<v8::Array> date_cache_version =
+      v8::Handle<v8::Array>::Cast(CompileRun("%DateCacheVersion()"));
+
+  CHECK_EQ(1, static_cast<int32_t>(date_cache_version->Length()));
+  CHECK(date_cache_version->Get(0)->IsNumber());
+  CHECK_EQ(0.0, date_cache_version->Get(0)->NumberValue());
+
+  v8::Date::DateTimeConfigurationChangeNotification(isolate);
+
+  CHECK_EQ(1, static_cast<int32_t>(date_cache_version->Length()));
+  CHECK(date_cache_version->Get(0)->IsNumber());
+  CHECK_EQ(1.0, date_cache_version->Get(0)->NumberValue());
 }

@@ -3,7 +3,7 @@ npm-faq(7) -- Frequently Asked Questions
 
 ## Where can I find these docs in HTML?
 
-<https://npmjs.org/doc/>, or run:
+<https://docs.npmjs.com/>, or run:
 
     npm config set viewer browser
 
@@ -68,24 +68,27 @@ program that uses it.
 
 ## Whatever, I really want the old style 'everything global' style.
 
-Write your own package manager, then.  It's not that hard.
+Write your own package manager.  You could probably even wrap up `npm`
+in a shell script if you really wanted to.
 
 npm will not help you do something that is known to be a bad idea.
 
 ## Should I check my `node_modules` folder into git?
 
-Mikeal Rogers answered this question very well:
+Usually, no. Allow npm to resolve dependencies for your packages.
 
-<http://www.mikealrogers.com/posts/nodemodules-in-git.html>
+For packages you **deploy**, such as websites and apps,
+you should use npm shrinkwrap to lock down your full dependency tree:
 
-tl;dr
+<https://docs.npmjs.com/cli/shrinkwrap>
 
-* Check `node_modules` into git for things you **deploy**, such as
-  websites and apps.
-* Do not check `node_modules` into git for libraries and modules
-  intended to be reused.
-* Use npm to manage dependencies in your dev environment, but not in
-  your deployment scripts.
+If you are paranoid about depending on the npm ecosystem,
+you should run a private npm mirror or a private cache.
+
+If you want 100% confidence in being able to reproduce the specific bytes
+included in a deployment, you should use an additional mechanism that can
+verify contents rather than versions. For example,
+Amazon machine images, DigitalOcean snapshots, Heroku slugs, or simple tarballs.
 
 ## Is it 'npm' or 'NPM' or 'Npm'?
 
@@ -132,7 +135,7 @@ Arguments are greps.  `npm search jsdom` shows jsdom packages.
 
 ## How do I update npm?
 
-    npm update npm -g
+    npm install npm -g
 
 You can also update all outdated local packages by doing `npm update` without
 any arguments, or global packages by doing `npm update -g`.
@@ -144,7 +147,7 @@ command.)
 
 In those cases, you can do this:
 
-    curl https://npmjs.org/install.sh | sh
+    curl https://www.npmjs.com/install.sh | sh
 
 ## What is a `package`?
 
@@ -257,7 +260,7 @@ change it again?  npm doesn't currently track any state about past
 configuration settings, so this would be rather difficult to do
 properly.  It would have to track every previous value for this
 config, and always accept any of them, or else yesterday's install may
-be broken tomorrow.  Complexity hurdle #5.
+be broken tomorrow.  Complexity hurdle #4.
 
 Never going to happen.  The folder is named `node_modules`.  It is
 written indelibly in the Node Way, handed down from the ancient times
@@ -304,41 +307,73 @@ See `npm-registry(7)`.
 
 ## I forgot my password, and can't publish.  How do I reset it?
 
-Go to <https://npmjs.org/forgot>.
+Go to <https://npmjs.com/forgot>.
 
 ## I get ECONNREFUSED a lot.  What's up?
 
 Either the registry is down, or node's DNS isn't able to reach out.
 
-To check if the registry is down, open up <http://registry.npmjs.org/>
-in a web browser.  This will also tell you if you are just unable to
-access the internet for some reason.
+To check if the registry is down, open up
+<https://registry.npmjs.org/> in a web browser.  This will also tell
+you if you are just unable to access the internet for some reason.
 
-If the registry IS down, let me know by emailing <i@izs.me> or posting
-an issue at <https://github.com/isaacs/npm/issues>.  We'll have
-someone kick it or something.
+If the registry IS down, let us know by emailing <support@npmjs.com>
+or posting an issue at <https://github.com/npm/npm/issues>.  If it's
+down for the world (and not just on your local network) then we're
+probably already being pinged about it.
+
+You can also often get a faster response by visiting the #npm channel
+on Freenode IRC.
 
 ## Why no namespaces?
 
-Please see this discussion: <https://github.com/isaacs/npm/issues/798>
+npm has only one global namespace.  If you want to namespace your own packages,
+you may: simply use the `-` character to separate the names or use scoped
+packages.  npm is a mostly anarchic system.  There is not sufficient need to
+impose namespace rules on everyone.
 
-tl;dr - It doesn't actually make things better, and can make them worse.
+As of 2.0, npm supports scoped packages, which allow you to publish a group of
+related modules without worrying about name collisions.
 
-If you want to namespace your own packages, you may: simply use the
-`-` character to separate the names.  npm is a mostly anarchic system.
-There is not sufficient need to impose namespace rules on everyone.
+Every npm user owns the scope associated with their username.  For example, the
+user named `npm` owns the scope `@npm`.  Scoped packages are published inside a
+scope by naming them as if they were files under the scope directory, e.g., by
+setting `name` in `package.json` to `@npm/npm`.
+
+Scoped packages are supported by the public npm registry. The npm client is
+backwards-compatible with un-scoped registries, so it can be used to work with
+scoped and un-scoped registries at the same time.
+
+Unscoped packages can only depend on other unscoped packages. Scoped packages
+can depend on packages from their own scope, a different scope, or the public
+registry (unscoped).
+
+For the current documentation of scoped packages, see
+<https://docs.npmjs.com/misc/scope>
+
+References:
+
+1. For the reasoning behind the "one global namespace", please see  this
+   discussion: <https://github.com/npm/npm/issues/798> (TL;DR: It doesn't
+   actually make things better, and can make them worse.)
+
+2. For the pre-implementation discussion of the scoped package feature, see
+   this discussion: <https://github.com/npm/npm/issues/5239>
 
 ## Who does npm?
 
-`npm view npm author`
+npm was originally written by Isaac Z. Schlueter, and many others have
+contributed to it, some of them quite substantially.
 
-`npm view npm contributors`
+The npm open source project, The npm Registry, and [the community
+website](https://www.npmjs.com) are maintained and operated by the
+good folks at [npm, Inc.](http://www.npmjs.com)
 
 ## I have a question or request not addressed here. Where should I put it?
 
 Post an issue on the github project:
 
-* <https://github.com/isaacs/npm/issues>
+* <https://github.com/npm/npm/issues>
 
 ## Why does npm hate me?
 

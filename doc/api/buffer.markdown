@@ -20,10 +20,6 @@ encoding method.  Here are the different string encodings.
 * `'ascii'` - for 7 bit ASCII data only.  This encoding method is very fast, and
   will strip the high bit if set.
 
-  Note that when converting from string to buffer, this encoding converts a null
-  character (`'\0'` or `'\u0000'`) into `0x20` (character code of a space). If
-  you want to convert a null character into `0x00`, you should use `'utf8'`.
-
 * `'utf8'` - Multibyte encoded Unicode characters. Many web pages and other
   document formats use UTF-8.
 
@@ -41,9 +37,14 @@ encoding method.  Here are the different string encodings.
 
 * `'hex'` - Encode each byte as two hexadecimal characters.
 
-A `Buffer` object can also be used with typed arrays.  The buffer object is
-cloned to an `ArrayBuffer` that is used as the backing store for the typed
-array.  The memory of the buffer and the `ArrayBuffer` is not shared.
+Creating a typed array from a `Buffer` works with the following caveats:
+
+1. The buffer's memory is copied, not shared.
+
+2. The buffer's memory is interpreted as an array, not a byte array.  That is,
+   `new Uint32Array(new Buffer([1,2,3,4]))` creates a 4-element `Uint32Array`
+   with elements `[1,2,3,4]`, not a `Uint32Array` with a single element
+   `[0x1020304]` or `[0x4030201]`.
 
 NOTE: Node.js v0.8 simply retained a reference to the buffer in `array.buffer`
 instead of cloning it.
@@ -61,7 +62,11 @@ It can be constructed in a variety of ways.
 
 * `size` Number
 
-Allocates a new buffer of `size` octets.
+Allocates a new buffer of `size` octets. Note, `size` must be no more than
+[kMaxLength](smalloc.html#smalloc_smalloc_kmaxlength). Otherwise, a `RangeError`
+will be thrown here. Unlike `ArrayBuffers`, the underlying memory for buffers
+is not initialized. So the contents of a newly created `Buffer` is unknown.
+Use `buf.fill(0)`to initialize a buffer to zeroes.
 
 ### new Buffer(array)
 
@@ -69,7 +74,13 @@ Allocates a new buffer of `size` octets.
 
 Allocates a new buffer using an `array` of octets.
 
-### new Buffer(str, [encoding])
+### new Buffer(buffer)
+
+* `buffer` {Buffer}
+
+Copies the passed `buffer` data onto a new `Buffer` instance.
+
+### new Buffer(str[, encoding])
 
 * `str` String - string to encode.
 * `encoding` String - encoding to use, Optional.
@@ -84,7 +95,93 @@ Allocates a new buffer containing the given `str`.
 Returns true if the `encoding` is a valid encoding argument, or false
 otherwise.
 
-### buf.write(string, [offset], [length], [encoding])
+### Class Method: Buffer.isBuffer(obj)
+
+* `obj` Object
+* Return: Boolean
+
+Tests if `obj` is a `Buffer`.
+
+### Class Method: Buffer.byteLength(string[, encoding])
+
+* `string` String
+* `encoding` String, Optional, Default: 'utf8'
+* Return: Number
+
+Gives the actual byte length of a string. `encoding` defaults to `'utf8'`.
+This is not the same as `String.prototype.length` since that returns the
+number of *characters* in a string.
+
+Example:
+
+    str = '\u00bd + \u00bc = \u00be';
+
+    console.log(str + ": " + str.length + " characters, " +
+      Buffer.byteLength(str, 'utf8') + " bytes");
+
+    // ½ + ¼ = ¾: 9 characters, 12 bytes
+
+### Class Method: Buffer.concat(list[, totalLength])
+
+* `list` {Array} List of Buffer objects to concat
+* `totalLength` {Number} Total length of the buffers when concatenated
+
+Returns a buffer which is the result of concatenating all the buffers in
+the list together.
+
+If the list has no items, or if the totalLength is 0, then it returns a
+zero-length buffer.
+
+If the list has exactly one item, then the first item of the list is
+returned.
+
+If the list has more than one item, then a new Buffer is created.
+
+If totalLength is not provided, it is read from the buffers in the list.
+However, this adds an additional loop to the function, so it is faster
+to provide the length explicitly.
+
+### Class Method: Buffer.compare(buf1, buf2)
+
+* `buf1` {Buffer}
+* `buf2` {Buffer}
+
+The same as [`buf1.compare(buf2)`](#buffer_buf_compare_otherbuffer). Useful
+for sorting an Array of Buffers:
+
+    var arr = [Buffer('1234'), Buffer('0123')];
+    arr.sort(Buffer.compare);
+
+
+### buf.length
+
+* Number
+
+The size of the buffer in bytes.  Note that this is not necessarily the size
+of the contents. `length` refers to the amount of memory allocated for the
+buffer object.  It does not change when the contents of the buffer are changed.
+
+    buf = new Buffer(1234);
+
+    console.log(buf.length);
+    buf.write("some string", 0, "ascii");
+    console.log(buf.length);
+
+    // 1234
+    // 1234
+
+While the `length` property is not immutable, changing the value of `length`
+can result in undefined and inconsistent behavior. Applications that wish to
+modify the length of a buffer should therefore treat `length` as read-only and
+use `buf.slice` to create a new buffer.
+
+    buf = new Buffer(10);
+    buf.write("abcdefghj", 0, "ascii");
+    console.log(buf.length); // 10
+    buf = buf.slice(0,5);
+    console.log(buf.length); // 5
+
+### buf.write(string[, offset][, length][, encoding])
 
 * `string` String - data to be written to buffer
 * `offset` Number, Optional, Default: 0
@@ -102,29 +199,76 @@ The method will not write partial characters.
     len = buf.write('\u00bd + \u00bc = \u00be', 0);
     console.log(len + " bytes: " + buf.toString('utf8', 0, len));
 
-The number of characters written (which may be different than the number of
-bytes written) is set in `Buffer._charsWritten` and will be overwritten the
-next time `buf.write()` is called.
+### buf.writeUIntLE(value, offset, byteLength[, noAssert])
+### buf.writeUIntBE(value, offset, byteLength[, noAssert])
+### buf.writeIntLE(value, offset, byteLength[, noAssert])
+### buf.writeIntBE(value, offset, byteLength[, noAssert])
 
+* `value` {Number} Bytes to be written to buffer
+* `offset` {Number} `0 <= offset <= buf.length`
+* `byteLength` {Number} `0 < byteLength <= 6`
+* `noAssert` {Boolean} Default: false
+* Return: {Number}
 
-### buf.toString([encoding], [start], [end])
+Writes `value` to the buffer at the specified `offset` and `byteLength`.
+Supports up to 48 bits of accuracy. For example:
+
+    var b = new Buffer(6);
+    b.writeUIntBE(0x1234567890ab, 0, 6);
+    // <Buffer 12 34 56 78 90 ab>
+
+Set `noAssert` to `true` to skip validation of `value` and `offset`. Defaults
+to `false`.
+
+### buf.readUIntLE(offset, byteLength[, noAssert])
+### buf.readUIntBE(offset, byteLength[, noAssert])
+### buf.readIntLE(offset, byteLength[, noAssert])
+### buf.readIntBE(offset, byteLength[, noAssert])
+
+* `offset` {Number} `0 <= offset <= buf.length`
+* `byteLength` {Number} `0 < byteLength <= 6`
+* `noAssert` {Boolean} Default: false
+* Return: {Number}
+
+A generalized version of all numeric read methods. Supports up to 48 bits of
+accuracy. For example:
+
+    var b = new Buffer(6);
+    b.writeUint16LE(0x90ab, 0);
+    b.writeUInt32LE(0x12345678, 2);
+    b.readUIntLE(0, 6).toString(16);  // Specify 6 bytes (48 bits)
+    // output: '1234567890ab'
+
+Set `noAssert` to true to skip validation of `offset`. This means that `offset`
+may be beyond the end of the buffer. Defaults to `false`.
+
+### buf.toString([encoding][, start][, end])
 
 * `encoding` String, Optional, Default: 'utf8'
 * `start` Number, Optional, Default: 0
 * `end` Number, Optional, Default: `buffer.length`
 
-Decodes and returns a string from buffer data encoded with `encoding`
-(defaults to `'utf8'`) beginning at `start` (defaults to `0`) and ending at
-`end` (defaults to `buffer.length`).
+Decodes and returns a string from buffer data encoded using the specified
+character set encoding. If `encoding` is `undefined` or `null`, then `encoding`
+defaults to `'utf8'`. The `start` and `end` parameters default to `0` and
+`buffer.length` when `undefined`.
+
+    buf = new Buffer(26);
+    for (var i = 0 ; i < 26 ; i++) {
+      buf[i] = i + 97; // 97 is ASCII a
+    }
+    buf.toString('ascii'); // outputs: abcdefghijklmnopqrstuvwxyz
+    buf.toString('ascii',0,5); // outputs: abcde
+    buf.toString('utf8',0,5); // outputs: abcde
+    buf.toString(undefined,0,5); // encoding defaults to 'utf8', outputs abcde
 
 See `buffer.write()` example, above.
 
 
 ### buf.toJSON()
 
-Returns a JSON-representation of the Buffer instance, which is identical to the
-output for JSON Arrays. `JSON.stringify` implicitly calls this function when
-stringifying a Buffer instance.
+Returns a JSON-representation of the Buffer instance.  `JSON.stringify`
+implicitly calls this function when stringifying a Buffer instance.
 
 Example:
 
@@ -132,9 +276,13 @@ Example:
     var json = JSON.stringify(buf);
 
     console.log(json);
-    // '[116,101,115,116]'
+    // '{"type":"Buffer","data":[116,101,115,116]}'
 
-    var copy = new Buffer(JSON.parse(json));
+    var copy = JSON.parse(json, function(key, value) {
+        return value && value.type === 'Buffer'
+          ? new Buffer(value.data)
+          : value;
+      });
 
     console.log(copy);
     // <Buffer 74 65 73 74>
@@ -160,82 +308,31 @@ Example: copy an ASCII string into a buffer, one byte at a time:
 
     // node.js
 
-### Class Method: Buffer.isBuffer(obj)
+### buf.equals(otherBuffer)
 
-* `obj` Object
-* Return: Boolean
+* `otherBuffer` {Buffer}
 
-Tests if `obj` is a `Buffer`.
+Returns a boolean of whether `this` and `otherBuffer` have the same
+bytes.
 
-### Class Method: Buffer.byteLength(string, [encoding])
+### buf.compare(otherBuffer)
 
-* `string` String
-* `encoding` String, Optional, Default: 'utf8'
-* Return: Number
+* `otherBuffer` {Buffer}
 
-Gives the actual byte length of a string. `encoding` defaults to `'utf8'`.
-This is not the same as `String.prototype.length` since that returns the
-number of *characters* in a string.
+Returns a number indicating whether `this` comes before or after or is
+the same as the `otherBuffer` in sort order.
 
-Example:
-
-    str = '\u00bd + \u00bc = \u00be';
-
-    console.log(str + ": " + str.length + " characters, " +
-      Buffer.byteLength(str, 'utf8') + " bytes");
-
-    // ½ + ¼ = ¾: 9 characters, 12 bytes
-
-### Class Method: Buffer.concat(list, [totalLength])
-
-* `list` {Array} List of Buffer objects to concat
-* `totalLength` {Number} Total length of the buffers when concatenated
-
-Returns a buffer which is the result of concatenating all the buffers in
-the list together.
-
-If the list has no items, or if the totalLength is 0, then it returns a
-zero-length buffer.
-
-If the list has exactly one item, then the first item of the list is
-returned.
-
-If the list has more than one item, then a new Buffer is created.
-
-If totalLength is not provided, it is read from the buffers in the list.
-However, this adds an additional loop to the function, so it is faster
-to provide the length explicitly.
-
-### buf.length
-
-* Number
-
-The size of the buffer in bytes.  Note that this is not necessarily the size
-of the contents. `length` refers to the amount of memory allocated for the
-buffer object.  It does not change when the contents of the buffer are changed.
-
-    buf = new Buffer(1234);
-
-    console.log(buf.length);
-    buf.write("some string", 0, "ascii");
-    console.log(buf.length);
-
-    // 1234
-    // 1234
-
-### buf.copy(targetBuffer, [targetStart], [sourceStart], [sourceEnd])
+### buf.copy(targetBuffer[, targetStart][, sourceStart][, sourceEnd])
 
 * `targetBuffer` Buffer object - Buffer to copy into
 * `targetStart` Number, Optional, Default: 0
 * `sourceStart` Number, Optional, Default: 0
 * `sourceEnd` Number, Optional, Default: `buffer.length`
 
-Does copy between buffers. The source and target regions can be overlapped.
-`targetStart` and `sourceStart` default to `0`.
-`sourceEnd` defaults to `buffer.length`.
-
-All values passed that are `undefined`/`NaN` or are out of bounds are set equal
-to their respective defaults.
+Copies data from a region of this buffer to a region in the target buffer even
+if the target memory region overlaps with the source. If `undefined` the
+`targetStart` and `sourceStart` parameters default to `0` while `sourceEnd`
+defaults to `buffer.length`.
 
 Example: build two Buffers, then copy `buf1` from byte 16 through byte 19
 into `buf2`, starting at the 8th byte in `buf2`.
@@ -253,8 +350,22 @@ into `buf2`, starting at the 8th byte in `buf2`.
 
     // !!!!!!!!qrst!!!!!!!!!!!!!
 
+Example: Build a single buffer, then copy data from one region to an overlapping
+region in the same buffer
 
-### buf.slice([start], [end])
+    buf = new Buffer(26);
+
+    for (var i = 0 ; i < 26 ; i++) {
+      buf[i] = i + 97; // 97 is ASCII a
+    }
+
+    buf.copy(buf, 0, 4, 10);
+    console.log(buf.toString());
+
+    // efghijghijklmnopqrstuvwxyz
+
+
+### buf.slice([start][, end])
 
 * `start` Number, Optional, Default: 0
 * `end` Number, Optional, Default: `buffer.length`
@@ -282,7 +393,7 @@ byte from the original Buffer.
     // abc
     // !bc
 
-### buf.readUInt8(offset, [noAssert])
+### buf.readUInt8(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -311,8 +422,8 @@ Example:
     // 0x23
     // 0x42
 
-### buf.readUInt16LE(offset, [noAssert])
-### buf.readUInt16BE(offset, [noAssert])
+### buf.readUInt16LE(offset[, noAssert])
+### buf.readUInt16BE(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -347,8 +458,8 @@ Example:
     // 0x2342
     // 0x4223
 
-### buf.readUInt32LE(offset, [noAssert])
-### buf.readUInt32BE(offset, [noAssert])
+### buf.readUInt32LE(offset[, noAssert])
+### buf.readUInt32BE(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -375,7 +486,7 @@ Example:
     // 0x03042342
     // 0x42230403
 
-### buf.readInt8(offset, [noAssert])
+### buf.readInt8(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -389,8 +500,8 @@ may be beyond the end of the buffer. Defaults to `false`.
 Works as `buffer.readUInt8`, except buffer contents are treated as two's
 complement signed values.
 
-### buf.readInt16LE(offset, [noAssert])
-### buf.readInt16BE(offset, [noAssert])
+### buf.readInt16LE(offset[, noAssert])
+### buf.readInt16BE(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -405,8 +516,8 @@ may be beyond the end of the buffer. Defaults to `false`.
 Works as `buffer.readUInt16*`, except buffer contents are treated as two's
 complement signed values.
 
-### buf.readInt32LE(offset, [noAssert])
-### buf.readInt32BE(offset, [noAssert])
+### buf.readInt32LE(offset[, noAssert])
+### buf.readInt32BE(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -421,8 +532,8 @@ may be beyond the end of the buffer. Defaults to `false`.
 Works as `buffer.readUInt32*`, except buffer contents are treated as two's
 complement signed values.
 
-### buf.readFloatLE(offset, [noAssert])
-### buf.readFloatBE(offset, [noAssert])
+### buf.readFloatLE(offset[, noAssert])
+### buf.readFloatBE(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -447,8 +558,8 @@ Example:
 
     // 0x01
 
-### buf.readDoubleLE(offset, [noAssert])
-### buf.readDoubleBE(offset, [noAssert])
+### buf.readDoubleLE(offset[, noAssert])
+### buf.readDoubleBE(offset[, noAssert])
 
 * `offset` Number
 * `noAssert` Boolean, Optional, Default: false
@@ -477,7 +588,7 @@ Example:
 
     // 0.3333333333333333
 
-### buf.writeUInt8(value, offset, [noAssert])
+### buf.writeUInt8(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -503,8 +614,8 @@ Example:
 
     // <Buffer 03 04 23 42>
 
-### buf.writeUInt16LE(value, offset, [noAssert])
-### buf.writeUInt16BE(value, offset, [noAssert])
+### buf.writeUInt16LE(value, offset[, noAssert])
+### buf.writeUInt16BE(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -534,8 +645,8 @@ Example:
     // <Buffer de ad be ef>
     // <Buffer ad de ef be>
 
-### buf.writeUInt32LE(value, offset, [noAssert])
-### buf.writeUInt32BE(value, offset, [noAssert])
+### buf.writeUInt32LE(value, offset[, noAssert])
+### buf.writeUInt32BE(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -563,7 +674,7 @@ Example:
     // <Buffer fe ed fa ce>
     // <Buffer ce fa ed fe>
 
-### buf.writeInt8(value, offset, [noAssert])
+### buf.writeInt8(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -580,8 +691,8 @@ should not be used unless you are certain of correctness. Defaults to `false`.
 Works as `buffer.writeUInt8`, except value is written out as a two's complement
 signed integer into `buffer`.
 
-### buf.writeInt16LE(value, offset, [noAssert])
-### buf.writeInt16BE(value, offset, [noAssert])
+### buf.writeInt16LE(value, offset[, noAssert])
+### buf.writeInt16BE(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -598,8 +709,8 @@ should not be used unless you are certain of correctness. Defaults to `false`.
 Works as `buffer.writeUInt16*`, except value is written out as a two's
 complement signed integer into `buffer`.
 
-### buf.writeInt32LE(value, offset, [noAssert])
-### buf.writeInt32BE(value, offset, [noAssert])
+### buf.writeInt32LE(value, offset[, noAssert])
+### buf.writeInt32BE(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -616,8 +727,8 @@ should not be used unless you are certain of correctness. Defaults to `false`.
 Works as `buffer.writeUInt32*`, except value is written out as a two's
 complement signed integer into `buffer`.
 
-### buf.writeFloatLE(value, offset, [noAssert])
-### buf.writeFloatBE(value, offset, [noAssert])
+### buf.writeFloatLE(value, offset[, noAssert])
+### buf.writeFloatBE(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -645,8 +756,8 @@ Example:
     // <Buffer 4f 4a fe bb>
     // <Buffer bb fe 4a 4f>
 
-### buf.writeDoubleLE(value, offset, [noAssert])
-### buf.writeDoubleBE(value, offset, [noAssert])
+### buf.writeDoubleLE(value, offset[, noAssert])
+### buf.writeDoubleBE(value, offset[, noAssert])
 
 * `value` Number
 * `offset` Number
@@ -674,7 +785,7 @@ Example:
     // <Buffer 43 eb d5 b7 dd f9 5f d7>
     // <Buffer d7 5f f9 dd b7 d5 eb 43>
 
-### buf.fill(value, [offset], [end])
+### buf.fill(value[, offset][, end])
 
 * `value`
 * `offset` Number, Optional
@@ -699,11 +810,28 @@ Note that this is a property on the buffer module returned by
 
 ## Class: SlowBuffer
 
-This class is primarily for internal use.  JavaScript programs should
-use Buffer instead of using SlowBuffer.
+Returns an un-pooled `Buffer`.
 
-In order to avoid the overhead of allocating many C++ Buffer objects for
-small blocks of memory in the lifetime of a server, Node allocates memory
-in 8Kb (8192 byte) chunks.  If a buffer is smaller than this size, then it
-will be backed by a parent SlowBuffer object.  If it is larger than this,
-then Node will allocate a SlowBuffer slab for it directly.
+In order to avoid the garbage collection overhead of creating many individually
+allocated Buffers, by default allocations under 4KB are sliced from a single
+larger allocated object. This approach improves both performance and memory
+usage since v8 does not need to track and cleanup as many `Persistent` objects.
+
+In the case where a developer may need to retain a small chunk of memory from a
+pool for an indeterminate amount of time it may be appropriate to create an
+un-pooled Buffer instance using SlowBuffer and copy out the relevant bits.
+
+    // need to keep around a few small chunks of memory
+    var store = [];
+
+    socket.on('readable', function() {
+      var data = socket.read();
+      // allocate for retained data
+      var sb = new SlowBuffer(10);
+      // copy the data into the new allocation
+      data.copy(sb, 0, 0, 10);
+      store.push(sb);
+    });
+
+Though this should used sparingly and only be a last resort *after* a developer
+has actively observed undue memory retention in their applications.

@@ -27,24 +27,17 @@
 
 #include <stdlib.h>
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "debug.h"
-#include "disasm.h"
-#include "disassembler.h"
-#include "macro-assembler.h"
-#include "serialize.h"
-#include "cctest.h"
+#include "src/debug.h"
+#include "src/disasm.h"
+#include "src/disassembler.h"
+#include "src/macro-assembler.h"
+#include "src/serialize.h"
+#include "src/stub-cache.h"
+#include "test/cctest/cctest.h"
 
 using namespace v8::internal;
-
-static v8::Persistent<v8::Context> env;
-
-static void InitializeVM() {
-  if (env.IsEmpty()) {
-    env = v8::Context::New();
-  }
-}
 
 
 #define __ assm.
@@ -55,18 +48,19 @@ static void DummyStaticFunction(Object* result) {
 
 
 TEST(DisasmX64) {
-  InitializeVM();
-  v8::HandleScope scope;
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
   v8::internal::byte buffer[2048];
-  Assembler assm(Isolate::Current(), buffer, sizeof buffer);
+  Assembler assm(isolate, buffer, sizeof buffer);
   DummyStaticFunction(NULL);  // just bloody use it (DELETE; debugging)
 
   // Short immediate instructions
   __ addq(rax, Immediate(12345678));
-  __ or_(rax, Immediate(12345678));
+  __ orq(rax, Immediate(12345678));
   __ subq(rax, Immediate(12345678));
-  __ xor_(rax, Immediate(12345678));
-  __ and_(rax, Immediate(12345678));
+  __ xorq(rax, Immediate(12345678));
+  __ andq(rax, Immediate(12345678));
 
   // ---- This one caused crash
   __ movq(rbx,  Operand(rsp, rcx, times_2, 0));  // [rsp+rcx*4]
@@ -76,39 +70,43 @@ TEST(DisasmX64) {
   __ addq(rdx, Operand(rbx, 0));
   __ addq(rdx, Operand(rbx, 16));
   __ addq(rdx, Operand(rbx, 1999));
+  __ addq(rdx, Operand(rbx, -4));
+  __ addq(rdx, Operand(rbx, -1999));
   __ addq(rdx, Operand(rsp, 0));
   __ addq(rdx, Operand(rsp, 16));
   __ addq(rdx, Operand(rsp, 1999));
+  __ addq(rdx, Operand(rsp, -4));
+  __ addq(rdx, Operand(rsp, -1999));
+  __ nop();
+  __ addq(rsi, Operand(rcx, times_4, 0));
+  __ addq(rsi, Operand(rcx, times_4, 24));
+  __ addq(rsi, Operand(rcx, times_4, -4));
+  __ addq(rsi, Operand(rcx, times_4, -1999));
   __ nop();
   __ addq(rdi, Operand(rbp, rcx, times_4, 0));
   __ addq(rdi, Operand(rbp, rcx, times_4, 12));
+  __ addq(rdi, Operand(rbp, rcx, times_4, -8));
+  __ addq(rdi, Operand(rbp, rcx, times_4, -3999));
   __ addq(Operand(rbp, rcx, times_4, 12), Immediate(12));
 
   __ nop();
   __ addq(rbx, Immediate(12));
   __ nop();
   __ nop();
-  __ and_(rdx, Immediate(3));
-  __ and_(rdx, Operand(rsp, 4));
+  __ andq(rdx, Immediate(3));
+  __ andq(rdx, Operand(rsp, 4));
   __ cmpq(rdx, Immediate(3));
   __ cmpq(rdx, Operand(rsp, 4));
   __ cmpq(Operand(rbp, rcx, times_4, 0), Immediate(1000));
   __ cmpb(rbx, Operand(rbp, rcx, times_2, 0));
   __ cmpb(Operand(rbp, rcx, times_2, 0), rbx);
-  __ or_(rdx, Immediate(3));
-  __ xor_(rdx, Immediate(3));
+  __ orq(rdx, Immediate(3));
+  __ xorq(rdx, Immediate(3));
   __ nop();
-  {
-    CHECK(CpuFeatures::IsSupported(CPUID));
-    CpuFeatures::Scope fscope(CPUID);
-    __ cpuid();
-  }
-  {
-    CHECK(CpuFeatures::IsSupported(RDTSC));
-    CpuFeatures::Scope fscope(RDTSC);
-    __ rdtsc();
-  }
+  __ cpuid();
+  __ movsxbl(rdx, Operand(rcx, 0));
   __ movsxbq(rdx, Operand(rcx, 0));
+  __ movsxwl(rdx, Operand(rcx, 0));
   __ movsxwq(rdx, Operand(rcx, 0));
   __ movzxbl(rdx, Operand(rcx, 0));
   __ movzxwl(rdx, Operand(rcx, 0));
@@ -116,23 +114,23 @@ TEST(DisasmX64) {
   __ movzxwq(rdx, Operand(rcx, 0));
 
   __ nop();
-  __ imul(rdx, rcx);
+  __ imulq(rdx, rcx);
   __ shld(rdx, rcx);
   __ shrd(rdx, rcx);
   __ bts(Operand(rdx, 0), rcx);
   __ bts(Operand(rbx, rcx, times_4, 0), rcx);
   __ nop();
-  __ push(Immediate(12));
-  __ push(Immediate(23456));
-  __ push(rcx);
-  __ push(rsi);
-  __ push(Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
-  __ push(Operand(rbx, rcx, times_4, 0));
-  __ push(Operand(rbx, rcx, times_4, 0));
-  __ push(Operand(rbx, rcx, times_4, 10000));
-  __ pop(rdx);
-  __ pop(rax);
-  __ pop(Operand(rbx, rcx, times_4, 0));
+  __ pushq(Immediate(12));
+  __ pushq(Immediate(23456));
+  __ pushq(rcx);
+  __ pushq(rsi);
+  __ pushq(Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
+  __ pushq(Operand(rbx, rcx, times_4, 0));
+  __ pushq(Operand(rbx, rcx, times_4, 0));
+  __ pushq(Operand(rbx, rcx, times_4, 10000));
+  __ popq(rdx);
+  __ popq(rax);
+  __ popq(Operand(rbx, rcx, times_4, 0));
   __ nop();
 
   __ addq(rdx, Operand(rsp, 16));
@@ -162,42 +160,43 @@ TEST(DisasmX64) {
   __ nop();
   __ idivq(rdx);
   __ mul(rdx);
-  __ neg(rdx);
-  __ not_(rdx);
+  __ negq(rdx);
+  __ notq(rdx);
   __ testq(Operand(rbx, rcx, times_4, 10000), rdx);
 
-  __ imul(rdx, Operand(rbx, rcx, times_4, 10000));
-  __ imul(rdx, rcx, Immediate(12));
-  __ imul(rdx, rcx, Immediate(1000));
+  __ imulq(rdx, Operand(rbx, rcx, times_4, 10000));
+  __ imulq(rdx, rcx, Immediate(12));
+  __ imulq(rdx, rcx, Immediate(1000));
 
   __ incq(rdx);
   __ incq(Operand(rbx, rcx, times_4, 10000));
-  __ push(Operand(rbx, rcx, times_4, 10000));
-  __ pop(Operand(rbx, rcx, times_4, 10000));
-  __ jmp(Operand(rbx, rcx, times_4, 10000));
+  __ pushq(Operand(rbx, rcx, times_4, 10000));
+  __ popq(Operand(rbx, rcx, times_4, 10000));
+  // TODO(mstarzinger): The following is protected.
+  // __ jmp(Operand(rbx, rcx, times_4, 10000));
 
-  __ lea(rdx, Operand(rbx, rcx, times_4, 10000));
-  __ or_(rdx, Immediate(12345));
-  __ or_(rdx, Operand(rbx, rcx, times_4, 10000));
+  __ leaq(rdx, Operand(rbx, rcx, times_4, 10000));
+  __ orq(rdx, Immediate(12345));
+  __ orq(rdx, Operand(rbx, rcx, times_4, 10000));
 
   __ nop();
 
-  __ rcl(rdx, Immediate(1));
-  __ rcl(rdx, Immediate(7));
-  __ rcr(rdx, Immediate(1));
-  __ rcr(rdx, Immediate(7));
-  __ sar(rdx, Immediate(1));
-  __ sar(rdx, Immediate(6));
-  __ sar_cl(rdx);
+  __ rclq(rdx, Immediate(1));
+  __ rclq(rdx, Immediate(7));
+  __ rcrq(rdx, Immediate(1));
+  __ rcrq(rdx, Immediate(7));
+  __ sarq(rdx, Immediate(1));
+  __ sarq(rdx, Immediate(6));
+  __ sarq_cl(rdx);
   __ sbbq(rdx, rbx);
   __ shld(rdx, rbx);
-  __ shl(rdx, Immediate(1));
-  __ shl(rdx, Immediate(6));
-  __ shl_cl(rdx);
+  __ shlq(rdx, Immediate(1));
+  __ shlq(rdx, Immediate(6));
+  __ shlq_cl(rdx);
   __ shrd(rdx, rbx);
-  __ shr(rdx, Immediate(1));
-  __ shr(rdx, Immediate(7));
-  __ shr_cl(rdx);
+  __ shrq(rdx, Immediate(1));
+  __ shrq(rdx, Immediate(7));
+  __ shrq_cl(rdx);
 
 
   // Immediates
@@ -205,22 +204,22 @@ TEST(DisasmX64) {
   __ addq(rbx, Immediate(12));
   __ addq(Operand(rdx, rcx, times_4, 10000), Immediate(12));
 
-  __ and_(rbx, Immediate(12345));
+  __ andq(rbx, Immediate(12345));
 
   __ cmpq(rbx, Immediate(12345));
   __ cmpq(rbx, Immediate(12));
   __ cmpq(Operand(rdx, rcx, times_4, 10000), Immediate(12));
   __ cmpb(rax, Immediate(100));
 
-  __ or_(rbx, Immediate(12345));
+  __ orq(rbx, Immediate(12345));
 
   __ subq(rbx, Immediate(12));
   __ subq(Operand(rdx, rcx, times_4, 10000), Immediate(12));
 
-  __ xor_(rbx, Immediate(12345));
+  __ xorq(rbx, Immediate(12345));
 
-  __ imul(rdx, rcx, Immediate(12));
-  __ imul(rdx, rcx, Immediate(1000));
+  __ imulq(rdx, rcx, Immediate(12));
+  __ imulq(rdx, rcx, Immediate(1000));
 
   __ cld();
 
@@ -233,8 +232,8 @@ TEST(DisasmX64) {
   __ testb(Operand(rax, -20), Immediate(0x9A));
   __ nop();
 
-  __ xor_(rdx, Immediate(12345));
-  __ xor_(rdx, Operand(rbx, rcx, times_8, 10000));
+  __ xorq(rdx, Immediate(12345));
+  __ xorq(rdx, Operand(rbx, rcx, times_8, 10000));
   __ bts(Operand(rbx, rcx, times_8, 10000), rdx);
   __ hlt();
   __ int3();
@@ -250,22 +249,20 @@ TEST(DisasmX64) {
   __ call(&L2);
   __ nop();
   __ bind(&L2);
-  __ call(Operand(rbx, rcx, times_4, 10000));
+  // TODO(mstarzinger): The following is protected.
+  // __ call(Operand(rbx, rcx, times_4, 10000));
   __ nop();
-  Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-      Builtins::kLoadIC_Initialize));
+  Handle<Code> ic(LoadIC::initialize_stub(isolate, NOT_CONTEXTUAL));
   __ call(ic, RelocInfo::CODE_TARGET);
   __ nop();
   __ nop();
 
   __ jmp(&L1);
-  __ jmp(Operand(rbx, rcx, times_4, 10000));
-#ifdef ENABLE_DEBUGGER_SUPPORT
+  // TODO(mstarzinger): The following is protected.
+  // __ jmp(Operand(rbx, rcx, times_4, 10000));
   ExternalReference after_break_target =
-      ExternalReference(Debug_Address::AfterBreakTarget(),
-                        assm.isolate());
+      ExternalReference::debug_after_break_target_address(isolate);
   USE(after_break_target);
-#endif  // ENABLE_DEBUGGER_SUPPORT
   __ jmp(ic, RelocInfo::CODE_TARGET);
   __ nop();
 
@@ -347,62 +344,88 @@ TEST(DisasmX64) {
   __ fdivp(3);
   __ fcompp();
   __ fwait();
+  __ frndint();
+  __ fninit();
   __ nop();
-  {
-    if (CpuFeatures::IsSupported(SSE2)) {
-      CpuFeatures::Scope fscope(SSE2);
-      __ cvttss2si(rdx, Operand(rbx, rcx, times_4, 10000));
-      __ cvttss2si(rdx, xmm1);
-      __ cvttsd2si(rdx, Operand(rbx, rcx, times_4, 10000));
-      __ cvttsd2si(rdx, xmm1);
-      __ cvttsd2siq(rdx, xmm1);
-      __ addsd(xmm1, xmm0);
-      __ mulsd(xmm1, xmm0);
-      __ subsd(xmm1, xmm0);
-      __ divsd(xmm1, xmm0);
-      __ movsd(xmm1, Operand(rbx, rcx, times_4, 10000));
-      __ movsd(Operand(rbx, rcx, times_4, 10000), xmm1);
-      __ ucomisd(xmm0, xmm1);
 
-      // 128 bit move instructions.
-      __ movdqa(xmm0, Operand(rbx, rcx, times_4, 10000));
-      __ movdqa(Operand(rbx, rcx, times_4, 10000), xmm0);
-    }
+  // SSE instruction
+  {
+    // Move operation
+    __ cvttss2si(rdx, Operand(rbx, rcx, times_4, 10000));
+    __ cvttss2si(rdx, xmm1);
+    __ movaps(xmm0, xmm1);
+
+    // logic operation
+    __ andps(xmm0, xmm1);
+    __ andps(xmm0, Operand(rbx, rcx, times_4, 10000));
+    __ orps(xmm0, xmm1);
+    __ orps(xmm0, Operand(rbx, rcx, times_4, 10000));
+    __ xorps(xmm0, xmm1);
+    __ xorps(xmm0, Operand(rbx, rcx, times_4, 10000));
+
+    // Arithmetic operation
+    __ addps(xmm1, xmm0);
+    __ addps(xmm1, Operand(rbx, rcx, times_4, 10000));
+    __ subps(xmm1, xmm0);
+    __ subps(xmm1, Operand(rbx, rcx, times_4, 10000));
+    __ mulps(xmm1, xmm0);
+    __ mulps(xmm1, Operand(rbx, rcx, times_4, 10000));
+    __ divps(xmm1, xmm0);
+    __ divps(xmm1, Operand(rbx, rcx, times_4, 10000));
+  }
+  // SSE 2 instructions
+  {
+    __ cvttsd2si(rdx, Operand(rbx, rcx, times_4, 10000));
+    __ cvttsd2si(rdx, xmm1);
+    __ cvttsd2siq(rdx, xmm1);
+    __ movsd(xmm1, Operand(rbx, rcx, times_4, 10000));
+    __ movsd(Operand(rbx, rcx, times_4, 10000), xmm1);
+    // 128 bit move instructions.
+    __ movdqa(xmm0, Operand(rbx, rcx, times_4, 10000));
+    __ movdqa(Operand(rbx, rcx, times_4, 10000), xmm0);
+
+    __ addsd(xmm1, xmm0);
+    __ mulsd(xmm1, xmm0);
+    __ subsd(xmm1, xmm0);
+    __ divsd(xmm1, xmm0);
+    __ ucomisd(xmm0, xmm1);
+
+    __ andpd(xmm0, xmm1);
   }
 
   // cmov.
   {
-    if (CpuFeatures::IsSupported(CMOV)) {
-      CpuFeatures::Scope use_cmov(CMOV);
-      __ cmovq(overflow, rax, Operand(rax, 0));
-      __ cmovq(no_overflow, rax, Operand(rax, 1));
-      __ cmovq(below, rax, Operand(rax, 2));
-      __ cmovq(above_equal, rax, Operand(rax, 3));
-      __ cmovq(equal, rax, Operand(rbx, 0));
-      __ cmovq(not_equal, rax, Operand(rbx, 1));
-      __ cmovq(below_equal, rax, Operand(rbx, 2));
-      __ cmovq(above, rax, Operand(rbx, 3));
-      __ cmovq(sign, rax, Operand(rcx, 0));
-      __ cmovq(not_sign, rax, Operand(rcx, 1));
-      __ cmovq(parity_even, rax, Operand(rcx, 2));
-      __ cmovq(parity_odd, rax, Operand(rcx, 3));
-      __ cmovq(less, rax, Operand(rdx, 0));
-      __ cmovq(greater_equal, rax, Operand(rdx, 1));
-      __ cmovq(less_equal, rax, Operand(rdx, 2));
-      __ cmovq(greater, rax, Operand(rdx, 3));
+    __ cmovq(overflow, rax, Operand(rax, 0));
+    __ cmovq(no_overflow, rax, Operand(rax, 1));
+    __ cmovq(below, rax, Operand(rax, 2));
+    __ cmovq(above_equal, rax, Operand(rax, 3));
+    __ cmovq(equal, rax, Operand(rbx, 0));
+    __ cmovq(not_equal, rax, Operand(rbx, 1));
+    __ cmovq(below_equal, rax, Operand(rbx, 2));
+    __ cmovq(above, rax, Operand(rbx, 3));
+    __ cmovq(sign, rax, Operand(rcx, 0));
+    __ cmovq(not_sign, rax, Operand(rcx, 1));
+    __ cmovq(parity_even, rax, Operand(rcx, 2));
+    __ cmovq(parity_odd, rax, Operand(rcx, 3));
+    __ cmovq(less, rax, Operand(rdx, 0));
+    __ cmovq(greater_equal, rax, Operand(rdx, 1));
+    __ cmovq(less_equal, rax, Operand(rdx, 2));
+    __ cmovq(greater, rax, Operand(rdx, 3));
+  }
+
+  {
+    if (CpuFeatures::IsSupported(SSE4_1)) {
+      CpuFeatureScope scope(&assm, SSE4_1);
+      __ extractps(rax, xmm1, 0);
     }
   }
 
-  // andpd, etc.
+  // xchg.
   {
-    if (CpuFeatures::IsSupported(SSE2)) {
-      CpuFeatures::Scope fscope(SSE2);
-      __ andpd(xmm0, xmm1);
-      __ andpd(xmm1, xmm2);
-
-      __ movaps(xmm0, xmm1);
-      __ movaps(xmm1, xmm2);
-    }
+    __ xchgq(rax, rax);
+    __ xchgq(rax, rbx);
+    __ xchgq(rbx, rbx);
+    __ xchgq(rbx, Operand(rsp, 12));
   }
 
   // Nop instructions
@@ -414,15 +437,14 @@ TEST(DisasmX64) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = HEAP->CreateCode(
-      desc,
-      Code::ComputeFlags(Code::STUB),
-      Handle<Object>(HEAP->undefined_value()))->ToObjectChecked();
-  CHECK(code->IsCode());
+  Handle<Code> code = isolate->factory()->NewCode(
+      desc, Code::ComputeFlags(Code::STUB), Handle<Code>());
+  USE(code);
 #ifdef OBJECT_PRINT
-  Code::cast(code)->Print();
-  byte* begin = Code::cast(code)->instruction_start();
-  byte* end = begin + Code::cast(code)->instruction_size();
+  OFStream os(stdout);
+  code->Print(os);
+  byte* begin = code->instruction_start();
+  byte* end = begin + code->instruction_size();
   disasm::Disassembler::Disassemble(stdout, begin, end);
 #endif
 }

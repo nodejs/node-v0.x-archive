@@ -22,6 +22,7 @@
 var common = require('../common');
 var assert = require('assert');
 var os = require('os');
+var path = require('path');
 var util = require('util');
 
 if (os.type() != 'SunOS') {
@@ -90,6 +91,14 @@ dtrace.on('exit', function (code) {
    */
   var mdb = spawn('mdb', args, { stdio: 'pipe' });
 
+  var mod = util.format('::load %s\n',
+                        path.join(__dirname,
+                                  '..',
+                                  '..',
+                                  'out',
+                                  'Release',
+                                  'mdb_v8.so'));
+
   mdb.on('exit', function (code) {
     var retained = '; core retained as ' + corefile;
 
@@ -99,7 +108,7 @@ dtrace.on('exit', function (code) {
     }
 
     var sentinel = '<anonymous> (as ';
-    var arg1 = '    arg1: ';
+    var arg1 = '          arg1: ';
     var lines = output.split('\n');
     var matched = 0;
     var straddr = undefined;
@@ -157,7 +166,7 @@ dtrace.on('exit', function (code) {
       console.log('mdb (second) stderr: ' + data);
     });
 
-    mdb.stdin.write('::load v8.so\n');
+    mdb.stdin.write(mod);
     mdb.stdin.write(straddr + '::v8str\n');
     mdb.stdin.end();
   });
@@ -170,7 +179,7 @@ dtrace.on('exit', function (code) {
     console.log('mdb stderr: ' + data);
   });
 
-  mdb.stdin.write('::load v8.so\n');
+  mdb.stdin.write(mod);
   mdb.stdin.write('::jsstack -v\n');
   mdb.stdin.end();
 });

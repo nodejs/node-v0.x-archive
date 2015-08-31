@@ -33,7 +33,10 @@ added and `'removeListener'` when a listener is removed.
 ### emitter.addListener(event, listener)
 ### emitter.on(event, listener)
 
-Adds a listener to the end of the listeners array for the specified event.
+Adds a listener to the end of the listeners array for the specified `event`.
+No checks are made to see if the `listener` has already been added. Multiple
+calls passing the same combination of `event` and `listener` will result in the
+`listener` being added multiple times.
 
     server.on('connection', function (stream) {
       console.log('someone connected!');
@@ -65,25 +68,43 @@ Remove a listener from the listener array for the specified event.
     // ...
     server.removeListener('connection', callback);
 
+`removeListener` will remove, at most, one instance of a listener from the
+listener array. If any single listener has been added multiple times to the
+listener array for the specified `event`, then `removeListener` must be called
+multiple times to remove each instance.
+
 Returns emitter, so calls can be chained.
 
 ### emitter.removeAllListeners([event])
 
-Removes all listeners, or those of the specified event.
+Removes all listeners, or those of the specified event. It's not a good idea to
+remove listeners that were added elsewhere in the code, especially when it's on
+an emitter that you didn't create (e.g. sockets or file streams).
 
 Returns emitter, so calls can be chained.
 
 ### emitter.setMaxListeners(n)
 
 By default EventEmitters will print a warning if more than 10 listeners are
-added for a particular event. This is a useful default which helps finding memory leaks.
-Obviously not all Emitters should be limited to 10. This function allows
-that to be increased. Set to zero for unlimited.
+added for a particular event. This is a useful default which helps finding
+memory leaks. Obviously not all Emitters should be limited to 10. This function
+allows that to be increased. Set to zero for unlimited.
+
+Returns emitter, so calls can be chained.
+
+### EventEmitter.defaultMaxListeners
+
+`emitter.setMaxListeners(n)` sets the maximum on a per-instance basis.
+This class property lets you set it for *all* `EventEmitter` instances,
+current and future, effective immediately. Use with care.
+
+Note that `emitter.setMaxListeners(n)` still has precedence over
+`EventEmitter.defaultMaxListeners`.
 
 
 ### emitter.listeners(event)
 
-Returns an array of listeners for the specified event.
+Returns a copy of the array of listeners for the specified event.
 
     server.on('connection', function (stream) {
       console.log('someone connected!');
@@ -91,7 +112,7 @@ Returns an array of listeners for the specified event.
     console.log(util.inspect(server.listeners('connection'))); // [ [Function] ]
 
 
-### emitter.emit(event, [arg1], [arg2], [...])
+### emitter.emit(event[, arg1][, arg2][, ...])
 
 Execute each of the listeners in order with the supplied arguments.
 
@@ -108,8 +129,8 @@ Return the number of listeners for a given event.
 * `event` {String} The event name
 * `listener` {Function} The event handler function
 
-This event is emitted any time someone adds a new listener.  It is unspecified
-if `listener` is in the list returned by `emitter.listeners(event)`.
+This event is emitted any time a listener is added. When this event is triggered,
+the listener may not yet have been added to the array of listeners for the `event`.
 
 
 ### Event: 'removeListener'
@@ -117,5 +138,5 @@ if `listener` is in the list returned by `emitter.listeners(event)`.
 * `event` {String} The event name
 * `listener` {Function} The event handler function
 
-This event is emitted any time someone removes a listener.  It is unspecified
-if `listener` is in the list returned by `emitter.listeners(event)`.
+This event is emitted any time someone removes a listener.  When this event is triggered,
+the listener may not yet have been removed from the array of listeners for the `event`.

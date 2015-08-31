@@ -1,31 +1,17 @@
 // Copyright 2009 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+"use strict";
+
+// This file relies on the fact that the following declarations have been made
+// in runtime.js:
+// var $Array = global.Array;
+// var $String = global.String;
 
 var $JSON = global.JSON;
+
+// -------------------------------------------------------------------
 
 function Revive(holder, name, reviver) {
   var val = holder[name];
@@ -174,145 +160,13 @@ function JSONSerialize(key, holder, replacer, stack, indent, gap) {
     }
   }
   // Undefined or a callable object.
-  return void 0;
-}
-
-
-function BasicSerializeArray(value, stack, builder) {
-  var len = value.length;
-  if (len == 0) {
-    builder.push("[]");
-    return;
-  }
-  if (!%PushIfAbsent(stack, value)) {
-    throw MakeTypeError('circular_structure', $Array());
-  }
-  builder.push("[");
-  var val = value[0];
-  if (IS_STRING(val)) {
-    // First entry is a string. Remaining entries are likely to be strings too.
-    var array_string = %QuoteJSONStringArray(value);
-    if (!IS_UNDEFINED(array_string)) {
-      // array_string also includes bracket characters so we are done.
-      builder[builder.length - 1] = array_string;
-      stack.pop();
-      return;
-    } else {
-      builder.push(%QuoteJSONString(val));
-      for (var i = 1; i < len; i++) {
-        val = value[i];
-        if (IS_STRING(val)) {
-          builder.push(%QuoteJSONStringComma(val));
-        } else {
-          builder.push(",");
-          var before = builder.length;
-          BasicJSONSerialize(i, val, stack, builder);
-          if (before == builder.length) builder[before - 1] = ",null";
-        }
-      }
-    }
-  } else if (IS_NUMBER(val)) {
-    // First entry is a number. Remaining entries are likely to be numbers too.
-    builder.push(JSON_NUMBER_TO_STRING(val));
-    for (var i = 1; i < len; i++) {
-      builder.push(",");
-      val = value[i];
-      if (IS_NUMBER(val)) {
-        builder.push(JSON_NUMBER_TO_STRING(val));
-      } else {
-        var before = builder.length;
-        BasicJSONSerialize(i, val, stack, builder);
-        if (before == builder.length) builder[before - 1] = ",null";
-      }
-    }
-  } else {
-    var before = builder.length;
-    BasicJSONSerialize(0, val, stack, builder);
-    if (before == builder.length) builder.push("null");
-    for (var i = 1; i < len; i++) {
-      builder.push(",");
-      before = builder.length;
-      BasicJSONSerialize(i, value[i], stack, builder);
-      if (before == builder.length) builder[before - 1] = ",null";
-    }
-  }
-  stack.pop();
-  builder.push("]");
-}
-
-
-function BasicSerializeObject(value, stack, builder) {
-  if (!%PushIfAbsent(stack, value)) {
-    throw MakeTypeError('circular_structure', $Array());
-  }
-  builder.push("{");
-  var first = true;
-  var keys = %ObjectKeys(value);
-  var len = keys.length;
-  for (var i = 0; i < len; i++) {
-    var p = keys[i];
-    if (!first) {
-      builder.push(%QuoteJSONStringComma(p));
-    } else {
-      builder.push(%QuoteJSONString(p));
-    }
-    builder.push(":");
-    var before = builder.length;
-    BasicJSONSerialize(p, value[p], stack, builder);
-    if (before == builder.length) {
-      builder.pop();
-      builder.pop();
-    } else {
-      first = false;
-    }
-  }
-  stack.pop();
-  builder.push("}");
-}
-
-
-function BasicJSONSerialize(key, value, stack, builder) {
-  if (IS_SPEC_OBJECT(value)) {
-    var toJSON = value.toJSON;
-    if (IS_SPEC_FUNCTION(toJSON)) {
-      value = %_CallFunction(value, ToString(key), toJSON);
-    }
-  }
-  if (IS_STRING(value)) {
-    builder.push(value !== "" ? %QuoteJSONString(value) : '""');
-  } else if (IS_NUMBER(value)) {
-    builder.push(JSON_NUMBER_TO_STRING(value));
-  } else if (IS_BOOLEAN(value)) {
-    builder.push(value ? "true" : "false");
-  } else if (IS_NULL(value)) {
-    builder.push("null");
-  } else if (IS_SPEC_OBJECT(value) && !(typeof value == "function")) {
-    // Value is a non-callable object.
-    // Unwrap value if necessary
-    if (IS_NUMBER_WRAPPER(value)) {
-      value = ToNumber(value);
-      builder.push(JSON_NUMBER_TO_STRING(value));
-    } else if (IS_STRING_WRAPPER(value)) {
-      builder.push(%QuoteJSONString(ToString(value)));
-    } else if (IS_BOOLEAN_WRAPPER(value)) {
-      builder.push(%_ValueOf(value) ? "true" : "false");
-    } else if (IS_ARRAY(value)) {
-      BasicSerializeArray(value, stack, builder);
-    } else {
-      BasicSerializeObject(value, stack, builder);
-    }
-  }
+  return UNDEFINED;
 }
 
 
 function JSONStringify(value, replacer, space) {
   if (%_ArgumentsLength() == 1) {
-    var builder = new InternalArray();
-    BasicJSONSerialize('', value, new InternalArray(), builder);
-    if (builder.length == 0) return;
-    var result = %_FastAsciiArrayJoin(builder, "");
-    if (!IS_UNDEFINED(result)) return result;
-    return %StringBuilderConcat(builder, builder.length, "");
+    return %BasicJSONStringify(value);
   }
   if (IS_OBJECT(space)) {
     // Unwrap 'space' if it is wrapped
@@ -325,21 +179,48 @@ function JSONStringify(value, replacer, space) {
   var gap;
   if (IS_NUMBER(space)) {
     space = MathMax(0, MathMin(ToInteger(space), 10));
-    gap = SubString("          ", 0, space);
+    gap = %_SubString("          ", 0, space);
   } else if (IS_STRING(space)) {
     if (space.length > 10) {
-      gap = SubString(space, 0, 10);
+      gap = %_SubString(space, 0, 10);
     } else {
       gap = space;
     }
   } else {
     gap = "";
   }
+  if (IS_ARRAY(replacer)) {
+    // Deduplicate replacer array items.
+    var property_list = new InternalArray();
+    var seen_properties = { __proto__: null };
+    var seen_sentinel = {};
+    var length = replacer.length;
+    for (var i = 0; i < length; i++) {
+      var item = replacer[i];
+      if (IS_STRING_WRAPPER(item)) {
+        item = ToString(item);
+      } else {
+        if (IS_NUMBER_WRAPPER(item)) item = ToNumber(item);
+        if (IS_NUMBER(item)) item = %_NumberToString(item);
+      }
+      if (IS_STRING(item) && seen_properties[item] != seen_sentinel) {
+        property_list.push(item);
+        // We cannot use true here because __proto__ needs to be an object.
+        seen_properties[item] = seen_sentinel;
+      }
+    }
+    replacer = property_list;
+  }
   return JSONSerialize('', {'': value}, replacer, new InternalArray(), "", gap);
 }
 
+
+// -------------------------------------------------------------------
+
 function SetUpJSON() {
   %CheckIsBootstrapping();
+
+  // Set up non-enumerable properties of the JSON object.
   InstallFunctions($JSON, DONT_ENUM, $Array(
     "parse", JSONParse,
     "stringify", JSONStringify
@@ -347,3 +228,14 @@ function SetUpJSON() {
 }
 
 SetUpJSON();
+
+
+// -------------------------------------------------------------------
+// JSON Builtins
+
+function JSONSerializeAdapter(key, object) {
+  var holder = {};
+  holder[key] = object;
+  // No need to pass the actual holder since there is no replacer function.
+  return JSONSerialize(key, holder, UNDEFINED, new InternalArray(), "", "");
+}

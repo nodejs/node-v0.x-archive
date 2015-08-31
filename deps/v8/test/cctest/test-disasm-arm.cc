@@ -28,25 +28,16 @@
 
 #include <stdlib.h>
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "debug.h"
-#include "disasm.h"
-#include "disassembler.h"
-#include "macro-assembler.h"
-#include "serialize.h"
-#include "cctest.h"
+#include "src/debug.h"
+#include "src/disasm.h"
+#include "src/disassembler.h"
+#include "src/macro-assembler.h"
+#include "src/serialize.h"
+#include "test/cctest/cctest.h"
 
 using namespace v8::internal;
-
-
-static v8::Persistent<v8::Context> env;
-
-static void InitializeVM() {
-  if (env.IsEmpty()) {
-    env = v8::Context::New();
-  }
-}
 
 
 bool DisassembleAndCompare(byte* pc, const char* compare_string) {
@@ -72,11 +63,12 @@ bool DisassembleAndCompare(byte* pc, const char* compare_string) {
 // Set up V8 to a state where we can at least run the assembler and
 // disassembler. Declare the variables and allocate the data structures used
 // in the rest of the macros.
-#define SET_UP()                                           \
-  InitializeVM();                                         \
-  v8::HandleScope scope;                                  \
+#define SET_UP()                                          \
+  CcTest::InitializeVM();                                 \
+  Isolate* isolate = CcTest::i_isolate();                  \
+  HandleScope scope(isolate);                             \
   byte *buffer = reinterpret_cast<byte*>(malloc(4*1024)); \
-  Assembler assm(Isolate::Current(), buffer, 4*1024);     \
+  Assembler assm(isolate, buffer, 4*1024);                \
   bool failure = false;
 
 
@@ -280,10 +272,10 @@ TEST(Type0) {
     // We only disassemble one instruction so the eor instruction is not here.
     COMPARE(eor(r5, r4, Operand(0x1234), LeaveCC, ne),
             "1301c234       movwne ip, #4660");
-    // Movw can't do setcc so we don't get that here.  Mov immediate with setcc
-    // is pretty strange anyway.
+    // Movw can't do setcc, so first move to ip, then the following instruction
+    // moves to r5.  Mov immediate with setcc is pretty strange anyway.
     COMPARE(mov(r5, Operand(0x01234), SetCC, ne),
-            "159fc000       ldrne ip, [pc, #+0]");
+            "1301c234       movwne ip, #4660");
     // Emit a literal pool now, otherwise this could be dumped later, in the
     // middle of a different test.
     EMIT_PENDING_LITERALS();
@@ -413,6 +405,19 @@ TEST(Type3) {
             "e6ff3f94       usat r3, #31, r4, lsl #31");
     COMPARE(usat(r8, 0, Operand(r5, ASR, 17)),
             "e6e088d5       usat r8, #0, r5, asr #17");
+
+    COMPARE(pkhbt(r3, r4, Operand(r5, LSL, 17)),
+            "e6843895       pkhbt r3, r4, r5, lsl #17");
+    COMPARE(pkhtb(r3, r4, Operand(r5, ASR, 17)),
+            "e68438d5       pkhtb r3, r4, r5, asr #17");
+    COMPARE(uxtb(r9, Operand(r10, ROR, 0)),
+            "e6ef907a       uxtb r9, r10");
+    COMPARE(uxtb(r3, Operand(r4, ROR, 8)),
+            "e6ef3474       uxtb r3, r4, ror #8");
+    COMPARE(uxtab(r3, r4, Operand(r5, ROR, 8)),
+            "e6e43475       uxtab r3, r4, r5, ror #8");
+    COMPARE(uxtb16(r3, Operand(r4, ROR, 8)),
+            "e6cf3474       uxtb16 r3, r4, ror #8");
   }
 
   VERIFY_RUN();
@@ -424,11 +429,15 @@ TEST(Vfp) {
   SET_UP();
 
   if (CpuFeatures::IsSupported(VFP3)) {
-    CpuFeatures::Scope scope(VFP3);
+    CpuFeatureScope scope(&assm, VFP3);
+    COMPARE(vmov(d0, r2, r3),
+            "ec432b10       vmov d0, r2, r3");
+    COMPARE(vmov(r2, r3, d0),
+            "ec532b10       vmov r2, r3, d0");
     COMPARE(vmov(d0, d1),
             "eeb00b41       vmov.f64 d0, d1");
     COMPARE(vmov(d3, d3, eq),
-            "0eb03b43       vmov.f64eq d3, d3");
+            "0eb03b43       vmoveq.f64 d3, d3");
 
     COMPARE(vmov(s0, s31),
             "eeb00a6f       vmov.f32 s0, s31");
@@ -446,42 +455,57 @@ TEST(Vfp) {
     COMPARE(vabs(d0, d1),
             "eeb00bc1       vabs.f64 d0, d1");
     COMPARE(vabs(d3, d4, mi),
-            "4eb03bc4       vabs.f64mi d3, d4");
+            "4eb03bc4       vabsmi.f64 d3, d4");
 
     COMPARE(vneg(d0, d1),
             "eeb10b41       vneg.f64 d0, d1");
     COMPARE(vneg(d3, d4, mi),
-            "4eb13b44       vneg.f64mi d3, d4");
+            "4eb13b44       vnegmi.f64 d3, d4");
 
     COMPARE(vadd(d0, d1, d2),
             "ee310b02       vadd.f64 d0, d1, d2");
     COMPARE(vadd(d3, d4, d5, mi),
-            "4e343b05       vadd.f64mi d3, d4, d5");
+            "4e343b05       vaddmi.f64 d3, d4, d5");
 
     COMPARE(vsub(d0, d1, d2),
             "ee310b42       vsub.f64 d0, d1, d2");
     COMPARE(vsub(d3, d4, d5, ne),
-            "1e343b45       vsub.f64ne d3, d4, d5");
+            "1e343b45       vsubne.f64 d3, d4, d5");
 
     COMPARE(vmul(d2, d1, d0),
             "ee212b00       vmul.f64 d2, d1, d0");
     COMPARE(vmul(d6, d4, d5, cc),
-            "3e246b05       vmul.f64cc d6, d4, d5");
+            "3e246b05       vmulcc.f64 d6, d4, d5");
 
     COMPARE(vdiv(d2, d2, d2),
             "ee822b02       vdiv.f64 d2, d2, d2");
     COMPARE(vdiv(d6, d7, d7, hi),
-            "8e876b07       vdiv.f64hi d6, d7, d7");
+            "8e876b07       vdivhi.f64 d6, d7, d7");
+
+    COMPARE(vcmp(d0, d1),
+            "eeb40b41       vcmp.f64 d0, d1");
+    COMPARE(vcmp(d0, 0.0),
+            "eeb50b40       vcmp.f64 d0, #0.0");
 
     COMPARE(vsqrt(d0, d0),
             "eeb10bc0       vsqrt.f64 d0, d0");
     COMPARE(vsqrt(d2, d3, ne),
-            "1eb12bc3       vsqrt.f64ne d2, d3");
+            "1eb12bc3       vsqrtne.f64 d2, d3");
 
     COMPARE(vmov(d0, 1.0),
             "eeb70b00       vmov.f64 d0, #1");
     COMPARE(vmov(d2, -13.0),
             "eeba2b0a       vmov.f64 d2, #-13");
+
+    COMPARE(vmov(d0, VmovIndexLo, r0),
+            "ee000b10       vmov.32 d0[0], r0");
+    COMPARE(vmov(d0, VmovIndexHi, r0),
+            "ee200b10       vmov.32 d0[1], r0");
+
+    COMPARE(vmov(r2, VmovIndexLo, d15),
+            "ee1f2b10       vmov.32 r2, d15[0]");
+    COMPARE(vmov(r3, VmovIndexHi, d14),
+            "ee3e3b10       vmov.32 r3, d14[1]");
 
     COMPARE(vldr(s0, r0, 0),
             "ed900a00       vldr s0, [r0 + 4*0]");
@@ -547,6 +571,128 @@ TEST(Vfp) {
             "ec860a20       vstmia r6, {s0-s31}");
     COMPARE(vldm(ia, r7, s0, s31),
             "ec970a20       vldmia r7, {s0-s31}");
+
+    COMPARE(vmla(d2, d1, d0),
+            "ee012b00       vmla.f64 d2, d1, d0");
+    COMPARE(vmla(d6, d4, d5, cc),
+            "3e046b05       vmlacc.f64 d6, d4, d5");
+
+    COMPARE(vmls(d2, d1, d0),
+            "ee012b40       vmls.f64 d2, d1, d0");
+    COMPARE(vmls(d6, d4, d5, cc),
+            "3e046b45       vmlscc.f64 d6, d4, d5");
+
+    COMPARE(vcvt_u32_f64(s0, d0),
+            "eebc0bc0       vcvt.u32.f64 s0, d0");
+    COMPARE(vcvt_s32_f64(s0, d0),
+            "eebd0bc0       vcvt.s32.f64 s0, d0");
+    COMPARE(vcvt_f64_u32(d0, s1),
+            "eeb80b60       vcvt.f64.u32 d0, s1");
+    COMPARE(vcvt_f64_s32(d0, s1),
+            "eeb80be0       vcvt.f64.s32 d0, s1");
+    COMPARE(vcvt_f32_s32(s0, s2),
+            "eeb80ac1       vcvt.f32.s32 s0, s2");
+    COMPARE(vcvt_f64_s32(d0, 2),
+            "eeba0bcf       vcvt.f64.s32 d0, d0, #2");
+
+    if (CpuFeatures::IsSupported(VFP32DREGS)) {
+      COMPARE(vmov(d3, d27),
+              "eeb03b6b       vmov.f64 d3, d27");
+      COMPARE(vmov(d18, d7),
+              "eef02b47       vmov.f64 d18, d7");
+      COMPARE(vmov(d18, r2, r3),
+              "ec432b32       vmov d18, r2, r3");
+      COMPARE(vmov(r2, r3, d18),
+              "ec532b32       vmov r2, r3, d18");
+      COMPARE(vmov(d20, d31),
+              "eef04b6f       vmov.f64 d20, d31");
+
+      COMPARE(vabs(d16, d31),
+              "eef00bef       vabs.f64 d16, d31");
+
+      COMPARE(vneg(d16, d31),
+              "eef10b6f       vneg.f64 d16, d31");
+
+      COMPARE(vadd(d16, d17, d18),
+              "ee710ba2       vadd.f64 d16, d17, d18");
+
+      COMPARE(vsub(d16, d17, d18),
+              "ee710be2       vsub.f64 d16, d17, d18");
+
+      COMPARE(vmul(d16, d17, d18),
+              "ee610ba2       vmul.f64 d16, d17, d18");
+
+      COMPARE(vdiv(d16, d17, d18),
+              "eec10ba2       vdiv.f64 d16, d17, d18");
+
+      COMPARE(vcmp(d16, d17),
+              "eef40b61       vcmp.f64 d16, d17");
+      COMPARE(vcmp(d16, 0.0),
+              "eef50b40       vcmp.f64 d16, #0.0");
+
+      COMPARE(vsqrt(d16, d17),
+              "eef10be1       vsqrt.f64 d16, d17");
+
+      COMPARE(vmov(d30, 16.0),
+              "eef3eb00       vmov.f64 d30, #16");
+
+      COMPARE(vmov(d31, VmovIndexLo, r7),
+              "ee0f7b90       vmov.32 d31[0], r7");
+      COMPARE(vmov(d31, VmovIndexHi, r7),
+              "ee2f7b90       vmov.32 d31[1], r7");
+
+      COMPARE(vldr(d25, r0, 0),
+              "edd09b00       vldr d25, [r0 + 4*0]");
+      COMPARE(vldr(d26, r1, 4),
+              "edd1ab01       vldr d26, [r1 + 4*1]");
+      COMPARE(vldr(d31, r10, 1020),
+              "eddafbff       vldr d31, [r10 + 4*255]");
+
+      COMPARE(vstr(d16, r0, 0),
+              "edc00b00       vstr d16, [r0 + 4*0]");
+      COMPARE(vstr(d17, r1, 4),
+              "edc11b01       vstr d17, [r1 + 4*1]");
+      COMPARE(vstr(d31, r10, 1020),
+              "edcafbff       vstr d31, [r10 + 4*255]");
+
+      COMPARE(vstm(ia, r0, d16, d31),
+              "ecc00b20       vstmia r0, {d16-d31}");
+      COMPARE(vldm(ia, r3, d16, d31),
+              "ecd30b20       vldmia r3, {d16-d31}");
+      COMPARE(vstm(ia, r0, d23, d27),
+              "ecc07b0a       vstmia r0, {d23-d27}");
+      COMPARE(vldm(ia, r3, d23, d27),
+              "ecd37b0a       vldmia r3, {d23-d27}");
+
+      COMPARE(vmla(d16, d17, d18),
+              "ee410ba2       vmla.f64 d16, d17, d18");
+
+      COMPARE(vcvt_u32_f64(s0, d16),
+              "eebc0be0       vcvt.u32.f64 s0, d16");
+      COMPARE(vcvt_s32_f64(s0, d16),
+              "eebd0be0       vcvt.s32.f64 s0, d16");
+      COMPARE(vcvt_f64_u32(d16, s1),
+              "eef80b60       vcvt.f64.u32 d16, s1");
+    }
+  }
+
+  VERIFY_RUN();
+}
+
+
+TEST(Neon) {
+  SET_UP();
+
+  if (CpuFeatures::IsSupported(NEON)) {
+    CpuFeatureScope scope(&assm, NEON);
+      COMPARE(vld1(Neon8, NeonListOperand(d4, 4), NeonMemOperand(r1)),
+              "f421420f       vld1.8 {d4, d5, d6, d7}, [r1]");
+      COMPARE(vst1(Neon16, NeonListOperand(d17, 4), NeonMemOperand(r9)),
+              "f449124f       vst1.16 {d17, d18, d19, d20}, [r9]");
+      COMPARE(vmovl(NeonU8, q3, d1),
+              "f3886a11       vmovl.u8 q3, d1");
+      COMPARE(vmovl(NeonU8, q4, d2),
+              "f3888a12       vmovl.u8 q4, d2");
   }
 
   VERIFY_RUN();
@@ -719,7 +865,7 @@ TEST(LoadStore) {
           "e7210002       str r0, [r1, -r2]!");
 
   if (CpuFeatures::IsSupported(ARMv7)) {
-    CpuFeatures::Scope scope(ARMv7);
+    CpuFeatureScope scope(&assm, ARMv7);
     COMPARE(ldrd(r0, r1, MemOperand(r1)),
             "e1c100d0       ldrd r0, [r1, #+0]");
     COMPARE(ldrd(r2, r3, MemOperand(r3, 127)),
@@ -749,8 +895,12 @@ TEST(LoadStore) {
             "e1eba7ff       strd r10, [fp, #+127]!");
     COMPARE(strd(ip, sp, MemOperand(sp, -127, PreIndex)),
             "e16dc7ff       strd ip, [sp, #-127]!");
+
+    COMPARE(pld(MemOperand(r1, 0)),
+            "f5d1f000       pld [r1]");
+    COMPARE(pld(MemOperand(r2, 128)),
+            "f5d2f080       pld [r2, #+128]");
   }
 
   VERIFY_RUN();
 }
-

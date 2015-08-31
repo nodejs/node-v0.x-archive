@@ -24,7 +24,7 @@ var https = require('https'),
     fs = require('fs'),
     assert = require('assert');
 
-if (['linux', 'win32'].indexOf(process.platform) == -1) {
+if (!common.hasMultiLocalhost()) {
   console.log('Skipping platform-specific test.');
   process.exit();
 }
@@ -35,8 +35,8 @@ var options = {
 };
 
 var server = https.createServer(options, function (req, res) {
-  console.log("Connect from: " + req.connection.socket.remoteAddress);
-  assert.equal('127.0.0.2', req.connection.socket.remoteAddress);
+  console.log("Connect from: " + req.connection.remoteAddress);
+  assert.equal('127.0.0.2', req.connection.remoteAddress);
 
   req.on('end', function() {
     res.writeHead(200, { 'Content-Type': 'text/plain' });

@@ -8,16 +8,16 @@ The `tls` module uses OpenSSL to provide Transport Layer Security and/or
 Secure Socket Layer: encrypted stream communication.
 
 TLS/SSL is a public/private key infrastructure. Each client and each
-server must have a private key. A private key is created like this
+server must have a private key. A private key is created like this:
 
-    openssl genrsa -out ryans-key.pem 1024
+    openssl genrsa -out ryans-key.pem 2048
 
-All severs and some clients need to have a certificate. Certificates are public
+All servers and some clients need to have a certificate. Certificates are public
 keys signed by a Certificate Authority or self-signed. The first step to
 getting a certificate is to create a "Certificate Signing Request" (CSR)
 file. This is done with:
 
-    openssl req -new -key ryans-key.pem -out ryans-csr.pem
+    openssl req -new -sha256 -key ryans-key.pem -out ryans-csr.pem
 
 To create a self-signed certificate with the CSR, do this:
 
@@ -25,8 +25,10 @@ To create a self-signed certificate with the CSR, do this:
 
 Alternatively you can send the CSR to a Certificate Authority for signing.
 
-(TODO: docs on creating a CA, for now interested users should just look at
-`test/fixtures/keys/Makefile` in the Node source code)
+For Perfect Forward Secrecy, it is required to generate Diffie-Hellman
+parameters:
+
+    openssl dhparam -outform PEM -out dhparam.pem 2048
 
 To create .pfx or .p12, do this:
 
@@ -38,6 +40,40 @@ To create .pfx or .p12, do this:
   - `certfile`: all CA certs concatenated in one file like
     `cat ca1-cert.pem ca2-cert.pem > ca-cert.pem`
 
+## Protocol support
+
+Node.js is compiled with SSLv2 and SSLv3 protocol support by default, but these
+protocols are **disabled**. They are considered insecure and could be easily
+compromised as was shown by [CVE-2014-3566][]. However, in some situations, it
+may cause problems with legacy clients/servers (such as Internet Explorer 6).
+If you wish to enable SSLv2 or SSLv3, run node with the `--enable-ssl2` or
+`--enable-ssl3` flag respectively.  In future versions of Node.js SSLv2 and
+SSLv3 will not be compiled in by default.
+
+There is a way to force node into using SSLv3 or SSLv2 only mode by explicitly
+specifying `secureProtocol` to `'SSLv3_method'` or `'SSLv2_method'`.
+
+The default protocol method Node.js uses is `SSLv23_method` which would be more
+accurately named `AutoNegotiate_method`. This method will try and negotiate
+from the highest level down to whatever the client supports.  To provide a
+secure default, Node.js (since v0.10.33) explicitly disables the use of SSLv3
+and SSLv2 by setting the `secureOptions` to be
+`SSL_OP_NO_SSLv3|SSL_OP_NO_SSLv2` (again, unless you have passed
+`--enable-ssl3`, or `--enable-ssl2`, or `SSLv3_method` as `secureProtocol`).
+
+If you have set `secureOptions` to anything, we will not override your
+options.
+
+The ramifications of this behavior change:
+
+ * If your application is behaving as a secure server, clients who are `SSLv3`
+only will now not be able to appropriately negotiate a connection and will be
+refused. In this case your server will emit a `clientError` event. The error
+message will include `'wrong version number'`.
+ * If your application is behaving as a secure client and communicating with a
+server that doesn't support methods more secure than SSLv3 then your connection
+won't be able to negotiate and will fail. In this case your client will emit a
+an `error` event. The error message will include `'wrong version number'`.
 
 ## Client-initiated renegotiation attack mitigation
 
@@ -49,7 +85,7 @@ server-side resources, which makes it a potential vector for denial-of-service
 attacks.
 
 To mitigate this, renegotiations are limited to three times every 10 minutes. An
-error is emitted on the [CleartextStream][] instance when the threshold is
+error is emitted on the [tls.TLSSocket][] instance when the threshold is
 exceeded. The limits are configurable:
 
   - `tls.CLIENT_RENEG_LIMIT`: renegotiation limit, default is 3.
@@ -76,6 +112,106 @@ handshake extensions allowing you:
     certificates.
 
 
+## Perfect Forward Secrecy
+
+<!-- type=misc -->
+
+The term "[Forward Secrecy]" or "Perfect Forward Secrecy" describes a feature of
+key-agreement (i.e. key-exchange) methods. Practically it means that even if the
+private key of a (your) server is compromised, communication can only be
+decrypted by eavesdroppers if they manage to obtain the key-pair specifically
+generated for each session.
+
+This is achieved by randomly generating a key pair for key-agreement on every
+handshake (in contrary to the same key for all sessions). Methods implementing
+this technique, thus offering Perfect Forward Secrecy, are called "ephemeral".
+
+Currently two methods are commonly used to achieve Perfect Forward Secrecy (note
+the character "E" appended to the traditional abbreviations):
+
+  * [DHE] - An ephemeral version of the Diffie Hellman key-agreement protocol.
+  * [ECDHE] - An ephemeral version of the Elliptic Curve Diffie Hellman
+    key-agreement protocol.
+
+Ephemeral methods may have some performance drawbacks, because key generation
+is expensive.
+
+## Modifying the Default Cipher Suite
+
+Node.js is built with a default suite of enabled and disabled ciphers.
+Currently, the default cipher suite is:
+
+    ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:
+    DHE-RSA-AES256-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:
+    HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA
+
+This default can be overridden entirely using the `--cipher-list` command line
+switch or `NODE_CIPHER_LIST` environment variable. For instance:
+
+    node --cipher-list=ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384
+
+Setting the environment variable would have the same effect:
+
+    NODE_CIPHER_LIST=ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384
+
+CAUTION: The default cipher suite has been carefully selected to reflect current
+security best practices and risk mitigation. Changing the default cipher suite
+can have a significant impact on the security of an application. The
+`--cipher-list` and `NODE_CIPHER_LIST` options should only be used if
+absolutely necessary.
+
+### Using Legacy Default Cipher Suite ###
+
+It is possible for the built-in default cipher suite to change from one release
+of Node.js to another. For instance, v0.10.38 uses a different default than
+v0.12.2. Such changes can cause issues with applications written to assume
+certain specific defaults. To help buffer applications against such changes,
+the `--enable-legacy-cipher-list` command line switch or `NODE_LEGACY_CIPHER_LIST`
+environment variable can be set to specify a specific preset default:
+
+    # Use the v0.10.38 defaults
+    node --enable-legacy-cipher-list=v0.10.38
+    // or
+    NODE_LEGACY_CIPHER_LIST=v0.10.38
+
+    # Use the v0.12.2 defaults
+    node --enable-legacy-cipher-list=v0.12.2
+    // or
+    NODE_LEGACY_CIPHER_LIST=v0.12.2
+
+Currently, the values supported for the `enable-legacy-cipher-list` switch and
+`NODE_LEGACY_CIPHER_LIST` environment variable include:
+
+    v0.10.38 - To enable the default cipher suite used in v0.10.38
+
+      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
+
+    v0.10.39 - To enable the default cipher suite used in v0.10.39
+
+      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH
+
+    v0.12.2 - To enable the default cipher suite used in v0.12.2
+
+      ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:
+      HIGH:!MD5:!aNULL
+
+    v.0.12.3 - To enable the default cipher suite used in v0.12.3
+
+      ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:
+      !RC4:!MD5:!aNULL
+
+These legacy cipher suites are also made available for use via the
+`getLegacyCiphers()` method:
+
+    var tls = require('tls');
+    console.log(tls.getLegacyCiphers('v0.10.38'));
+
+CAUTION: Changes to the default cipher suite are typically made in order to
+strengthen the default security for applications running within Node.js.
+Reverting back to the defaults used by older releases can weaken the security
+of your applications. The legacy cipher suites should only be used if absolutely
+necessary.
+
 ## tls.getCiphers()
 
 Returns an array with the names of the supported SSL ciphers.
@@ -85,8 +221,14 @@ Example:
     var ciphers = tls.getCiphers();
     console.log(ciphers); // ['AES128-SHA', 'AES256-SHA', ...]
 
+## tls.getLegacyCiphers(version)
 
-## tls.createServer(options, [secureConnectionListener])
+Returns the legacy default cipher suite for the specified Node.js release.
+
+Example:
+    var cipher_suite = tls.getLegacyCiphers('v0.10.38');
+
+## tls.createServer(options[, secureConnectionListener])
 
 Creates a new [tls.Server][].  The `connectionListener` argument is
 automatically set as a listener for the [secureConnection][] event.  The
@@ -97,12 +239,12 @@ automatically set as a listener for the [secureConnection][] event.  The
     the `key`, `cert` and `ca` options.)
 
   - `key`: A string or `Buffer` containing the private key of the server in
-    PEM format. (Required)
+    PEM format. (Could be an array of keys). (Required)
 
   - `passphrase`: A string of passphrase for the private key or pfx.
 
   - `cert`: A string or `Buffer` containing the certificate key of the server in
-    PEM format. (Required)
+    PEM format. (Could be an array of certs). (Required)
 
   - `ca`: An array of strings or `Buffer`s of trusted certificates in PEM
     format. If this is omitted several well known "root" CAs will be used,
@@ -111,23 +253,29 @@ automatically set as a listener for the [secureConnection][] event.  The
   - `crl` : Either a string or list of strings of PEM encoded CRLs (Certificate
     Revocation List)
 
-  - `ciphers`: A string describing the ciphers to use or exclude.
+  - `ciphers`: A string describing the ciphers to use or exclude, separated by
+    `:`. The default cipher suite is:
 
-    To mitigate [BEAST attacks] it is recommended that you use this option in
-    conjunction with the `honorCipherOrder` option described below to
-    prioritize the non-CBC cipher.
+        ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:
+        DHE-RSA-AES256-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:
+        HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA
 
-    Defaults to `AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH`.
-    Consult the [OpenSSL cipher list format documentation] for details on the
-    format. ECDH (Elliptic Curve Diffie-Hellman) ciphers are not yet supported.
+    The default cipher suite prefers ECDHE and DHE ciphers for Perfect Forward
+    secrecy, while offering *some* backward compatibility. Old clients which
+    rely on insecure and deprecated RC4 or DES-based ciphers (like Internet
+    Explorer 6) aren't able to complete the handshake with the default
+    configuration. If you absolutely must support these clients, the
+    [TLS recommendations] may offer a compatible cipher suite. For more details
+    on the format, see the [OpenSSL cipher list format documentation].
 
+  - `ecdhCurve`: A string describing a named curve to use for ECDH key agreement
+    or false to disable ECDH.
 
-    `AES128-GCM-SHA256` is used when node.js is linked against OpenSSL 1.0.1
-    or newer and the client speaks TLS 1.2, RC4 is used as a secure fallback.
+    Defaults to `prime256v1`. Consult [RFC 4492] for more details.
 
-    **NOTE**: Previous revisions of this section suggested `AES256-SHA` as an
-    acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
-    susceptible to BEAST attacks. Do *not* use it.
+  - `dhparam`: DH parameter file to use for DHE key agreement. Use
+    `openssl dhparam` command to create it. If the file is invalid to
+    load, it is silently discarded.
 
   - `handshakeTimeout`: Abort the connection if the SSL/TLS handshake does not
     finish in this many milliseconds. The default is 120 seconds.
@@ -136,14 +284,15 @@ automatically set as a listener for the [secureConnection][] event.  The
     times out.
 
   - `honorCipherOrder` : When choosing a cipher, use the server's preferences
-    instead of the client preferences.
-
-    Note that if SSLv2 is used, the server will send its list of preferences
-    to the client, and the client chooses the cipher.
+    instead of the client preferences. Default: `true`.
 
     Although, this option is disabled by default, it is *recommended* that you
     use this option in conjunction with the `ciphers` option to mitigate
     BEAST attacks.
+
+    Note: If SSLv2 is used, the server will send its list of preferences to the
+    client, and the client chooses the cipher.  Support for SSLv2 is disabled
+    unless node.js was configured with `./configure --with-sslv2`.
 
   - `requestCert`: If `true` the server will request a certificate from
     clients that connect and attempt to verify that certificate. Default:
@@ -153,23 +302,42 @@ automatically set as a listener for the [secureConnection][] event.  The
     which is not authorized with the list of supplied CAs. This option only
     has an effect if `requestCert` is `true`. Default: `false`.
 
+  - `checkServerIdentity(servername, cert)`: Provide an override for checking
+    server's hostname against the certificate. Should return an error if verification
+    fails. Return `undefined` if passing.
+
   - `NPNProtocols`: An array or `Buffer` of possible NPN protocols. (Protocols
     should be ordered by their priority).
 
-  - `SNICallback`: A function that will be called if client supports SNI TLS
-    extension. Only one argument will be passed to it: `servername`. And
-    `SNICallback` should return SecureContext instance.
-    (You can use `crypto.createCredentials(...).context` to get proper
+  - `SNICallback(servername, cb)`: A function that will be called if client
+    supports SNI TLS extension. Two argument will be passed to it: `servername`,
+    and `cb`. `SNICallback` should invoke `cb(null, ctx)`, where `ctx` is a
+    SecureContext instance.
+    (You can use `tls.createSecureContext(...)` to get proper
     SecureContext). If `SNICallback` wasn't provided - default callback with
     high-level API will be used (see below).
 
-  - `sessionIdContext`: A string containing a opaque identifier for session
+  - `sessionTimeout`: An integer specifying the seconds after which TLS
+    session identifiers and TLS session tickets created by the server are
+    timed out. See [SSL_CTX_set_timeout] for more details.
+
+  - `ticketKeys`: A 48-byte `Buffer` instance consisting of 16-byte prefix,
+    16-byte hmac key, 16-byte AES key. You could use it to accept tls session
+    tickets on multiple instances of tls server.
+
+    NOTE: Automatically shared between `cluster` module workers.
+
+  - `sessionIdContext`: A string containing an opaque identifier for session
     resumption. If `requestCert` is `true`, the default is MD5 hash value
     generated from command-line. Otherwise, the default is not provided.
 
   - `secureProtocol`: The SSL method to use, e.g. `SSLv3_method` to force
     SSL version 3. The possible values depend on your installation of
     OpenSSL and are defined in the constant [SSL_METHODS][].
+
+  - `secureOptions`: Set server options. For example, to disable the SSLv3
+    protocol set the `SSL_OP_NO_SSLv3` flag. See [SSL_CTX_set_options]
+    for all available options.
 
 Here is a simple example echo server:
 
@@ -187,12 +355,12 @@ Here is a simple example echo server:
       ca: [ fs.readFileSync('client-cert.pem') ]
     };
 
-    var server = tls.createServer(options, function(cleartextStream) {
+    var server = tls.createServer(options, function(socket) {
       console.log('server connected',
-                  cleartextStream.authorized ? 'authorized' : 'unauthorized');
-      cleartextStream.write("welcome!\n");
-      cleartextStream.setEncoding('utf8');
-      cleartextStream.pipe(cleartextStream);
+                  socket.authorized ? 'authorized' : 'unauthorized');
+      socket.write("welcome!\n");
+      socket.setEncoding('utf8');
+      socket.pipe(socket);
     });
     server.listen(8000, function() {
       console.log('server bound');
@@ -211,12 +379,12 @@ Or
 
     };
 
-    var server = tls.createServer(options, function(cleartextStream) {
+    var server = tls.createServer(options, function(socket) {
       console.log('server connected',
-                  cleartextStream.authorized ? 'authorized' : 'unauthorized');
-      cleartextStream.write("welcome!\n");
-      cleartextStream.setEncoding('utf8');
-      cleartextStream.pipe(cleartextStream);
+                  socket.authorized ? 'authorized' : 'unauthorized');
+      socket.write("welcome!\n");
+      socket.setEncoding('utf8');
+      socket.pipe(socket);
     });
     server.listen(8000, function() {
       console.log('server bound');
@@ -227,17 +395,8 @@ You can test this server by connecting to it with `openssl s_client`:
     openssl s_client -connect 127.0.0.1:8000
 
 
-## tls.SLAB_BUFFER_SIZE
-
-Size of slab buffer used by all tls servers and clients.
-Default: `10 * 1024 * 1024`.
-
-
-Don't change the defaults unless you know what you are doing.
-
-
-## tls.connect(options, [callback])
-## tls.connect(port, [host], [options], [callback])
+## tls.connect(options[, callback])
+## tls.connect(port[, host][, options][, callback])
 
 Creates a new client connection to the given `port` and `host` (old API) or
 `options.port` and `options.host`. (If `host` is omitted, it defaults to
@@ -251,16 +410,33 @@ Creates a new client connection to the given `port` and `host` (old API) or
     creating a new socket. If this option is specified, `host` and `port`
     are ignored.
 
+  - `path`: Creates unix socket connection to path. If this option is
+    specified, `host` and `port` are ignored.
+
+  - `ciphers`: A string describing the ciphers to use or exclude.
+
+    Defaults to
+    `ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL`.
+    Consult the [OpenSSL cipher list format documentation] for details
+    on the format.
+
+	The full list of available ciphers can be obtained via [tls.getCiphers][].
+
+    `ECDHE-RSA-AES128-SHA256`, `DHE-RSA-AES128-SHA256` and
+    `AES128-GCM-SHA256` are TLS v1.2 ciphers and used when Node.js is
+    linked against OpenSSL 1.0.1 or newer, such as the bundled version
+    of OpenSSL.
+
   - `pfx`: A string or `Buffer` containing the private key, certificate and
-    CA certs of the server in PFX or PKCS12 format.
+    CA certs of the client in PFX or PKCS12 format.
 
   - `key`: A string or `Buffer` containing the private key of the client in
-    PEM format.
+    PEM format. (Could be an array of keys).
 
   - `passphrase`: A string of passphrase for the private key or pfx.
 
   - `cert`: A string or `Buffer` containing the certificate key of the client in
-    PEM format.
+    PEM format. (Could be an array of certs).
 
   - `ca`: An array of strings or `Buffer`s of trusted certificates in PEM
     format. If this is omitted several well known "root" CAs will be used,
@@ -268,7 +444,7 @@ Creates a new client connection to the given `port` and `host` (old API) or
 
   - `rejectUnauthorized`: If `true`, the server certificate is verified against
     the list of supplied CAs. An `'error'` event is emitted if verification
-    fails. Default: `true`.
+    fails; `err.code` contains the OpenSSL error code. Default: `true`.
 
   - `NPNProtocols`: An array of strings or `Buffer`s containing supported NPN
     protocols. `Buffer`s should have following format: `0x05hello0x05world`,
@@ -281,10 +457,12 @@ Creates a new client connection to the given `port` and `host` (old API) or
     SSL version 3. The possible values depend on your installation of
     OpenSSL and are defined in the constant [SSL_METHODS][].
 
+  - `session`: A `Buffer` instance, containing TLS session.
+
 The `callback` parameter will be added as a listener for the
 ['secureConnect'][] event.
 
-`tls.connect()` returns a [CleartextStream][] object.
+`tls.connect()` returns a [tls.TLSSocket][] object.
 
 Here is an example of a client of echo server as described previously:
 
@@ -295,22 +473,22 @@ Here is an example of a client of echo server as described previously:
       // These are necessary only if using the client certificate authentication
       key: fs.readFileSync('client-key.pem'),
       cert: fs.readFileSync('client-cert.pem'),
-    
+
       // This is necessary only if the server uses the self-signed certificate
       ca: [ fs.readFileSync('server-cert.pem') ]
     };
 
-    var cleartextStream = tls.connect(8000, options, function() {
+    var socket = tls.connect(8000, options, function() {
       console.log('client connected',
-                  cleartextStream.authorized ? 'authorized' : 'unauthorized');
-      process.stdin.pipe(cleartextStream);
+                  socket.authorized ? 'authorized' : 'unauthorized');
+      process.stdin.pipe(socket);
       process.stdin.resume();
     });
-    cleartextStream.setEncoding('utf8');
-    cleartextStream.on('data', function(data) {
+    socket.setEncoding('utf8');
+    socket.on('data', function(data) {
       console.log(data);
     });
-    cleartextStream.on('end', function() {
+    socket.on('end', function() {
       server.close();
     });
 
@@ -323,28 +501,90 @@ Or
       pfx: fs.readFileSync('client.pfx')
     };
 
-    var cleartextStream = tls.connect(8000, options, function() {
+    var socket = tls.connect(8000, options, function() {
       console.log('client connected',
-                  cleartextStream.authorized ? 'authorized' : 'unauthorized');
-      process.stdin.pipe(cleartextStream);
+                  socket.authorized ? 'authorized' : 'unauthorized');
+      process.stdin.pipe(socket);
       process.stdin.resume();
     });
-    cleartextStream.setEncoding('utf8');
-    cleartextStream.on('data', function(data) {
+    socket.setEncoding('utf8');
+    socket.on('data', function(data) {
       console.log(data);
     });
-    cleartextStream.on('end', function() {
+    socket.on('end', function() {
       server.close();
     });
 
-## tls.createSecurePair([credentials], [isServer], [requestCert], [rejectUnauthorized])
+## Class: tls.TLSSocket
+
+Wrapper for instance of [net.Socket][], replaces internal socket read/write
+routines to perform transparent encryption/decryption of incoming/outgoing data.
+
+## new tls.TLSSocket(socket, options)
+
+Construct a new TLSSocket object from existing TCP socket.
+
+`socket` is an instance of [net.Socket][]
+
+`options` is an object that might contain following properties:
+
+  - `secureContext`: An optional TLS context object from
+     `tls.createSecureContext( ... )`
+
+  - `isServer`: If true - TLS socket will be instantiated in server-mode
+
+  - `server`: An optional [net.Server][] instance
+
+  - `requestCert`: Optional, see [tls.createSecurePair][]
+
+  - `rejectUnauthorized`: Optional, see [tls.createSecurePair][]
+
+  - `NPNProtocols`: Optional, see [tls.createServer][]
+
+  - `SNICallback`: Optional, see [tls.createServer][]
+
+  - `session`: Optional, a `Buffer` instance, containing TLS session
+
+  - `requestOCSP`: Optional, if `true` - OCSP status request extension would
+    be added to client hello, and `OCSPResponse` event will be emitted on socket
+    before establishing secure communication
+
+
+## tls.createSecureContext(details)
+
+Creates a credentials object, with the optional details being a
+dictionary with keys:
+
+* `pfx` : A string or buffer holding the PFX or PKCS12 encoded private
+  key, certificate and CA certificates
+* `key` : A string holding the PEM encoded private key
+* `passphrase` : A string of passphrase for the private key or pfx
+* `cert` : A string holding the PEM encoded certificate
+* `ca` : Either a string or list of strings of PEM encoded CA
+  certificates to trust.
+* `crl` : Either a string or list of strings of PEM encoded CRLs
+  (Certificate Revocation List)
+* `ciphers`: A string describing the ciphers to use or exclude.
+  Consult
+  <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>
+  for details on the format.
+* `honorCipherOrder` : When choosing a cipher, use the server's preferences
+  instead of the client preferences. For further details see `tls` module
+  documentation.
+
+If no 'ca' details are given, then node.js will use the default
+publicly trusted list of CAs as given in
+<http://mxr.mozilla.org/mozilla/source/security/nss/lib/ckfw/builtins/certdata.txt>.
+
+
+## tls.createSecurePair([context][, isServer][, requestCert][, rejectUnauthorized])
 
 Creates a new secure pair object with two streams, one of which reads/writes
 encrypted data, and one reads/writes cleartext data.
 Generally the encrypted one is piped to/from an incoming encrypted data stream,
 and the cleartext one is used as a replacement for the initial encrypted stream.
 
- - `credentials`: A credentials object from crypto.createCredentials( ... )
+ - `context`: A secure context object from tls.createSecureContext( ... )
 
  - `isServer`: A boolean indicating whether this tls connection should be
    opened as a server or a client.
@@ -356,8 +596,10 @@ and the cleartext one is used as a replacement for the initial encrypted stream.
    automatically reject clients with invalid certificates. Only applies to
    servers with `requestCert` enabled.
 
-`tls.createSecurePair()` returns a SecurePair object with [cleartext][] and
+`tls.createSecurePair()` returns a SecurePair object with `cleartext` and
 `encrypted` stream properties.
+
+NOTE: `cleartext` has the same APIs as [tls.TLSSocket][]
 
 ## Class: SecurePair
 
@@ -380,39 +622,43 @@ connections using TLS or SSL.
 
 ### Event: 'secureConnection'
 
-`function (cleartextStream) {}`
+`function (tlsSocket) {}`
 
 This event is emitted after a new connection has been successfully
-handshaked. The argument is a instance of [CleartextStream][]. It has all the
+handshaked. The argument is an instance of [tls.TLSSocket][]. It has all the
 common stream methods and events.
 
-`cleartextStream.authorized` is a boolean value which indicates if the
+`socket.authorized` is a boolean value which indicates if the
 client has verified by one of the supplied certificate authorities for the
-server. If `cleartextStream.authorized` is false, then
-`cleartextStream.authorizationError` is set to describe how authorization
+server. If `socket.authorized` is false, then
+`socket.authorizationError` is set to describe how authorization
 failed. Implied but worth mentioning: depending on the settings of the TLS
 server, you unauthorized connections may be accepted.
-`cleartextStream.npnProtocol` is a string containing selected NPN protocol.
-`cleartextStream.servername` is a string containing servername requested with
+`socket.npnProtocol` is a string containing selected NPN protocol.
+`socket.servername` is a string containing servername requested with
 SNI.
 
 
 ### Event: 'clientError'
 
-`function (exception, securePair) { }`
+`function (exception, tlsSocket) { }`
 
 When a client connection emits an 'error' event before secure connection is
 established - it will be forwarded here.
 
-`securePair` is the `tls.SecurePair` that the error originated from.
+`tlsSocket` is the [tls.TLSSocket][] that the error originated from.
 
 
 ### Event: 'newSession'
 
-`function (sessionId, sessionData) { }`
+`function (sessionId, sessionData, callback) { }`
 
 Emitted on creation of TLS session. May be used to store sessions in external
-storage.
+storage. `callback` must be invoked eventually, otherwise no data will be
+sent or received from secure connection.
+
+NOTE: adding this event listener will have an effect only on connections
+established after addition of event listener.
 
 
 ### Event: 'resumeSession'
@@ -425,8 +671,50 @@ perform lookup in external storage using given `sessionId`, and invoke
 (i.e. doesn't exist in storage) one may call `callback(null, null)`. Calling
 `callback(err)` will terminate incoming connection and destroy socket.
 
+NOTE: adding this event listener will have an effect only on connections
+established after addition of event listener.
 
-### server.listen(port, [host], [callback])
+
+### Event: 'OCSPRequest'
+
+`function (certificate, issuer, callback) { }`
+
+Emitted when the client sends a certificate status request. You could parse
+server's current certificate to obtain OCSP url and certificate id, and after
+obtaining OCSP response invoke `callback(null, resp)`, where `resp` is a
+`Buffer` instance. Both `certificate` and `issuer` are a `Buffer`
+DER-representations of the primary and issuer's certificates. They could be used
+to obtain OCSP certificate id and OCSP endpoint url.
+
+Alternatively, `callback(null, null)` could be called, meaning that there is no
+OCSP response.
+
+Calling `callback(err)` will result in a `socket.destroy(err)` call.
+
+Typical flow:
+
+1. Client connects to server and sends `OCSPRequest` to it (via status info
+   extension in ClientHello.)
+2. Server receives request and invokes `OCSPRequest` event listener if present
+3. Server grabs OCSP url from either `certificate` or `issuer` and performs an
+   [OCSP request] to the CA
+4. Server receives `OCSPResponse` from CA and sends it back to client via
+   `callback` argument
+5. Client validates the response and either destroys socket or performs a
+   handshake.
+
+NOTE: `issuer` could be null, if the certificate is self-signed or if the issuer
+is not in the root certificates list. (You could provide an issuer via `ca`
+option.)
+
+NOTE: adding this event listener will have an effect only on connections
+established after addition of event listener.
+
+NOTE: you may want to use some npm module like [asn1.js] to parse the
+certificates.
+
+
+### server.listen(port[, host][, callback])
 
 Begin accepting connections on the specified `port` and `host`.  If the
 `host` is omitted, the server will accept connections directed to any
@@ -450,11 +738,12 @@ Returns the bound address, the address family name and port of the
 server as reported by the operating system.  See [net.Server.address()][] for
 more information.
 
-### server.addContext(hostname, credentials)
+### server.addContext(hostname, context)
 
 Add secure context that will be used if client request's SNI hostname is
-matching passed `hostname` (wildcards can be used). `credentials` can contain
-`key`, `cert` and `ca`.
+matching passed `hostname` (wildcards can be used). `context` can contain
+`key`, `cert`, `ca` and/or any other properties from `tls.createSecureContext`
+`options` argument.
 
 ### server.maxConnections
 
@@ -468,6 +757,8 @@ The number of concurrent connections on the server.
 
 ## Class: CryptoStream
 
+    Stability: 0 - Deprecated. Use tls.TLSSocket instead.
+
 This is an encrypted stream.
 
 ### cryptoStream.bytesWritten
@@ -475,65 +766,89 @@ This is an encrypted stream.
 A proxy to the underlying socket's bytesWritten accessor, this will return
 the total bytes written to the socket, *including the TLS overhead*.
 
-## Class: tls.CleartextStream
+## Class: CleartextStream
 
-This is a stream on top of the *Encrypted* stream that makes it possible to
-read/write an encrypted data as a cleartext data.
+The CleartextStream class in Node.js version v0.10.39 and prior has been
+deprecated and removed.
+
+## Class: tls.TLSSocket
+
+This is a wrapped version of [net.Socket][] that does transparent encryption
+of written data and all required TLS negotiation.
 
 This instance implements a duplex [Stream][] interfaces.  It has all the
 common stream methods and events.
 
-A ClearTextStream is the `clear` member of a SecurePair object.
-
 ### Event: 'secureConnect'
 
-This event is emitted after a new connection has been successfully handshaked. 
+This event is emitted after a new connection has been successfully handshaked.
 The listener will be called no matter if the server's certificate was
-authorized or not. It is up to the user to test `cleartextStream.authorized`
+authorized or not. It is up to the user to test `tlsSocket.authorized`
 to see if the server certificate was signed by one of the specified CAs.
-If `cleartextStream.authorized === false` then the error can be found in
-`cleartextStream.authorizationError`. Also if NPN was used - you can check
-`cleartextStream.npnProtocol` for negotiated protocol.
+If `tlsSocket.authorized === false` then the error can be found in
+`tlsSocket.authorizationError`. Also if NPN was used - you can check
+`tlsSocket.npnProtocol` for negotiated protocol.
 
-### cleartextStream.authorized
+### Event: 'OCSPResponse'
+
+`function (response) { }`
+
+This event will be emitted if `requestOCSP` option was set. `response` is a
+buffer object, containing server's OCSP response.
+
+Traditionally, the `response` is a signed object from the server's CA that
+contains information about server's certificate revocation status.
+
+### tlsSocket.encrypted
+
+Static boolean value, always `true`. May be used to distinguish TLS sockets
+from regular ones.
+
+### tlsSocket.authorized
 
 A boolean that is `true` if the peer certificate was signed by one of the
 specified CAs, otherwise `false`
 
-### cleartextStream.authorizationError
+### tlsSocket.authorizationError
 
 The reason why the peer's certificate has not been verified. This property
-becomes available only when `cleartextStream.authorized === false`.
+becomes available only when `tlsSocket.authorized === false`.
 
-### cleartextStream.getPeerCertificate()
+### tlsSocket.getPeerCertificate([ detailed ])
 
 Returns an object representing the peer's certificate. The returned object has
-some properties corresponding to the field of the certificate.
+some properties corresponding to the field of the certificate. If `detailed`
+argument is `true` - the full chain with `issuer` property will be returned,
+if `false` - only the top certificate without `issuer` property.
 
 Example:
 
-    { subject: 
+    { subject:
        { C: 'UK',
          ST: 'Acknack Ltd',
          L: 'Rhys Jones',
          O: 'node.js',
          OU: 'Test TLS Certificate',
          CN: 'localhost' },
-      issuer: 
+      issuerInfo:
        { C: 'UK',
          ST: 'Acknack Ltd',
          L: 'Rhys Jones',
          O: 'node.js',
          OU: 'Test TLS Certificate',
          CN: 'localhost' },
+      issuer:
+       { ... another certificate ... },
+      raw: < RAW DER buffer >,
       valid_from: 'Nov 11 09:52:22 2009 GMT',
       valid_to: 'Nov  6 09:52:22 2029 GMT',
-      fingerprint: '2A:7A:C2:DD:E5:F9:CC:53:72:35:99:7A:02:5A:71:38:52:EC:8A:DF' }
+      fingerprint: '2A:7A:C2:DD:E5:F9:CC:53:72:35:99:7A:02:5A:71:38:52:EC:8A:DF',
+      serialNumber: 'B9B0D332A1AA5635' }
 
 If the peer does not provide a certificate, it returns `null` or an empty
 object.
 
-### cleartextStream.getCipher()
+### tlsSocket.getCipher()
 Returns an object representing the cipher name and the SSL/TLS
 protocol version of the current connection.
 
@@ -544,28 +859,92 @@ See SSL_CIPHER_get_name() and SSL_CIPHER_get_version() in
 http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_CIPHERS for more
 information.
 
-### cleartextStream.address()
+### tlsSocket.renegotiate(options, callback)
+
+Initiate TLS renegotiation process. The `options` may contain the following
+fields: `rejectUnauthorized`, `requestCert` (See [tls.createServer][]
+for details). `callback(err)` will be executed with `null` as `err`,
+once the renegotiation is successfully completed.
+
+NOTE: Can be used to request peer's certificate after the secure connection
+has been established.
+
+ANOTHER NOTE: When running as the server, socket will be destroyed
+with an error after `handshakeTimeout` timeout.
+
+### tlsSocket.setMaxSendFragment(size)
+
+Set maximum TLS fragment size (default and maximum value is: `16384`, minimum
+is: `512`). Returns `true` on success, `false` otherwise.
+
+Smaller fragment size decreases buffering latency on the client: large
+fragments are buffered by the TLS layer until the entire fragment is received
+and its integrity is verified; large fragments can span multiple roundtrips,
+and their processing can be delayed due to packet loss or reordering. However,
+smaller fragments add extra TLS framing bytes and CPU overhead, which may
+decrease overall server throughput.
+
+### tlsSocket.getSession()
+
+Return ASN.1 encoded TLS session or `undefined` if none was negotiated. Could
+be used to speed up handshake establishment when reconnecting to the server.
+
+### tlsSocket.getTLSTicket()
+
+NOTE: Works only with client TLS sockets. Useful only for debugging, for
+session reuse provide `session` option to `tls.connect`.
+
+Return TLS session ticket or `undefined` if none was negotiated.
+
+### tlsSocket.address()
 
 Returns the bound address, the address family name and port of the
 underlying socket as reported by the operating system. Returns an
 object with three properties, e.g.
 `{ port: 12346, family: 'IPv4', address: '127.0.0.1' }`
 
-### cleartextStream.remoteAddress
+### tlsSocket.remoteAddress
 
 The string representation of the remote IP address. For example,
 `'74.125.127.100'` or `'2001:4860:a005::68'`.
 
-### cleartextStream.remotePort
+### tlsSocket.remoteFamily
+
+The string representation of the remote IP family. `'IPv4'` or `'IPv6'`.
+
+### tlsSocket.remotePort
 
 The numeric representation of the remote port. For example, `443`.
 
+### tlsSocket.localAddress
+
+The string representation of the local IP address.
+
+### tlsSocket.localPort
+
+The numeric representation of the local port.
+
 [OpenSSL cipher list format documentation]: http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT
 [BEAST attacks]: http://blog.ivanristic.com/2011/10/mitigating-the-beast-attack-on-tls.html
-[CleartextStream]: #tls_class_tls_cleartextstream
+[tls.getCiphers]: #tls_tls_getciphers
+[tls.createServer]: #tls_tls_createserver_options_secureconnectionlistener
+[tls.createSecurePair]: #tls_tls_createsecurepair_credentials_isserver_requestcert_rejectunauthorized
+[tls.TLSSocket]: #tls_class_tls_tlssocket
+[net.Server]: net.html#net_class_net_server
+[net.Socket]: net.html#net_class_net_socket
 [net.Server.address()]: net.html#net_server_address
 ['secureConnect']: #tls_event_secureconnect
 [secureConnection]: #tls_event_secureconnection
 [Stream]: stream.html#stream_stream
 [SSL_METHODS]: http://www.openssl.org/docs/ssl/ssl.html#DEALING_WITH_PROTOCOL_METHODS
 [tls.Server]: #tls_class_tls_server
+[SSL_CTX_set_timeout]: http://www.openssl.org/docs/ssl/SSL_CTX_set_timeout.html
+[RFC 4492]: http://www.rfc-editor.org/rfc/rfc4492.txt
+[Forward secrecy]: http://en.wikipedia.org/wiki/Perfect_forward_secrecy
+[DHE]: https://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
+[ECDHE]: https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman
+[asn1.js]: http://npmjs.org/package/asn1.js
+[OCSP request]: http://en.wikipedia.org/wiki/OCSP_stapling
+[TLS recommendations]: https://wiki.mozilla.org/Security/Server_Side_TLS
+[SSL_CTX_set_options]: https://www.openssl.org/docs/ssl/SSL_CTX_set_options.html
+[CVE-2014-3566]: https://access.redhat.com/articles/1232123

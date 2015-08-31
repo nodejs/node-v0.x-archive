@@ -23,13 +23,14 @@ var common = require('../common');
 var assert = require('assert');
 var exec = require('child_process').exec;
 var path = require('path');
+var util = require('util');
 
 var callbacks = 0;
 
 function test(env, cb) {
   var filename = path.join(common.fixturesDir, 'test-fs-readfile-error.js');
-  var execPath = process.execPath + ' --throw-deprecation ' + filename;
-  var options = { env: env || {} };
+  var execPath = process.execPath + ' ' + filename;
+  var options = { env: util._extend(process.env, env || {}) };
   exec(execPath, options, function(err, stdout, stderr) {
     assert(err);
     assert.equal(stdout, '');
@@ -53,12 +54,3 @@ test({ NODE_DEBUG: 'fs' }, function(data) {
 process.on('exit', function() {
   assert.equal(callbacks, 2);
 });
-
-(function() {
-  console.error('the warnings are normal here.');
-  // just make sure that this doesn't crash the process.
-  var fs = require('fs');
-  fs.readFile(__dirname);
-  fs.readdir(__filename);
-  fs.unlink('gee-i-sure-hope-this-file-isnt-important-or-existing');
-})();

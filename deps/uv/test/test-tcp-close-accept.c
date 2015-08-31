@@ -19,6 +19,9 @@
  * IN THE SOFTWARE.
  */
 
+/* this test is Unix only */
+#ifndef _WIN32
+
 #include "uv.h"
 #include "task.h"
 
@@ -71,13 +74,13 @@ static void connect_cb(uv_connect_t* req, int status) {
   ASSERT(0 == uv_write(&write_reqs[i], outgoing, &buf, 1, write_cb));
 }
 
-static uv_buf_t alloc_cb(uv_handle_t* handle, size_t suggested_size) {
-  static char buf[1];
-
-  return uv_buf_init(buf, sizeof(buf));
+static void alloc_cb(uv_handle_t* handle, size_t size, uv_buf_t* buf) {
+  static char slab[1];
+  buf->base = slab;
+  buf->len = sizeof(slab);
 }
 
-static void read_cb(uv_stream_t* stream, ssize_t nread, uv_buf_t b) {
+static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   uv_loop_t* loop;
   unsigned int i;
 
@@ -95,7 +98,10 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, uv_buf_t b) {
 
   /* Create new fd that should be one of the closed incomings */
   ASSERT(0 == uv_tcp_init(loop, &tcp_check));
-  ASSERT(0 == uv_tcp_connect(&tcp_check_req, &tcp_check, addr, connect_cb));
+  ASSERT(0 == uv_tcp_connect(&tcp_check_req,
+                             &tcp_check,
+                             (const struct sockaddr*) &addr,
+                             connect_cb));
   ASSERT(0 == uv_read_start((uv_stream_t*) &tcp_check, alloc_cb, read_cb));
 
   /* Close server, so no one will connect to it */
@@ -150,10 +156,10 @@ TEST_IMPL(tcp_close_accept) {
    */
 
   loop = uv_default_loop();
-  addr = uv_ip4_addr("0.0.0.0", TEST_PORT);
+  ASSERT(0 == uv_ip4_addr("127.0.0.1", TEST_PORT, &addr));
 
   ASSERT(0 == uv_tcp_init(loop, &tcp_server));
-  ASSERT(0 == uv_tcp_bind(&tcp_server, addr));
+  ASSERT(0 == uv_tcp_bind(&tcp_server, (const struct sockaddr*) &addr, 0));
   ASSERT(0 == uv_listen((uv_stream_t*) &tcp_server,
                         ARRAY_SIZE(tcp_outgoing),
                         connection_cb));
@@ -162,7 +168,10 @@ TEST_IMPL(tcp_close_accept) {
     client = tcp_outgoing + i;
 
     ASSERT(0 == uv_tcp_init(loop, client));
-    ASSERT(0 == uv_tcp_connect(&connect_reqs[i], client, addr, connect_cb));
+    ASSERT(0 == uv_tcp_connect(&connect_reqs[i],
+                               client,
+                               (const struct sockaddr*) &addr,
+                               connect_cb));
   }
 
   uv_run(loop, UV_RUN_DEFAULT);
@@ -175,3 +184,5 @@ TEST_IMPL(tcp_close_accept) {
   MAKE_VALGRIND_HAPPY();
   return 0;
 }
+
+#endif  /* !_WIN32 */

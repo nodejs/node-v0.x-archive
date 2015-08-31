@@ -1,6 +1,6 @@
 # Cluster
 
-    Stability: 1 - Experimental
+    Stability: 2 - Unstable
 
 A single instance of Node runs in a single thread. To take advantage of
 multi-core systems the user will sometimes want to launch a cluster of Node
@@ -53,14 +53,28 @@ The worker processes are spawned using the `child_process.fork` method,
 so that they can communicate with the parent via IPC and pass server
 handles back and forth.
 
-When you call `server.listen(...)` in a worker, it serializes the
-arguments and passes the request to the master process.  If the master
-process already has a listening server matching the worker's
-requirements, then it passes the handle to the worker.  If it does not
-already have a listening server matching that requirement, then it will
-create one, and pass the handle to the worker.
+The cluster module supports two methods of distributing incoming
+connections.
 
-This causes potentially surprising behavior in three edge cases:
+The first one (and the default one on all platforms except Windows),
+is the round-robin approach, where the master process listens on a
+port, accepts new connections and distributes them across the workers
+in a round-robin fashion, with some built-in smarts to avoid
+overloading a worker process.
+
+The second approach is where the master process creates the listen
+socket and sends it to interested workers. The workers then accept
+incoming connections directly.
+
+The second approach should, in theory, give the best performance.
+In practice however, distribution tends to be very unbalanced due
+to operating system scheduler vagaries. Loads have been observed
+where over 70% of all connections ended up in just two processes,
+out of a total of eight.
+
+Because `server.listen()` hands off most of the work to the master
+process, there are three cases where the behavior between a normal
+node.js process and a cluster worker differs:
 
 1. `server.listen({fd: 7})` Because the message is passed to the master,
    file descriptor 7 **in the parent** will be listened on, and the
@@ -77,12 +91,10 @@ This causes potentially surprising behavior in three edge cases:
    want to listen on a unique port, generate a port number based on the
    cluster worker ID.
 
-When multiple processes are all `accept()`ing on the same underlying
-resource, the operating system load-balances across them very
-efficiently.  There is no routing logic in Node.js, or in your program,
-and no shared state between the workers.  Therefore, it is important to
-design your program such that it does not rely too heavily on in-memory
-data objects for things like sessions and login.
+There is no routing logic in Node.js, or in your program, and no shared
+state between the workers.  Therefore, it is important to design your
+program such that it does not rely too heavily on in-memory data objects
+for things like sessions and login.
 
 Because workers are all separate processes, they can be killed or
 re-spawned depending on your program's needs, without affecting other
@@ -90,6 +102,21 @@ workers.  As long as there are some workers still alive, the server will
 continue to accept connections.  Node does not automatically manage the
 number of workers for you, however.  It is your responsibility to manage
 the worker pool for your application's needs.
+
+## cluster.schedulingPolicy
+
+The scheduling policy, either `cluster.SCHED_RR` for round-robin or
+`cluster.SCHED_NONE` to leave it to the operating system. This is a
+global setting and effectively frozen once you spawn the first worker
+or call `cluster.setupMaster()`, whatever comes first.
+
+`SCHED_RR` is the default on all operating systems except Windows.
+Windows will change to `SCHED_RR` once libuv is able to effectively
+distribute IOCP handles without incurring a large performance hit.
+
+`cluster.schedulingPolicy` can also be set through the
+`NODE_CLUSTER_SCHED_POLICY` environment variable. Valid
+values are `"rr"` and `"none"`.
 
 ## cluster.settings
 
@@ -101,6 +128,8 @@ the worker pool for your application's needs.
     (Default=`process.argv.slice(2)`)
   * `silent` {Boolean} whether or not to send output to parent's stdio.
     (Default=`false`)
+  * `uid` {Number} Sets the user identity of the process. (See setuid(2).)
+  * `gid` {Number} Sets the group identity of the process. (See setgid(2).)
 
 After calling `.setupMaster()` (or `.fork()`) this settings object will contain
 the settings, including the default values.
@@ -221,7 +250,15 @@ See [child_process event: 'exit'](child_process.html#child_process_event_exit).
 
 ## Event: 'setup'
 
-Emitted the first time that `.setupMaster()` is called.
+* `settings` {Object}
+
+Emitted every time `.setupMaster()` is called.
+
+The `settings` object is the `cluster.settings` object at the time
+`.setupMaster()` was called and is advisory only, since multiple calls to
+`.setupMaster()` can be made in a single tick.
+
+If accuracy is important, use `cluster.settings`.
 
 ## cluster.setupMaster([settings])
 
@@ -237,23 +274,26 @@ the settings will be present in `cluster.settings`.
 
 Note that:
 
-* Only the first call to `.setupMaster()` has any effect, subsequent calls are
-  ignored
-* That because of the above, the *only* attribute of a worker that may be
-  customized per-worker is the `env` passed to `.fork()`
-* `.fork()` calls `.setupMaster()` internally to establish the defaults, so to
-  have any effect, `.setupMaster()` must be called *before* any calls to
-  `.fork()`
+* any settings changes only affect future calls to `.fork()` and have no
+  effect on workers that are already running
+* The *only* attribute of a worker that cannot be set via `.setupMaster()` is
+  the `env` passed to `.fork()`
+* the defaults above apply to the first call only, the defaults for later
+  calls is the current value at the time of `cluster.setupMaster()` is called
 
 Example:
 
-    var cluster = require("cluster");
+    var cluster = require('cluster');
     cluster.setupMaster({
-      exec : "worker.js",
-      args : ["--use", "https"],
-      silent : true
+      exec: 'worker.js',
+      args: ['--use', 'https'],
+      silent: true
     });
-    cluster.fork();
+    cluster.fork(); // https worker
+    cluster.setupMaster({
+      args: ['--use', 'http']
+    });
+    cluster.fork(); // http worker
 
 This can only be called from the master process.
 
@@ -304,8 +344,10 @@ A hash that stores the active worker objects, keyed by `id` field. Makes it
 easy to loop through all the workers. It is only available in the master
 process.
 
-A worker is removed from cluster.workers just before the `'disconnect'` or
-`'exit'` event is emitted.
+A worker is removed from cluster.workers after the worker has disconnected _and_
+exited. The order between these two events cannot be determined in advance.
+However, it is guaranteed that the removal from the cluster.workers list happens
+before last `'disconnect'` or `'exit'` event is emitted.
 
     // Go through all workers
     function eachWorker(callback) {
@@ -373,7 +415,7 @@ exit, the master may choose not to respawn a worker based on this value.
     // kill worker
     worker.kill();
 
-### worker.send(message, [sendHandle])
+### worker.send(message[, sendHandle])
 
 * `message` {Object}
 * `sendHandle` {Handle object}
@@ -471,6 +513,17 @@ the `disconnect` event has not been emitted after some time.
       });
     }
 
+### worker.isDead()
+
+This function returns `true` if the worker's process has terminated (either
+because of exiting or being signaled). Otherwise, it returns `false`.
+
+### worker.isConnected()
+
+This function returns `true` if the worker is connected to its master via its IPC
+channel, `false` otherwise. A worker is connected to its master after it's been
+created. It is disconnected after the `disconnect` event is emitted.
+
 ### Event: 'message'
 
 * `message` {Object}
@@ -546,7 +599,7 @@ It is not emitted in the worker.
 
 ### Event: 'disconnect'
 
-Similar to the `cluster.on('disconnect')` event, but specfic to this worker.
+Similar to the `cluster.on('disconnect')` event, but specific to this worker.
 
     cluster.fork().on('disconnect', function() {
       // Worker has disconnected

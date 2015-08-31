@@ -1,35 +1,12 @@
 // Copyright 2011 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef V8_UNICODE_H_
 #define V8_UNICODE_H_
 
 #include <sys/types.h>
-
+#include "src/globals.h"
 /**
  * \file
  * Definitions and convenience functions for working with unicode.
@@ -100,23 +77,11 @@ class UnicodeData {
   static const uchar kMaxCodePoint;
 };
 
-// --- U t f   8   a n d   16 ---
-
-template <typename Data>
-class Buffer {
- public:
-  inline Buffer(Data data, unsigned length) : data_(data), length_(length) { }
-  inline Buffer() : data_(0), length_(0) { }
-  Data data() { return data_; }
-  unsigned length() { return length_; }
- private:
-  Data data_;
-  unsigned length_;
-};
-
-
 class Utf16 {
  public:
+  static inline bool IsSurrogatePair(int lead, int trail) {
+    return IsLeadSurrogate(lead) && IsTrailSurrogate(trail);
+  }
   static inline bool IsLeadSurrogate(int code) {
     if (code == kNoPreviousCharacter) return false;
     return (code & 0xfc00) == 0xd800;
@@ -140,25 +105,37 @@ class Utf16 {
   // One UTF-16 surrogate is endoded (illegally) as 3 UTF-8 bytes.
   // The illegality stems from the surrogate not being part of a pair.
   static const int kUtf8BytesToCodeASurrogate = 3;
-  static inline uchar LeadSurrogate(int char_code) {
+  static inline uint16_t LeadSurrogate(uint32_t char_code) {
     return 0xd800 + (((char_code - 0x10000) >> 10) & 0x3ff);
   }
-  static inline uchar TrailSurrogate(int char_code) {
+  static inline uint16_t TrailSurrogate(uint32_t char_code) {
     return 0xdc00 + (char_code & 0x3ff);
   }
 };
 
+class Latin1 {
+ public:
+  static const unsigned kMaxChar = 0xff;
+  // Returns 0 if character does not convert to single latin-1 character
+  // or if the character doesn't not convert back to latin-1 via inverse
+  // operation (upper to lower, etc).
+  static inline uint16_t ConvertNonLatin1ToLatin1(uint16_t);
+};
 
 class Utf8 {
  public:
   static inline uchar Length(uchar chr, int previous);
-  static inline unsigned Encode(
-      char* out, uchar c, int previous);
-  static const byte* ReadBlock(Buffer<const char*> str, byte* buffer,
-      unsigned capacity, unsigned* chars_read, unsigned* offset);
+  static inline unsigned EncodeOneByte(char* out, uint8_t c);
+  static inline unsigned Encode(char* out,
+                                uchar c,
+                                int previous,
+                                bool replace_invalid = false);
   static uchar CalculateValue(const byte* str,
                               unsigned length,
                               unsigned* cursor);
+
+  // The unicode replacement character, used to signal invalid unicode
+  // sequences (e.g. an orphan surrogate) when converting to a UTF-8 encoding.
   static const uchar kBadChar = 0xFFFD;
   static const unsigned kMaxEncodedSize   = 4;
   static const unsigned kMaxOneByteChar   = 0x7f;
@@ -170,92 +147,50 @@ class Utf8 {
   // that match are coded as a 4 byte UTF-8 sequence.
   static const unsigned kBytesSavedByCombiningSurrogates = 2;
   static const unsigned kSizeOfUnmatchedSurrogate = 3;
-
- private:
-  template <unsigned s> friend class Utf8InputBuffer;
-  friend class Test;
+  // The maximum size a single UTF-16 code unit may take up when encoded as
+  // UTF-8.
+  static const unsigned kMax16BitCodeUnitSize  = 3;
   static inline uchar ValueOf(const byte* str,
                               unsigned length,
                               unsigned* cursor);
 };
 
-// --- C h a r a c t e r   S t r e a m ---
 
-class CharacterStream {
+class Utf8DecoderBase {
  public:
-  inline uchar GetNext();
-  inline bool has_more() { return remaining_ != 0; }
-  // Note that default implementation is not efficient.
-  virtual void Seek(unsigned);
-  unsigned Length();
-  unsigned Utf16Length();
-  virtual ~CharacterStream() { }
-  static inline bool EncodeCharacter(uchar c, byte* buffer, unsigned capacity,
-      unsigned& offset);
-  static inline bool EncodeAsciiCharacter(uchar c, byte* buffer,
-      unsigned capacity, unsigned& offset);
-  static inline bool EncodeNonAsciiCharacter(uchar c, byte* buffer,
-      unsigned capacity, unsigned& offset);
-  static inline uchar DecodeCharacter(const byte* buffer, unsigned* offset);
-  virtual void Rewind() = 0;
-
+  // Initialization done in subclass.
+  inline Utf8DecoderBase();
+  inline Utf8DecoderBase(uint16_t* buffer,
+                         unsigned buffer_length,
+                         const uint8_t* stream,
+                         unsigned stream_length);
+  inline unsigned Utf16Length() const { return utf16_length_; }
  protected:
-  virtual void FillBuffer() = 0;
-  virtual bool BoundsCheck(unsigned offset) = 0;
-  // The number of characters left in the current buffer
-  unsigned remaining_;
-  // The current offset within the buffer
-  unsigned cursor_;
-  // The buffer containing the decoded characters.
-  const byte* buffer_;
+  // This reads all characters and sets the utf16_length_.
+  // The first buffer_length utf16 chars are cached in the buffer.
+  void Reset(uint16_t* buffer,
+             unsigned buffer_length,
+             const uint8_t* stream,
+             unsigned stream_length);
+  static void WriteUtf16Slow(const uint8_t* stream, unsigned stream_length,
+                             uint16_t* data, unsigned length);
+  const uint8_t* unbuffered_start_;
+  unsigned unbuffered_length_;
+  unsigned utf16_length_;
+  bool last_byte_of_buffer_unused_;
+ private:
+  DISALLOW_COPY_AND_ASSIGN(Utf8DecoderBase);
 };
 
-// --- I n p u t   B u f f e r ---
-
-/**
- * Provides efficient access to encoded characters in strings.  It
- * does so by reading characters one block at a time, rather than one
- * character at a time, which gives string implementations an
- * opportunity to optimize the decoding.
- */
-template <class Reader, class Input = Reader*, unsigned kSize = 256>
-class InputBuffer : public CharacterStream {
+template <unsigned kBufferSize>
+class Utf8Decoder : public Utf8DecoderBase {
  public:
-  virtual void Rewind();
-  inline void Reset(Input input);
-  void Seek(unsigned position);
-  inline void Reset(unsigned position, Input input);
- protected:
-  InputBuffer() { }
-  explicit InputBuffer(Input input) { Reset(input); }
-  virtual void FillBuffer();
-  virtual bool BoundsCheck(unsigned offset) {
-    return (buffer_ != util_buffer_) || (offset < kSize);
-  }
-
-  // A custom offset that can be used by the string implementation to
-  // mark progress within the encoded string.
-  unsigned offset_;
-  // The input string
-  Input input_;
-  // To avoid heap allocation, we keep an internal buffer to which
-  // the encoded string can write its characters.  The string
-  // implementation is free to decide whether it wants to use this
-  // buffer or not.
-  byte util_buffer_[kSize];
-};
-
-// --- U t f 8   I n p u t   B u f f e r ---
-
-template <unsigned s = 256>
-class Utf8InputBuffer : public InputBuffer<Utf8, Buffer<const char*>, s> {
- public:
-  inline Utf8InputBuffer() { }
-  inline Utf8InputBuffer(const char* data, unsigned length);
-  inline void Reset(const char* data, unsigned length) {
-    InputBuffer<Utf8, Buffer<const char*>, s>::Reset(
-        Buffer<const char*>(data, length));
-  }
+  inline Utf8Decoder() {}
+  inline Utf8Decoder(const char* stream, unsigned length);
+  inline void Reset(const char* stream, unsigned length);
+  inline unsigned WriteUtf16(uint16_t* data, unsigned length) const;
+ private:
+  uint16_t buffer_[kBufferSize];
 };
 
 
@@ -266,9 +201,6 @@ struct Lowercase {
   static bool Is(uchar c);
 };
 struct Letter {
-  static bool Is(uchar c);
-};
-struct Space {
   static bool Is(uchar c);
 };
 struct Number {
@@ -288,6 +220,7 @@ struct ConnectorPunctuation {
 };
 struct ToLowercase {
   static const int kMaxWidth = 3;
+  static const bool kIsToLower = true;
   static int Convert(uchar c,
                      uchar n,
                      uchar* result,
@@ -295,6 +228,7 @@ struct ToLowercase {
 };
 struct ToUppercase {
   static const int kMaxWidth = 3;
+  static const bool kIsToLower = false;
   static int Convert(uchar c,
                      uchar n,
                      uchar* result,

@@ -267,6 +267,10 @@ function test_cyclic_link_overprotection(callback) {
 
 function test_relative_input_cwd(callback) {
   console.log('test_relative_input_cwd');
+  if (skipSymlinks) {
+    console.log('skipping symlink test (no privs)');
+    return runNextTest();
+  }
 
   // we need to get the relative path to the tmp dir from cwd.
   // When the test runner is running it, that will be .../node/test
@@ -406,6 +410,17 @@ function test_up_multiple(cb) {
     console.log('skipping symlink test (no privs)');
     return runNextTest();
   }
+  function cleanup() {
+    ['a/b',
+      'a'
+    ].forEach(function(folder) {
+      try {fs.rmdirSync(tmp(folder))} catch (ex) {}
+    });
+  }
+  function setup() {
+    cleanup();
+  }
+  setup();
   fs.mkdirSync(tmp('a'), 0755);
   fs.mkdirSync(tmp('a/b'), 0755);
   fs.symlinkSync('..', tmp('a/d'), 'dir');
@@ -428,6 +443,7 @@ function test_up_multiple(cb) {
       if (er) throw er;
       assert.equal(abedabed_real, real);
       cb();
+      cleanup();
     });
   });
 }

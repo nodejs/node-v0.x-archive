@@ -2,11 +2,48 @@
 
     Stability: 4 - API Frozen
 
-These functions are in the module `'util'`. Use `require('util')` to access
-them.
+These functions are in the module `'util'`. Use `require('util')` to
+access them.
 
+The `util` module is primarily designed to support the needs of Node's
+internal APIs.  Many of these utilities are useful for your own
+programs.  If you find that these functions are lacking for your
+purposes, however, you are encouraged to write your own utilities.  We
+are not interested in any future additions to the `util` module that
+are unnecessary for Node's internal functionality.
 
-## util.format(format, [...])
+## util.debuglog(section)
+
+* `section` {String} The section of the program to be debugged
+* Returns: {Function} The logging function
+
+This is used to create a function which conditionally writes to stderr
+based on the existence of a `NODE_DEBUG` environment variable.  If the
+`section` name appears in that environment variable, then the returned
+function will be similar to `console.error()`.  If not, then the
+returned function is a no-op.
+
+For example:
+
+```javascript
+var debuglog = util.debuglog('foo');
+
+var bar = 123;
+debuglog('hello from foo [%d]', bar);
+```
+
+If this program is run with `NODE_DEBUG=foo` in the environment, then
+it will output something like:
+
+    FOO 3245: hello from foo [123]
+
+where `3245` is the process id.  If it is not run with that
+environment variable set, then it will not print anything.
+
+You may separate multiple `NODE_DEBUG` environment variables with a
+comma.  For example, `NODE_DEBUG=fs,net,tls`.
+
+## util.format(format[, ...])
 
 Returns a formatted string using the first argument as a `printf`-like format.
 
@@ -16,7 +53,8 @@ argument. Supported placeholders are:
 
 * `%s` - String.
 * `%d` - Number (both integer and float).
-* `%j` - JSON.
+* `%j` - JSON.  Replaced with the string `'[Circular]'` if the argument
+         contains circular references.
 * `%%` - single percent sign (`'%'`). This does not consume an argument.
 
 If the placeholder does not have a corresponding argument, the placeholder is
@@ -37,36 +75,13 @@ Each argument is converted to a string with `util.inspect()`.
     util.format(1, 2, 3); // '1 2 3'
 
 
-## util.debug(string)
-
-A synchronous output function. Will block the process and
-output `string` immediately to `stderr`.
-
-    require('util').debug('message on stderr');
-
-## util.error([...])
-
-Same as `util.debug()` except this will output all arguments immediately to
-`stderr`.
-
-## util.puts([...])
-
-A synchronous output function. Will block the process and output all arguments
-to `stdout` with newlines after each argument.
-
-## util.print([...])
-
-A synchronous output function. Will block the process, cast each argument to a
-string then output to `stdout`. Does not place newlines after each argument.
-
 ## util.log(string)
 
 Output with timestamp on `stdout`.
 
     require('util').log('Timestamped message.');
 
-
-## util.inspect(object, [options])
+## util.inspect(object[, options])
 
 Return a string representation of `object`, which is useful for debugging.
 
@@ -83,8 +98,8 @@ formatted string:
  - `colors` - if `true`, then the output will be styled with ANSI color codes.
    Defaults to `false`. Colors are customizable, see below.
 
- - `customInspect` - if `false`, then custom `inspect()` functions defined on the
-   objects being inspected won't be called. Defaults to `true`.
+ - `customInspect` - if `false`, then custom `inspect(depth, opts)` functions
+   defined on the objects being inspected won't be called. Defaults to `true`.
 
 Example of inspecting all properties of the `util` object:
 
@@ -92,7 +107,13 @@ Example of inspecting all properties of the `util` object:
 
     console.log(util.inspect(util, { showHidden: true, depth: null }));
 
+Values may supply their own custom `inspect(depth, opts)` functions, when
+called they receive the current depth in the recursive inspection, as well as
+the options object passed to `util.inspect()`.
+
 ### Customizing `util.inspect` colors
+
+<!-- type=misc -->
 
 Color output (if enabled) of `util.inspect` is customizable globally
 via `util.inspect.styles` and `util.inspect.colors` objects.
@@ -114,6 +135,10 @@ Predefined color codes are: `white`, `grey`, `black`, `blue`, `cyan`,
 `green`, `magenta`, `red` and `yellow`.
 There are also `bold`, `italic`, `underline` and `inverse` codes.
 
+### Custom `inspect()` function on Objects
+
+<!-- type=misc -->
+
 Objects also may define their own `inspect(depth)` function which `util.inspect()`
 will invoke and use the result of when inspecting the object:
 
@@ -127,8 +152,22 @@ will invoke and use the result of when inspecting the object:
     util.inspect(obj);
       // "{nate}"
 
+You may also return another Object entirely, and the returned String will be
+formatted according to the returned Object. This is similar to how
+`JSON.stringify()` works:
+
+    var obj = { foo: 'this will not show up in the inspect() output' };
+    obj.inspect = function(depth) {
+      return { bar: 'baz' };
+    };
+
+    util.inspect(obj);
+      // "{ bar: 'baz' }"
+
 
 ## util.isArray(object)
+
+Internal alias for Array.isArray.
 
 Returns `true` if the given "object" is an `Array`. `false` otherwise.
 
@@ -184,17 +223,6 @@ Returns `true` if the given "object" is an `Error`. `false` otherwise.
       // false
 
 
-## util.pump(readableStream, writableStream, [callback])
-
-    Stability: 0 - Deprecated: Use readableStream.pipe(writableStream)
-
-Read the data from `readableStream` and send it to the `writableStream`.
-When `writableStream.write(data)` returns `false` `readableStream` will be
-paused until the `drain` event occurs on the `writableStream`. `callback` gets
-an error as its only argument and is called when `writableStream` is closed or
-when an error occurs.
-
-
 ## util.inherits(constructor, superConstructor)
 
 Inherit the prototype methods from one
@@ -227,3 +255,50 @@ through the `constructor.super_` property.
         console.log('Received data: "' + data + '"');
     })
     stream.write("It works!"); // Received data: "It works!"
+
+
+## util.deprecate(function, string)
+
+Marks that a method should not be used any more.
+
+    exports.puts = util.deprecate(function() {
+      for (var i = 0, len = arguments.length; i < len; ++i) {
+        process.stdout.write(arguments[i] + '\n');
+      }
+    }, 'util.puts: Use console.log instead')
+
+It returns a modified function which warns once by default. If
+`--no-deprecation` is set then this function is a NO-OP. If
+`--throw-deprecation` is set then the application will throw an exception
+if the deprecated API is used.
+
+## util.debug(string)
+
+    Stability: 0 - Deprecated: use console.error() instead.
+
+Deprecated predecessor of `console.error`.
+
+## util.error([...])
+
+    Stability: 0 - Deprecated: Use console.error() instead.
+
+Deprecated predecessor of `console.error`.
+
+## util.puts([...])
+
+    Stability: 0 - Deprecated: Use console.log() instead.
+
+Deprecated predecessor of `console.log`.
+
+## util.print([...])
+
+    Stability: 0 - Deprecated: Use `console.log` instead.
+
+Deprecated predecessor of `console.log`.
+
+
+## util.pump(readableStream, writableStream[, callback])
+
+    Stability: 0 - Deprecated: Use readableStream.pipe(writableStream)
+
+Deprecated predecessor of `stream.pipe()`.

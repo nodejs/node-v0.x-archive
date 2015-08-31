@@ -2,8 +2,8 @@
 module.exports = exports = search
 
 var npm = require("./npm.js")
-  , registry = npm.registry
-  , columnify = require('columnify')
+  , columnify = require("columnify")
+  , updateIndex = require("./cache/update-index.js")
 
 search.usage = "npm search [some search terms ...]"
 
@@ -34,19 +34,24 @@ function search (args, silent, staleness, cb) {
   if (typeof cb !== "function") cb = silent, silent = false
 
   var searchopts = npm.config.get("searchopts")
-    , searchexclude = npm.config.get("searchexclude")
+  var searchexclude = npm.config.get("searchexclude")
+
   if (typeof searchopts !== "string") searchopts = ""
   searchopts = searchopts.split(/\s+/)
-  if (typeof searchexclude === "string") {
-    searchexclude = searchexclude.split(/\s+/)
-  } else searchexclude = []
   var opts = searchopts.concat(args).map(function (s) {
     return s.toLowerCase()
   }).filter(function (s) { return s })
+
+  if (typeof searchexclude === "string") {
+    searchexclude = searchexclude.split(/\s+/)
+  } else {
+    searchexclude = []
+  }
   searchexclude = searchexclude.map(function (s) {
     return s.toLowerCase()
   })
-  getFilteredData( staleness, opts, searchexclude, function (er, data) {
+
+  getFilteredData(staleness, opts, searchexclude, function (er, data) {
     // now data is the list of data that we want to show.
     // prettify and print it, and then provide the raw
     // data to the cb.
@@ -57,8 +62,7 @@ function search (args, silent, staleness, cb) {
 }
 
 function getFilteredData (staleness, args, notArgs, cb) {
-  registry.get( "/-/all", staleness, false
-              , true, function (er, data) {
+  updateIndex(staleness, function (er, data) {
     if (er) return cb(er)
     return cb(null, filter(data, args, notArgs))
   })
@@ -115,7 +119,7 @@ function filterWords (data, args, notArgs) {
   for (var i = 0, l = args.length; i < l; i ++) {
     if (!match(words, args[i])) return false
   }
-  for (var i = 0, l = notArgs.length; i < l; i ++) {
+  for (i = 0, l = notArgs.length; i < l; i ++) {
     if (match(words, notArgs[i])) return false
   }
   return true
@@ -155,7 +159,7 @@ function prettify (data, args) {
       dat.keywords = dat.keywords.split(/[,\s]+/)
     }
     if (Array.isArray(dat.keywords)) {
-      dat.keywords = dat.keywords.join(' ')
+      dat.keywords = dat.keywords.join(" ")
     }
 
     // split author on whitespace or ,
@@ -163,7 +167,7 @@ function prettify (data, args) {
       dat.author = dat.author.split(/[,\s]+/)
     }
     if (Array.isArray(dat.author)) {
-      dat.author = dat.author.join(' ')
+      dat.author = dat.author.join(" ")
     }
     return dat
   })
@@ -185,7 +189,7 @@ function prettify (data, args) {
         include: columns
       , truncate: truncate
       , config: {
-          name: { maxWidth: 40, truncate: false, truncateMarker: '' }
+          name: { maxWidth: 40, truncate: false, truncateMarker: "" }
         , description: { maxWidth: 60 }
         , author: { maxWidth: 20 }
         , date: { maxWidth: 11 }
@@ -209,7 +213,7 @@ function addColorMarker (str, arg, i) {
 
   if (arg.charAt(0) === "/") {
     //arg = arg.replace(/\/$/, "")
-    return str.replace( new RegExp(arg.substr(1, arg.length - 1), "gi")
+    return str.replace( new RegExp(arg.substr(1, arg.length - 2), "gi")
                       , function (bit) { return markStart + bit + markEnd } )
 
   }
@@ -218,7 +222,7 @@ function addColorMarker (str, arg, i) {
   var pieces = str.toLowerCase().split(arg.toLowerCase())
     , p = 0
 
-  return pieces.map(function (piece, i) {
+  return pieces.map(function (piece) {
     piece = str.substr(p, piece.length)
     var mark = markStart
              + str.substr(p+piece.length, arg.length)
@@ -239,21 +243,21 @@ function colorize (line) {
 }
 
 function getMaxWidth() {
+  var cols
   try {
     var tty = require("tty")
       , stdout = process.stdout
-      , cols = !tty.isatty(stdout.fd) ? Infinity
-             : process.stdout.getWindowSize()[0]
-      cols = (cols == 0) ? Infinity : cols
+    cols = !tty.isatty(stdout.fd) ? Infinity : process.stdout.getWindowSize()[0]
+    cols = (cols === 0) ? Infinity : cols
   } catch (ex) { cols = Infinity }
   return cols
 }
 
 function trimToMaxWidth(str) {
   var maxWidth = getMaxWidth()
-  return str.split('\n').map(function(line) {
+  return str.split("\n").map(function(line) {
     return line.slice(0, maxWidth)
-  }).join('\n')
+  }).join("\n")
 }
 
 function highlightSearchTerms(str, terms) {

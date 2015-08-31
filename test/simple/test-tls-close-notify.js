@@ -38,8 +38,8 @@ var server = tls.createServer({
   cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 }, function(c) {
   // Send close-notify without shutting down TCP socket
-  if (c.pair.ssl.shutdown() !== 1)
-    c.pair.ssl.shutdown();
+  if (c.ssl.shutdown() !== 1)
+    c.ssl.shutdown();
 }).listen(common.PORT, function() {
   var c = tls.connect(common.PORT, {
     rejectUnauthorized: false

@@ -54,6 +54,10 @@ var assertSame;
 // and the properties of non-Array objects).
 var assertEquals;
 
+
+// The difference between expected and found value is within certain tolerance.
+var assertEqualsDelta;
+
 // The found object is an Array with the same length and elements
 // as the expected object. The expected object doesn't need to be an Array,
 // as long as it's "array-ish".
@@ -98,6 +102,14 @@ var assertInstanceof;
 
 // Assert that this code is never executed (i.e., always fails if executed).
 var assertUnreachable;
+
+// Assert that the function code is (not) optimized.  If "no sync" is passed
+// as second argument, we do not wait for the concurrent optimization thread to
+// finish when polling for optimization status.
+// Only works with --allow-natives-syntax.
+var assertOptimized;
+var assertUnoptimized;
+
 
 (function () {  // Scope for utility functions.
 
@@ -219,8 +231,16 @@ var assertUnreachable;
     return deepObjectEquals(a, b);
   }
 
+  function checkArity(args, arity, name) {
+    if (args.length < arity) {
+      fail(PrettyPrint(arity), args.length,
+           name + " requires " + arity + " or more arguments");
+    }
+  }
 
   assertSame = function assertSame(expected, found, name_opt) {
+    checkArity(arguments, 2, "assertSame");
+
     // TODO(mstarzinger): We should think about using Harmony's egal operator
     // or the function equivalent Object.is() here.
     if (found === expected) {
@@ -233,9 +253,17 @@ var assertUnreachable;
 
 
   assertEquals = function assertEquals(expected, found, name_opt) {
+    checkArity(arguments, 2, "assertEquals");
+
     if (!deepEquals(found, expected)) {
       fail(PrettyPrint(expected), found, name_opt);
     }
+  };
+
+
+  assertEqualsDelta =
+      function assertEqualsDelta(expected, found, delta, name_opt) {
+    assertTrue(Math.abs(expected - found) <= delta, name_opt);
   };
 
 
@@ -353,5 +381,28 @@ var assertUnreachable;
     throw new MjsUnitAssertionError(message);
   };
 
-})();
+  var OptimizationStatusImpl = undefined;
 
+  var OptimizationStatus = function(fun, sync_opt) {
+    if (OptimizationStatusImpl === undefined) {
+      try {
+        OptimizationStatusImpl = new Function(
+            "fun", "sync", "return %GetOptimizationStatus(fun, sync);");
+      } catch (e) {
+        throw new Error("natives syntax not allowed");
+      }
+    }
+    return OptimizationStatusImpl(fun, sync_opt);
+  }
+
+  assertUnoptimized = function assertUnoptimized(fun, sync_opt, name_opt) {
+    if (sync_opt === undefined) sync_opt = "";
+    assertTrue(OptimizationStatus(fun, sync_opt) != 1, name_opt);
+  }
+
+  assertOptimized = function assertOptimized(fun, sync_opt, name_opt) {
+    if (sync_opt === undefined) sync_opt = "";
+    assertTrue(OptimizationStatus(fun, sync_opt) != 2, name_opt);
+  }
+
+})();

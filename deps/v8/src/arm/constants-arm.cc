@@ -1,35 +1,12 @@
 // Copyright 2009 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
-#include "v8.h"
+#include "src/v8.h"
 
-#if defined(V8_TARGET_ARCH_ARM)
+#if V8_TARGET_ARCH_ARM
 
-#include "constants-arm.h"
+#include "src/arm/constants-arm.h"
 
 
 namespace v8 {
@@ -87,8 +64,8 @@ const char* Registers::Name(int reg) {
 }
 
 
-// Support for VFP registers s0 to s31 (d0 to d15).
-// Note that "sN:sM" is the same as "dN/2"
+// Support for VFP registers s0 to s31 (d0 to d15) and d16-d31.
+// Note that "sN:sM" is the same as "dN/2" up to d15.
 // These register names are defined in a way to match the native disassembler
 // formatting. See for example the command "objdump -d <binary file>".
 const char* VFPRegisters::names_[kNumVFPRegisters] = {
@@ -97,12 +74,14 @@ const char* VFPRegisters::names_[kNumVFPRegisters] = {
     "s16", "s17", "s18", "s19", "s20", "s21", "s22", "s23",
     "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31",
     "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7",
-    "d8", "d9", "d10", "d11", "d12", "d13", "d14", "d15"
+    "d8", "d9", "d10", "d11", "d12", "d13", "d14", "d15",
+    "d16", "d17", "d18", "d19", "d20", "d21", "d22", "d23",
+    "d24", "d25", "d26", "d27", "d28", "d29", "d30", "d31"
 };
 
 
 const char* VFPRegisters::Name(int reg, bool is_double) {
-  ASSERT((0 <= reg) && (reg < kNumVFPRegisters));
+  DCHECK((0 <= reg) && (reg < kNumVFPRegisters));
   return names_[reg + (is_double ? kNumVFPSingleRegisters : 0)];
 }
 

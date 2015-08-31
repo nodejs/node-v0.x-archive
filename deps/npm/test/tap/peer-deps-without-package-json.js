@@ -1,59 +1,81 @@
+var fs = require('fs')
+var path = require('path')
+
+var mkdirp = require('mkdirp')
+var mr = require('npm-registry-mock')
+var osenv = require('osenv')
+var rimraf = require('rimraf')
+var test = require('tap').test
+
+var npm = require('../../')
 var common = require('../common-tap.js')
-var fs = require("fs")
-var test = require("tap").test
-var rimraf = require("rimraf")
-var npm = require("../../")
 
-var http = require("http")
+var pkg = path.resolve(__dirname, 'peer-deps-without-package-json')
+var cache = path.resolve(pkg, 'cache')
+var nodeModules = path.resolve(pkg, 'node_modules')
 
+var fileJS = function () {
+/**package
+* { "name": "npm-test-peer-deps-file"
+* , "main": "index.js"
+* , "version": "1.2.3"
+* , "description":"No package.json in sight!"
+* , "peerDependencies": { "underscore": "1.3.1" }
+* , "dependencies": { "mkdirp": "0.3.5" }
+* }
+**/
 
-var js = new Buffer(
-'/**package\n' +
-' * { "name": "npm-test-peer-deps-file"\n' +
-' * , "main": "index.js"\n' +
-' * , "version": "1.2.3"\n' +
-' * , "description":"No package.json in sight!"\n' +
-' * , "peerDependencies": { "dict": "1.1.0" }\n' +
-' * , "dependencies": { "opener": "1.3.0" }\n' +
-' * }\n' +
-' **/\n' +
-'\n' +
-'module.exports = "I\'m just a lonely index, naked as the day I was born."\n')
+  module.exports = 'I\'m just a lonely index, naked as the day I was born.'
+}.toString().split('\n').slice(1, -1).join('\n')
 
-var server
-test("setup", function(t) {
-  server = http.createServer(function (q, s) {
-    s.setHeader('content-type', 'application/javascript')
-    s.end(js)
-  })
-  server.listen(common.port, function () {
-    t.pass('listening')
-    t.end()
-  })
+test('setup', function (t) {
+  t.comment('test for https://github.com/npm/npm/issues/3049')
+  cleanup()
+  mkdirp.sync(cache)
+  mkdirp.sync(nodeModules)
+  fs.writeFileSync(path.join(pkg, 'file-js.js'), fileJS)
+  process.chdir(pkg)
+
+  t.end()
 })
 
-test("installing a peerDependencies-using package without a package.json present (GH-3049)", function (t) {
+test('installing a peerDeps-using package without package.json', function (t) {
+  var customMocks = {
+    'get': {
+      '/ok.js': [200, path.join(pkg, 'file-js.js')]
+    }
+  }
+  mr({port: common.port, mocks: customMocks}, function (err, s) {
+    t.ifError(err, 'mock registry booted')
+    npm.load({
+      registry: common.registry,
+      cache: cache
+    }, function () {
+      npm.install(common.registry + '/ok.js', function (err) {
+        t.ifError(err, 'installed ok.js')
 
-  rimraf.sync(__dirname + "/peer-deps-without-package-json/node_modules")
-  fs.mkdirSync(__dirname + "/peer-deps-without-package-json/node_modules")
-  process.chdir(__dirname + "/peer-deps-without-package-json")
+        t.ok(
+          fs.existsSync(path.join(nodeModules, 'npm-test-peer-deps-file')),
+          'passive peer dep installed'
+        )
+        t.ok(
+          fs.existsSync(path.join(nodeModules, 'underscore')),
+          'underscore installed'
+        )
 
-  npm.load(function () {
-    npm.install(common.registry, function (err) {
-      if (err) {
-        t.fail(err)
-      } else {
-        t.ok(fs.existsSync(__dirname + "/peer-deps-without-package-json/node_modules/npm-test-peer-deps-file"))
-        t.ok(fs.existsSync(__dirname + "/peer-deps-without-package-json/node_modules/dict"))
-      }
-      t.end()
+        t.end()
+        s.close() // shutdown mock registry.
+      })
     })
   })
 })
 
-test("cleanup", function (t) {
-  server.close(function() {
-    t.pass("closed")
-    t.end()
-  })
+test('cleanup', function (t) {
+  cleanup()
+  t.end()
 })
+
+function cleanup () {
+  process.chdir(osenv.tmpdir())
+  rimraf.sync(pkg)
+}

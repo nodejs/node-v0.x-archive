@@ -50,7 +50,7 @@ var server = http.Server(function(req, res) {
 });
 
 var responses = 0;
-var N = http.Agent.defaultMaxSockets - 1;
+var N = 16;
 var requests = [];
 
 server.listen(common.PORT, function() {
@@ -62,6 +62,7 @@ server.listen(common.PORT, function() {
     var req = http.get(options, function(res) {
       console.log('Client response code ' + res.statusCode);
 
+      res.resume();
       if (++responses == N) {
         console.log('All clients connected, destroying.');
         requests.forEach(function(outReq) {

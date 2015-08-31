@@ -69,13 +69,16 @@ var server = http.createServer(function(req, res) {
     res.write(data);
   });
 
+  cat.stdout.on('end', function onStdoutEnd() {
+    res.end();
+  });
+
   // End the response on exit (and log errors)
   cat.on('exit', function(code) {
     if (code !== 0) {
       console.error('subprocess exited with code ' + code);
-      exit(1);
+      process.exit(1);
     }
-    res.end();
   });
 
 });

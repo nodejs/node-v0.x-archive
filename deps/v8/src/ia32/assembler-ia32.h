@@ -37,8 +37,8 @@
 #ifndef V8_IA32_ASSEMBLER_IA32_H_
 #define V8_IA32_ASSEMBLER_IA32_H_
 
-#include "isolate.h"
-#include "serialize.h"
+#include "src/isolate.h"
+#include "src/serialize.h"
 
 namespace v8 {
 namespace internal {
@@ -65,7 +65,10 @@ namespace internal {
 // and best performance in optimized code.
 //
 struct Register {
-  static const int kNumAllocatableRegisters = 6;
+  static const int kMaxNumAllocatableRegisters = 6;
+  static int NumAllocatableRegisters() {
+    return kMaxNumAllocatableRegisters;
+  }
   static const int kNumRegisters = 8;
 
   static inline const char* AllocationIndexToString(int index);
@@ -75,8 +78,8 @@ struct Register {
   static inline Register FromAllocationIndex(int index);
 
   static Register from_code(int code) {
-    ASSERT(code >= 0);
-    ASSERT(code < kNumRegisters);
+    DCHECK(code >= 0);
+    DCHECK(code < kNumRegisters);
     Register r = { code };
     return r;
   }
@@ -85,11 +88,11 @@ struct Register {
   // eax, ebx, ecx and edx are byte registers, the rest are not.
   bool is_byte_register() const { return code_ <= 3; }
   int code() const {
-    ASSERT(is_valid());
+    DCHECK(is_valid());
     return code_;
   }
   int bit() const {
-    ASSERT(is_valid());
+    DCHECK(is_valid());
     return 1 << code_;
   }
 
@@ -119,7 +122,7 @@ const Register no_reg = { kRegister_no_reg_Code };
 
 
 inline const char* Register::AllocationIndexToString(int index) {
-  ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+  DCHECK(index >= 0 && index < kMaxNumAllocatableRegisters);
   // This is the mapping of allocation indices to registers.
   const char* const kNames[] = { "eax", "ecx", "edx", "ebx", "esi", "edi" };
   return kNames[index];
@@ -127,33 +130,52 @@ inline const char* Register::AllocationIndexToString(int index) {
 
 
 inline int Register::ToAllocationIndex(Register reg) {
-  ASSERT(reg.is_valid() && !reg.is(esp) && !reg.is(ebp));
+  DCHECK(reg.is_valid() && !reg.is(esp) && !reg.is(ebp));
   return (reg.code() >= 6) ? reg.code() - 2 : reg.code();
 }
 
 
 inline Register Register::FromAllocationIndex(int index)  {
-  ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+  DCHECK(index >= 0 && index < kMaxNumAllocatableRegisters);
   return (index >= 4) ? from_code(index + 2) : from_code(index);
 }
 
 
 struct XMMRegister {
-  static const int kNumAllocatableRegisters = 7;
-  static const int kNumRegisters = 8;
+  static const int kMaxNumAllocatableRegisters = 7;
+  static const int kMaxNumRegisters = 8;
+  static int NumAllocatableRegisters() {
+    return kMaxNumAllocatableRegisters;
+  }
 
   static int ToAllocationIndex(XMMRegister reg) {
-    ASSERT(reg.code() != 0);
+    DCHECK(reg.code() != 0);
     return reg.code() - 1;
   }
 
   static XMMRegister FromAllocationIndex(int index) {
-    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    DCHECK(index >= 0 && index < kMaxNumAllocatableRegisters);
     return from_code(index + 1);
   }
 
+  static XMMRegister from_code(int code) {
+    XMMRegister result = { code };
+    return result;
+  }
+
+  bool is_valid() const {
+    return 0 <= code_ && code_ < kMaxNumRegisters;
+  }
+
+  int code() const {
+    DCHECK(is_valid());
+    return code_;
+  }
+
+  bool is(XMMRegister reg) const { return code_ == reg.code_; }
+
   static const char* AllocationIndexToString(int index) {
-    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    DCHECK(index >= 0 && index < kMaxNumAllocatableRegisters);
     const char* const names[] = {
       "xmm1",
       "xmm2",
@@ -166,20 +188,11 @@ struct XMMRegister {
     return names[index];
   }
 
-  static XMMRegister from_code(int code) {
-    XMMRegister r = { code };
-    return r;
-  }
-
-  bool is_valid() const { return 0 <= code_ && code_ < kNumRegisters; }
-  bool is(XMMRegister reg) const { return code_ == reg.code_; }
-  int code() const {
-    ASSERT(is_valid());
-    return code_;
-  }
-
   int code_;
 };
+
+
+typedef XMMRegister DoubleRegister;
 
 
 const XMMRegister xmm0 = { 0 };
@@ -190,9 +203,7 @@ const XMMRegister xmm4 = { 4 };
 const XMMRegister xmm5 = { 5 };
 const XMMRegister xmm6 = { 6 };
 const XMMRegister xmm7 = { 7 };
-
-
-typedef XMMRegister DoubleRegister;
+const XMMRegister no_xmm_reg = { -1 };
 
 
 enum Condition {
@@ -235,8 +246,8 @@ inline Condition NegateCondition(Condition cc) {
 }
 
 
-// Corresponds to transposing the operands of a comparison.
-inline Condition ReverseCondition(Condition cc) {
+// Commute a condition such that {a cond b == b cond' a}.
+inline Condition CommuteCondition(Condition cc) {
   switch (cc) {
     case below:
       return above;
@@ -256,7 +267,7 @@ inline Condition ReverseCondition(Condition cc) {
       return greater_equal;
     default:
       return cc;
-  };
+  }
 }
 
 
@@ -275,12 +286,12 @@ class Immediate BASE_EMBEDDED {
     return Immediate(label);
   }
 
-  bool is_zero() const { return x_ == 0 && rmode_ == RelocInfo::NONE; }
+  bool is_zero() const { return x_ == 0 && RelocInfo::IsNone(rmode_); }
   bool is_int8() const {
-    return -128 <= x_ && x_ < 128 && rmode_ == RelocInfo::NONE;
+    return -128 <= x_ && x_ < 128 && RelocInfo::IsNone(rmode_);
   }
   bool is_int16() const {
-    return -32768 <= x_ && x_ < 32768 && rmode_ == RelocInfo::NONE;
+    return -32768 <= x_ && x_ < 32768 && RelocInfo::IsNone(rmode_);
   }
 
  private:
@@ -289,6 +300,7 @@ class Immediate BASE_EMBEDDED {
   int x_;
   RelocInfo::Mode rmode_;
 
+  friend class Operand;
   friend class Assembler;
   friend class MacroAssembler;
 };
@@ -311,29 +323,34 @@ enum ScaleFactor {
 
 class Operand BASE_EMBEDDED {
  public:
+  // reg
+  INLINE(explicit Operand(Register reg));
+
   // XMM reg
   INLINE(explicit Operand(XMMRegister xmm_reg));
 
   // [disp/r]
   INLINE(explicit Operand(int32_t disp, RelocInfo::Mode rmode));
-  // disp only must always be relocated
+
+  // [disp/r]
+  INLINE(explicit Operand(Immediate imm));
 
   // [base + disp/r]
   explicit Operand(Register base, int32_t disp,
-                   RelocInfo::Mode rmode = RelocInfo::NONE);
+                   RelocInfo::Mode rmode = RelocInfo::NONE32);
 
   // [base + index*scale + disp/r]
   explicit Operand(Register base,
                    Register index,
                    ScaleFactor scale,
                    int32_t disp,
-                   RelocInfo::Mode rmode = RelocInfo::NONE);
+                   RelocInfo::Mode rmode = RelocInfo::NONE32);
 
   // [index*scale + disp/r]
   explicit Operand(Register index,
                    ScaleFactor scale,
                    int32_t disp,
-                   RelocInfo::Mode rmode = RelocInfo::NONE);
+                   RelocInfo::Mode rmode = RelocInfo::NONE32);
 
   static Operand StaticVariable(const ExternalReference& ext) {
     return Operand(reinterpret_cast<int32_t>(ext.address()),
@@ -347,9 +364,14 @@ class Operand BASE_EMBEDDED {
                    RelocInfo::EXTERNAL_REFERENCE);
   }
 
-  static Operand Cell(Handle<JSGlobalPropertyCell> cell) {
+  static Operand ForCell(Handle<Cell> cell) {
+    AllowDeferredHandleDereference embedding_raw_address;
     return Operand(reinterpret_cast<int32_t>(cell.location()),
-                   RelocInfo::GLOBAL_PROPERTY_CELL);
+                   RelocInfo::CELL);
+  }
+
+  static Operand ForRegisterPlusImmediate(Register base, Immediate imm) {
+    return Operand(base, imm.x_, imm.rmode_);
   }
 
   // Returns true if this Operand is a wrapper for the specified register.
@@ -363,9 +385,6 @@ class Operand BASE_EMBEDDED {
   Register reg() const;
 
  private:
-  // reg
-  INLINE(explicit Operand(Register reg));
-
   // Set the ModRM byte without an encoded 'reg' register. The
   // register is encoded later as part of the emit_operand operation.
   inline void set_modrm(int mod, Register rm);
@@ -382,7 +401,6 @@ class Operand BASE_EMBEDDED {
 
   friend class Assembler;
   friend class MacroAssembler;
-  friend class LCodeGen;
 };
 
 
@@ -440,119 +458,6 @@ class Displacement BASE_EMBEDDED {
 };
 
 
-
-// CpuFeatures keeps track of which features are supported by the target CPU.
-// Supported features must be enabled by a Scope before use.
-// Example:
-//   if (CpuFeatures::IsSupported(SSE2)) {
-//     CpuFeatures::Scope fscope(SSE2);
-//     // Generate SSE2 floating point code.
-//   } else {
-//     // Generate standard x87 floating point code.
-//   }
-class CpuFeatures : public AllStatic {
- public:
-  // Detect features of the target CPU. Set safe defaults if the serializer
-  // is enabled (snapshots must be portable).
-  static void Probe();
-
-  // Check whether a feature is supported by the target CPU.
-  static bool IsSupported(CpuFeature f) {
-    ASSERT(initialized_);
-    if (f == SSE2 && !FLAG_enable_sse2) return false;
-    if (f == SSE3 && !FLAG_enable_sse3) return false;
-    if (f == SSE4_1 && !FLAG_enable_sse4_1) return false;
-    if (f == CMOV && !FLAG_enable_cmov) return false;
-    if (f == RDTSC && !FLAG_enable_rdtsc) return false;
-    return (supported_ & (static_cast<uint64_t>(1) << f)) != 0;
-  }
-
-#ifdef DEBUG
-  // Check whether a feature is currently enabled.
-  static bool IsEnabled(CpuFeature f) {
-    ASSERT(initialized_);
-    Isolate* isolate = Isolate::UncheckedCurrent();
-    if (isolate == NULL) {
-      // When no isolate is available, work as if we're running in
-      // release mode.
-      return IsSupported(f);
-    }
-    uint64_t enabled = isolate->enabled_cpu_features();
-    return (enabled & (static_cast<uint64_t>(1) << f)) != 0;
-  }
-#endif
-
-  // Enable a specified feature within a scope.
-  class Scope BASE_EMBEDDED {
-#ifdef DEBUG
-
-   public:
-    explicit Scope(CpuFeature f) {
-      uint64_t mask = static_cast<uint64_t>(1) << f;
-      ASSERT(CpuFeatures::IsSupported(f));
-      ASSERT(!Serializer::enabled() ||
-             (CpuFeatures::found_by_runtime_probing_ & mask) == 0);
-      isolate_ = Isolate::UncheckedCurrent();
-      old_enabled_ = 0;
-      if (isolate_ != NULL) {
-        old_enabled_ = isolate_->enabled_cpu_features();
-        isolate_->set_enabled_cpu_features(old_enabled_ | mask);
-      }
-    }
-    ~Scope() {
-      ASSERT_EQ(Isolate::UncheckedCurrent(), isolate_);
-      if (isolate_ != NULL) {
-        isolate_->set_enabled_cpu_features(old_enabled_);
-      }
-    }
-
-   private:
-    Isolate* isolate_;
-    uint64_t old_enabled_;
-#else
-
-   public:
-    explicit Scope(CpuFeature f) {}
-#endif
-  };
-
-  class TryForceFeatureScope BASE_EMBEDDED {
-   public:
-    explicit TryForceFeatureScope(CpuFeature f)
-        : old_supported_(CpuFeatures::supported_) {
-      if (CanForce()) {
-        CpuFeatures::supported_ |= (static_cast<uint64_t>(1) << f);
-      }
-    }
-
-    ~TryForceFeatureScope() {
-      if (CanForce()) {
-        CpuFeatures::supported_ = old_supported_;
-      }
-    }
-
-   private:
-    static bool CanForce() {
-      // It's only safe to temporarily force support of CPU features
-      // when there's only a single isolate, which is guaranteed when
-      // the serializer is enabled.
-      return Serializer::enabled();
-    }
-
-    const uint64_t old_supported_;
-  };
-
- private:
-#ifdef DEBUG
-  static bool initialized_;
-#endif
-  static uint64_t supported_;
-  static uint64_t found_by_runtime_probing_;
-
-  DISALLOW_COPY_AND_ASSIGN(CpuFeatures);
-};
-
-
 class Assembler : public AssemblerBase {
  private:
   // We check before assembling an instruction that there is sufficient
@@ -582,15 +487,7 @@ class Assembler : public AssemblerBase {
   // upon destruction of the assembler.
   // TODO(vitalyr): the assembler does not need an isolate.
   Assembler(Isolate* isolate, void* buffer, int buffer_size);
-  ~Assembler();
-
-  // Overrides the default provided by FLAG_debug_code.
-  void set_emit_debug_code(bool value) { emit_debug_code_ = value; }
-
-  // Avoids using instructions that vary in size in unpredictable ways between
-  // the snapshot and the running VM.  This is needed by the full compiler so
-  // that it can recompile code with debug support and fix the PC.
-  void set_predictable_code_size(bool value) { predictable_code_size_ = value; }
+  virtual ~Assembler() { }
 
   // GetCode emits any pending (non-emitted) code and fills the descriptor
   // desc. GetCode() is idempotent; it returns the same result if no other
@@ -598,25 +495,38 @@ class Assembler : public AssemblerBase {
   void GetCode(CodeDesc* desc);
 
   // Read/Modify the code target in the branch/call instruction at pc.
-  inline static Address target_address_at(Address pc);
-  inline static void set_target_address_at(Address pc, Address target);
+  inline static Address target_address_at(Address pc,
+                                          ConstantPoolArray* constant_pool);
+  inline static void set_target_address_at(Address pc,
+                                           ConstantPoolArray* constant_pool,
+                                           Address target,
+                                           ICacheFlushMode icache_flush_mode =
+                                               FLUSH_ICACHE_IF_NEEDED);
+  static inline Address target_address_at(Address pc, Code* code) {
+    ConstantPoolArray* constant_pool = code ? code->constant_pool() : NULL;
+    return target_address_at(pc, constant_pool);
+  }
+  static inline void set_target_address_at(Address pc,
+                                           Code* code,
+                                           Address target,
+                                           ICacheFlushMode icache_flush_mode =
+                                               FLUSH_ICACHE_IF_NEEDED) {
+    ConstantPoolArray* constant_pool = code ? code->constant_pool() : NULL;
+    set_target_address_at(pc, constant_pool, target);
+  }
 
   // Return the code target address at a call site from the return address
   // of that call in the instruction stream.
   inline static Address target_address_from_return_address(Address pc);
 
+  // Return the code target address of the patch debug break slot
+  inline static Address break_address_from_return_address(Address pc);
+
   // This sets the branch destination (which is in the instruction on x86).
   // This is for calls and branches within generated code.
   inline static void deserialization_set_special_target_at(
-      Address instruction_payload, Address target) {
-    set_target_address_at(instruction_payload, target);
-  }
-
-  // This sets the branch destination (which is in the instruction on x86).
-  // This is for calls and branches to runtime code.
-  inline static void set_external_target_at(Address instruction_payload,
-                                            Address target) {
-    set_target_address_at(instruction_payload, target);
+      Address instruction_payload, Code* code, Address target) {
+    set_target_address_at(instruction_payload, code, target);
   }
 
   static const int kSpecialTargetSize = kPointerSize;
@@ -709,6 +619,7 @@ class Assembler : public AssemblerBase {
 
   void mov_w(Register dst, const Operand& src);
   void mov_w(const Operand& dst, Register src);
+  void mov_w(const Operand& dst, int16_t imm16);
 
   void mov(Register dst, int32_t imm32);
   void mov(Register dst, const Immediate& x);
@@ -745,8 +656,9 @@ class Assembler : public AssemblerBase {
   void rep_stos();
   void stos();
 
-  // Exchange two registers
+  // Exchange
   void xchg(Register dst, Register src);
+  void xchg(Register dst, const Operand& src);
 
   // Arithmetics
   void adc(Register dst, int32_t imm32);
@@ -788,13 +700,17 @@ class Assembler : public AssemblerBase {
 
   void cdq();
 
-  void idiv(Register src);
+  void idiv(Register src) { idiv(Operand(src)); }
+  void idiv(const Operand& src);
+  void div(Register src) { div(Operand(src)); }
+  void div(const Operand& src);
 
   // Signed multiply instructions.
   void imul(Register src);                               // edx:eax = eax * src.
   void imul(Register dst, Register src) { imul(dst, Operand(src)); }
   void imul(Register dst, const Operand& src);           // dst = dst * src.
   void imul(Register dst, Register src, int32_t imm32);  // dst = src * imm32.
+  void imul(Register dst, const Operand& src, int32_t imm32);
 
   void inc(Register dst);
   void inc(const Operand& dst);
@@ -805,8 +721,10 @@ class Assembler : public AssemblerBase {
   void mul(Register src);                                // edx:eax = eax * reg.
 
   void neg(Register dst);
+  void neg(const Operand& dst);
 
   void not_(Register dst);
+  void not_(const Operand& dst);
 
   void or_(Register dst, int32_t imm32);
   void or_(Register dst, Register src) { or_(dst, Operand(src)); }
@@ -817,23 +735,31 @@ class Assembler : public AssemblerBase {
 
   void rcl(Register dst, uint8_t imm8);
   void rcr(Register dst, uint8_t imm8);
+  void ror(Register dst, uint8_t imm8);
+  void ror_cl(Register dst);
 
-  void sar(Register dst, uint8_t imm8);
-  void sar_cl(Register dst);
+  void sar(Register dst, uint8_t imm8) { sar(Operand(dst), imm8); }
+  void sar(const Operand& dst, uint8_t imm8);
+  void sar_cl(Register dst) { sar_cl(Operand(dst)); }
+  void sar_cl(const Operand& dst);
 
   void sbb(Register dst, const Operand& src);
 
   void shld(Register dst, Register src) { shld(dst, Operand(src)); }
   void shld(Register dst, const Operand& src);
 
-  void shl(Register dst, uint8_t imm8);
-  void shl_cl(Register dst);
+  void shl(Register dst, uint8_t imm8) { shl(Operand(dst), imm8); }
+  void shl(const Operand& dst, uint8_t imm8);
+  void shl_cl(Register dst) { shl_cl(Operand(dst)); }
+  void shl_cl(const Operand& dst);
 
   void shrd(Register dst, Register src) { shrd(dst, Operand(src)); }
   void shrd(Register dst, const Operand& src);
 
-  void shr(Register dst, uint8_t imm8);
-  void shr_cl(Register dst);
+  void shr(Register dst, uint8_t imm8) { shr(Operand(dst), imm8); }
+  void shr(const Operand& dst, uint8_t imm8);
+  void shr_cl(Register dst) { shr_cl(Operand(dst)); }
+  void shr_cl(const Operand& dst);
 
   void sub(Register dst, const Immediate& imm) { sub(Operand(dst), imm); }
   void sub(const Operand& dst, const Immediate& x);
@@ -846,7 +772,7 @@ class Assembler : public AssemblerBase {
   void test(Register reg, const Operand& op);
   void test_b(Register reg, const Operand& op);
   void test(const Operand& op, const Immediate& imm);
-  void test_b(Register reg, uint8_t imm8) { test_b(Operand(reg), imm8); }
+  void test_b(Register reg, uint8_t imm8);
   void test_b(const Operand& op, uint8_t imm8);
 
   void xor_(Register dst, int32_t imm32);
@@ -860,12 +786,13 @@ class Assembler : public AssemblerBase {
   void bt(const Operand& dst, Register src);
   void bts(Register dst, Register src) { bts(Operand(dst), src); }
   void bts(const Operand& dst, Register src);
+  void bsr(Register dst, Register src) { bsr(dst, Operand(src)); }
+  void bsr(Register dst, const Operand& src);
 
   // Miscellaneous
   void hlt();
   void int3();
   void nop();
-  void rdtsc();
   void ret(int imm16);
 
   // Label operations & relative jumps (PPUM Appendix D)
@@ -924,6 +851,7 @@ class Assembler : public AssemblerBase {
   void fld_d(const Operand& adr);
 
   void fstp_s(const Operand& adr);
+  void fst_s(const Operand& adr);
   void fstp_d(const Operand& adr);
   void fst_d(const Operand& adr);
 
@@ -950,9 +878,13 @@ class Assembler : public AssemblerBase {
   void fninit();
 
   void fadd(int i);
+  void fadd_i(int i);
   void fsub(int i);
+  void fsub_i(int i);
   void fmul(int i);
+  void fmul_i(int i);
   void fdiv(int i);
+  void fdiv_i(int i);
 
   void fisub_s(const Operand& adr);
 
@@ -985,9 +917,35 @@ class Assembler : public AssemblerBase {
 
   void cpuid();
 
+  // SSE instructions
+  void movaps(XMMRegister dst, XMMRegister src);
+  void shufps(XMMRegister dst, XMMRegister src, byte imm8);
+
+  void andps(XMMRegister dst, const Operand& src);
+  void andps(XMMRegister dst, XMMRegister src) { andps(dst, Operand(src)); }
+  void xorps(XMMRegister dst, const Operand& src);
+  void xorps(XMMRegister dst, XMMRegister src) { xorps(dst, Operand(src)); }
+  void orps(XMMRegister dst, const Operand& src);
+  void orps(XMMRegister dst, XMMRegister src) { orps(dst, Operand(src)); }
+
+  void addps(XMMRegister dst, const Operand& src);
+  void addps(XMMRegister dst, XMMRegister src) { addps(dst, Operand(src)); }
+  void subps(XMMRegister dst, const Operand& src);
+  void subps(XMMRegister dst, XMMRegister src) { subps(dst, Operand(src)); }
+  void mulps(XMMRegister dst, const Operand& src);
+  void mulps(XMMRegister dst, XMMRegister src) { mulps(dst, Operand(src)); }
+  void divps(XMMRegister dst, const Operand& src);
+  void divps(XMMRegister dst, XMMRegister src) { divps(dst, Operand(src)); }
+
   // SSE2 instructions
   void cvttss2si(Register dst, const Operand& src);
+  void cvttss2si(Register dst, XMMRegister src) {
+    cvttss2si(dst, Operand(src));
+  }
   void cvttsd2si(Register dst, const Operand& src);
+  void cvttsd2si(Register dst, XMMRegister src) {
+    cvttsd2si(dst, Operand(src));
+  }
   void cvtsd2si(Register dst, XMMRegister src);
 
   void cvtsi2sd(XMMRegister dst, Register src) { cvtsi2sd(dst, Operand(src)); }
@@ -996,17 +954,19 @@ class Assembler : public AssemblerBase {
   void cvtsd2ss(XMMRegister dst, XMMRegister src);
 
   void addsd(XMMRegister dst, XMMRegister src);
+  void addsd(XMMRegister dst, const Operand& src);
   void subsd(XMMRegister dst, XMMRegister src);
   void mulsd(XMMRegister dst, XMMRegister src);
+  void mulsd(XMMRegister dst, const Operand& src);
   void divsd(XMMRegister dst, XMMRegister src);
   void xorpd(XMMRegister dst, XMMRegister src);
-  void xorps(XMMRegister dst, XMMRegister src);
   void sqrtsd(XMMRegister dst, XMMRegister src);
+  void sqrtsd(XMMRegister dst, const Operand& src);
 
   void andpd(XMMRegister dst, XMMRegister src);
   void orpd(XMMRegister dst, XMMRegister src);
 
-  void ucomisd(XMMRegister dst, XMMRegister src);
+  void ucomisd(XMMRegister dst, XMMRegister src) { ucomisd(dst, Operand(src)); }
   void ucomisd(XMMRegister dst, const Operand& src);
 
   enum RoundingMode {
@@ -1019,30 +979,35 @@ class Assembler : public AssemblerBase {
   void roundsd(XMMRegister dst, XMMRegister src, RoundingMode mode);
 
   void movmskpd(Register dst, XMMRegister src);
+  void movmskps(Register dst, XMMRegister src);
 
   void cmpltsd(XMMRegister dst, XMMRegister src);
   void pcmpeqd(XMMRegister dst, XMMRegister src);
-
-  void movaps(XMMRegister dst, XMMRegister src);
 
   void movdqa(XMMRegister dst, const Operand& src);
   void movdqa(const Operand& dst, XMMRegister src);
   void movdqu(XMMRegister dst, const Operand& src);
   void movdqu(const Operand& dst, XMMRegister src);
-
-  // Use either movsd or movlpd.
-  void movdbl(XMMRegister dst, const Operand& src);
-  void movdbl(const Operand& dst, XMMRegister src);
+  void movdq(bool aligned, XMMRegister dst, const Operand& src) {
+    if (aligned) {
+      movdqa(dst, src);
+    } else {
+      movdqu(dst, src);
+    }
+  }
 
   void movd(XMMRegister dst, Register src) { movd(dst, Operand(src)); }
   void movd(XMMRegister dst, const Operand& src);
   void movd(Register dst, XMMRegister src) { movd(Operand(dst), src); }
   void movd(const Operand& dst, XMMRegister src);
-  void movsd(XMMRegister dst, XMMRegister src);
+  void movsd(XMMRegister dst, XMMRegister src) { movsd(dst, Operand(src)); }
+  void movsd(XMMRegister dst, const Operand& src);
+  void movsd(const Operand& dst, XMMRegister src);
+
 
   void movss(XMMRegister dst, const Operand& src);
   void movss(const Operand& dst, XMMRegister src);
-  void movss(XMMRegister dst, XMMRegister src);
+  void movss(XMMRegister dst, XMMRegister src) { movss(dst, Operand(src)); }
   void extractps(Register dst, XMMRegister src, byte imm8);
 
   void pand(XMMRegister dst, XMMRegister src);
@@ -1054,7 +1019,7 @@ class Assembler : public AssemblerBase {
   void psllq(XMMRegister dst, XMMRegister src);
   void psrlq(XMMRegister reg, int8_t shift);
   void psrlq(XMMRegister dst, XMMRegister src);
-  void pshufd(XMMRegister dst, XMMRegister src, int8_t shuffle);
+  void pshufd(XMMRegister dst, XMMRegister src, uint8_t shuffle);
   void pextrd(Register dst, XMMRegister src, int8_t offset) {
     pextrd(Operand(dst), src, offset);
   }
@@ -1097,12 +1062,12 @@ class Assembler : public AssemblerBase {
   void db(uint8_t data);
   void dd(uint32_t data);
 
-  int pc_offset() const { return pc_ - buffer_; }
-
   // Check if there is less than kGap bytes available in the buffer.
   // If this is the case, we need to grow the buffer before emitting
   // an instruction or relocation information.
-  inline bool overflow() const { return pc_ >= reloc_info_writer.pos() - kGap; }
+  inline bool buffer_overflow() const {
+    return pc_ >= reloc_info_writer.pos() - kGap;
+  }
 
   // Get the number of bytes available in the buffer.
   inline int available_space() const { return reloc_info_writer.pos() - pc_; }
@@ -1117,21 +1082,21 @@ class Assembler : public AssemblerBase {
 
   // Avoid overflows for displacements etc.
   static const int kMaximalBufferSize = 512*MB;
-  static const int kMinimalBufferSize = 4*KB;
 
-  byte byte_at(int pos)  { return buffer_[pos]; }
+  byte byte_at(int pos) { return buffer_[pos]; }
   void set_byte_at(int pos, byte value) { buffer_[pos] = value; }
 
+  // Allocate a constant pool of the correct size for the generated code.
+  Handle<ConstantPoolArray> NewConstantPool(Isolate* isolate);
+
+  // Generate the constant pool for the generated code.
+  void PopulateConstantPool(ConstantPoolArray* constant_pool);
+
  protected:
-  bool emit_debug_code() const { return emit_debug_code_; }
-  bool predictable_code_size() const { return predictable_code_size_ ; }
-
-  void movsd(XMMRegister dst, const Operand& src);
-  void movsd(const Operand& dst, XMMRegister src);
-
   void emit_sse_operand(XMMRegister reg, const Operand& adr);
   void emit_sse_operand(XMMRegister dst, XMMRegister src);
   void emit_sse_operand(Register dst, XMMRegister src);
+  void emit_sse_operand(XMMRegister dst, Register src);
 
   byte* addr_at(int pos) { return buffer_ + pos; }
 
@@ -1149,6 +1114,9 @@ class Assembler : public AssemblerBase {
   inline void emit(uint32_t x);
   inline void emit(Handle<Object> handle);
   inline void emit(uint32_t x,
+                   RelocInfo::Mode rmode,
+                   TypeFeedbackId id = TypeFeedbackId::None());
+  inline void emit(Handle<Code> code,
                    RelocInfo::Mode rmode,
                    TypeFeedbackId id = TypeFeedbackId::None());
   inline void emit(const Immediate& x);
@@ -1186,22 +1154,10 @@ class Assembler : public AssemblerBase {
   friend class CodePatcher;
   friend class EnsureSpace;
 
-  // Code buffer:
-  // The buffer into which code and relocation info are generated.
-  byte* buffer_;
-  int buffer_size_;
-  // True if the assembler owns the buffer, false if buffer is external.
-  bool own_buffer_;
-
   // code generation
-  byte* pc_;  // the program counter; moves forward
   RelocInfoWriter reloc_info_writer;
 
   PositionsRecorder positions_recorder_;
-
-  bool emit_debug_code_;
-  bool predictable_code_size_;
-
   friend class PositionsRecorder;
 };
 
@@ -1213,7 +1169,7 @@ class Assembler : public AssemblerBase {
 class EnsureSpace BASE_EMBEDDED {
  public:
   explicit EnsureSpace(Assembler* assembler) : assembler_(assembler) {
-    if (assembler_->overflow()) assembler_->GrowBuffer();
+    if (assembler_->buffer_overflow()) assembler_->GrowBuffer();
 #ifdef DEBUG
     space_before_ = assembler_->available_space();
 #endif
@@ -1222,7 +1178,7 @@ class EnsureSpace BASE_EMBEDDED {
 #ifdef DEBUG
   ~EnsureSpace() {
     int bytes_generated = space_before_ - assembler_->available_space();
-    ASSERT(bytes_generated < assembler_->kGap);
+    DCHECK(bytes_generated < assembler_->kGap);
   }
 #endif
 

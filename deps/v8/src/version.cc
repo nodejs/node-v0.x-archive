@@ -25,24 +25,24 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "version.h"
+#include "src/version.h"
 
 // These macros define the version number for the current version.
-// NOTE these macros are used by the SCons build script so their names
-// cannot be changed without changing the SCons build script.
+// NOTE these macros are used by some of the tool scripts and the build
+// system so their names cannot be changed without changing the scripts.
 #define MAJOR_VERSION     3
-#define MINOR_VERSION     14
-#define BUILD_NUMBER      5
-#define PATCH_LEVEL       9
+#define MINOR_VERSION     28
+#define BUILD_NUMBER      71
+#define PATCH_LEVEL 19
 // Use 1 for candidates and 0 otherwise.
 // (Boolean macro values are not supported by all preprocessors.)
 #define IS_CANDIDATE_VERSION 0
 
-// Define SONAME to have the SCons build the put a specific SONAME into the
+// Define SONAME to have the build system put a specific SONAME into the
 // shared library instead the generic SONAME generated from the V8 version
-// number. This define is mainly used by the SCons build script.
+// number. This define is mainly used by the build system script.
 #define SONAME            ""
 
 #if IS_CANDIDATE_VERSION
@@ -84,13 +84,13 @@ void Version::GetString(Vector<char> str) {
   const char* is_simulator = "";
 #endif  // USE_SIMULATOR
   if (GetPatch() > 0) {
-    OS::SNPrintF(str, "%d.%d.%d.%d%s%s",
-                 GetMajor(), GetMinor(), GetBuild(), GetPatch(), candidate,
-                 is_simulator);
+    SNPrintF(str, "%d.%d.%d.%d%s%s",
+             GetMajor(), GetMinor(), GetBuild(), GetPatch(), candidate,
+             is_simulator);
   } else {
-    OS::SNPrintF(str, "%d.%d.%d%s%s",
-                 GetMajor(), GetMinor(), GetBuild(), candidate,
-                 is_simulator);
+    SNPrintF(str, "%d.%d.%d%s%s",
+             GetMajor(), GetMinor(), GetBuild(), candidate,
+             is_simulator);
   }
 }
 
@@ -101,15 +101,15 @@ void Version::GetSONAME(Vector<char> str) {
     // Generate generic SONAME if no specific SONAME is defined.
     const char* candidate = IsCandidate() ? "-candidate" : "";
     if (GetPatch() > 0) {
-      OS::SNPrintF(str, "libv8-%d.%d.%d.%d%s.so",
-                   GetMajor(), GetMinor(), GetBuild(), GetPatch(), candidate);
+      SNPrintF(str, "libv8-%d.%d.%d.%d%s.so",
+               GetMajor(), GetMinor(), GetBuild(), GetPatch(), candidate);
     } else {
-      OS::SNPrintF(str, "libv8-%d.%d.%d%s.so",
-                   GetMajor(), GetMinor(), GetBuild(), candidate);
+      SNPrintF(str, "libv8-%d.%d.%d%s.so",
+               GetMajor(), GetMinor(), GetBuild(), candidate);
     }
   } else {
     // Use specific SONAME.
-    OS::SNPrintF(str, "%s", soname_);
+    SNPrintF(str, "%s", soname_);
   }
 }
 

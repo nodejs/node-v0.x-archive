@@ -4,17 +4,17 @@ docs.usage  = "npm docs <pkgname>"
 docs.usage += "\n"
 docs.usage += "npm docs ."
 
-docs.completion = function (opts, cb) {
-  registry.get("/-/short", 60000, function (er, list) {
-    return cb(null, list || [])
-  })
-}
-
 var npm = require("./npm.js")
-  , registry = npm.registry
   , opener = require("opener")
-  , path = require('path')
-  , log = require('npmlog')
+  , path = require("path")
+  , log = require("npmlog")
+  , mapToRegistry = require("./utils/map-to-registry.js")
+
+docs.completion = function (opts, cb) {
+  // FIXME: there used to be registry completion here, but it stopped making
+  // sense somewhere around 50,000 packages on the registry
+  cb()
+}
 
 function url (json) {
   return json.homepage ? json.homepage : "https://npmjs.org/package/" + json.name
@@ -23,22 +23,25 @@ function url (json) {
 function docs (args, cb) {
   args = args || []
   var pending = args.length
-  if (!pending) return getDoc('.', cb)
+  if (!pending) return getDoc(".", cb)
   args.forEach(function(proj) {
     getDoc(proj, function(err) {
-      if (err) return cb(err)
+      if (err) {
+        return cb(err)
+      }
       --pending || cb()
     })
   })
 }
 
 function getDoc (project, cb) {
-  project = project || '.'
-  var package = path.resolve(process.cwd(), "package.json")
+  project = project || "."
+  var package = path.resolve(npm.localPrefix, "package.json")
 
-  if (project === '.' || project === './') {
+  if (project === "." || project === "./") {
+    var json
     try {
-      var json = require(package)
+      json = require(package)
       if (!json.name) throw new Error('package.json does not have a valid "name" property')
       project = json.name
     } catch (e) {
@@ -49,7 +52,13 @@ function getDoc (project, cb) {
     return opener(url(json), { command: npm.config.get("browser") }, cb)
   }
 
-  registry.get(project + "/latest", 3600, function (er, json) {
+  mapToRegistry(project, npm.config, function (er, uri, auth) {
+    if (er) return cb(er)
+
+    npm.registry.get(uri + "/latest", { timeout : 3600, auth : auth }, next)
+  })
+
+  function next (er, json) {
     var github = "https://github.com/" + project + "#readme"
 
     if (er) {
@@ -58,5 +67,5 @@ function getDoc (project, cb) {
     }
 
     return opener(url(json), { command: npm.config.get("browser") }, cb)
-  })
+  }
 }

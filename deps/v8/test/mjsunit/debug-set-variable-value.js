@@ -257,6 +257,38 @@ RunPauseTest(0, 'mouse', 'v1', 'dog', 'dog', (function Factory() {
 })());
 
 
+// Check that we correctly update local variable that
+// is referenced from an inner closure.
+RunPauseTest(0, 'Blue', 'v', 'Green', 'Green', (function Factory() {
+  return function() {
+    function A() {
+      var v = "Blue";
+      function Inner() {
+        return void v;
+      }
+      debugger;
+      return v;
+    }
+    return A();
+  }
+})());
+
+// Check that we correctly update parameter, that is known to be stored
+// both on stack and in heap.
+RunPauseTest(0, 5, 'p', 2012, 2012, (function Factory() {
+  return function() {
+    function A(p) {
+      function Inner() {
+        return void p;
+      }
+      debugger;
+      return p;
+    }
+    return A(5);
+  }
+})());
+
+
 // Test value description protocol JSON
 
 assertEquals(true, Debug.TestApi.CommandProcessorResolveValue({value: true}));

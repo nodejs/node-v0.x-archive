@@ -23,6 +23,7 @@ var common = require('../common');
 var assert = require('assert');
 
 var TCP = process.binding('tcp_wrap').TCP;
+var WriteWrap = process.binding('stream_wrap').WriteWrap;
 
 var server = new TCP();
 
@@ -36,7 +37,7 @@ var slice, sliceCount = 0, eofCount = 0;
 var writeCount = 0;
 var recvCount = 0;
 
-server.onconnection = function(client) {
+server.onconnection = function(err, client) {
   assert.equal(0, client.writeQueueSize);
   console.log('got connection');
 
@@ -49,20 +50,28 @@ server.onconnection = function(client) {
 
   client.readStart();
   client.pendingWrites = [];
-  client.onread = function(buffer, offset, length) {
+  client.onread = function(err, buffer) {
     if (buffer) {
-      assert.ok(length > 0);
+      assert.ok(buffer.length > 0);
 
       assert.equal(0, client.writeQueueSize);
 
-      var req = client.writeBuffer(buffer.slice(offset, offset + length));
+      var req = new WriteWrap();
+      req.async = false;
+      var err = client.writeBuffer(req, buffer);
+      assert.equal(err, 0);
       client.pendingWrites.push(req);
 
       console.log('client.writeQueueSize: ' + client.writeQueueSize);
       // 11 bytes should flush
       assert.equal(0, client.writeQueueSize);
 
-      req.oncomplete = function(status, client_, req_) {
+      if (req.async)
+        req.oncomplete = done;
+      else
+        process.nextTick(done.bind(null, 0, client, req));
+
+      function done(status, client_, req_) {
         assert.equal(req, client.pendingWrites.shift());
 
         // Check parameters.
@@ -112,5 +121,3 @@ process.on('exit', function() {
   assert.equal(1, writeCount);
   assert.equal(1, recvCount);
 });
-
-

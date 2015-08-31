@@ -15,6 +15,7 @@ B<openssl> B<smime>
 [B<-pk7out>]
 [B<-[cipher]>]
 [B<-in file>]
+[B<-no_alt_chains>]
 [B<-certfile file>]
 [B<-signer file>]
 [B<-recip  file>]
@@ -159,7 +160,7 @@ EVP_get_cipherbyname() function) can also be used preceded by a dash, for
 example B<-aes_128_cbc>. See L<B<enc>|enc(1)> for list of ciphers
 supported by your version of OpenSSL.
 
-If not specified 40 bit RC2 is used. Only used with B<-encrypt>.
+If not specified triple DES is used. Only used with B<-encrypt>.
 
 =item B<-nointern>
 
@@ -259,7 +260,7 @@ portion of a message so they may be included manually. If signing
 then many S/MIME mail clients check the signers certificate's email
 address matches that specified in the From: address.
 
-=item B<-purpose, -ignore_critical, -issuer_checks, -crl_check, -crl_check_all, -policy_check, -extended_crl, -x509_strict, -policy -check_ss_sig>
+=item B<-purpose, -ignore_critical, -issuer_checks, -crl_check, -crl_check_all, -policy_check, -extended_crl, -x509_strict, -policy -check_ss_sig -no_alt_chains>
 
 Set various options of certificate chain verification. See
 L<B<verify>|verify(1)> manual page for details.
@@ -308,28 +309,28 @@ remains DER.
 
 =over 4
 
-=item 0
+=item Z<>0
 
 the operation was completely successfully.
 
-=item 1 
+=item Z<>1
 
 an error occurred parsing the command options.
 
-=item 2
+=item Z<>2
 
 one of the input files could not be read.
 
-=item 3
+=item Z<>3
 
 an error occurred creating the PKCS#7 file or when reading the MIME
 message.
 
-=item 4
+=item Z<>4
 
 an error occurred decrypting or verifying the message.
 
-=item 5
+=item Z<>5
 
 the message was verified correctly but an error occurred writing out
 the signers certificates.
@@ -441,5 +442,6 @@ structures may cause parsing errors.
 The use of multiple B<-signer> options and the B<-resign> command were first
 added in OpenSSL 1.0.0
 
+The -no_alt_chains options was first added to OpenSSL 1.0.1n and 1.0.2b.
 
 =cut

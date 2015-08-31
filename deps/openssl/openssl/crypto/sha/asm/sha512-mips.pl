@@ -68,7 +68,7 @@ $pf = ($flavour =~ /nubi/i) ? $t0 : $t2;
 #
 ######################################################################
 
-$big_endian=(`echo MIPSEL | $ENV{CC} -E -P -`=~/MIPSEL/)?1:0;
+$big_endian=(`echo MIPSEL | $ENV{CC} -E -`=~/MIPSEL/)?1:0 if ($ENV{CC});
 
 for (@ARGV) {	$output=$_ if (/^\w[\w\-]*\.\w+$/);	}
 open STDOUT,">$output";
@@ -351,7 +351,7 @@ $code.=<<___;
 	$ST	$G,6*$SZ($ctx)
 	$ST	$H,7*$SZ($ctx)
 
-	bnel	$inp,@X[15],.Loop
+	bne	$inp,@X[15],.Loop
 	$PTR_SUB $Ktbl,`($rounds-16)*$SZ`	# rewind $Ktbl
 
 	$REG_L	$ra,$FRAMESIZE-1*$SZREG($sp)

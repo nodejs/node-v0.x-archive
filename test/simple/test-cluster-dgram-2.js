@@ -6,7 +6,7 @@
 // without limitation the rights to use, copy, modify, merge, publish,
 // distribute, sublicense, and/or sell copies of the Software, and to permit
 // persons to whom the Software is furnished to do so, subject to the
-// following condonitions:
+// following conditions:
 //
 // The above copyright notice and this permission notice shall be included
 // in all copies or substantial portions of the Software.
@@ -73,6 +73,11 @@ function worker() {
   // Create udp socket and send packets to master.
   var socket = dgram.createSocket('udp4');
   var buf = new Buffer('hello world');
+
+  // This test is intended to exercise the cluster binding of udp sockets, but
+  // since sockets aren't clustered when implicitly bound by at first call of
+  // send(), explicitly bind them to an ephemeral port.
+  socket.bind(0);
 
   for (var i = 0; i < PACKETS_PER_WORKER; i++)
     socket.send(buf, 0, buf.length, common.PORT, '127.0.0.1');

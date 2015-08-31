@@ -61,8 +61,8 @@ The module system is implemented in the `require("module")` module.
 
 <!--type=misc-->
 
-When there are circular `require()` calls, a module might not be
-done being executed when it is returned.
+When there are circular `require()` calls, a module might not have finished
+executing when it is returned.
 
 Consider this situation:
 
@@ -93,7 +93,7 @@ Consider this situation:
 
 When `main.js` loads `a.js`, then `a.js` in turn loads `b.js`.  At that
 point, `b.js` tries to load `a.js`.  In order to prevent an infinite
-loop an **unfinished copy** of the `a.js` exports object is returned to the
+loop, an **unfinished copy** of the `a.js` exports object is returned to the
 `b.js` module.  `b.js` then finishes loading, and its `exports` object is
 provided to the `a.js` module.
 
@@ -161,7 +161,7 @@ parent directory of the current module, and adds `/node_modules`, and
 attempts to load the module from that location.
 
 If it is not found there, then it moves to the parent directory, and so
-on, until the root of the tree is reached.
+on, until the root of the file system is reached.
 
 For example, if the file at `'/home/ry/projects/foo.js'` called
 `require('bar.js')`, then node would look in the following locations, in
@@ -174,6 +174,12 @@ this order:
 
 This allows programs to localize their dependencies, so that they do not
 clash.
+
+You can require specific files or sub modules distributed with a module by
+including a path suffix after the module name. For instance
+`require('example-module/path/to/file')` would resolve `path/to/file`
+relative to where `example-module` is located. The suffixed path follows the
+same module resolution semantics.
 
 ## Folders as Modules
 
@@ -248,7 +254,7 @@ a global but rather local to each module.
 * {Object}
 
 The `module.exports` object is created by the Module system. Sometimes this is not
-acceptable; many want their module to be an instance of some class. To do this
+acceptable; many want their module to be an instance of some class. To do this,
 assign the desired export object to `module.exports`. Note that assigning the
 desired object to `exports` will simply rebind the local `exports` variable,
 which is probably not what you want to do.
@@ -385,7 +391,8 @@ in pseudocode of what require.resolve does:
     LOAD_AS_FILE(X)
     1. If X is a file, load X as JavaScript text.  STOP
     2. If X.js is a file, load X.js as JavaScript text.  STOP
-    3. If X.node is a file, load X.node as binary addon.  STOP
+    3. If X.json is a file, parse X.json to a JavaScript Object.  STOP
+    4. If X.node is a file, load X.node as binary addon.  STOP
 
     LOAD_AS_DIRECTORY(X)
     1. If X/package.json is a file,
@@ -393,7 +400,8 @@ in pseudocode of what require.resolve does:
        b. let M = X + (json main field)
        c. LOAD_AS_FILE(M)
     2. If X/index.js is a file, load X/index.js as JavaScript text.  STOP
-    3. If X/index.node is a file, load X/index.node as binary addon.  STOP
+    3. If X/index.json is a file, parse X/index.json to a JavaScript object. STOP
+    4. If X/index.node is a file, load X/index.node as binary addon.  STOP
 
     LOAD_NODE_MODULES(X, START)
     1. let DIRS=NODE_MODULES_PATHS(START)
@@ -403,15 +411,14 @@ in pseudocode of what require.resolve does:
 
     NODE_MODULES_PATHS(START)
     1. let PARTS = path split(START)
-    2. let ROOT = index of first instance of "node_modules" in PARTS, or 0
-    3. let I = count of PARTS - 1
-    4. let DIRS = []
-    5. while I > ROOT,
+    2. let I = count of PARTS - 1
+    3. let DIRS = []
+    4. while I >= 0,
        a. if PARTS[I] = "node_modules" CONTINUE
        c. DIR = path join(PARTS[0 .. I] + "node_modules")
        b. DIRS = DIRS + DIR
        c. let I = I - 1
-    6. return DIRS
+    5. return DIRS
 
 ## Loading from the global folders
 

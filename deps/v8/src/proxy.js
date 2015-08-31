@@ -1,47 +1,28 @@
 // Copyright 2011 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 "use strict";
 
-global.Proxy = new $Object();
+// This file relies on the fact that the following declaration has been made
+// in runtime.js:
+// var $Object = global.Object;
 
-var $Proxy = global.Proxy
+var $Proxy = new $Object();
 
-$Proxy.create = function(handler, proto) {
+// -------------------------------------------------------------------
+
+function ProxyCreate(handler, proto) {
   if (!IS_SPEC_OBJECT(handler))
     throw MakeTypeError("handler_non_object", ["create"])
   if (IS_UNDEFINED(proto))
     proto = null
-  else if (!(IS_SPEC_OBJECT(proto) || proto === null))
+  else if (!(IS_SPEC_OBJECT(proto) || IS_NULL(proto)))
     throw MakeTypeError("proto_non_object", ["create"])
   return %CreateJSProxy(handler, proto)
 }
 
-$Proxy.createFunction = function(handler, callTrap, constructTrap) {
+function ProxyCreateFunction(handler, callTrap, constructTrap) {
   if (!IS_SPEC_OBJECT(handler))
     throw MakeTypeError("handler_non_object", ["create"])
   if (!IS_SPEC_FUNCTION(callTrap))
@@ -52,7 +33,7 @@ $Proxy.createFunction = function(handler, callTrap, constructTrap) {
     // Make sure the trap receives 'undefined' as this.
     var construct = constructTrap
     constructTrap = function() {
-      return %Apply(construct, void 0, arguments, 0, %_ArgumentsLength());
+      return %Apply(construct, UNDEFINED, arguments, 0, %_ArgumentsLength());
     }
   } else {
     throw MakeTypeError("trap_function_expected",
@@ -63,17 +44,32 @@ $Proxy.createFunction = function(handler, callTrap, constructTrap) {
 }
 
 
+// -------------------------------------------------------------------
 
-////////////////////////////////////////////////////////////////////////////////
-// Builtins
-////////////////////////////////////////////////////////////////////////////////
+function SetUpProxy() {
+  %CheckIsBootstrapping()
+
+  var global_proxy = %GlobalProxy(global);
+  global_proxy.Proxy = $Proxy;
+
+  // Set up non-enumerable properties of the Proxy object.
+  InstallFunctions($Proxy, DONT_ENUM, [
+    "create", ProxyCreate,
+    "createFunction", ProxyCreateFunction
+  ])
+}
+
+SetUpProxy();
+
+
+// -------------------------------------------------------------------
+// Proxy Builtins
 
 function DerivedConstructTrap(callTrap) {
   return function() {
     var proto = this.prototype
     if (!IS_SPEC_OBJECT(proto)) proto = $Object.prototype
-    var obj = new $Object()
-    obj.__proto__ = proto
+    var obj = { __proto__: proto };
     var result = %Apply(callTrap, obj, arguments, 0, %_ArgumentsLength());
     return IS_SPEC_OBJECT(result) ? result : obj
   }
@@ -158,6 +154,7 @@ function DerivedKeysTrap() {
   var enumerableNames = []
   for (var i = 0, count = 0; i < names.length; ++i) {
     var name = names[i]
+    if (IS_SYMBOL(name)) continue
     var desc = this.getOwnPropertyDescriptor(TO_STRING_INLINE(name))
     if (!IS_UNDEFINED(desc) && desc.enumerable) {
       enumerableNames[count++] = names[i]
@@ -171,9 +168,14 @@ function DerivedEnumerateTrap() {
   var enumerableNames = []
   for (var i = 0, count = 0; i < names.length; ++i) {
     var name = names[i]
+    if (IS_SYMBOL(name)) continue
     var desc = this.getPropertyDescriptor(TO_STRING_INLINE(name))
-    if (!IS_UNDEFINED(desc) && desc.enumerable) {
-      enumerableNames[count++] = names[i]
+    if (!IS_UNDEFINED(desc)) {
+      if (!desc.configurable) {
+        throw MakeTypeError("proxy_prop_not_configurable",
+            [this, "getPropertyDescriptor", name])
+      }
+      if (desc.enumerable) enumerableNames[count++] = names[i]
     }
   }
   return enumerableNames
@@ -184,6 +186,6 @@ function ProxyEnumerate(proxy) {
   if (IS_UNDEFINED(handler.enumerate)) {
     return %Apply(DerivedEnumerateTrap, handler, [], 0, 0)
   } else {
-    return ToStringArray(handler.enumerate(), "enumerate")
+    return ToNameArray(handler.enumerate(), "enumerate", false)
   }
 }

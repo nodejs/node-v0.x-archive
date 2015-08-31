@@ -33,8 +33,10 @@ B<openssl> B<s_server>
 [B<-state>]
 [B<-CApath directory>]
 [B<-CAfile filename>]
+[B<-no_alt_chains>]
 [B<-nocert>]
 [B<-cipher cipherlist>]
+[B<-serverpref>]
 [B<-quiet>]
 [B<-no_tmp_rsa>]
 [B<-ssl2>]
@@ -44,6 +46,7 @@ B<openssl> B<s_server>
 [B<-no_ssl3>]
 [B<-no_tls1>]
 [B<-no_dhe>]
+[B<-no_ecdhe>]
 [B<-bugs>]
 [B<-hack>]
 [B<-www>]
@@ -54,6 +57,11 @@ B<openssl> B<s_server>
 [B<-no_ticket>]
 [B<-id_prefix arg>]
 [B<-rand file(s)>]
+[B<-status>]
+[B<-status_verbose>]
+[B<-status_timeout nsec>]
+[B<-status_url url>]
+[B<-nextprotoneg protocols>]
 
 =head1 DESCRIPTION
 
@@ -111,7 +119,7 @@ by using an appropriate certificate.
 
 =item B<-dcertform format>, B<-dkeyform format>, B<-dpass arg>
 
-addtional certificate and private key format and passphrase respectively.
+additional certificate and private key format and passphrase respectively.
 
 =item B<-nocert>
 
@@ -131,6 +139,11 @@ a static set of parameters hard coded into the s_server program will be used.
 if this option is set then no DH parameters will be loaded effectively
 disabling the ephemeral DH cipher suites.
 
+=item B<-no_ecdhe>
+
+if this option is set then no ECDH parameters will be loaded effectively
+disabling the ephemeral ECDH cipher suites.
+
 =item B<-no_tmp_rsa>
 
 certain export cipher suites sometimes use a temporary RSA key, this option
@@ -143,6 +156,9 @@ client certificate chain and makes the server request a certificate from
 the client. With the B<-verify> option a certificate is requested but the
 client does not have to send one, with the B<-Verify> option the client
 must supply a certificate or an error occurs.
+
+If the ciphersuite cannot request a client certificate (for example an
+anonymous ciphersuite or PSK) this option has no effect.
 
 =item B<-crl_check>, B<-crl_check_all>
 
@@ -162,6 +178,10 @@ A file containing trusted certificates to use during client authentication
 and to use when attempting to build the server certificate chain. The list
 is also used in the list of acceptable client CAs passed to the client when
 a certificate is requested.
+
+=item B<-no_alt_chains>
+
+See the L<B<verify>|verify(1)> manual page for details.
 
 =item B<-state>
 
@@ -225,6 +245,10 @@ also included in the server list is used. Because the client specifies
 the preference order, the order of the server cipherlist irrelevant. See
 the B<ciphers> command for more information.
 
+=item B<-serverpref>
+
+use the server's cipher preferences, rather than the client's preferences.
+
 =item B<-tlsextdebug>
 
 print out a hex dump of any TLS extensions received from the server.
@@ -275,6 +299,33 @@ generator, or an EGD socket (see L<RAND_egd(3)|RAND_egd(3)>).
 Multiple files can be specified separated by a OS-dependent character.
 The separator is B<;> for MS-Windows, B<,> for OpenVMS, and B<:> for
 all others.
+
+=item B<-status>
+
+enables certificate status request support (aka OCSP stapling).
+
+=item B<-status_verbose>
+
+enables certificate status request support (aka OCSP stapling) and gives
+a verbose printout of the OCSP response.
+
+=item B<-status_timeout nsec>
+
+sets the timeout for OCSP response to B<nsec> seconds.
+
+=item B<-status_url url>
+
+sets a fallback responder URL to use if no responder URL is present in the
+server certificate. Without this option an error is returned if the server
+certificate does not contain a responder address.
+
+=item B<-nextprotoneg protocols>
+
+enable Next Protocol Negotiation TLS extension and provide a
+comma-separated list of supported protocol names.
+The list should contain most wanted protocols first.
+Protocol names are printable ASCII strings, for example "http/1.1" or
+"spdy/3".
 
 =back
 
@@ -351,5 +402,9 @@ unknown cipher suites a client says it supports.
 =head1 SEE ALSO
 
 L<sess_id(1)|sess_id(1)>, L<s_client(1)|s_client(1)>, L<ciphers(1)|ciphers(1)>
+
+=head1 HISTORY
+
+The -no_alt_chains options was first added to OpenSSL 1.0.1n and 1.0.2b.
 
 =cut

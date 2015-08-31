@@ -9,7 +9,7 @@ through the process.
 Fork the project [on GitHub](https://github.com/joyent/node) and check out
 your copy.
 
-```
+```sh
 $ git clone git@github.com:username/node.git
 $ cd node
 $ git remote add upstream git://github.com/joyent/node.git
@@ -48,7 +48,7 @@ does not align with that of a project maintainer.
 Okay, so you have decided on the proper branch.  Create a feature branch
 and start hacking:
 
-```
+```sh
 $ git checkout -b my-feature-branch -t origin/v0.10
 ```
 
@@ -59,7 +59,7 @@ $ git checkout -b my-feature-branch -t origin/v0.10
 
 Make sure git knows your name and email address:
 
-```
+```sh
 $ git config --global user.name "J. Random User"
 $ git config --global user.email "j.random.user@example.com"
 ```
@@ -99,7 +99,7 @@ what subsystem (or subsystems) your changes touch.
 
 Use `git rebase` (not `git merge`) to sync your work from time to time.
 
-```
+```sh
 $ git fetch upstream
 $ git rebase upstream/v0.10  # or upstream/master
 ```
@@ -111,17 +111,30 @@ Bug fixes and features should come with tests.  Add your tests in the
 test/simple/ directory.  Look at other tests to see how they should be
 structured (license boilerplate, common includes, etc.).
 
-```
+```sh
 $ make jslint test
 ```
 
 Make sure the linter is happy and that all tests pass.  Please, do not submit
 patches that fail either check.
 
+If you are updating tests and just want to run a single test to check it, you
+can use this syntax to run it exactly as the test harness would:
+
+```
+python tools/test.py -v --mode=release simple/test-stream2-transform
+```
+
+You can run tests directly with node:
+
+```
+node ./test/simple/test-streams2-transform.js
+```
+
 
 ### PUSH
 
-```
+```sh
 $ git push origin my-feature-branch
 ```
 
@@ -132,12 +145,6 @@ Pull requests are usually reviewed within a few days.  If there are comments
 to address, apply your changes in a separate commit and push that to your
 feature branch.  Post a comment in the pull request afterwards; GitHub does
 not send out notifications when you add commits.
-
-
-### CONTRIBUTOR LICENSE AGREEMENT
-
-Please visit http://nodejs.org/cla.html and sign the Contributor License
-Agreement.  You only need to do that once.
 
 
 [stability index page]: https://github.com/joyent/node/blob/master/doc/api/documentation.markdown

@@ -25,84 +25,65 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
-#include "accessors.h"
+#include "src/v8.h"
+#include "test/cctest/cctest.h"
 
-#include "cctest.h"
+#include "src/accessors.h"
+#include "src/api.h"
 
 
 using namespace v8::internal;
 
 
-// Also used in test-heap.cc test cases.
-void SimulateFullSpace(PagedSpace* space) {
-  int old_linear_size = static_cast<int>(space->limit() - space->top());
-  space->Free(space->top(), old_linear_size);
-  space->SetTop(space->limit(), space->limit());
-  space->ResetFreeList();
-  space->ClearStats();
-}
-
-
-static MaybeObject* AllocateAfterFailures() {
+static AllocationResult AllocateAfterFailures() {
   static int attempts = 0;
-  if (++attempts < 3) return Failure::RetryAfterGC();
-  Heap* heap = Isolate::Current()->heap();
+
+  if (++attempts < 3) return AllocationResult::Retry();
+  TestHeap* heap = CcTest::test_heap();
 
   // New space.
-  NewSpace* new_space = heap->new_space();
-  static const int kNewSpaceFillerSize = ByteArray::SizeFor(0);
-  while (new_space->Available() > kNewSpaceFillerSize) {
-    int available_before = static_cast<int>(new_space->Available());
-    CHECK(!heap->AllocateByteArray(0)->IsFailure());
-    if (available_before == new_space->Available()) {
-      // It seems that we are avoiding new space allocations when
-      // allocation is forced, so no need to fill up new space
-      // in order to make the test harder.
-      break;
-    }
-  }
-  CHECK(!heap->AllocateByteArray(100)->IsFailure());
-  CHECK(!heap->AllocateFixedArray(100, NOT_TENURED)->IsFailure());
+  SimulateFullSpace(heap->new_space());
+  heap->AllocateByteArray(100).ToObjectChecked();
+  heap->AllocateFixedArray(100, NOT_TENURED).ToObjectChecked();
 
   // Make sure we can allocate through optimized allocation functions
   // for specific kinds.
-  CHECK(!heap->AllocateFixedArray(100)->IsFailure());
-  CHECK(!heap->AllocateHeapNumber(0.42)->IsFailure());
-  CHECK(!heap->AllocateArgumentsObject(Smi::FromInt(87), 10)->IsFailure());
+  heap->AllocateFixedArray(100).ToObjectChecked();
+  heap->AllocateHeapNumber(0.42).ToObjectChecked();
   Object* object = heap->AllocateJSObject(
-      *Isolate::Current()->object_function())->ToObjectChecked();
-  CHECK(!heap->CopyJSObject(JSObject::cast(object))->IsFailure());
+      *CcTest::i_isolate()->object_function()).ToObjectChecked();
+  heap->CopyJSObject(JSObject::cast(object)).ToObjectChecked();
 
   // Old data space.
   SimulateFullSpace(heap->old_data_space());
-  CHECK(!heap->AllocateRawAsciiString(100, TENURED)->IsFailure());
+  heap->AllocateByteArray(100, TENURED).ToObjectChecked();
 
   // Old pointer space.
   SimulateFullSpace(heap->old_pointer_space());
-  CHECK(!heap->AllocateFixedArray(10000, TENURED)->IsFailure());
+  heap->AllocateFixedArray(10000, TENURED).ToObjectChecked();
 
   // Large object space.
   static const int kLargeObjectSpaceFillerLength = 300000;
   static const int kLargeObjectSpaceFillerSize = FixedArray::SizeFor(
       kLargeObjectSpaceFillerLength);
-  ASSERT(kLargeObjectSpaceFillerSize > heap->old_pointer_space()->AreaSize());
+  DCHECK(kLargeObjectSpaceFillerSize > heap->old_pointer_space()->AreaSize());
   while (heap->OldGenerationSpaceAvailable() > kLargeObjectSpaceFillerSize) {
-    CHECK(!heap->AllocateFixedArray(kLargeObjectSpaceFillerLength, TENURED)->
-          IsFailure());
+    heap->AllocateFixedArray(
+        kLargeObjectSpaceFillerLength, TENURED).ToObjectChecked();
   }
-  CHECK(!heap->AllocateFixedArray(kLargeObjectSpaceFillerLength, TENURED)->
-        IsFailure());
+  heap->AllocateFixedArray(
+      kLargeObjectSpaceFillerLength, TENURED).ToObjectChecked();
 
   // Map space.
   SimulateFullSpace(heap->map_space());
   int instance_size = JSObject::kHeaderSize;
-  CHECK(!heap->AllocateMap(JS_OBJECT_TYPE, instance_size)->IsFailure());
+  heap->AllocateMap(JS_OBJECT_TYPE, instance_size).ToObjectChecked();
 
   // Test that we can allocate in old pointer space and code space.
-  CHECK(!heap->AllocateFixedArray(100, TENURED)->IsFailure());
-  CHECK(!heap->CopyCode(Isolate::Current()->builtins()->builtin(
-      Builtins::kIllegal))->IsFailure());
+  SimulateFullSpace(heap->code_space());
+  heap->AllocateFixedArray(100, TENURED).ToObjectChecked();
+  heap->CopyCode(CcTest::i_isolate()->builtins()->builtin(
+      Builtins::kIllegal)).ToObjectChecked();
 
   // Return success.
   return Smi::FromInt(42);
@@ -110,13 +91,13 @@ static MaybeObject* AllocateAfterFailures() {
 
 
 static Handle<Object> Test() {
-  CALL_HEAP_FUNCTION(ISOLATE, AllocateAfterFailures(), Object);
+  CALL_HEAP_FUNCTION(CcTest::i_isolate(), AllocateAfterFailures(), Object);
 }
 
 
 TEST(StressHandles) {
-  v8::Persistent<v8::Context> env = v8::Context::New();
-  v8::HandleScope scope;
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Handle<v8::Context> env = v8::Context::New(CcTest::isolate());
   env->Enter();
   Handle<Object> o = Test();
   CHECK(o->IsSmi() && Smi::cast(*o)->value() == 42);
@@ -124,53 +105,63 @@ TEST(StressHandles) {
 }
 
 
-static MaybeObject* TestAccessorGet(Object* object, void*) {
-  return AllocateAfterFailures();
+void TestGetter(
+    v8::Local<v8::String> name,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(info.GetIsolate());
+  HandleScope scope(isolate);
+  info.GetReturnValue().Set(v8::Utils::ToLocal(Test()));
 }
 
 
-const AccessorDescriptor kDescriptor = {
-  TestAccessorGet,
-  0,
-  0
-};
+void TestSetter(
+    v8::Local<v8::String> name,
+    v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  UNREACHABLE();
+}
+
+
+Handle<AccessorInfo> TestAccessorInfo(
+      Isolate* isolate, PropertyAttributes attributes) {
+  Handle<String> name = isolate->factory()->NewStringFromStaticAscii("get");
+  return Accessors::MakeAccessor(isolate, name, &TestGetter, &TestSetter,
+                                 attributes);
+}
 
 
 TEST(StressJS) {
-  v8::Persistent<v8::Context> env = v8::Context::New();
-  v8::HandleScope scope;
+  Isolate* isolate = CcTest::i_isolate();
+  Factory* factory = isolate->factory();
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Handle<v8::Context> env = v8::Context::New(CcTest::isolate());
   env->Enter();
-  Handle<JSFunction> function =
-      FACTORY->NewFunction(FACTORY->function_symbol(), FACTORY->null_value());
+  Handle<JSFunction> function = factory->NewFunction(
+      factory->function_string());
   // Force the creation of an initial map and set the code to
   // something empty.
-  FACTORY->NewJSObject(function);
-  function->ReplaceCode(Isolate::Current()->builtins()->builtin(
+  factory->NewJSObject(function);
+  function->ReplaceCode(CcTest::i_isolate()->builtins()->builtin(
       Builtins::kEmptyFunction));
   // Patch the map to have an accessor for "get".
   Handle<Map> map(function->initial_map());
   Handle<DescriptorArray> instance_descriptors(map->instance_descriptors());
-  Handle<Foreign> foreign = FACTORY->NewForeign(&kDescriptor);
-  Handle<String> name =
-      FACTORY->NewStringFromAscii(Vector<const char>("get", 3));
-  ASSERT(instance_descriptors->IsEmpty());
+  DCHECK(instance_descriptors->IsEmpty());
 
-  Handle<DescriptorArray> new_descriptors = FACTORY->NewDescriptorArray(0, 1);
+  PropertyAttributes attrs = static_cast<PropertyAttributes>(0);
+  Handle<AccessorInfo> foreign = TestAccessorInfo(isolate, attrs);
+  Map::EnsureDescriptorSlack(map, 1);
 
-  v8::internal::DescriptorArray::WhitenessWitness witness(*new_descriptors);
-  map->set_instance_descriptors(*new_descriptors);
-
-  CallbacksDescriptor d(*name,
-                        *foreign,
-                        static_cast<PropertyAttributes>(0),
-                        v8::internal::PropertyDetails::kInitialIndex);
-  map->AppendDescriptor(&d, witness);
+  CallbacksDescriptor d(Handle<Name>(Name::cast(foreign->name())),
+                        foreign, attrs);
+  map->AppendDescriptor(&d);
 
   // Add the Foo constructor the global object.
-  env->Global()->Set(v8::String::New("Foo"), v8::Utils::ToLocal(function));
+  env->Global()->Set(v8::String::NewFromUtf8(CcTest::isolate(), "Foo"),
+                     v8::Utils::ToLocal(function));
   // Call the accessor through JavaScript.
-  v8::Handle<v8::Value> result =
-      v8::Script::Compile(v8::String::New("(new Foo).get"))->Run();
+  v8::Handle<v8::Value> result = v8::Script::Compile(
+      v8::String::NewFromUtf8(CcTest::isolate(), "(new Foo).get"))->Run();
   CHECK_EQ(42, result->Int32Value());
   env->Exit();
 }
@@ -204,35 +195,36 @@ class Block {
 
 
 TEST(CodeRange) {
-  const int code_range_size = 32*MB;
-  OS::SetUp();
-  Isolate::Current()->InitializeLoggingAndCounters();
-  CodeRange* code_range = new CodeRange(Isolate::Current());
-  code_range->SetUp(code_range_size);
-  int current_allocated = 0;
-  int total_allocated = 0;
-  List<Block> blocks(1000);
+  const size_t code_range_size = 32*MB;
+  CcTest::InitializeVM();
+  CodeRange code_range(reinterpret_cast<Isolate*>(CcTest::isolate()));
+  code_range.SetUp(code_range_size);
+  size_t current_allocated = 0;
+  size_t total_allocated = 0;
+  List< ::Block> blocks(1000);
 
   while (total_allocated < 5 * code_range_size) {
     if (current_allocated < code_range_size / 10) {
       // Allocate a block.
       // Geometrically distributed sizes, greater than
-      // Page::kMaxNonCodeHeapObjectSize (which is greater than code page area).
+      // Page::kMaxRegularHeapObjectSize (which is greater than code page area).
       // TODO(gc): instead of using 3 use some contant based on code_range_size
       // kMaxHeapObjectSize.
       size_t requested =
-          (Page::kMaxNonCodeHeapObjectSize << (Pseudorandom() % 3)) +
+          (Page::kMaxRegularHeapObjectSize << (Pseudorandom() % 3)) +
           Pseudorandom() % 5000 + 1;
       size_t allocated = 0;
-      Address base = code_range->AllocateRawMemory(requested, &allocated);
+      Address base = code_range.AllocateRawMemory(requested,
+                                                  requested,
+                                                  &allocated);
       CHECK(base != NULL);
-      blocks.Add(Block(base, static_cast<int>(allocated)));
+      blocks.Add(::Block(base, static_cast<int>(allocated)));
       current_allocated += static_cast<int>(allocated);
       total_allocated += static_cast<int>(allocated);
     } else {
       // Free a block.
       int index = Pseudorandom() % blocks.length();
-      code_range->FreeRawMemory(blocks[index].base, blocks[index].size);
+      code_range.FreeRawMemory(blocks[index].base, blocks[index].size);
       current_allocated -= blocks[index].size;
       if (index < blocks.length() - 1) {
         blocks[index] = blocks.RemoveLast();
@@ -242,6 +234,5 @@ TEST(CodeRange) {
     }
   }
 
-  code_range->TearDown();
-  delete code_range;
+  code_range.TearDown();
 }

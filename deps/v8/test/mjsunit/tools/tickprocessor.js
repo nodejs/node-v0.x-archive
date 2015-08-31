@@ -307,7 +307,7 @@ CppEntriesProviderMock.prototype.parseVmSymbols = function(
     name, startAddr, endAddr, symbolAdder) {
   var symbols = {
     'shell':
-        [['v8::internal::JSObject::LocalLookupRealNamedProperty(v8::internal::String*, v8::internal::LookupResult*)', 0x080f8800, 0x080f8d90],
+        [['v8::internal::JSObject::LookupOwnRealNamedProperty(v8::internal::String*, v8::internal::LookupResult*)', 0x080f8800, 0x080f8d90],
          ['v8::internal::HashTable<v8::internal::StringDictionaryShape, v8::internal::String*>::FindEntry(v8::internal::String*)', 0x080f8210, 0x080f8800],
          ['v8::internal::Runtime_Math_exp(v8::internal::Arguments)', 0x08123b20, 0x08123b80]],
     '/lib32/libm-2.7.so':
@@ -380,7 +380,10 @@ function driveTickProcessorTest(
                              separateIc,
                              TickProcessor.CALL_GRAPH_SIZE,
                              ignoreUnknown,
-                             stateFilter);
+                             stateFilter,
+                             undefined,
+                             "0",
+                             "auto,auto");
   var pm = new PrintMonitor(testsPath + refOutput);
   tp.processLogFileInTest(testsPath + logInput);
   tp.printStatistics();

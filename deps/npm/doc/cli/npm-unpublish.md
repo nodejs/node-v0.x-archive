@@ -3,7 +3,7 @@ npm-unpublish(1) -- Remove a package from the registry
 
 ## SYNOPSIS
 
-    npm unpublish <name>[@<version>]
+    npm unpublish [@<scope>/]<name>[@<version>]
 
 ## WARNING
 
@@ -22,6 +22,12 @@ entry and removing the tarball.
 
 If no version is specified, or if all versions are removed then
 the root package entry is removed from the registry entirely.
+
+Even if a package version is unpublished, that specific name and
+version combination can never be reused.  In order to publish the
+package again, a new version number must be used.
+
+The scope is optional and follows the usual rules for `npm-scope(7)`.
 
 ## SEE ALSO
 

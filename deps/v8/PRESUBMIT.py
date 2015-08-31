@@ -31,6 +31,9 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
 for more details about the presubmit API built into gcl.
 """
 
+import sys
+
+
 def _V8PresubmitChecks(input_api, output_api):
   """Runs the V8 presubmit checks."""
   import sys
@@ -38,13 +41,75 @@ def _V8PresubmitChecks(input_api, output_api):
         input_api.PresubmitLocalPath(), 'tools'))
   from presubmit import CppLintProcessor
   from presubmit import SourceProcessor
+  from presubmit import CheckGeneratedRuntimeTests
+  from presubmit import CheckExternalReferenceRegistration
 
   results = []
   if not CppLintProcessor().Run(input_api.PresubmitLocalPath()):
     results.append(output_api.PresubmitError("C++ lint check failed"))
   if not SourceProcessor().Run(input_api.PresubmitLocalPath()):
     results.append(output_api.PresubmitError(
-        "Copyright header and trailing whitespaces check failed"))
+        "Copyright header, trailing whitespaces and two empty lines " \
+        "between declarations check failed"))
+  if not CheckGeneratedRuntimeTests(input_api.PresubmitLocalPath()):
+    results.append(output_api.PresubmitError(
+        "Generated runtime tests check failed"))
+  if not CheckExternalReferenceRegistration(input_api.PresubmitLocalPath()):
+    results.append(output_api.PresubmitError(
+        "External references registration check failed"))
+  return results
+
+
+def _CheckUnwantedDependencies(input_api, output_api):
+  """Runs checkdeps on #include statements added in this
+  change. Breaking - rules is an error, breaking ! rules is a
+  warning.
+  """
+  # We need to wait until we have an input_api object and use this
+  # roundabout construct to import checkdeps because this file is
+  # eval-ed and thus doesn't have __file__.
+  original_sys_path = sys.path
+  try:
+    sys.path = sys.path + [input_api.os_path.join(
+        input_api.PresubmitLocalPath(), 'buildtools', 'checkdeps')]
+    import checkdeps
+    from cpp_checker import CppChecker
+    from rules import Rule
+  finally:
+    # Restore sys.path to what it was before.
+    sys.path = original_sys_path
+
+  added_includes = []
+  for f in input_api.AffectedFiles():
+    if not CppChecker.IsCppFile(f.LocalPath()):
+      continue
+
+    changed_lines = [line for line_num, line in f.ChangedContents()]
+    added_includes.append([f.LocalPath(), changed_lines])
+
+  deps_checker = checkdeps.DepsChecker(input_api.PresubmitLocalPath())
+
+  error_descriptions = []
+  warning_descriptions = []
+  for path, rule_type, rule_description in deps_checker.CheckAddedCppIncludes(
+      added_includes):
+    description_with_path = '%s\n    %s' % (path, rule_description)
+    if rule_type == Rule.DISALLOW:
+      error_descriptions.append(description_with_path)
+    else:
+      warning_descriptions.append(description_with_path)
+
+  results = []
+  if error_descriptions:
+    results.append(output_api.PresubmitError(
+        'You added one or more #includes that violate checkdeps rules.',
+        error_descriptions))
+  if warning_descriptions:
+    results.append(output_api.PresubmitPromptOrNotify(
+        'You added one or more #includes of files that are temporarily\n'
+        'allowed but being removed. Can you avoid introducing the\n'
+        '#include? See relevant DEPS file(s) for details and contacts.',
+        warning_descriptions))
   return results
 
 
@@ -53,19 +118,68 @@ def _CommonChecks(input_api, output_api):
   results = []
   results.extend(input_api.canned_checks.CheckOwners(
       input_api, output_api, source_file_filter=None))
+  results.extend(input_api.canned_checks.CheckPatchFormatted(
+      input_api, output_api))
+  results.extend(_V8PresubmitChecks(input_api, output_api))
+  results.extend(_CheckUnwantedDependencies(input_api, output_api))
+  return results
+
+
+def _SkipTreeCheck(input_api, output_api):
+  """Check the env var whether we want to skip tree check.
+     Only skip if src/version.cc has been updated."""
+  src_version = 'src/version.cc'
+  FilterFile = lambda file: file.LocalPath() == src_version
+  if not input_api.AffectedSourceFiles(
+      lambda file: file.LocalPath() == src_version):
+    return False
+  return input_api.environ.get('PRESUBMIT_TREE_CHECK') == 'skip'
+
+
+def _CheckChangeLogFlag(input_api, output_api):
+  """Checks usage of LOG= flag in the commit message."""
+  results = []
+  if input_api.change.BUG and not 'LOG' in input_api.change.tags:
+    results.append(output_api.PresubmitError(
+        'An issue reference (BUG=) requires a change log flag (LOG=). '
+        'Use LOG=Y for including this commit message in the change log. '
+        'Use LOG=N or leave blank otherwise.'))
   return results
 
 
 def CheckChangeOnUpload(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
+  results.extend(_CheckChangeLogFlag(input_api, output_api))
   return results
 
 
 def CheckChangeOnCommit(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
+  results.extend(_CheckChangeLogFlag(input_api, output_api))
   results.extend(input_api.canned_checks.CheckChangeHasDescription(
       input_api, output_api))
-  results.extend(_V8PresubmitChecks(input_api, output_api))
+  if not _SkipTreeCheck(input_api, output_api):
+    results.extend(input_api.canned_checks.CheckTreeIsOpen(
+        input_api, output_api,
+        json_url='http://v8-status.appspot.com/current?format=json'))
   return results
+
+
+def GetPreferredTryMasters(project, change):
+  return {
+    'tryserver.v8': {
+      'v8_linux_rel': set(['defaulttests']),
+      'v8_linux_dbg': set(['defaulttests']),
+      'v8_linux_nosnap_rel': set(['defaulttests']),
+      'v8_linux_nosnap_dbg': set(['defaulttests']),
+      'v8_linux64_rel': set(['defaulttests']),
+      'v8_linux_arm_dbg': set(['defaulttests']),
+      'v8_linux_arm64_rel': set(['defaulttests']),
+      'v8_linux_layout_dbg': set(['defaulttests']),
+      'v8_mac_rel': set(['defaulttests']),
+      'v8_win_rel': set(['defaulttests']),
+      'v8_win64_rel': set(['defaulttests']),
+    },
+  }

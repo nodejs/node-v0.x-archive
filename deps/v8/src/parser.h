@@ -1,68 +1,29 @@
 // Copyright 2012 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef V8_PARSER_H_
 #define V8_PARSER_H_
 
-#include "allocation.h"
-#include "ast.h"
-#include "preparse-data-format.h"
-#include "preparse-data.h"
-#include "scopes.h"
-#include "preparser.h"
+#include "src/allocation.h"
+#include "src/ast.h"
+#include "src/compiler.h"  // For CachedDataMode
+#include "src/preparse-data.h"
+#include "src/preparse-data-format.h"
+#include "src/preparser.h"
+#include "src/scopes.h"
 
 namespace v8 {
+class ScriptCompiler;
+
 namespace internal {
 
 class CompilationInfo;
-class FuncNameInferrer;
 class ParserLog;
 class PositionStack;
 class Target;
 
 template <typename T> class ZoneListWrapper;
-
-
-class ParserMessage : public Malloced {
- public:
-  ParserMessage(Scanner::Location loc, const char* message,
-                Vector<const char*> args)
-      : loc_(loc),
-        message_(message),
-        args_(args) { }
-  ~ParserMessage();
-  Scanner::Location location() { return loc_; }
-  const char* message() { return message_; }
-  Vector<const char*> args() { return args_; }
- private:
-  Scanner::Location loc_;
-  const char* message_;
-  Vector<const char*> args_;
-};
 
 
 class FunctionEntry BASE_EMBEDDED {
@@ -72,7 +33,7 @@ class FunctionEntry BASE_EMBEDDED {
     kEndPositionIndex,
     kLiteralCountIndex,
     kPropertyCountIndex,
-    kLanguageModeIndex,
+    kStrictModeIndex,
     kSize
   };
 
@@ -85,96 +46,50 @@ class FunctionEntry BASE_EMBEDDED {
   int end_pos() { return backing_[kEndPositionIndex]; }
   int literal_count() { return backing_[kLiteralCountIndex]; }
   int property_count() { return backing_[kPropertyCountIndex]; }
-  LanguageMode language_mode() {
-    ASSERT(backing_[kLanguageModeIndex] == CLASSIC_MODE ||
-           backing_[kLanguageModeIndex] == STRICT_MODE ||
-           backing_[kLanguageModeIndex] == EXTENDED_MODE);
-    return static_cast<LanguageMode>(backing_[kLanguageModeIndex]);
+  StrictMode strict_mode() {
+    DCHECK(backing_[kStrictModeIndex] == SLOPPY ||
+           backing_[kStrictModeIndex] == STRICT);
+    return static_cast<StrictMode>(backing_[kStrictModeIndex]);
   }
 
   bool is_valid() { return !backing_.is_empty(); }
 
  private:
   Vector<unsigned> backing_;
-  bool owns_data_;
 };
 
 
-class ScriptDataImpl : public ScriptData {
+// Wrapper around ScriptData to provide parser-specific functionality.
+class ParseData {
  public:
-  explicit ScriptDataImpl(Vector<unsigned> store)
-      : store_(store),
-        owns_store_(true) { }
-
-  // Create an empty ScriptDataImpl that is guaranteed to not satisfy
-  // a SanityCheck.
-  ScriptDataImpl() : owns_store_(false) { }
-
-  virtual ~ScriptDataImpl();
-  virtual int Length();
-  virtual const char* Data();
-  virtual bool HasError();
-
-  void Initialize();
-  void ReadNextSymbolPosition();
-
-  FunctionEntry GetFunctionEntry(int start);
-  int GetSymbolIdentifier();
-  bool SanityCheck();
-
-  Scanner::Location MessageLocation();
-  const char* BuildMessage();
-  Vector<const char*> BuildArgs();
-
-  int symbol_count() {
-    return (store_.length() > PreparseDataConstants::kHeaderSize)
-        ? store_[PreparseDataConstants::kSymbolCountOffset]
-        : 0;
+  explicit ParseData(ScriptData* script_data) : script_data_(script_data) {
+    CHECK(IsAligned(script_data->length(), sizeof(unsigned)));
+    CHECK(IsSane());
   }
-  // The following functions should only be called if SanityCheck has
-  // returned true.
-  bool has_error() { return store_[PreparseDataConstants::kHasErrorOffset]; }
-  unsigned magic() { return store_[PreparseDataConstants::kMagicOffset]; }
-  unsigned version() { return store_[PreparseDataConstants::kVersionOffset]; }
+  void Initialize();
+  FunctionEntry GetFunctionEntry(int start);
+  int FunctionCount();
+
+  bool HasError();
+
+  unsigned* Data() {  // Writable data as unsigned int array.
+    return reinterpret_cast<unsigned*>(const_cast<byte*>(script_data_->data()));
+  }
 
  private:
-  Vector<unsigned> store_;
-  unsigned char* symbol_data_;
-  unsigned char* symbol_data_end_;
-  int function_index_;
-  bool owns_store_;
-
-  unsigned Read(int position);
-  unsigned* ReadAddress(int position);
-  // Reads a number from the current symbols
-  int ReadNumber(byte** source);
-
-  ScriptDataImpl(const char* backing_store, int length)
-      : store_(reinterpret_cast<unsigned*>(const_cast<char*>(backing_store)),
-               length / static_cast<int>(sizeof(unsigned))),
-        owns_store_(false) {
-    ASSERT_EQ(0, static_cast<int>(
-        reinterpret_cast<intptr_t>(backing_store) % sizeof(unsigned)));
+  bool IsSane();
+  unsigned Magic();
+  unsigned Version();
+  int FunctionsSize();
+  int Length() const {
+    // Script data length is already checked to be a multiple of unsigned size.
+    return script_data_->length() / sizeof(unsigned);
   }
 
-  // Read strings written by ParserRecorder::WriteString.
-  static const char* ReadString(unsigned* start, int* chars);
+  ScriptData* script_data_;
+  int function_index_;
 
-  friend class ScriptData;
-};
-
-
-class ParserApi {
- public:
-  // Parses the source code represented by the compilation info and sets its
-  // function literal.  Returns false (and deallocates any allocated AST
-  // nodes) if parsing failed.
-  static bool Parse(CompilationInfo* info, int flags);
-
-  // Generic preparser generating full preparse data.
-  static ScriptDataImpl* PreParse(Utf16CharacterStream* source,
-                                  v8::Extension* extension,
-                                  int flags);
+  DISALLOW_COPY_AND_ASSIGN(ParseData);
 };
 
 // ----------------------------------------------------------------------------
@@ -205,12 +120,12 @@ class BufferedZoneList {
   }
 
   T* last() {
-    ASSERT(last_ != NULL);
+    DCHECK(last_ != NULL);
     return last_;
   }
 
   T* RemoveLast() {
-    ASSERT(last_ != NULL);
+    DCHECK(last_ != NULL);
     T* result = last_;
     if ((list_ != NULL) && (list_->length() > 0))
       last_ = list_->RemoveLast();
@@ -220,13 +135,13 @@ class BufferedZoneList {
   }
 
   T* Get(int i) {
-    ASSERT((0 <= i) && (i < length()));
+    DCHECK((0 <= i) && (i < length()));
     if (list_ == NULL) {
-      ASSERT_EQ(0, i);
+      DCHECK_EQ(0, i);
       return last_;
     } else {
       if (i == list_->length()) {
-        ASSERT(last_ != NULL);
+        DCHECK(last_ != NULL);
         return last_;
       } else {
         return list_->at(i);
@@ -272,7 +187,8 @@ class RegExpBuilder: public ZoneObject {
   void AddAtom(RegExpTree* tree);
   void AddAssertion(RegExpTree* tree);
   void NewAlternative();  // '|'
-  void AddQuantifierToAtom(int min, int max, RegExpQuantifier::Type type);
+  void AddQuantifierToAtom(
+      int min, int max, RegExpQuantifier::QuantifierType type);
   RegExpTree* ToRegExp();
 
  private:
@@ -296,7 +212,7 @@ class RegExpBuilder: public ZoneObject {
 };
 
 
-class RegExpParser {
+class RegExpParser BASE_EMBEDDED {
  public:
   RegExpParser(FlatStringReader* in,
                Handle<String>* error,
@@ -423,38 +339,301 @@ class RegExpParser {
 // ----------------------------------------------------------------------------
 // JAVASCRIPT PARSING
 
-// Forward declaration.
+class Parser;
 class SingletonLogger;
 
-class Parser {
+class ParserTraits {
  public:
-  Parser(CompilationInfo* info,
-         int parsing_flags,  // Combination of ParsingFlags
-         v8::Extension* extension,
-         ScriptDataImpl* pre_data);
-  virtual ~Parser() {
-    delete reusable_preparser_;
-    reusable_preparser_ = NULL;
+  struct Type {
+    // TODO(marja): To be removed. The Traits object should contain all the data
+    // it needs.
+    typedef v8::internal::Parser* Parser;
+
+    // Used by FunctionState and BlockState.
+    typedef v8::internal::Scope Scope;
+    typedef v8::internal::Scope* ScopePtr;
+    typedef Variable GeneratorVariable;
+    typedef v8::internal::Zone Zone;
+
+    class Checkpoint BASE_EMBEDDED {
+     public:
+      template <typename Parser>
+      explicit Checkpoint(Parser* parser) {
+        isolate_ = parser->zone()->isolate();
+        saved_ast_node_id_ = isolate_->ast_node_id();
+      }
+
+      void Restore() { isolate_->set_ast_node_id(saved_ast_node_id_); }
+
+     private:
+      Isolate* isolate_;
+      int saved_ast_node_id_;
+    };
+
+    typedef v8::internal::AstProperties AstProperties;
+    typedef Vector<VariableProxy*> ParameterIdentifierVector;
+
+    // Return types for traversing functions.
+    typedef const AstRawString* Identifier;
+    typedef v8::internal::Expression* Expression;
+    typedef Yield* YieldExpression;
+    typedef v8::internal::FunctionLiteral* FunctionLiteral;
+    typedef v8::internal::Literal* Literal;
+    typedef ObjectLiteral::Property* ObjectLiteralProperty;
+    typedef ZoneList<v8::internal::Expression*>* ExpressionList;
+    typedef ZoneList<ObjectLiteral::Property*>* PropertyList;
+    typedef ZoneList<v8::internal::Statement*>* StatementList;
+
+    // For constructing objects returned by the traversing functions.
+    typedef AstNodeFactory<AstConstructionVisitor> Factory;
+  };
+
+  explicit ParserTraits(Parser* parser) : parser_(parser) {}
+
+  // Custom operations executed when FunctionStates are created and destructed.
+  template<typename FunctionState>
+  static void SetUpFunctionState(FunctionState* function_state, Zone* zone) {
+    Isolate* isolate = zone->isolate();
+    function_state->saved_ast_node_id_ = isolate->ast_node_id();
+    isolate->set_ast_node_id(BailoutId::FirstUsable().ToInt());
   }
 
-  // Returns NULL if parsing failed.
-  FunctionLiteral* ParseProgram();
-  FunctionLiteral* ParseLazy();
+  template<typename FunctionState>
+  static void TearDownFunctionState(FunctionState* function_state, Zone* zone) {
+    if (function_state->outer_function_state_ != NULL) {
+      zone->isolate()->set_ast_node_id(function_state->saved_ast_node_id_);
+    }
+  }
 
-  void ReportMessageAt(Scanner::Location loc,
+  // Helper functions for recursive descent.
+  bool IsEvalOrArguments(const AstRawString* identifier) const;
+  V8_INLINE bool IsFutureStrictReserved(const AstRawString* identifier) const;
+
+  // Returns true if the expression is of type "this.foo".
+  static bool IsThisProperty(Expression* expression);
+
+  static bool IsIdentifier(Expression* expression);
+
+  static const AstRawString* AsIdentifier(Expression* expression) {
+    DCHECK(IsIdentifier(expression));
+    return expression->AsVariableProxy()->raw_name();
+  }
+
+  static bool IsBoilerplateProperty(ObjectLiteral::Property* property) {
+    return ObjectLiteral::IsBoilerplateProperty(property);
+  }
+
+  static bool IsArrayIndex(const AstRawString* string, uint32_t* index) {
+    return string->AsArrayIndex(index);
+  }
+
+  // Functions for encapsulating the differences between parsing and preparsing;
+  // operations interleaved with the recursive descent.
+  static void PushLiteralName(FuncNameInferrer* fni, const AstRawString* id) {
+    fni->PushLiteralName(id);
+  }
+  void PushPropertyName(FuncNameInferrer* fni, Expression* expression);
+  static void InferFunctionName(FuncNameInferrer* fni,
+                                FunctionLiteral* func_to_infer) {
+    fni->AddFunction(func_to_infer);
+  }
+
+  static void CheckFunctionLiteralInsideTopLevelObjectLiteral(
+      Scope* scope, Expression* value, bool* has_function) {
+    if (scope->DeclarationScope()->is_global_scope() &&
+        value->AsFunctionLiteral() != NULL) {
+      *has_function = true;
+      value->AsFunctionLiteral()->set_pretenure();
+    }
+  }
+
+  // If we assign a function literal to a property we pretenure the
+  // literal so it can be added as a constant function property.
+  static void CheckAssigningFunctionLiteralToProperty(Expression* left,
+                                                      Expression* right);
+
+  // Keep track of eval() calls since they disable all local variable
+  // optimizations. This checks if expression is an eval call, and if yes,
+  // forwards the information to scope.
+  void CheckPossibleEvalCall(Expression* expression, Scope* scope);
+
+  // Determine if the expression is a variable proxy and mark it as being used
+  // in an assignment or with a increment/decrement operator.
+  static Expression* MarkExpressionAsAssigned(Expression* expression);
+
+  // Returns true if we have a binary expression between two numeric
+  // literals. In that case, *x will be changed to an expression which is the
+  // computed value.
+  bool ShortcutNumericLiteralBinaryExpression(
+      Expression** x, Expression* y, Token::Value op, int pos,
+      AstNodeFactory<AstConstructionVisitor>* factory);
+
+  // Rewrites the following types of unary expressions:
+  // not <literal> -> true / false
+  // + <numeric literal> -> <numeric literal>
+  // - <numeric literal> -> <numeric literal with value negated>
+  // ! <literal> -> true / false
+  // The following rewriting rules enable the collection of type feedback
+  // without any special stub and the multiplication is removed later in
+  // Crankshaft's canonicalization pass.
+  // + foo -> foo * 1
+  // - foo -> foo * (-1)
+  // ~ foo -> foo ^(~0)
+  Expression* BuildUnaryExpression(
+      Expression* expression, Token::Value op, int pos,
+      AstNodeFactory<AstConstructionVisitor>* factory);
+
+  // Generate AST node that throws a ReferenceError with the given type.
+  Expression* NewThrowReferenceError(const char* type, int pos);
+
+  // Generate AST node that throws a SyntaxError with the given
+  // type. The first argument may be null (in the handle sense) in
+  // which case no arguments are passed to the constructor.
+  Expression* NewThrowSyntaxError(
+      const char* type, const AstRawString* arg, int pos);
+
+  // Generate AST node that throws a TypeError with the given
+  // type. Both arguments must be non-null (in the handle sense).
+  Expression* NewThrowTypeError(const char* type, const AstRawString* arg,
+                                int pos);
+
+  // Generic AST generator for throwing errors from compiled code.
+  Expression* NewThrowError(
+      const AstRawString* constructor, const char* type,
+      const AstRawString* arg, int pos);
+
+  // Reporting errors.
+  void ReportMessageAt(Scanner::Location source_location,
                        const char* message,
-                       Vector<const char*> args);
-  void ReportMessageAt(Scanner::Location loc,
+                       const char* arg = NULL,
+                       bool is_reference_error = false);
+  void ReportMessage(const char* message,
+                     const char* arg = NULL,
+                     bool is_reference_error = false);
+  void ReportMessage(const char* message,
+                     const AstRawString* arg,
+                     bool is_reference_error = false);
+  void ReportMessageAt(Scanner::Location source_location,
                        const char* message,
-                       Vector<Handle<String> > args);
+                       const AstRawString* arg,
+                       bool is_reference_error = false);
+
+  // "null" return type creators.
+  static const AstRawString* EmptyIdentifier() {
+    return NULL;
+  }
+  static Expression* EmptyExpression() {
+    return NULL;
+  }
+  static Expression* EmptyArrowParamList() { return NULL; }
+  static Literal* EmptyLiteral() {
+    return NULL;
+  }
+
+  // Used in error return values.
+  static ZoneList<Expression*>* NullExpressionList() {
+    return NULL;
+  }
+
+  // Non-NULL empty string.
+  V8_INLINE const AstRawString* EmptyIdentifierString();
+
+  // Odd-ball literal creators.
+  Literal* GetLiteralTheHole(int position,
+                             AstNodeFactory<AstConstructionVisitor>* factory);
+
+  // Producing data during the recursive descent.
+  const AstRawString* GetSymbol(Scanner* scanner);
+  const AstRawString* GetNextSymbol(Scanner* scanner);
+
+  Expression* ThisExpression(Scope* scope,
+                             AstNodeFactory<AstConstructionVisitor>* factory,
+                             int pos = RelocInfo::kNoPosition);
+  Literal* ExpressionFromLiteral(
+      Token::Value token, int pos, Scanner* scanner,
+      AstNodeFactory<AstConstructionVisitor>* factory);
+  Expression* ExpressionFromIdentifier(
+      const AstRawString* name, int pos, Scope* scope,
+      AstNodeFactory<AstConstructionVisitor>* factory);
+  Expression* ExpressionFromString(
+      int pos, Scanner* scanner,
+      AstNodeFactory<AstConstructionVisitor>* factory);
+  Expression* GetIterator(Expression* iterable,
+                          AstNodeFactory<AstConstructionVisitor>* factory);
+  ZoneList<v8::internal::Expression*>* NewExpressionList(int size, Zone* zone) {
+    return new(zone) ZoneList<v8::internal::Expression*>(size, zone);
+  }
+  ZoneList<ObjectLiteral::Property*>* NewPropertyList(int size, Zone* zone) {
+    return new(zone) ZoneList<ObjectLiteral::Property*>(size, zone);
+  }
+  ZoneList<v8::internal::Statement*>* NewStatementList(int size, Zone* zone) {
+    return new(zone) ZoneList<v8::internal::Statement*>(size, zone);
+  }
+  V8_INLINE Scope* NewScope(Scope* parent_scope, ScopeType scope_type);
+
+  // Utility functions
+  int DeclareArrowParametersFromExpression(Expression* expression, Scope* scope,
+                                           Scanner::Location* dupe_loc,
+                                           bool* ok);
+  V8_INLINE AstValueFactory* ast_value_factory();
+
+  // Temporary glue; these functions will move to ParserBase.
+  Expression* ParseV8Intrinsic(bool* ok);
+  FunctionLiteral* ParseFunctionLiteral(
+      const AstRawString* name,
+      Scanner::Location function_name_location,
+      bool name_is_strict_reserved,
+      bool is_generator,
+      int function_token_position,
+      FunctionLiteral::FunctionType type,
+      FunctionLiteral::ArityRestriction arity_restriction,
+      bool* ok);
+  V8_INLINE void SkipLazyFunctionBody(const AstRawString* name,
+                                      int* materialized_literal_count,
+                                      int* expected_property_count, bool* ok);
+  V8_INLINE ZoneList<Statement*>* ParseEagerFunctionBody(
+      const AstRawString* name, int pos, Variable* fvar,
+      Token::Value fvar_init_op, bool is_generator, bool* ok);
+  V8_INLINE void CheckConflictingVarDeclarations(v8::internal::Scope* scope,
+                                                 bool* ok);
 
  private:
-  static const int kMaxNumFunctionLocals = 131071;  // 2^17-1
+  Parser* parser_;
+};
 
-  enum Mode {
-    PARSE_LAZILY,
-    PARSE_EAGERLY
-  };
+
+class Parser : public ParserBase<ParserTraits> {
+ public:
+  explicit Parser(CompilationInfo* info);
+  ~Parser() {
+    delete reusable_preparser_;
+    reusable_preparser_ = NULL;
+    delete cached_parse_data_;
+    cached_parse_data_ = NULL;
+  }
+
+  // Parses the source code represented by the compilation info and sets its
+  // function literal.  Returns false (and deallocates any allocated AST
+  // nodes) if parsing failed.
+  static bool Parse(CompilationInfo* info,
+                    bool allow_lazy = false) {
+    Parser parser(info);
+    parser.set_allow_lazy(allow_lazy);
+    return parser.Parse();
+  }
+  bool Parse();
+
+ private:
+  friend class ParserTraits;
+
+  // Limit the allowed number of local variables in a function. The hard limit
+  // is that offsets computed by FullCodeGenerator::StackOperand and similar
+  // functions are ints, and they should not overflow. In addition, accessing
+  // local variables creates user-controlled constants in the generated code,
+  // and we don't want too much user-controlled memory inside the code (this was
+  // the reason why this limit was introduced in the first place; see
+  // https://codereview.chromium.org/7003030/ ).
+  static const int kMaxNumFunctionLocals = 4194303;  // 2^22-1
 
   enum VariableDeclarationContext {
     kModuleElement,
@@ -469,117 +648,29 @@ class Parser {
     kHasNoInitializers
   };
 
-  class BlockState;
+  // Returns NULL if parsing failed.
+  FunctionLiteral* ParseProgram();
 
-  class FunctionState BASE_EMBEDDED {
-   public:
-    FunctionState(Parser* parser,
-                  Scope* scope,
-                  Isolate* isolate);
-    ~FunctionState();
-
-    int NextMaterializedLiteralIndex() {
-      return next_materialized_literal_index_++;
-    }
-    int materialized_literal_count() {
-      return next_materialized_literal_index_ - JSFunction::kLiteralsPrefixSize;
-    }
-
-    int NextHandlerIndex() { return next_handler_index_++; }
-    int handler_count() { return next_handler_index_; }
-
-    void SetThisPropertyAssignmentInfo(
-        bool only_simple_this_property_assignments,
-        Handle<FixedArray> this_property_assignments) {
-      only_simple_this_property_assignments_ =
-          only_simple_this_property_assignments;
-      this_property_assignments_ = this_property_assignments;
-    }
-    bool only_simple_this_property_assignments() {
-      return only_simple_this_property_assignments_;
-    }
-    Handle<FixedArray> this_property_assignments() {
-      return this_property_assignments_;
-    }
-
-    void AddProperty() { expected_property_count_++; }
-    int expected_property_count() { return expected_property_count_; }
-
-    AstNodeFactory<AstConstructionVisitor>* factory() { return &factory_; }
-
-   private:
-    // Used to assign an index to each literal that needs materialization in
-    // the function.  Includes regexp literals, and boilerplate for object and
-    // array literals.
-    int next_materialized_literal_index_;
-
-    // Used to assign a per-function index to try and catch handlers.
-    int next_handler_index_;
-
-    // Properties count estimation.
-    int expected_property_count_;
-
-    // Keeps track of assignments to properties of this. Used for
-    // optimizing constructors.
-    bool only_simple_this_property_assignments_;
-    Handle<FixedArray> this_property_assignments_;
-
-    Parser* parser_;
-    FunctionState* outer_function_state_;
-    Scope* outer_scope_;
-    int saved_ast_node_id_;
-    AstNodeFactory<AstConstructionVisitor> factory_;
-  };
-
-  class ParsingModeScope BASE_EMBEDDED {
-   public:
-    ParsingModeScope(Parser* parser, Mode mode)
-        : parser_(parser),
-          old_mode_(parser->mode()) {
-      parser_->mode_ = mode;
-    }
-    ~ParsingModeScope() {
-      parser_->mode_ = old_mode_;
-    }
-
-   private:
-    Parser* parser_;
-    Mode old_mode_;
-  };
-
-  FunctionLiteral* ParseLazy(Utf16CharacterStream* source,
-                             ZoneScope* zone_scope);
+  FunctionLiteral* ParseLazy();
+  FunctionLiteral* ParseLazy(Utf16CharacterStream* source);
 
   Isolate* isolate() { return isolate_; }
-  Zone* zone() const { return zone_; }
   CompilationInfo* info() const { return info_; }
 
   // Called by ParseProgram after setting up the scanner.
   FunctionLiteral* DoParseProgram(CompilationInfo* info,
-                                  Handle<String> source,
-                                  ZoneScope* zone_scope);
+                                  Handle<String> source);
 
-  // Report syntax error
-  void ReportUnexpectedToken(Token::Value token);
-  void ReportInvalidPreparseData(Handle<String> name, bool* ok);
-  void ReportMessage(const char* message, Vector<const char*> args);
-  void ReportMessage(const char* message, Vector<Handle<String> > args);
+  void SetCachedData();
 
-  bool inside_with() const { return top_scope_->inside_with(); }
-  Scanner& scanner()  { return scanner_; }
-  Mode mode() const { return mode_; }
-  ScriptDataImpl* pre_data() const { return pre_data_; }
-  bool is_extended_mode() {
-    ASSERT(top_scope_ != NULL);
-    return top_scope_->is_extended_mode();
+  bool inside_with() const { return scope_->inside_with(); }
+  ScriptCompiler::CompileOptions compile_options() const {
+    return info_->compile_options();
   }
   Scope* DeclarationScope(VariableMode mode) {
     return IsLexicalVariableMode(mode)
-        ? top_scope_ : top_scope_->DeclarationScope();
+        ? scope_ : scope_->DeclarationScope();
   }
-
-  // Check if the given string is 'eval' or 'arguments'.
-  bool IsEvalOrArguments(Handle<String> string);
 
   // All ParseXXX functions take as the last argument an *ok parameter
   // which is set to false if parsing failed; it is unchanged otherwise.
@@ -587,8 +678,10 @@ class Parser {
   // for failure at the call sites.
   void* ParseSourceElements(ZoneList<Statement*>* processor, int end_token,
                             bool is_eval, bool is_global, bool* ok);
-  Statement* ParseModuleElement(ZoneStringList* labels, bool* ok);
-  Statement* ParseModuleDeclaration(ZoneStringList* names, bool* ok);
+  Statement* ParseModuleElement(ZoneList<const AstRawString*>* labels,
+                                bool* ok);
+  Statement* ParseModuleDeclaration(ZoneList<const AstRawString*>* names,
+                                    bool* ok);
   Module* ParseModule(bool* ok);
   Module* ParseModuleLiteral(bool* ok);
   Module* ParseModulePath(bool* ok);
@@ -597,167 +690,73 @@ class Parser {
   Module* ParseModuleSpecifier(bool* ok);
   Block* ParseImportDeclaration(bool* ok);
   Statement* ParseExportDeclaration(bool* ok);
-  Statement* ParseBlockElement(ZoneStringList* labels, bool* ok);
-  Statement* ParseStatement(ZoneStringList* labels, bool* ok);
-  Statement* ParseFunctionDeclaration(ZoneStringList* names, bool* ok);
+  Statement* ParseBlockElement(ZoneList<const AstRawString*>* labels, bool* ok);
+  Statement* ParseStatement(ZoneList<const AstRawString*>* labels, bool* ok);
+  Statement* ParseFunctionDeclaration(ZoneList<const AstRawString*>* names,
+                                      bool* ok);
   Statement* ParseNativeDeclaration(bool* ok);
-  Block* ParseBlock(ZoneStringList* labels, bool* ok);
+  Block* ParseBlock(ZoneList<const AstRawString*>* labels, bool* ok);
   Block* ParseVariableStatement(VariableDeclarationContext var_context,
-                                ZoneStringList* names,
+                                ZoneList<const AstRawString*>* names,
                                 bool* ok);
   Block* ParseVariableDeclarations(VariableDeclarationContext var_context,
                                    VariableDeclarationProperties* decl_props,
-                                   ZoneStringList* names,
-                                   Handle<String>* out,
+                                   ZoneList<const AstRawString*>* names,
+                                   const AstRawString** out,
                                    bool* ok);
-  Statement* ParseExpressionOrLabelledStatement(ZoneStringList* labels,
-                                                bool* ok);
-  IfStatement* ParseIfStatement(ZoneStringList* labels, bool* ok);
+  Statement* ParseExpressionOrLabelledStatement(
+      ZoneList<const AstRawString*>* labels, bool* ok);
+  IfStatement* ParseIfStatement(ZoneList<const AstRawString*>* labels,
+                                bool* ok);
   Statement* ParseContinueStatement(bool* ok);
-  Statement* ParseBreakStatement(ZoneStringList* labels, bool* ok);
+  Statement* ParseBreakStatement(ZoneList<const AstRawString*>* labels,
+                                 bool* ok);
   Statement* ParseReturnStatement(bool* ok);
-  Statement* ParseWithStatement(ZoneStringList* labels, bool* ok);
+  Statement* ParseWithStatement(ZoneList<const AstRawString*>* labels,
+                                bool* ok);
   CaseClause* ParseCaseClause(bool* default_seen_ptr, bool* ok);
-  SwitchStatement* ParseSwitchStatement(ZoneStringList* labels, bool* ok);
-  DoWhileStatement* ParseDoWhileStatement(ZoneStringList* labels, bool* ok);
-  WhileStatement* ParseWhileStatement(ZoneStringList* labels, bool* ok);
-  Statement* ParseForStatement(ZoneStringList* labels, bool* ok);
+  SwitchStatement* ParseSwitchStatement(ZoneList<const AstRawString*>* labels,
+                                        bool* ok);
+  DoWhileStatement* ParseDoWhileStatement(ZoneList<const AstRawString*>* labels,
+                                          bool* ok);
+  WhileStatement* ParseWhileStatement(ZoneList<const AstRawString*>* labels,
+                                      bool* ok);
+  Statement* ParseForStatement(ZoneList<const AstRawString*>* labels, bool* ok);
   Statement* ParseThrowStatement(bool* ok);
   Expression* MakeCatchContext(Handle<String> id, VariableProxy* value);
   TryStatement* ParseTryStatement(bool* ok);
   DebuggerStatement* ParseDebuggerStatement(bool* ok);
 
   // Support for hamony block scoped bindings.
-  Block* ParseScopedBlock(ZoneStringList* labels, bool* ok);
+  Block* ParseScopedBlock(ZoneList<const AstRawString*>* labels, bool* ok);
 
-  Expression* ParseExpression(bool accept_IN, bool* ok);
-  Expression* ParseAssignmentExpression(bool accept_IN, bool* ok);
-  Expression* ParseConditionalExpression(bool accept_IN, bool* ok);
-  Expression* ParseBinaryExpression(int prec, bool accept_IN, bool* ok);
-  Expression* ParseUnaryExpression(bool* ok);
-  Expression* ParsePostfixExpression(bool* ok);
-  Expression* ParseLeftHandSideExpression(bool* ok);
-  Expression* ParseNewExpression(bool* ok);
-  Expression* ParseMemberExpression(bool* ok);
-  Expression* ParseNewPrefix(PositionStack* stack, bool* ok);
-  Expression* ParseMemberWithNewPrefixesExpression(PositionStack* stack,
-                                                   bool* ok);
-  Expression* ParsePrimaryExpression(bool* ok);
-  Expression* ParseArrayLiteral(bool* ok);
-  Expression* ParseObjectLiteral(bool* ok);
-  ObjectLiteral::Property* ParseObjectLiteralGetSet(bool is_getter, bool* ok);
-  Expression* ParseRegExpLiteral(bool seen_equal, bool* ok);
+  // Initialize the components of a for-in / for-of statement.
+  void InitializeForEachStatement(ForEachStatement* stmt,
+                                  Expression* each,
+                                  Expression* subject,
+                                  Statement* body);
+  Statement* DesugarLetBindingsInForStatement(
+      Scope* inner_scope, ZoneList<const AstRawString*>* names,
+      ForStatement* loop, Statement* init, Expression* cond, Statement* next,
+      Statement* body, bool* ok);
 
-  // Populate the constant properties fixed array for a materialized object
-  // literal.
-  void BuildObjectLiteralConstantProperties(
-      ZoneList<ObjectLiteral::Property*>* properties,
-      Handle<FixedArray> constants,
-      bool* is_simple,
-      bool* fast_elements,
-      int* depth);
-
-  // Populate the literals fixed array for a materialized array literal.
-  void BuildArrayLiteralBoilerplateLiterals(ZoneList<Expression*>* properties,
-                                            Handle<FixedArray> constants,
-                                            bool* is_simple,
-                                            int* depth);
-
-  // Decide if a property should be in the object boilerplate.
-  bool IsBoilerplateProperty(ObjectLiteral::Property* property);
-  // If the expression is a literal, return the literal value;
-  // if the expression is a materialized literal and is simple return a
-  // compile time value as encoded by CompileTimeValue::GetValue().
-  // Otherwise, return undefined literal as the placeholder
-  // in the object literal boilerplate.
-  Handle<Object> GetBoilerplateValue(Expression* expression);
-
-  ZoneList<Expression*>* ParseArguments(bool* ok);
-  FunctionLiteral* ParseFunctionLiteral(Handle<String> var_name,
-                                        bool name_is_reserved,
-                                        int function_token_position,
-                                        FunctionLiteral::Type type,
-                                        bool* ok);
-
+  FunctionLiteral* ParseFunctionLiteral(
+      const AstRawString* name,
+      Scanner::Location function_name_location,
+      bool name_is_strict_reserved,
+      bool is_generator,
+      int function_token_position,
+      FunctionLiteral::FunctionType type,
+      FunctionLiteral::ArityRestriction arity_restriction,
+      bool* ok);
 
   // Magical syntax support.
   Expression* ParseV8Intrinsic(bool* ok);
 
-  INLINE(Token::Value peek()) {
-    if (stack_overflow_) return Token::ILLEGAL;
-    return scanner().peek();
-  }
-
-  INLINE(Token::Value Next()) {
-    // BUG 1215673: Find a thread safe way to set a stack limit in
-    // pre-parse mode. Otherwise, we cannot safely pre-parse from other
-    // threads.
-    if (stack_overflow_) {
-      return Token::ILLEGAL;
-    }
-    if (StackLimitCheck(isolate()).HasOverflowed()) {
-      // Any further calls to Next or peek will return the illegal token.
-      // The current call must return the next token, which might already
-      // have been peek'ed.
-      stack_overflow_ = true;
-    }
-    return scanner().Next();
-  }
-
-  bool peek_any_identifier();
-
-  INLINE(void Consume(Token::Value token));
-  void Expect(Token::Value token, bool* ok);
-  bool Check(Token::Value token);
-  void ExpectSemicolon(bool* ok);
-  void ExpectContextualKeyword(const char* keyword, bool* ok);
-
-  Handle<String> LiteralString(PretenureFlag tenured) {
-    if (scanner().is_literal_ascii()) {
-      return isolate_->factory()->NewStringFromAscii(
-          scanner().literal_ascii_string(), tenured);
-    } else {
-      return isolate_->factory()->NewStringFromTwoByte(
-            scanner().literal_utf16_string(), tenured);
-    }
-  }
-
-  Handle<String> NextLiteralString(PretenureFlag tenured) {
-    if (scanner().is_next_literal_ascii()) {
-      return isolate_->factory()->NewStringFromAscii(
-          scanner().next_literal_ascii_string(), tenured);
-    } else {
-      return isolate_->factory()->NewStringFromTwoByte(
-          scanner().next_literal_utf16_string(), tenured);
-    }
-  }
-
-  Handle<String> GetSymbol(bool* ok);
+  bool CheckInOrOf(bool accept_OF, ForEachStatement::VisitMode* visit_mode);
 
   // Get odd-ball literals.
-  Literal* GetLiteralUndefined();
-  Literal* GetLiteralTheHole();
-
-  Handle<String> ParseIdentifier(bool* ok);
-  Handle<String> ParseIdentifierOrStrictReservedWord(
-      bool* is_strict_reserved, bool* ok);
-  Handle<String> ParseIdentifierName(bool* ok);
-  Handle<String> ParseIdentifierNameOrGetOrSet(bool* is_get,
-                                               bool* is_set,
-                                               bool* ok);
-
-  // Determine if the expression is a variable proxy and mark it as being used
-  // in an assignment or with a increment/decrement operator. This is currently
-  // used on for the statically checking assignments to harmony const bindings.
-  void MarkAsLValue(Expression* expression);
-
-  // Strict mode validation of LValue expressions
-  void CheckStrictModeLValue(Expression* expression,
-                             const char* error,
-                             bool* ok);
-
-  // Strict mode octal literal validation.
-  void CheckOctalLiteral(int beg_pos, int end_pos, bool* ok);
+  Literal* GetLiteralUndefined(int position);
 
   // For harmony block scoping mode: Check if the scope has conflicting var/let
   // declarations from different scopes. It covers for example
@@ -771,14 +770,14 @@ class Parser {
   void CheckConflictingVarDeclarations(Scope* scope, bool* ok);
 
   // Parser support
-  VariableProxy* NewUnresolved(Handle<String> name,
+  VariableProxy* NewUnresolved(const AstRawString* name,
                                VariableMode mode,
                                Interface* interface);
   void Declare(Declaration* declaration, bool resolve, bool* ok);
 
-  bool TargetStackContainsLabel(Handle<String> label);
-  BreakableStatement* LookupBreakTarget(Handle<String> label, bool* ok);
-  IterationStatement* LookupContinueTarget(Handle<String> label, bool* ok);
+  bool TargetStackContainsLabel(const AstRawString* label);
+  BreakableStatement* LookupBreakTarget(const AstRawString* label, bool* ok);
+  IterationStatement* LookupContinueTarget(const AstRawString* label, bool* ok);
 
   void RegisterTargetUse(Label* target, Target* stop);
 
@@ -786,72 +785,100 @@ class Parser {
 
   Scope* NewScope(Scope* parent, ScopeType type);
 
-  Handle<String> LookupSymbol(int symbol_id);
+  // Skip over a lazy function, either using cached data if we have it, or
+  // by parsing the function with PreParser. Consumes the ending }.
+  void SkipLazyFunctionBody(const AstRawString* function_name,
+                            int* materialized_literal_count,
+                            int* expected_property_count,
+                            bool* ok);
 
-  Handle<String> LookupCachedSymbol(int symbol_id);
+  PreParser::PreParseResult ParseLazyFunctionBodyWithPreParser(
+      SingletonLogger* logger);
 
-  // Generate AST node that throw a ReferenceError with the given type.
-  Expression* NewThrowReferenceError(Handle<String> type);
+  // Consumes the ending }.
+  ZoneList<Statement*>* ParseEagerFunctionBody(
+      const AstRawString* function_name, int pos, Variable* fvar,
+      Token::Value fvar_init_op, bool is_generator, bool* ok);
 
-  // Generate AST node that throw a SyntaxError with the given
-  // type. The first argument may be null (in the handle sense) in
-  // which case no arguments are passed to the constructor.
-  Expression* NewThrowSyntaxError(Handle<String> type, Handle<Object> first);
+  void HandleSourceURLComments();
 
-  // Generate AST node that throw a TypeError with the given
-  // type. Both arguments must be non-null (in the handle sense).
-  Expression* NewThrowTypeError(Handle<String> type,
-                                Handle<Object> first,
-                                Handle<Object> second);
+  void ThrowPendingError();
 
-  // Generic AST generator for throwing errors from compiled code.
-  Expression* NewThrowError(Handle<String> constructor,
-                            Handle<String> type,
-                            Vector< Handle<Object> > arguments);
-
-  preparser::PreParser::PreParseResult LazyParseFunctionLiteral(
-       SingletonLogger* logger);
-
-  AstNodeFactory<AstConstructionVisitor>* factory() {
-    return current_function_state_->factory();
-  }
+  void InternalizeUseCounts();
 
   Isolate* isolate_;
-  ZoneList<Handle<String> > symbol_cache_;
 
   Handle<Script> script_;
   Scanner scanner_;
-  preparser::PreParser* reusable_preparser_;
-  Scope* top_scope_;
-  FunctionState* current_function_state_;
+  PreParser* reusable_preparser_;
+  Scope* original_scope_;  // for ES5 function declarations in sloppy eval
   Target* target_stack_;  // for break, continue statements
-  v8::Extension* extension_;
-  ScriptDataImpl* pre_data_;
-  FuncNameInferrer* fni_;
+  ParseData* cached_parse_data_;
+  AstValueFactory* ast_value_factory_;
 
-  Mode mode_;
-  bool allow_natives_syntax_;
-  bool allow_lazy_;
-  bool allow_modules_;
-  bool stack_overflow_;
-  // If true, the next (and immediately following) function literal is
-  // preceded by a parenthesis.
-  // Heuristically that means that the function will be called immediately,
-  // so never lazily compile it.
-  bool parenthesized_function_;
-
-  Zone* zone_;
   CompilationInfo* info_;
-  friend class BlockState;
-  friend class FunctionState;
+
+  // Pending errors.
+  bool has_pending_error_;
+  Scanner::Location pending_error_location_;
+  const char* pending_error_message_;
+  const AstRawString* pending_error_arg_;
+  const char* pending_error_char_arg_;
+  bool pending_error_is_reference_error_;
+
+  int use_counts_[v8::Isolate::kUseCounterFeatureCount];
 };
+
+
+bool ParserTraits::IsFutureStrictReserved(
+    const AstRawString* identifier) const {
+  return identifier->IsOneByteEqualTo("yield") ||
+         parser_->scanner()->IdentifierIsFutureStrictReserved(identifier);
+}
+
+
+Scope* ParserTraits::NewScope(Scope* parent_scope, ScopeType scope_type) {
+  return parser_->NewScope(parent_scope, scope_type);
+}
+
+
+const AstRawString* ParserTraits::EmptyIdentifierString() {
+  return parser_->ast_value_factory_->empty_string();
+}
+
+
+void ParserTraits::SkipLazyFunctionBody(const AstRawString* function_name,
+                                        int* materialized_literal_count,
+                                        int* expected_property_count,
+                                        bool* ok) {
+  return parser_->SkipLazyFunctionBody(
+      function_name, materialized_literal_count, expected_property_count, ok);
+}
+
+
+ZoneList<Statement*>* ParserTraits::ParseEagerFunctionBody(
+    const AstRawString* name, int pos, Variable* fvar,
+    Token::Value fvar_init_op, bool is_generator, bool* ok) {
+  return parser_->ParseEagerFunctionBody(name, pos, fvar, fvar_init_op,
+                                         is_generator, ok);
+}
+
+void ParserTraits::CheckConflictingVarDeclarations(v8::internal::Scope* scope,
+                                                   bool* ok) {
+  parser_->CheckConflictingVarDeclarations(scope, ok);
+}
+
+
+AstValueFactory* ParserTraits::ast_value_factory() {
+  return parser_->ast_value_factory_;
+}
 
 
 // Support for handling complex values (array and object literals) that
 // can be fully handled at compile time.
 class CompileTimeValue: public AllStatic {
  public:
-  enum Type {
+  enum LiteralType {
     OBJECT_LITERAL_FAST_ELEMENTS,
     OBJECT_LITERAL_SLOW_ELEMENTS,
     ARRAY_LITERAL
@@ -859,19 +886,17 @@ class CompileTimeValue: public AllStatic {
 
   static bool IsCompileTimeValue(Expression* expression);
 
-  static bool ArrayLiteralElementNeedsInitialization(Expression* value);
-
   // Get the value as a compile time value.
-  static Handle<FixedArray> GetValue(Expression* expression);
+  static Handle<FixedArray> GetValue(Isolate* isolate, Expression* expression);
 
   // Get the type of a compile time value returned by GetValue().
-  static Type GetType(Handle<FixedArray> value);
+  static LiteralType GetLiteralType(Handle<FixedArray> value);
 
   // Get the elements array of a compile time value returned by GetValue().
   static Handle<FixedArray> GetElements(Handle<FixedArray> value);
 
  private:
-  static const int kTypeSlot = 0;
+  static const int kLiteralTypeSlot = 0;
   static const int kElementsSlot = 1;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(CompileTimeValue);

@@ -35,6 +35,7 @@ B<openssl> B<cms>
 [B<-print>]
 [B<-CAfile file>]
 [B<-CApath dir>]
+[B<-no_alt_chains>]
 [B<-md digest>]
 [B<-[cipher]>]
 [B<-nointern>]
@@ -90,6 +91,11 @@ decrypt mail using the supplied certificate and private key. Expects an
 encrypted mail message in MIME format for the input file. The decrypted mail
 is written to the output file.
 
+=item B<-debug_decrypt>
+
+this option sets the B<CMS_DEBUG_DECRYPT> flag. This option should be used
+with caution: see the notes section below.
+
 =item B<-sign>
 
 sign mail using the supplied certificate and private key. Input file is
@@ -138,7 +144,7 @@ output an error.
 
 =item B<-EncryptedData_encrypt>
 
-Encrypt suppled content using supplied symmetric key and algorithm using a CMS
+Encrypt content using supplied symmetric key and algorithm using a CMS
 B<EncrytedData> type and output the content.
 
 =item B<-sign_receipt>
@@ -401,7 +407,7 @@ portion of a message so they may be included manually. If signing
 then many S/MIME mail clients check the signers certificate's email
 address matches that specified in the From: address.
 
-=item B<-purpose, -ignore_critical, -issuer_checks, -crl_check, -crl_check_all, -policy_check, -extended_crl, -x509_strict, -policy -check_ss_sig>
+=item B<-purpose, -ignore_critical, -issuer_checks, -crl_check, -crl_check_all, -policy_check, -extended_crl, -x509_strict, -policy -check_ss_sig -no_alt_chains>
 
 Set various certificate chain valiadition option. See the
 L<B<verify>|verify(1)> manual page for details.
@@ -446,32 +452,42 @@ Streaming is always used for the B<-sign> operation with detached data but
 since the content is no longer part of the CMS structure the encoding
 remains DER.
 
+If the B<-decrypt> option is used without a recipient certificate then an
+attempt is made to locate the recipient by trying each potential recipient
+in turn using the supplied private key. To thwart the MMA attack
+(Bleichenbacher's attack on PKCS #1 v1.5 RSA padding) all recipients are
+tried whether they succeed or not and if no recipients match the message
+is "decrypted" using a random key which will typically output garbage. 
+The B<-debug_decrypt> option can be used to disable the MMA attack protection
+and return an error if no recipient can be found: this option should be used
+with caution. For a fuller description see L<CMS_decrypt(3)|CMS_decrypt(3)>).
+
 =head1 EXIT CODES
 
 =over 4
 
-=item 0
+=item Z<>0
 
 the operation was completely successfully.
 
-=item 1 
+=item Z<>1
 
 an error occurred parsing the command options.
 
-=item 2
+=item Z<>2
 
 one of the input files could not be read.
 
-=item 3
+=item Z<>3
 
 an error occurred creating the CMS file or when reading the MIME
 message.
 
-=item 4
+=item Z<>4
 
 an error occurred decrypting or verifying the message.
 
-=item 5
+=item Z<>5
 
 the message was verified correctly but an error occurred writing out
 the signers certificates.
@@ -598,5 +614,7 @@ No revocation checking is done on the signer's certificate.
 The use of multiple B<-signer> options and the B<-resign> command were first
 added in OpenSSL 1.0.0
 
+
+The -no_alt_chains options was first added to OpenSSL 1.0.1n and 1.0.2b.
 
 =cut

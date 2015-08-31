@@ -23,11 +23,28 @@
 #define SRC_NODE_CRYPTO_H_
 
 #include "node.h"
+#include "node_crypto_clienthello.h"  // ClientHelloParser
+#include "node_crypto_clienthello-inl.h"
 
-#include "node_object_wrap.h"
+#ifdef OPENSSL_NPN_NEGOTIATED
+#include "node_buffer.h"
+#endif
+
+#include "env.h"
+#include "async-wrap.h"
+#include "async-wrap-inl.h"
+#include "base-object.h"
+#include "base-object-inl.h"
+
 #include "v8.h"
 
+#include <string.h>
 #include <openssl/ssl.h>
+#include <openssl/ec.h>
+#include <openssl/ecdh.h>
+#ifndef OPENSSL_NO_ENGINE
+# include <openssl/engine.h>
+#endif  // !OPENSSL_NO_ENGINE
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -37,54 +54,116 @@
 #include <openssl/rand.h>
 #include <openssl/pkcs12.h>
 
-#ifdef OPENSSL_NPN_NEGOTIATED
-#include "node_buffer.h"
-#endif
-
 #define EVP_F_EVP_DECRYPTFINAL 101
 
+#if !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_set_tlsext_status_cb)
+# define NODE__HAVE_TLSEXT_STATUS_CB
+#endif  // !defined(OPENSSL_NO_TLSEXT) && defined(SSL_CTX_set_tlsext_status_cb)
+
+#define DEFAULT_CIPHER_LIST_V10_38 "ECDHE-RSA-AES128-SHA256:"                  \
+                                "AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
+
+#define DEFAULT_CIPHER_LIST_V10_39 "ECDHE-RSA-AES128-SHA256:"                  \
+                                "AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH"
+
+#define DEFAULT_CIPHER_LIST_V12_2 "ECDHE-RSA-AES128-SHA256:"                   \
+                                "DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:" \
+                                "HIGH:!MD5:!aNULL"
+
+#define DEFAULT_CIPHER_LIST_V12_3  "ECDHE-RSA-AES128-SHA256:"                  \
+                                "DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:"\
+                                "!RC4:!MD5:!aNULL"
+
+#define DEFAULT_CIPHER_LIST_HEAD "ECDHE-RSA-AES256-SHA384:"                    \
+                                 "DHE-RSA-AES256-SHA384:"                      \
+                                 "ECDHE-RSA-AES256-SHA256:"                    \
+                                 "DHE-RSA-AES256-SHA256:"                      \
+                                 "ECDHE-RSA-AES128-SHA256:"                    \
+                                 "DHE-RSA-AES128-SHA256:"                      \
+                                 "HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:"  \
+                                 "!PSK:!SRP:!CAMELLIA"
+
+static inline const char * legacy_cipher_list(const char * ver) {
+  if (ver == NULL) {
+    return NULL;
+  }
+  if (strncmp(ver, "v0.10.38", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_38;
+  } else if (strncmp(ver, "v0.10.39", 8) == 0) {
+    return DEFAULT_CIPHER_LIST_V10_39;
+  } else if (strncmp(ver, "v0.12.2", 7) == 0) {
+    return DEFAULT_CIPHER_LIST_V12_2;
+  } else if (strncmp(ver, "v0.12.3", 7) == 0) {
+    return DEFAULT_CIPHER_LIST_V12_3;
+  } else {
+    return NULL;
+  }
+}
 
 namespace node {
+
+extern bool SSL2_ENABLE;
+extern bool SSL3_ENABLE;
+extern const char * DEFAULT_CIPHER_LIST;
+
 namespace crypto {
 
-static X509_STORE* root_cert_store;
+extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
+
+extern X509_STORE* root_cert_store;
 
 // Forward declaration
 class Connection;
 
-class SecureContext : ObjectWrap {
+class SecureContext : public BaseObject {
  public:
-  static void Initialize(v8::Handle<v8::Object> target);
+  ~SecureContext() {
+    FreeCTXMem();
+  }
 
-  SSL_CTX *ctx_;
-  // TODO: ca_store_ should probably be removed, it's not used anywhere.
-  X509_STORE *ca_store_;
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
 
- protected:
+  X509_STORE* ca_store_;
+  SSL_CTX* ctx_;
+  X509* cert_;
+  X509* issuer_;
+
   static const int kMaxSessionSize = 10 * 1024;
 
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Init(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetKey(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetCert(const v8::Arguments& args);
-  static v8::Handle<v8::Value> AddCACert(const v8::Arguments& args);
-  static v8::Handle<v8::Value> AddCRL(const v8::Arguments& args);
-  static v8::Handle<v8::Value> AddRootCerts(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetCiphers(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetOptions(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetSessionIdContext(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Close(const v8::Arguments& args);
-  static v8::Handle<v8::Value> LoadPKCS12(const v8::Arguments& args);
+ protected:
 
-  static SSL_SESSION* GetSessionCallback(SSL* s,
-                                         unsigned char* key,
-                                         int len,
-                                         int* copy);
-  static int NewSessionCallback(SSL* s, SSL_SESSION* sess);
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Init(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetCert(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void AddCACert(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void AddCRL(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void AddRootCerts(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetCiphers(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetECDHCurve(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetDHParam(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetOptions(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetSessionIdContext(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetSessionTimeout(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void LoadPKCS12(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetTicketKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void CtxGetter(v8::Local<v8::String> property,
+                        const v8::PropertyCallbackInfo<v8::Value>& info);
 
-  SecureContext() : ObjectWrap() {
-    ctx_ = NULL;
-    ca_store_ = NULL;
+  template <bool primary>
+  static void GetCertificate(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  SecureContext(Environment* env, v8::Local<v8::Object> wrap)
+      : BaseObject(env, wrap),
+        ca_store_(NULL),
+        ctx_(NULL),
+        cert_(NULL),
+        issuer_(NULL) {
+    MakeWeak<SecureContext>(this);
   }
 
   void FreeCTXMem() {
@@ -97,66 +176,157 @@ class SecureContext : ObjectWrap {
         ctx_->cert_store = NULL;
       }
       SSL_CTX_free(ctx_);
+      if (cert_ != NULL)
+        X509_free(cert_);
+      if (issuer_ != NULL)
+        X509_free(issuer_);
       ctx_ = NULL;
       ca_store_ = NULL;
+      cert_ = NULL;
+      issuer_ = NULL;
     } else {
       assert(ca_store_ == NULL);
     }
   }
-
-  ~SecureContext() {
-    FreeCTXMem();
-  }
-
- private:
 };
 
-class ClientHelloParser {
+// SSLWrap implicitly depends on the inheriting class' handle having an
+// internal pointer to the Base class.
+template <class Base>
+class SSLWrap {
  public:
-  enum FrameType {
-    kChangeCipherSpec = 20,
-    kAlert = 21,
-    kHandshake = 22,
-    kApplicationData = 23,
-    kOther = 255
+  enum Kind {
+    kClient,
+    kServer
   };
 
-  enum HandshakeType {
-    kClientHello = 1
-  };
-
-  enum ParseState {
-    kWaiting,
-    kTLSHeader,
-    kSSLHeader,
-    kPaused,
-    kEnded
-  };
-
-  ClientHelloParser(Connection* c) : conn_(c),
-                                     state_(kWaiting),
-                                     offset_(0),
-                                     body_offset_(0) {
+  SSLWrap(Environment* env, SecureContext* sc, Kind kind)
+      : env_(env),
+        kind_(kind),
+        next_sess_(NULL),
+        session_callbacks_(false),
+        new_session_wait_(false) {
+    ssl_ = SSL_new(sc->ctx_);
+    assert(ssl_ != NULL);
   }
 
-  size_t Write(const uint8_t* data, size_t len);
-  void Finish();
+  ~SSLWrap() {
+    if (ssl_ != NULL) {
+      SSL_free(ssl_);
+      ssl_ = NULL;
+    }
+    if (next_sess_ != NULL) {
+      SSL_SESSION_free(next_sess_);
+      next_sess_ = NULL;
+    }
 
-  inline bool ended() { return state_ == kEnded; }
+#ifdef OPENSSL_NPN_NEGOTIATED
+    npn_protos_.Reset();
+    selected_npn_proto_.Reset();
+#endif
+#ifdef NODE__HAVE_TLSEXT_STATUS_CB
+    ocsp_response_.Reset();
+#endif  // NODE__HAVE_TLSEXT_STATUS_CB
+  }
 
- private:
-  Connection* conn_;
-  ParseState state_;
-  size_t frame_len_;
+  inline SSL* ssl() const { return ssl_; }
+  inline void enable_session_callbacks() { session_callbacks_ = true; }
+  inline bool is_server() const { return kind_ == kServer; }
+  inline bool is_client() const { return kind_ == kClient; }
+  inline bool is_waiting_new_session() const { return new_session_wait_; }
 
-  uint8_t data_[18432];
-  size_t offset_;
-  size_t body_offset_;
+ protected:
+  static void InitNPN(SecureContext* sc);
+  static void AddMethods(Environment* env, v8::Handle<v8::FunctionTemplate> t);
+
+  static SSL_SESSION* GetSessionCallback(SSL* s,
+                                         unsigned char* key,
+                                         int len,
+                                         int* copy);
+  static int NewSessionCallback(SSL* s, SSL_SESSION* sess);
+  static void OnClientHello(void* arg,
+                            const ClientHelloParser::ClientHello& hello);
+
+  static void GetPeerCertificate(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void LoadSession(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void IsSessionReused(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void IsInitFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifyError(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetCurrentCipher(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void EndParser(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Renegotiate(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Shutdown(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetTLSTicket(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void NewSessionDone(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetOCSPResponse(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void RequestOCSP(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+#ifdef SSL_set_max_send_fragment
+  static void SetMaxSendFragment(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+#endif  // SSL_set_max_send_fragment
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+  static void GetNegotiatedProto(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetNPNProtocols(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static int AdvertiseNextProtoCallback(SSL* s,
+                                        const unsigned char** data,
+                                        unsigned int* len,
+                                        void* arg);
+  static int SelectNextProtoCallback(SSL* s,
+                                     unsigned char** out,
+                                     unsigned char* outlen,
+                                     const unsigned char* in,
+                                     unsigned int inlen,
+                                     void* arg);
+#endif  // OPENSSL_NPN_NEGOTIATED
+  static int TLSExtStatusCallback(SSL* s, void* arg);
+  static void SSLGetter(v8::Local<v8::String> property,
+                        const v8::PropertyCallbackInfo<v8::Value>& info);
+
+  inline Environment* ssl_env() const {
+    return env_;
+  }
+
+  Environment* const env_;
+  Kind kind_;
+  SSL_SESSION* next_sess_;
+  SSL* ssl_;
+  bool session_callbacks_;
+  bool new_session_wait_;
+  ClientHelloParser hello_parser_;
+
+#ifdef NODE__HAVE_TLSEXT_STATUS_CB
+  v8::Persistent<v8::Object> ocsp_response_;
+#endif  // NODE__HAVE_TLSEXT_STATUS_CB
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+  v8::Persistent<v8::Object> npn_protos_;
+  v8::Persistent<v8::Value> selected_npn_proto_;
+#endif  // OPENSSL_NPN_NEGOTIATED
+
+  friend class SecureContext;
 };
 
-class Connection : ObjectWrap {
+// Connection inherits from AsyncWrap because SSLWrap makes calls to
+// MakeCallback, but SSLWrap doesn't store the handle itself. Instead it
+// assumes that any args.This() called will be the handle from Connection.
+class Connection : public SSLWrap<Connection>, public AsyncWrap {
  public:
-  static void Initialize(v8::Handle<v8::Object> target);
+  ~Connection() {
+#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
+    sniObject_.Reset();
+    sniContext_.Reset();
+    servername_.Reset();
+#endif
+  }
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+  void NewSessionDoneCb();
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   v8::Persistent<v8::Object> npnProtos_;
@@ -170,49 +340,26 @@ class Connection : ObjectWrap {
 #endif
 
  protected:
-  static v8::Handle<v8::Value> New(const v8::Arguments& args);
-  static v8::Handle<v8::Value> EncIn(const v8::Arguments& args);
-  static v8::Handle<v8::Value> ClearOut(const v8::Arguments& args);
-  static v8::Handle<v8::Value> ClearPending(const v8::Arguments& args);
-  static v8::Handle<v8::Value> EncPending(const v8::Arguments& args);
-  static v8::Handle<v8::Value> EncOut(const v8::Arguments& args);
-  static v8::Handle<v8::Value> ClearIn(const v8::Arguments& args);
-  static v8::Handle<v8::Value> GetPeerCertificate(const v8::Arguments& args);
-  static v8::Handle<v8::Value> GetSession(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetSession(const v8::Arguments& args);
-  static v8::Handle<v8::Value> LoadSession(const v8::Arguments& args);
-  static v8::Handle<v8::Value> IsSessionReused(const v8::Arguments& args);
-  static v8::Handle<v8::Value> IsInitFinished(const v8::Arguments& args);
-  static v8::Handle<v8::Value> VerifyError(const v8::Arguments& args);
-  static v8::Handle<v8::Value> GetCurrentCipher(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Shutdown(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Start(const v8::Arguments& args);
-  static v8::Handle<v8::Value> Close(const v8::Arguments& args);
-
-  static void InitNPN(SecureContext* sc, bool is_server);
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-  // NPN
-  static v8::Handle<v8::Value> GetNegotiatedProto(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetNPNProtocols(const v8::Arguments& args);
-  static int AdvertiseNextProtoCallback_(SSL *s,
-                                         const unsigned char **data,
-                                         unsigned int *len,
-                                         void *arg);
-  static int SelectNextProtoCallback_(SSL *s,
-                                      unsigned char **out, unsigned char *outlen,
-                                      const unsigned char* in,
-                                      unsigned int inlen, void *arg);
-#endif
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void EncIn(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ClearOut(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ClearPending(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void EncPending(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void EncOut(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ClearIn(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Start(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Close(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 #ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   // SNI
-  static v8::Handle<v8::Value> GetServername(const v8::Arguments& args);
-  static v8::Handle<v8::Value> SetSNICallback(const v8::Arguments& args);
-  static int SelectSNIContextCallback_(SSL *s, int *ad, void* arg);
+  static void GetServername(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetSNICallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static int SelectSNIContextCallback_(SSL* s, int* ad, void* arg);
 #endif
 
-  int HandleBIOError(BIO *bio, const char* func, int rv);
+  static void OnClientHelloParseEnd(void* arg);
+
+  int HandleBIOError(BIO* bio, const char* func, int rv);
 
   enum ZeroStatus {
     kZeroIsNotAnError,
@@ -229,39 +376,20 @@ class Connection : ObjectWrap {
   void ClearError();
   void SetShutdownFlags();
 
-  static Connection* Unwrap(const v8::Arguments& args) {
-    Connection* ss = ObjectWrap::Unwrap<Connection>(args.Holder());
-    ss->ClearError();
-    return ss;
-  }
-
-  Connection() : ObjectWrap(), hello_parser_(this) {
-    bio_read_ = bio_write_ = NULL;
-    ssl_ = NULL;
-    next_sess_ = NULL;
-  }
-
-  ~Connection() {
-    if (ssl_ != NULL) {
-      SSL_free(ssl_);
-      ssl_ = NULL;
-    }
-
-    if (next_sess_ != NULL) {
-      SSL_SESSION_free(next_sess_);
-      next_sess_ = NULL;
-    }
-
-#ifdef OPENSSL_NPN_NEGOTIATED
-    if (!npnProtos_.IsEmpty()) npnProtos_.Dispose();
-    if (!selectedNPNProto_.IsEmpty()) selectedNPNProto_.Dispose();
-#endif
-
-#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
-   if (!sniObject_.IsEmpty()) sniObject_.Dispose();
-   if (!sniContext_.IsEmpty()) sniContext_.Dispose();
-   if (!servername_.IsEmpty()) servername_.Dispose();
-#endif
+  Connection(Environment* env,
+             v8::Local<v8::Object> wrap,
+             SecureContext* sc,
+             SSLWrap<Connection>::Kind kind)
+      : SSLWrap<Connection>(env, sc, kind),
+        AsyncWrap(env, wrap, AsyncWrap::PROVIDER_CRYPTO),
+        bio_read_(NULL),
+        bio_write_(NULL),
+        hello_offset_(0) {
+    MakeWeak<Connection>(this);
+    hello_parser_.Start(SSLWrap<Connection>::OnClientHello,
+                        OnClientHelloParseEnd,
+                        this);
+    enable_session_callbacks();
   }
 
  private:
@@ -269,17 +397,358 @@ class Connection : ObjectWrap {
 
   BIO *bio_read_;
   BIO *bio_write_;
-  SSL *ssl_;
 
-  ClientHelloParser hello_parser_;
-
-  bool is_server_; /* coverity[member_decl] */
-  SSL_SESSION* next_sess_;
+  uint8_t hello_data_[18432];
+  size_t hello_offset_;
 
   friend class ClientHelloParser;
   friend class SecureContext;
 };
 
+class CipherBase : public BaseObject {
+ public:
+  ~CipherBase() {
+    if (!initialised_)
+      return;
+    delete[] auth_tag_;
+    EVP_CIPHER_CTX_cleanup(&ctx_);
+  }
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+ protected:
+  enum CipherKind {
+    kCipher,
+    kDecipher
+  };
+
+  void Init(const char* cipher_type, const char* key_buf, int key_buf_len);
+  void InitIv(const char* cipher_type,
+              const char* key,
+              int key_len,
+              const char* iv,
+              int iv_len);
+  bool Update(const char* data, int len, unsigned char** out, int* out_len);
+  bool Final(unsigned char** out, int *out_len);
+  bool SetAutoPadding(bool auto_padding);
+
+  bool IsAuthenticatedMode() const;
+  bool GetAuthTag(char** out, unsigned int* out_len) const;
+  bool SetAuthTag(const char* data, unsigned int len);
+  bool SetAAD(const char* data, unsigned int len);
+
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Init(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void InitIv(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Update(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void Final(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetAutoPadding(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  static void GetAuthTag(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetAuthTag(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetAAD(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  CipherBase(Environment* env,
+             v8::Local<v8::Object> wrap,
+             CipherKind kind)
+      : BaseObject(env, wrap),
+        cipher_(NULL),
+        initialised_(false),
+        kind_(kind),
+        auth_tag_(NULL),
+        auth_tag_len_(0) {
+    MakeWeak<CipherBase>(this);
+  }
+
+ private:
+  EVP_CIPHER_CTX ctx_; /* coverity[member_decl] */
+  const EVP_CIPHER* cipher_; /* coverity[member_decl] */
+  bool initialised_;
+  CipherKind kind_;
+  char* auth_tag_;
+  unsigned int auth_tag_len_;
+};
+
+class Hmac : public BaseObject {
+ public:
+  ~Hmac() {
+    if (!initialised_)
+      return;
+    HMAC_CTX_cleanup(&ctx_);
+  }
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+ protected:
+  void HmacInit(const char* hash_type, const char* key, int key_len);
+  bool HmacUpdate(const char* data, int len);
+  bool HmacDigest(unsigned char** md_value, unsigned int* md_len);
+
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void HmacInit(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void HmacUpdate(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void HmacDigest(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  Hmac(Environment* env, v8::Local<v8::Object> wrap)
+      : BaseObject(env, wrap),
+        md_(NULL),
+        initialised_(false) {
+    MakeWeak<Hmac>(this);
+  }
+
+ private:
+  HMAC_CTX ctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+};
+
+class Hash : public BaseObject {
+ public:
+  ~Hash() {
+    if (!initialised_)
+      return;
+    EVP_MD_CTX_cleanup(&mdctx_);
+  }
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+  bool HashInit(const char* hash_type);
+  bool HashUpdate(const char* data, int len);
+
+ protected:
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void HashUpdate(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void HashDigest(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  Hash(Environment* env, v8::Local<v8::Object> wrap)
+      : BaseObject(env, wrap),
+        md_(NULL),
+        initialised_(false) {
+    MakeWeak<Hash>(this);
+  }
+
+ private:
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+};
+
+class SignBase : public BaseObject {
+ public:
+  typedef enum {
+    kSignOk,
+    kSignUnknownDigest,
+    kSignInit,
+    kSignNotInitialised,
+    kSignUpdate,
+    kSignPrivateKey,
+    kSignPublicKey
+  } Error;
+
+  SignBase(Environment* env, v8::Local<v8::Object> wrap)
+      : BaseObject(env, wrap),
+        md_(NULL),
+        initialised_(false) {
+  }
+
+  ~SignBase() {
+    if (!initialised_)
+      return;
+    EVP_MD_CTX_cleanup(&mdctx_);
+  }
+
+ protected:
+  void CheckThrow(Error error);
+
+  EVP_MD_CTX mdctx_; /* coverity[member_decl] */
+  const EVP_MD* md_; /* coverity[member_decl] */
+  bool initialised_;
+};
+
+class Sign : public SignBase {
+ public:
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+  Error SignInit(const char* sign_type);
+  Error SignUpdate(const char* data, int len);
+  Error SignFinal(const char* key_pem,
+                  int key_pem_len,
+                  const char* passphrase,
+                  unsigned char** sig,
+                  unsigned int *sig_len);
+
+ protected:
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SignInit(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SignUpdate(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SignFinal(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  Sign(Environment* env, v8::Local<v8::Object> wrap) : SignBase(env, wrap) {
+    MakeWeak<Sign>(this);
+  }
+};
+
+class Verify : public SignBase {
+ public:
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+  Error VerifyInit(const char* verify_type);
+  Error VerifyUpdate(const char* data, int len);
+  Error VerifyFinal(const char* key_pem,
+                    int key_pem_len,
+                    const char* sig,
+                    int siglen,
+                    bool* verify_result);
+
+ protected:
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifyInit(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifyUpdate(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifyFinal(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  Verify(Environment* env, v8::Local<v8::Object> wrap) : SignBase(env, wrap) {
+    MakeWeak<Verify>(this);
+  }
+};
+
+class PublicKeyCipher {
+ public:
+  typedef int (*EVP_PKEY_cipher_init_t)(EVP_PKEY_CTX *ctx);
+  typedef int (*EVP_PKEY_cipher_t)(EVP_PKEY_CTX *ctx,
+                                   unsigned char *out, size_t *outlen,
+                                   const unsigned char *in, size_t inlen);
+
+  enum Operation {
+    kEncrypt,
+    kDecrypt
+  };
+
+  template <Operation operation,
+            EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
+            EVP_PKEY_cipher_t EVP_PKEY_cipher>
+  static bool Cipher(const char* key_pem,
+                     int key_pem_len,
+                     const char* passphrase,
+                     int padding,
+                     const unsigned char* data,
+                     int len,
+                     unsigned char** out,
+                     size_t* out_len);
+
+  template <Operation operation,
+            EVP_PKEY_cipher_init_t EVP_PKEY_cipher_init,
+            EVP_PKEY_cipher_t EVP_PKEY_cipher>
+  static void Cipher(const v8::FunctionCallbackInfo<v8::Value>& args);
+};
+
+class DiffieHellman : public BaseObject {
+ public:
+  ~DiffieHellman() {
+    if (dh != NULL) {
+      DH_free(dh);
+    }
+  }
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+  bool Init(int primeLength, int g);
+  bool Init(const char* p, int p_len, int g);
+  bool Init(const char* p, int p_len, const char* g, int g_len);
+
+ protected:
+  static void DiffieHellmanGroup(
+      const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GenerateKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetPrime(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetGenerator(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetPrivateKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ComputeSecret(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetPrivateKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifyErrorGetter(
+      v8::Local<v8::String> property,
+      const v8::PropertyCallbackInfo<v8::Value>& args);
+
+  DiffieHellman(Environment* env, v8::Local<v8::Object> wrap)
+      : BaseObject(env, wrap),
+        initialised_(false),
+        verifyError_(0),
+        dh(NULL) {
+    MakeWeak<DiffieHellman>(this);
+  }
+
+ private:
+  bool VerifyContext();
+
+  bool initialised_;
+  int verifyError_;
+  DH* dh;
+};
+
+class ECDH : public BaseObject {
+ public:
+  ~ECDH() {
+    if (key_ != NULL)
+      EC_KEY_free(key_);
+    key_ = NULL;
+    group_ = NULL;
+  }
+
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+ protected:
+  ECDH(Environment* env, v8::Local<v8::Object> wrap, EC_KEY* key)
+      : BaseObject(env, wrap),
+        generated_(false),
+        key_(key),
+        group_(EC_KEY_get0_group(key_)) {
+    MakeWeak<ECDH>(this);
+    ASSERT(group_ != NULL);
+  }
+
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GenerateKeys(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ComputeSecret(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetPrivateKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetPrivateKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void SetPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  EC_POINT* BufferToPoint(char* data, size_t len);
+
+  bool generated_;
+  EC_KEY* key_;
+  const EC_GROUP* group_;
+};
+
+class Certificate : public AsyncWrap {
+ public:
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target);
+
+  v8::Handle<v8::Value> CertificateInit(const char* sign_type);
+  bool VerifySpkac(const char* data, unsigned int len);
+  const char* ExportPublicKey(const char* data, int len);
+  const char* ExportChallenge(const char* data, int len);
+
+ protected:
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void VerifySpkac(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ExportPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void ExportChallenge(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  Certificate(Environment* env, v8::Local<v8::Object> wrap)
+      : AsyncWrap(env, wrap, AsyncWrap::PROVIDER_CRYPTO) {
+    MakeWeak<Certificate>(this);
+  }
+};
+
+bool EntropySource(unsigned char* buffer, size_t length);
+#ifndef OPENSSL_NO_ENGINE
+void SetEngine(const v8::FunctionCallbackInfo<v8::Value>& args);
+#endif  // !OPENSSL_NO_ENGINE
 void InitCrypto(v8::Handle<v8::Object> target);
 
 }  // namespace crypto

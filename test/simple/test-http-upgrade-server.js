@@ -57,14 +57,14 @@ function testServer() {
 
     request_upgradeHead = upgradeHead;
 
-    socket.ondata = function(d, start, end) {
-      var data = d.toString('utf8', start, end);
+    socket.on('data', function(d) {
+      var data = d.toString('utf8');
       if (data == 'kill') {
         socket.end();
       } else {
         socket.write(data, 'utf8');
       }
-    };
+    });
   });
 }
 
@@ -155,7 +155,7 @@ function test_standard_http() {
     writeReq(conn, 'GET / HTTP/1.1\r\n\r\n');
   });
 
-  conn.on('data', function(data) {
+  conn.once('data', function(data) {
     assert.equal('string', typeof data);
     assert.equal('HTTP/1.1 200', data.substr(0, 12));
     conn.end();

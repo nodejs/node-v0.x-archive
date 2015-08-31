@@ -25,7 +25,11 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-proxies
+// We change the stack size for the ARM64 simulator because at one point this
+// test enters an infinite recursion which goes through the runtime and we
+// overflow the system stack before the simulator stack.
+
+// Flags: --harmony-proxies --sim-stack-size=500
 
 
 // Helper.
@@ -649,6 +653,11 @@ function TestSetForDerived2(create, trap) {
 
 TestSetForDerived(
   function(k) {
+    // TODO(yangguo): issue 2398 - throwing an error causes formatting of
+    // the message string, which can be observable through this handler.
+    // We ignore keys that occur when formatting the message string.
+    if (k == "toString" || k == "valueOf") return;
+
     key = k;
     switch (k) {
       case "p_writable": return {writable: true, configurable: true}
@@ -1798,7 +1807,7 @@ TestKeysThrow({
   },
 })
 
-TestKeysThrow([], {
+TestKeysThrow({
   get getOwnPropertyNames() {
     return function() { return [1, 2] }
   },
@@ -2289,7 +2298,6 @@ function TestConstructorWithProxyPrototype2(create, handler) {
   C.prototype = create(handler);
 
   var o = new C;
-  assertSame(C.prototype, o.__proto__);
   assertSame(C.prototype, Object.getPrototypeOf(o));
 }
 

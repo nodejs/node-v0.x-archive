@@ -1,38 +1,16 @@
 // Copyright 2012 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef V8_IC_INL_H_
 #define V8_IC_INL_H_
 
-#include "ic.h"
+#include "src/ic.h"
 
-#include "compiler.h"
-#include "debug.h"
-#include "macro-assembler.h"
+#include "src/compiler.h"
+#include "src/debug.h"
+#include "src/macro-assembler.h"
+#include "src/prototype.h"
 
 namespace v8 {
 namespace internal {
@@ -42,55 +20,96 @@ Address IC::address() const {
   // Get the address of the call.
   Address result = Assembler::target_address_from_return_address(pc());
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
-  Debug* debug = Isolate::Current()->debug();
+  Debug* debug = isolate()->debug();
   // First check if any break points are active if not just return the address
   // of the call.
   if (!debug->has_break_points()) return result;
 
   // At least one break point is active perform additional test to ensure that
   // break point locations are updated correctly.
-  if (debug->IsDebugBreak(Assembler::target_address_at(result))) {
+  if (debug->IsDebugBreak(Assembler::target_address_at(result,
+                                                       raw_constant_pool()))) {
     // If the call site is a call to debug break then return the address in
     // the original code instead of the address in the running code. This will
     // cause the original code to be updated and keeps the breakpoint active in
     // the running code.
-    return OriginalCodeAddress();
+    Code* code = GetCode();
+    Code* original_code = GetOriginalCode();
+    intptr_t delta =
+        original_code->instruction_start() - code->instruction_start();
+    // Return the address in the original code. This is the place where
+    // the call which has been overwritten by the DebugBreakXXX resides
+    // and the place where the inline cache system should look.
+    return result + delta;
   } else {
     // No break point here just return the address of the call.
     return result;
   }
-#else
-  return result;
-#endif
 }
 
 
-Code* IC::GetTargetAtAddress(Address address) {
+ConstantPoolArray* IC::constant_pool() const {
+  if (!FLAG_enable_ool_constant_pool) {
+    return NULL;
+  } else {
+    Handle<ConstantPoolArray> result = raw_constant_pool_;
+    Debug* debug = isolate()->debug();
+    // First check if any break points are active if not just return the
+    // original constant pool.
+    if (!debug->has_break_points()) return *result;
+
+    // At least one break point is active perform additional test to ensure that
+    // break point locations are updated correctly.
+    Address target = Assembler::target_address_from_return_address(pc());
+    if (debug->IsDebugBreak(
+            Assembler::target_address_at(target, raw_constant_pool()))) {
+      // If the call site is a call to debug break then we want to return the
+      // constant pool for the original code instead of the breakpointed code.
+      return GetOriginalCode()->constant_pool();
+    }
+    return *result;
+  }
+}
+
+
+ConstantPoolArray* IC::raw_constant_pool() const {
+  if (FLAG_enable_ool_constant_pool) {
+    return *raw_constant_pool_;
+  } else {
+    return NULL;
+  }
+}
+
+
+Code* IC::GetTargetAtAddress(Address address,
+                             ConstantPoolArray* constant_pool) {
   // Get the target address of the IC.
-  Address target = Assembler::target_address_at(address);
+  Address target = Assembler::target_address_at(address, constant_pool);
   // Convert target address to the code object. Code::GetCodeFromTargetAddress
   // is safe for use during GC where the map might be marked.
   Code* result = Code::GetCodeFromTargetAddress(target);
-  ASSERT(result->is_inline_cache_stub());
+  DCHECK(result->is_inline_cache_stub());
   return result;
 }
 
 
-void IC::SetTargetAtAddress(Address address, Code* target) {
-  ASSERT(target->is_inline_cache_stub() || target->is_compare_ic_stub());
+void IC::SetTargetAtAddress(Address address,
+                            Code* target,
+                            ConstantPoolArray* constant_pool) {
+  DCHECK(target->is_inline_cache_stub() || target->is_compare_ic_stub());
   Heap* heap = target->GetHeap();
-  Code* old_target = GetTargetAtAddress(address);
+  Code* old_target = GetTargetAtAddress(address, constant_pool);
 #ifdef DEBUG
   // STORE_IC and KEYED_STORE_IC use Code::extra_ic_state() to mark
   // ICs as strict mode. The strict-ness of the IC must be preserved.
   if (old_target->kind() == Code::STORE_IC ||
       old_target->kind() == Code::KEYED_STORE_IC) {
-    ASSERT(Code::GetStrictMode(old_target->extra_ic_state()) ==
-           Code::GetStrictMode(target->extra_ic_state()));
+    DCHECK(StoreIC::GetStrictMode(old_target->extra_ic_state()) ==
+           StoreIC::GetStrictMode(target->extra_ic_state()));
   }
 #endif
-  Assembler::set_target_address_at(address, target->instruction_start());
+  Assembler::set_target_address_at(
+      address, constant_pool, target->instruction_start());
   if (heap->gc_state() == Heap::MARK_COMPACT) {
     heap->mark_compact_collector()->RecordCodeTargetPatch(address, target);
   } else {
@@ -100,41 +119,71 @@ void IC::SetTargetAtAddress(Address address, Code* target) {
 }
 
 
-InlineCacheHolderFlag IC::GetCodeCacheForObject(Object* object,
-                                                JSObject* holder) {
-  if (object->IsJSObject()) {
-    return GetCodeCacheForObject(JSObject::cast(object), holder);
+template <class TypeClass>
+JSFunction* IC::GetRootConstructor(TypeClass* type, Context* native_context) {
+  if (type->Is(TypeClass::Boolean())) {
+    return native_context->boolean_function();
+  } else if (type->Is(TypeClass::Number())) {
+    return native_context->number_function();
+  } else if (type->Is(TypeClass::String())) {
+    return native_context->string_function();
+  } else if (type->Is(TypeClass::Symbol())) {
+    return native_context->symbol_function();
+  } else {
+    return NULL;
   }
-  // If the object is a value, we use the prototype map for the cache.
-  ASSERT(object->IsString() || object->IsNumber() || object->IsBoolean());
-  return PROTOTYPE_MAP;
 }
 
 
-InlineCacheHolderFlag IC::GetCodeCacheForObject(JSObject* object,
-                                                JSObject* holder) {
-  // Fast-properties and global objects store stubs in their own maps.
-  // Slow properties objects use prototype's map (unless the property is its own
-  // when holder == object). It works because slow properties objects having
-  // the same prototype (or a prototype with the same map) and not having
-  // the property are interchangeable for such a stub.
-  if (holder != object &&
-      !object->HasFastProperties() &&
-      !object->IsJSGlobalProxy() &&
-      !object->IsJSGlobalObject()) {
-    return PROTOTYPE_MAP;
+Handle<Map> IC::GetHandlerCacheHolder(HeapType* type, bool receiver_is_holder,
+                                      Isolate* isolate, CacheHolderFlag* flag) {
+  Handle<Map> receiver_map = TypeToMap(type, isolate);
+  if (receiver_is_holder) {
+    *flag = kCacheOnReceiver;
+    return receiver_map;
   }
-  return OWN_MAP;
+  Context* native_context = *isolate->native_context();
+  JSFunction* builtin_ctor = GetRootConstructor(type, native_context);
+  if (builtin_ctor != NULL) {
+    *flag = kCacheOnPrototypeReceiverIsPrimitive;
+    return handle(HeapObject::cast(builtin_ctor->instance_prototype())->map());
+  }
+  *flag = receiver_map->is_dictionary_map()
+              ? kCacheOnPrototypeReceiverIsDictionary
+              : kCacheOnPrototype;
+  // Callers must ensure that the prototype is non-null.
+  return handle(JSObject::cast(receiver_map->prototype())->map());
 }
 
 
-JSObject* IC::GetCodeCacheHolder(Object* object, InlineCacheHolderFlag holder) {
-  Object* map_owner = (holder == OWN_MAP ? object : object->GetPrototype());
-  ASSERT(map_owner->IsJSObject());
-  return JSObject::cast(map_owner);
+Handle<Map> IC::GetICCacheHolder(HeapType* type, Isolate* isolate,
+                                 CacheHolderFlag* flag) {
+  Context* native_context = *isolate->native_context();
+  JSFunction* builtin_ctor = GetRootConstructor(type, native_context);
+  if (builtin_ctor != NULL) {
+    *flag = kCacheOnPrototype;
+    return handle(builtin_ctor->initial_map());
+  }
+  *flag = kCacheOnReceiver;
+  return TypeToMap(type, isolate);
 }
 
 
+IC::State CallIC::FeedbackToState(Handle<FixedArray> vector,
+                                  Handle<Smi> slot) const {
+  IC::State state = UNINITIALIZED;
+  Object* feedback = vector->get(slot->value());
+
+  if (feedback == *TypeFeedbackInfo::MegamorphicSentinel(isolate())) {
+    state = GENERIC;
+  } else if (feedback->IsAllocationSite() || feedback->IsJSFunction()) {
+    state = MONOMORPHIC;
+  } else {
+    CHECK(feedback == *TypeFeedbackInfo::UninitializedSentinel(isolate()));
+  }
+
+  return state;
+}
 } }  // namespace v8::internal
 
 #endif  // V8_IC_INL_H_

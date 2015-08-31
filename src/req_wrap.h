@@ -19,47 +19,38 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef REQ_WRAP_H_
-#define REQ_WRAP_H_
+#ifndef SRC_REQ_WRAP_H_
+#define SRC_REQ_WRAP_H_
 
-#include "ngx-queue.h"
+#include "async-wrap.h"
+#include "async-wrap-inl.h"
+#include "env.h"
+#include "env-inl.h"
+#include "queue.h"
+#include "util.h"
 
 namespace node {
 
-// defined in node.cc
-extern v8::Persistent<v8::String> process_symbol;
-extern v8::Persistent<v8::String> domain_symbol;
-extern ngx_queue_t req_wrap_queue;
-
 template <typename T>
-class ReqWrap {
+class ReqWrap : public AsyncWrap {
  public:
-  ReqWrap() {
-    v8::HandleScope scope;
-    object_ = v8::Persistent<v8::Object>::New(v8::Object::New());
+  ReqWrap(Environment* env,
+          v8::Handle<v8::Object> object,
+          AsyncWrap::ProviderType provider)
+      : AsyncWrap(env, object, provider) {
+    if (env->in_domain())
+      object->Set(env->domain_string(), env->domain_array()->Get(0));
 
-    v8::Local<v8::Value> domain = v8::Context::GetCurrent()
-                                  ->Global()
-                                  ->Get(process_symbol)
-                                  ->ToObject()
-                                  ->Get(domain_symbol);
-
-    if (!domain->IsUndefined()) {
-      // fprintf(stderr, "setting domain on ReqWrap\n");
-      object_->Set(domain_symbol, domain);
-    }
-
-    ngx_queue_insert_tail(&req_wrap_queue, &req_wrap_queue_);
+    QUEUE_INSERT_TAIL(env->req_wrap_queue(), &req_wrap_queue_);
   }
 
 
   ~ReqWrap() {
-    ngx_queue_remove(&req_wrap_queue_);
+    QUEUE_REMOVE(&req_wrap_queue_);
     // Assert that someone has called Dispatched()
     assert(req_.data == this);
-    assert(!object_.IsEmpty());
-    object_.Dispose();
-    object_.Clear();
+    assert(!persistent().IsEmpty());
+    persistent().Reset();
   }
 
   // Call this after the req has been dispatched.
@@ -67,14 +58,13 @@ class ReqWrap {
     req_.data = this;
   }
 
-  v8::Persistent<v8::Object> object_;
-  ngx_queue_t req_wrap_queue_;
-  void* data_;
-  T req_; // *must* be last, GetActiveRequests() in node.cc depends on it
+  // TODO(bnoordhuis) Make these private.
+  QUEUE req_wrap_queue_;
+  T req_;  // *must* be last, GetActiveRequests() in node.cc depends on it
 };
 
 
 }  // namespace node
 
 
-#endif  // REQ_WRAP_H_
+#endif  // SRC_REQ_WRAP_H_

@@ -1,39 +1,22 @@
 // Copyright 2011 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 #ifndef V8_GLOBAL_HANDLES_H_
 #define V8_GLOBAL_HANDLES_H_
 
-#include "../include/v8-profiler.h"
+#include "include/v8.h"
+#include "include/v8-profiler.h"
 
-#include "list.h"
+#include "src/handles.h"
+#include "src/list.h"
+#include "src/utils.h"
 
 namespace v8 {
 namespace internal {
+
+class HeapStats;
+class ObjectVisitor;
 
 // Structure for tracking global handles.
 // A single list keeps all the allocated global handles.
@@ -41,74 +24,78 @@ namespace internal {
 // At GC the destroyed global handles are removed from the free list
 // and deallocated.
 
+// Data structures for tracking object groups and implicit references.
+
 // An object group is treated like a single JS object: if one of object in
 // the group is alive, all objects in the same group are considered alive.
 // An object group is used to simulate object relationship in a DOM tree.
-class ObjectGroup {
- public:
-  static ObjectGroup* New(Object*** handles,
-                          size_t length,
-                          v8::RetainedObjectInfo* info) {
-    ASSERT(length > 0);
-    ObjectGroup* group = reinterpret_cast<ObjectGroup*>(
-        malloc(OFFSET_OF(ObjectGroup, objects_[length])));
-    group->length_ = length;
-    group->info_ = info;
-    CopyWords(group->objects_, handles, static_cast<int>(length));
-    return group;
+
+// An implicit references group consists of two parts: a parent object and a
+// list of children objects.  If the parent is alive, all the children are alive
+// too.
+
+struct ObjectGroup {
+  explicit ObjectGroup(size_t length)
+      : info(NULL), length(length) {
+    DCHECK(length > 0);
+    objects = new Object**[length];
   }
-
-  void Dispose() {
-    if (info_ != NULL) info_->Dispose();
-    free(this);
-  }
-
-  size_t length_;
-  v8::RetainedObjectInfo* info_;
-  Object** objects_[1];  // Variable sized array.
-
- private:
-  void* operator new(size_t size);
-  void operator delete(void* p);
   ~ObjectGroup();
-  DISALLOW_IMPLICIT_CONSTRUCTORS(ObjectGroup);
+
+  v8::RetainedObjectInfo* info;
+  Object*** objects;
+  size_t length;
 };
 
 
-// An implicit references group consists of two parts: a parent object and
-// a list of children objects.  If the parent is alive, all the children
-// are alive too.
-class ImplicitRefGroup {
- public:
-  static ImplicitRefGroup* New(HeapObject** parent,
-                               Object*** children,
-                               size_t length) {
-    ASSERT(length > 0);
-    ImplicitRefGroup* group = reinterpret_cast<ImplicitRefGroup*>(
-        malloc(OFFSET_OF(ImplicitRefGroup, children_[length])));
-    group->parent_ = parent;
-    group->length_ = length;
-    CopyWords(group->children_, children, static_cast<int>(length));
-    return group;
+struct ImplicitRefGroup {
+  ImplicitRefGroup(HeapObject** parent, size_t length)
+      : parent(parent), length(length) {
+    DCHECK(length > 0);
+    children = new Object**[length];
   }
-
-  void Dispose() {
-    free(this);
-  }
-
-  HeapObject** parent_;
-  size_t length_;
-  Object** children_[1];  // Variable sized array.
-
- private:
-  void* operator new(size_t size);
-  void operator delete(void* p);
   ~ImplicitRefGroup();
-  DISALLOW_IMPLICIT_CONSTRUCTORS(ImplicitRefGroup);
+
+  HeapObject** parent;
+  Object*** children;
+  size_t length;
 };
 
 
-typedef void (*WeakReferenceGuest)(Object* object, void* parameter);
+// For internal bookkeeping.
+struct ObjectGroupConnection {
+  ObjectGroupConnection(UniqueId id, Object** object)
+      : id(id), object(object) {}
+
+  bool operator==(const ObjectGroupConnection& other) const {
+    return id == other.id;
+  }
+
+  bool operator<(const ObjectGroupConnection& other) const {
+    return id < other.id;
+  }
+
+  UniqueId id;
+  Object** object;
+};
+
+
+struct ObjectGroupRetainerInfo {
+  ObjectGroupRetainerInfo(UniqueId id, RetainedObjectInfo* info)
+      : id(id), info(info) {}
+
+  bool operator==(const ObjectGroupRetainerInfo& other) const {
+    return id == other.id;
+  }
+
+  bool operator<(const ObjectGroupRetainerInfo& other) const {
+    return id < other.id;
+  }
+
+  UniqueId id;
+  RetainedObjectInfo* info;
+};
+
 
 class GlobalHandles {
  public:
@@ -117,8 +104,13 @@ class GlobalHandles {
   // Creates a new global handle that is alive until Destroy is called.
   Handle<Object> Create(Object* value);
 
+  // Copy a global handle
+  static Handle<Object> CopyGlobal(Object** location);
+
   // Destroy a global handle.
-  void Destroy(Object** location);
+  static void Destroy(Object** location);
+
+  typedef WeakCallbackData<v8::Value, void>::Callback WeakCallback;
 
   // Make the global handle weak and set the callback parameter for the
   // handle.  When the garbage collector recognizes that only weak global
@@ -126,34 +118,32 @@ class GlobalHandles {
   // function is invoked (for each handle) with the handle and corresponding
   // parameter as arguments.  Note: cleared means set to Smi::FromInt(0). The
   // reason is that Smi::FromInt(0) does not change during garage collection.
-  void MakeWeak(Object** location,
-                void* parameter,
-                WeakReferenceCallback callback);
-
-  static void SetWrapperClassId(Object** location, uint16_t class_id);
-  static uint16_t GetWrapperClassId(Object** location);
-
-  // Returns the current number of weak handles.
-  int NumberOfWeakHandles() { return number_of_weak_handles_; }
+  static void MakeWeak(Object** location,
+                       void* parameter,
+                       WeakCallback weak_callback);
 
   void RecordStats(HeapStats* stats);
 
+  // Returns the current number of weak handles.
+  int NumberOfWeakHandles();
+
   // Returns the current number of weak handles to global objects.
   // These handles are also included in NumberOfWeakHandles().
-  int NumberOfGlobalObjectWeakHandles() {
-    return number_of_global_object_weak_handles_;
-  }
+  int NumberOfGlobalObjectWeakHandles();
 
   // Returns the current number of handles to global objects.
-  int NumberOfGlobalHandles() {
+  int global_handles_count() const {
     return number_of_global_handles_;
   }
 
   // Clear the weakness of a global handle.
-  void ClearWeakness(Object** location);
+  static void* ClearWeakness(Object** location);
 
   // Clear the weakness of a global handle.
-  void MarkIndependent(Object** location);
+  static void MarkIndependent(Object** location);
+
+  // Mark the reference to this object externaly unreachable.
+  static void MarkPartiallyDependent(Object** location);
 
   static bool IsIndependent(Object** location);
 
@@ -164,8 +154,8 @@ class GlobalHandles {
   static bool IsWeak(Object** location);
 
   // Process pending weak handles.
-  // Returns true if next major GC is likely to collect more garbage.
-  bool PostGarbageCollectionProcessing(GarbageCollector collector);
+  // Returns the number of freed nodes.
+  int PostGarbageCollectionProcessing(GarbageCollector collector);
 
   // Iterates over all strong handles.
   void IterateStrongRoots(ObjectVisitor* v);
@@ -176,12 +166,12 @@ class GlobalHandles {
   // Iterates over all handles that have embedder-assigned class ID.
   void IterateAllRootsWithClassIds(ObjectVisitor* v);
 
+  // Iterates over all handles in the new space that have embedder-assigned
+  // class ID.
+  void IterateAllRootsInNewSpaceWithClassIds(ObjectVisitor* v);
+
   // Iterates over all weak roots in heap.
   void IterateWeakRoots(ObjectVisitor* v);
-
-  // Iterates over weak roots that are bound to a given callback.
-  void IterateWeakRoots(WeakReferenceGuest f,
-                        WeakReferenceCallback callback);
 
   // Find all weak handles satisfying the callback predicate, mark
   // them as pending.
@@ -195,19 +185,35 @@ class GlobalHandles {
   // Iterates over strong and dependent handles. See the node above.
   void IterateNewSpaceStrongAndDependentRoots(ObjectVisitor* v);
 
-  // Finds weak independent handles satisfying the callback predicate
-  // and marks them as pending. See the note above.
+  // Finds weak independent or partially independent handles satisfying
+  // the callback predicate and marks them as pending. See the note above.
   void IdentifyNewSpaceWeakIndependentHandles(WeakSlotCallbackWithHeap f);
 
-  // Iterates over weak independent handles. See the note above.
+  // Iterates over weak independent or partially independent handles.
+  // See the note above.
   void IterateNewSpaceWeakIndependentRoots(ObjectVisitor* v);
+
+  // Iterate over objects in object groups that have at least one object
+  // which requires visiting. The callback has to return true if objects
+  // can be skipped and false otherwise.
+  bool IterateObjectGroups(ObjectVisitor* v, WeakSlotCallbackWithHeap can_skip);
 
   // Add an object group.
   // Should be only used in GC callback function before a collection.
-  // All groups are destroyed after a mark-compact collection.
+  // All groups are destroyed after a garbage collection.
   void AddObjectGroup(Object*** handles,
                       size_t length,
                       v8::RetainedObjectInfo* info);
+
+  // Associates handle with the object group represented by id.
+  // Should be only used in GC callback function before a collection.
+  // All groups are destroyed after a garbage collection.
+  void SetObjectGroupId(Object** handle, UniqueId id);
+
+  // Set RetainedObjectInfo for an object group. Should not be called more than
+  // once for a group. Should not be called for a group which contains no
+  // handles.
+  void SetRetainedObjectInfo(UniqueId id, RetainedObjectInfo* info);
 
   // Add an implicit references' group.
   // Should be only used in GC callback function before a collection.
@@ -216,11 +222,23 @@ class GlobalHandles {
                              Object*** children,
                              size_t length);
 
-  // Returns the object groups.
-  List<ObjectGroup*>* object_groups() { return &object_groups_; }
+  // Adds an implicit reference from a group to an object. Should be only used
+  // in GC callback function before a collection. All implicit references are
+  // destroyed after a mark-compact collection.
+  void SetReferenceFromGroup(UniqueId id, Object** child);
 
-  // Returns the implicit references' groups.
+  // Adds an implicit reference from a parent object to a child object. Should
+  // be only used in GC callback function before a collection. All implicit
+  // references are destroyed after a mark-compact collection.
+  void SetReference(HeapObject** parent, Object** child);
+
+  List<ObjectGroup*>* object_groups() {
+    ComputeObjectGroupsAndImplicitReferences();
+    return &object_groups_;
+  }
+
   List<ImplicitRefGroup*>* implicit_ref_groups() {
+    ComputeObjectGroupsAndImplicitReferences();
     return &implicit_ref_groups_;
   }
 
@@ -241,20 +259,21 @@ class GlobalHandles {
  private:
   explicit GlobalHandles(Isolate* isolate);
 
+  // Migrates data from the internal representation (object_group_connections_,
+  // retainer_infos_ and implicit_ref_connections_) to the public and more
+  // efficient representation (object_groups_ and implicit_ref_groups_).
+  void ComputeObjectGroupsAndImplicitReferences();
+
+  // v8::internal::List is inefficient even for small number of elements, if we
+  // don't assign any initial capacity.
+  static const int kObjectGroupConnectionsCapacity = 20;
+
   // Internal node structures.
   class Node;
   class NodeBlock;
   class NodeIterator;
 
   Isolate* isolate_;
-
-  // Field always containing the number of weak and near-death handles.
-  int number_of_weak_handles_;
-
-  // Field always containing the number of weak and near-death handles
-  // to global objects.  These objects are also included in
-  // number_of_weak_handles_.
-  int number_of_global_object_weak_handles_;
 
   // Field always containing the number of handles to global objects.
   int number_of_global_handles_;
@@ -274,12 +293,90 @@ class GlobalHandles {
 
   int post_gc_processing_count_;
 
+  // Object groups and implicit references, public and more efficient
+  // representation.
   List<ObjectGroup*> object_groups_;
   List<ImplicitRefGroup*> implicit_ref_groups_;
+
+  // Object groups and implicit references, temporary representation while
+  // constructing the groups.
+  List<ObjectGroupConnection> object_group_connections_;
+  List<ObjectGroupRetainerInfo> retainer_infos_;
+  List<ObjectGroupConnection> implicit_ref_connections_;
 
   friend class Isolate;
 
   DISALLOW_COPY_AND_ASSIGN(GlobalHandles);
+};
+
+
+class EternalHandles {
+ public:
+  enum SingletonHandle {
+    I18N_TEMPLATE_ONE,
+    I18N_TEMPLATE_TWO,
+    DATE_CACHE_VERSION,
+
+    NUMBER_OF_SINGLETON_HANDLES
+  };
+
+  EternalHandles();
+  ~EternalHandles();
+
+  int NumberOfHandles() { return size_; }
+
+  // Create an EternalHandle, overwriting the index.
+  void Create(Isolate* isolate, Object* object, int* index);
+
+  // Grab the handle for an existing EternalHandle.
+  inline Handle<Object> Get(int index) {
+    return Handle<Object>(GetLocation(index));
+  }
+
+  // Grab the handle for an existing SingletonHandle.
+  inline Handle<Object> GetSingleton(SingletonHandle singleton) {
+    DCHECK(Exists(singleton));
+    return Get(singleton_handles_[singleton]);
+  }
+
+  // Checks whether a SingletonHandle has been assigned.
+  inline bool Exists(SingletonHandle singleton) {
+    return singleton_handles_[singleton] != kInvalidIndex;
+  }
+
+  // Assign a SingletonHandle to an empty slot and returns the handle.
+  Handle<Object> CreateSingleton(Isolate* isolate,
+                                 Object* object,
+                                 SingletonHandle singleton) {
+    Create(isolate, object, &singleton_handles_[singleton]);
+    return Get(singleton_handles_[singleton]);
+  }
+
+  // Iterates over all handles.
+  void IterateAllRoots(ObjectVisitor* visitor);
+  // Iterates over all handles which might be in new space.
+  void IterateNewSpaceRoots(ObjectVisitor* visitor);
+  // Rebuilds new space list.
+  void PostGarbageCollectionProcessing(Heap* heap);
+
+ private:
+  static const int kInvalidIndex = -1;
+  static const int kShift = 8;
+  static const int kSize = 1 << kShift;
+  static const int kMask = 0xff;
+
+  // Gets the slot for an index
+  inline Object** GetLocation(int index) {
+    DCHECK(index >= 0 && index < size_);
+    return &blocks_[index >> kShift][index & kMask];
+  }
+
+  int size_;
+  List<Object**> blocks_;
+  List<int> new_space_indices_;
+  int singleton_handles_[NUMBER_OF_SINGLETON_HANDLES];
+
+  DISALLOW_COPY_AND_ASSIGN(EternalHandles);
 };
 
 

@@ -42,11 +42,13 @@ server.listen(common.PORT, function() {
     res.on('data', function(chunk) {
       dataCount++;
       res.pause();
+      setTimeout(function() {
+        res.resume();
+      });
     });
 
     res.on('end', function() {
       endCount++;
-      res.resume();
     });
   });
 });

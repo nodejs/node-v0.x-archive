@@ -66,12 +66,8 @@ assert.doesNotThrow(
       watcher.on('change', function(event, filename) {
         assert.equal('change', event);
 
-        // darwin only shows the file path for subdir watching,
-        // not for individual file watching.
-        if (expectFilePath && process.platform !== 'darwin') {
+        if (expectFilePath) {
           assert.equal('watch.txt', filename);
-        } else {
-          assert.equal(null, filename);
         }
         watcher.close();
         ++watchSeenOne;
@@ -81,7 +77,7 @@ assert.doesNotThrow(
 
 setTimeout(function() {
   fs.writeFileSync(filepathOne, 'world');
-}, 1000);
+}, 10);
 
 
 process.chdir(testDir);
@@ -93,12 +89,8 @@ assert.doesNotThrow(
       var watcher = fs.watch(filepathTwo, function(event, filename) {
         assert.equal('change', event);
 
-        // darwin only shows the file path for subdir watching,
-        // not for individual file watching.
-        if (expectFilePath && process.platform !== 'darwin') {
+        if (expectFilePath) {
           assert.equal('hasOwnProperty', filename);
-        } else {
-          assert.equal(null, filename);
         }
         watcher.close();
         ++watchSeenTwo;
@@ -108,7 +100,7 @@ assert.doesNotThrow(
 
 setTimeout(function() {
   fs.writeFileSync(filepathTwoAbs, 'pardner');
-}, 1000);
+}, 10);
 
 try { fs.unlinkSync(filepathThree); } catch (e) {}
 try { fs.mkdirSync(testsubdir, 0700); } catch (e) {}
@@ -132,10 +124,29 @@ assert.doesNotThrow(
 setTimeout(function() {
   var fd = fs.openSync(filepathThree, 'w');
   fs.closeSync(fd);
-}, 1000);
+}, 10);
 
 // https://github.com/joyent/node/issues/2293 - non-persistent watcher should
 // not block the event loop
 fs.watch(__filename, {persistent: false}, function() {
   assert(0);
 });
+
+// whitebox test to ensure that wrapped FSEvent is safe
+// https://github.com/joyent/node/issues/6690
+var oldhandle;
+assert.throws(function() {
+  var w = fs.watch(__filename, function(event, filename) { });
+  oldhandle = w._handle;
+  w._handle = { close: w._handle.close };
+  w.close();
+}, TypeError);
+oldhandle.close(); // clean up
+
+assert.throws(function() {
+  var w = fs.watchFile(__filename, {persistent:false}, function(){});
+  oldhandle = w._handle;
+  w._handle = { stop: w._handle.stop };
+  w.stop();
+}, TypeError);
+oldhandle.stop(); // clean up

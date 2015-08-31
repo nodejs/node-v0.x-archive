@@ -1,35 +1,12 @@
 // Copyright 2012 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 //
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// This file was generated at 2012-03-06 09:55:58.934483
+// This file was generated at 2014-02-07 15:31:16.733174
 
-#include "unicode-inl.h"
-#include <stdlib.h>
+#include "src/unicode-inl.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 namespace unibrow {
 
@@ -52,13 +29,16 @@ static inline uchar TableGet(const int32_t* table, int index) {
   return table[D * index];
 }
 
+
 static inline uchar GetEntry(int32_t entry) {
   return entry & (kStartBit - 1);
 }
 
+
 static inline bool IsStart(int32_t entry) {
   return (entry & kStartBit) != 0;
 }
+
 
 /**
  * Look up a character in the unicode table using a mix of binary and
@@ -105,6 +85,7 @@ struct MultiCharacterSpecialCase {
   static const uchar kEndOfEncoding = kSentinel;
   uchar chars[kW];
 };
+
 
 // Look up the mapping for the given character in the specified table,
 // which is of the specified length and uses the specified special case
@@ -277,84 +258,81 @@ uchar Utf8::CalculateValue(const byte* str,
 }
 
 
-const byte* Utf8::ReadBlock(Buffer<const char*> str, byte* buffer,
-    unsigned capacity, unsigned* chars_read_ptr, unsigned* offset_ptr) {
-  unsigned offset = *offset_ptr;
-  // Bail out early if we've reached the end of the string.
-  if (offset == str.length()) {
-    *chars_read_ptr = 0;
-    return NULL;
-  }
-  const byte* data = reinterpret_cast<const byte*>(str.data());
-  if (data[offset] <= kMaxOneByteChar) {
-    // The next character is an ASCII char so we scan forward over
-    // the following ASCII characters and return the next pure ASCII
-    // substring
-    const byte* result = data + offset;
-    offset++;
-    while ((offset < str.length()) && (data[offset] <= kMaxOneByteChar))
-      offset++;
-    *chars_read_ptr = offset - *offset_ptr;
-    *offset_ptr = offset;
-    return result;
-  } else {
-    // The next character is non-ASCII so we just fill the buffer
+void Utf8DecoderBase::Reset(uint16_t* buffer,
+                            unsigned buffer_length,
+                            const uint8_t* stream,
+                            unsigned stream_length) {
+  // Assume everything will fit in the buffer and stream won't be needed.
+  last_byte_of_buffer_unused_ = false;
+  unbuffered_start_ = NULL;
+  unbuffered_length_ = 0;
+  bool writing_to_buffer = true;
+  // Loop until stream is read, writing to buffer as long as buffer has space.
+  unsigned utf16_length = 0;
+  while (stream_length != 0) {
     unsigned cursor = 0;
-    unsigned chars_read = 0;
-    while (offset < str.length()) {
-      uchar c = data[offset];
-      if (c <= kMaxOneByteChar) {
-        // Fast case for ASCII characters
-        if (!CharacterStream::EncodeAsciiCharacter(c,
-                                                   buffer,
-                                                   capacity,
-                                                   cursor))
-          break;
-        offset += 1;
+    uint32_t character = Utf8::ValueOf(stream, stream_length, &cursor);
+    DCHECK(cursor > 0 && cursor <= stream_length);
+    stream += cursor;
+    stream_length -= cursor;
+    bool is_two_characters = character > Utf16::kMaxNonSurrogateCharCode;
+    utf16_length += is_two_characters ? 2 : 1;
+    // Don't need to write to the buffer, but still need utf16_length.
+    if (!writing_to_buffer) continue;
+    // Write out the characters to the buffer.
+    // Must check for equality with buffer_length as we've already updated it.
+    if (utf16_length <= buffer_length) {
+      if (is_two_characters) {
+        *buffer++ = Utf16::LeadSurrogate(character);
+        *buffer++ = Utf16::TrailSurrogate(character);
       } else {
-        unsigned chars = 0;
-        c = Utf8::ValueOf(data + offset, str.length() - offset, &chars);
-        if (!CharacterStream::EncodeNonAsciiCharacter(c,
-                                                      buffer,
-                                                      capacity,
-                                                      cursor))
-          break;
-        offset += chars;
+        *buffer++ = character;
       }
-      chars_read++;
+      if (utf16_length == buffer_length) {
+        // Just wrote last character of buffer
+        writing_to_buffer = false;
+        unbuffered_start_ = stream;
+        unbuffered_length_ = stream_length;
+      }
+      continue;
     }
-    *offset_ptr = offset;
-    *chars_read_ptr = chars_read;
-    return buffer;
+    // Have gone over buffer.
+    // Last char of buffer is unused, set cursor back.
+    DCHECK(is_two_characters);
+    writing_to_buffer = false;
+    last_byte_of_buffer_unused_ = true;
+    unbuffered_start_ = stream - cursor;
+    unbuffered_length_ = stream_length + cursor;
   }
+  utf16_length_ = utf16_length;
 }
 
-unsigned CharacterStream::Length() {
-  unsigned result = 0;
-  while (has_more()) {
-    result++;
-    GetNext();
+
+void Utf8DecoderBase::WriteUtf16Slow(const uint8_t* stream,
+                                     unsigned stream_length,
+                                     uint16_t* data,
+                                     unsigned data_length) {
+  while (data_length != 0) {
+    unsigned cursor = 0;
+
+    uint32_t character = Utf8::ValueOf(stream, stream_length, &cursor);
+    // There's a total lack of bounds checking for stream
+    // as it was already done in Reset.
+    stream += cursor;
+    stream_length -= cursor;
+    if (character > unibrow::Utf16::kMaxNonSurrogateCharCode) {
+      *data++ = Utf16::LeadSurrogate(character);
+      *data++ = Utf16::TrailSurrogate(character);
+      DCHECK(data_length > 1);
+      data_length -= 2;
+    } else {
+      *data++ = character;
+      data_length -= 1;
+    }
   }
-  Rewind();
-  return result;
+  DCHECK(stream_length >= 0);
 }
 
-unsigned CharacterStream::Utf16Length() {
-  unsigned result = 0;
-  while (has_more()) {
-    uchar c = GetNext();
-    result += c > Utf16::kMaxNonSurrogateCharCode ? 2 : 1;
-  }
-  Rewind();
-  return result;
-}
-
-void CharacterStream::Seek(unsigned position) {
-  Rewind();
-  for (unsigned i = 0; i < position; i++) {
-    GetNext();
-  }
-}
 
 // Uppercase:            point.category == 'Lu'
 
@@ -466,6 +444,7 @@ bool Uppercase::Is(uchar c) {
   }
 }
 
+
 // Lowercase:            point.category == 'Ll'
 
 static const uint16_t kLowercaseTable0Size = 463;
@@ -576,6 +555,7 @@ bool Lowercase::Is(uchar c) {
     default: return false;
   }
 }
+
 
 // Letter:               point.category in ['Lu', 'Ll', 'Lt', 'Lm', 'Lo', 'Nl' ]
 
@@ -713,26 +693,6 @@ bool Letter::Is(uchar c) {
   }
 }
 
-// Space:                point.category == 'Zs'
-
-static const uint16_t kSpaceTable0Size = 4;
-static const int32_t kSpaceTable0[4] = {
-  32, 160, 5760, 6158 };  // NOLINT
-static const uint16_t kSpaceTable1Size = 5;
-static const int32_t kSpaceTable1[5] = {
-  1073741824, 10, 47, 95, 4096 };  // NOLINT
-bool Space::Is(uchar c) {
-  int chunk_index = c >> 13;
-  switch (chunk_index) {
-    case 0: return LookupPredicate(kSpaceTable0,
-                                       kSpaceTable0Size,
-                                       c);
-    case 1: return LookupPredicate(kSpaceTable1,
-                                       kSpaceTable1Size,
-                                       c);
-    default: return false;
-  }
-}
 
 // Number:               point.category == 'Nd'
 
@@ -768,14 +728,15 @@ bool Number::Is(uchar c) {
   }
 }
 
-// WhiteSpace:           'Ws' in point.properties
 
-static const uint16_t kWhiteSpaceTable0Size = 7;
-static const int32_t kWhiteSpaceTable0[7] = {
-  1073741833, 13, 32, 133, 160, 5760, 6158 };  // NOLINT
-static const uint16_t kWhiteSpaceTable1Size = 7;
-static const int32_t kWhiteSpaceTable1[7] = {
-  1073741824, 10, 1073741864, 41, 47, 95, 4096 };  // NOLINT
+// WhiteSpace:           point.category == 'Zs'
+
+static const uint16_t kWhiteSpaceTable0Size = 4;
+static const int32_t kWhiteSpaceTable0[4] = {
+  32, 160, 5760, 6158 };  // NOLINT
+static const uint16_t kWhiteSpaceTable1Size = 5;
+static const int32_t kWhiteSpaceTable1[5] = {
+  1073741824, 10, 47, 95, 4096 };  // NOLINT
 bool WhiteSpace::Is(uchar c) {
   int chunk_index = c >> 13;
   switch (chunk_index) {
@@ -788,6 +749,7 @@ bool WhiteSpace::Is(uchar c) {
     default: return false;
   }
 }
+
 
 // LineTerminator:       'Lt' in point.properties
 
@@ -809,6 +771,7 @@ bool LineTerminator::Is(uchar c) {
     default: return false;
   }
 }
+
 
 // CombiningMark:        point.category in ['Mn', 'Mc']
 
@@ -880,6 +843,7 @@ bool CombiningMark::Is(uchar c) {
     default: return false;
   }
 }
+
 
 // ConnectorPunctuation: point.category == 'Pc'
 
@@ -1831,8 +1795,6 @@ int UnicodeData::GetByteCount() {
       + kLetterTable5Size * sizeof(int32_t)  // NOLINT
       + kLetterTable6Size * sizeof(int32_t)  // NOLINT
       + kLetterTable7Size * sizeof(int32_t)  // NOLINT
-      + kSpaceTable0Size * sizeof(int32_t)  // NOLINT
-      + kSpaceTable1Size * sizeof(int32_t)  // NOLINT
       + kNumberTable0Size * sizeof(int32_t)  // NOLINT
       + kNumberTable5Size * sizeof(int32_t)  // NOLINT
       + kNumberTable7Size * sizeof(int32_t)  // NOLINT

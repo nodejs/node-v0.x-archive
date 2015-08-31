@@ -1,29 +1,6 @@
 // Copyright 2006-2008 the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 // This files contains runtime support implemented in JavaScript.
 
@@ -48,7 +25,6 @@ var $Number = global.Number;
 var $Function = global.Function;
 var $Boolean = global.Boolean;
 var $NaN = %GetRootNaN();
-var builtins = this;
 
 // ECMA-262 Section 11.9.3.
 function EQUALS(y) {
@@ -60,6 +36,7 @@ function EQUALS(y) {
       while (true) {
         if (IS_NUMBER(y)) return %NumberEquals(x, y);
         if (IS_NULL_OR_UNDEFINED(y)) return 1;  // not equal
+        if (IS_SYMBOL(y)) return 1;  // not equal
         if (!IS_SPEC_OBJECT(y)) {
           // String or boolean.
           return %NumberEquals(x, %ToNumber(y));
@@ -69,16 +46,21 @@ function EQUALS(y) {
     } else if (IS_STRING(x)) {
       while (true) {
         if (IS_STRING(y)) return %StringEquals(x, y);
+        if (IS_SYMBOL(y)) return 1;  // not equal
         if (IS_NUMBER(y)) return %NumberEquals(%ToNumber(x), y);
         if (IS_BOOLEAN(y)) return %NumberEquals(%ToNumber(x), %ToNumber(y));
         if (IS_NULL_OR_UNDEFINED(y)) return 1;  // not equal
         y = %ToPrimitive(y, NO_HINT);
       }
+    } else if (IS_SYMBOL(x)) {
+      if (IS_SYMBOL(y)) return %_ObjectEquals(x, y) ? 0 : 1;
+      return 1; // not equal
     } else if (IS_BOOLEAN(x)) {
       if (IS_BOOLEAN(y)) return %_ObjectEquals(x, y) ? 0 : 1;
       if (IS_NULL_OR_UNDEFINED(y)) return 1;
       if (IS_NUMBER(y)) return %NumberEquals(%ToNumber(x), y);
       if (IS_STRING(y)) return %NumberEquals(%ToNumber(x), %ToNumber(y));
+      if (IS_SYMBOL(y)) return 1;  // not equal
       // y is object.
       x = %ToNumber(x);
       y = %ToPrimitive(y, NO_HINT);
@@ -90,6 +72,7 @@ function EQUALS(y) {
         return %_ObjectEquals(x, y) ? 0 : 1;
       }
       if (IS_NULL_OR_UNDEFINED(y)) return 1;  // not equal
+      if (IS_SYMBOL(y)) return 1;  // not equal
       if (IS_BOOLEAN(y)) y = %ToNumber(y);
       x = %ToPrimitive(x, NO_HINT);
     }
@@ -286,20 +269,6 @@ function BIT_XOR(y) {
 }
 
 
-// ECMA-262, section 11.4.7, page 47.
-function UNARY_MINUS() {
-  var x = IS_NUMBER(this) ? this : %NonNumberToNumber(this);
-  return %NumberUnaryMinus(x);
-}
-
-
-// ECMA-262, section 11.4.8, page 48.
-function BIT_NOT() {
-  var x = IS_NUMBER(this) ? this : %NonNumberToNumber(this);
-  return %NumberNot(x);
-}
-
-
 // ECMA-262, section 11.7.1, page 51.
 function SHL(y) {
   var x = IS_NUMBER(this) ? this : %NonNumberToNumber(this);
@@ -346,7 +315,7 @@ function SHR(y) {
 
 // ECMA-262, section 11.4.1, page 46.
 function DELETE(key, strict) {
-  return %DeleteProperty(%ToObject(this), %ToString(key), strict);
+  return %DeleteProperty(%ToObject(this), %ToName(key), strict);
 }
 
 
@@ -356,7 +325,7 @@ function IN(x) {
     throw %MakeTypeError('invalid_in_operator_use', [this, x]);
   }
   return %_IsNonNegativeSmi(this) ?
-    %HasElement(x, this) : %HasProperty(x, %ToString(this));
+    %HasElement(x, this) : %HasProperty(x, %ToName(this));
 }
 
 
@@ -367,7 +336,7 @@ function IN(x) {
 function INSTANCE_OF(F) {
   var V = this;
   if (!IS_SPEC_FUNCTION(F)) {
-    throw %MakeTypeError('instanceof_function_expected', [V]);
+    throw %MakeTypeError('instanceof_function_expected', [F]);
   }
 
   // If V is not an object, return false.
@@ -396,7 +365,7 @@ function INSTANCE_OF(F) {
 // has a property with the given key; return the key as a string if
 // it has. Otherwise returns 0 (smi). Used in for-in statements.
 function FILTER_KEY(key) {
-  var string = %ToString(key);
+  var string = %ToName(key);
   if (%HasProperty(this, string)) return string;
   return 0;
 }
@@ -473,7 +442,7 @@ function APPLY_PREPARE(args) {
 }
 
 
-function APPLY_OVERFLOW(length) {
+function STACK_OVERFLOW(length) {
   throw %MakeRangeError('stack_overflow', []);
 }
 
@@ -508,6 +477,7 @@ function ToPrimitive(x, hint) {
   if (IS_STRING(x)) return x;
   // Normal behavior.
   if (!IS_SPEC_OBJECT(x)) return x;
+  if (IS_SYMBOL_WRAPPER(x)) throw MakeTypeError('symbol_to_primitive', []);
   if (hint == NO_HINT) hint = (IS_DATE(x)) ? STRING_HINT : NUMBER_HINT;
   return (hint == NUMBER_HINT) ? %DefaultNumber(x) : %DefaultString(x);
 }
@@ -531,7 +501,8 @@ function ToNumber(x) {
                                     : %StringToNumber(x);
   }
   if (IS_BOOLEAN(x)) return x ? 1 : 0;
-  if (IS_UNDEFINED(x)) return $NaN;
+  if (IS_UNDEFINED(x)) return NAN;
+  if (IS_SYMBOL(x)) throw MakeTypeError('symbol_to_number', []);
   return (IS_NULL(x)) ? 0 : ToNumber(%DefaultNumber(x));
 }
 
@@ -541,7 +512,8 @@ function NonNumberToNumber(x) {
                                     : %StringToNumber(x);
   }
   if (IS_BOOLEAN(x)) return x ? 1 : 0;
-  if (IS_UNDEFINED(x)) return $NaN;
+  if (IS_UNDEFINED(x)) return NAN;
+  if (IS_SYMBOL(x)) throw MakeTypeError('symbol_to_number', []);
   return (IS_NULL(x)) ? 0 : ToNumber(%DefaultNumber(x));
 }
 
@@ -552,6 +524,7 @@ function ToString(x) {
   if (IS_NUMBER(x)) return %_NumberToString(x);
   if (IS_BOOLEAN(x)) return x ? 'true' : 'false';
   if (IS_UNDEFINED(x)) return 'undefined';
+  if (IS_SYMBOL(x)) throw %MakeTypeError('symbol_to_string', []);
   return (IS_NULL(x)) ? 'null' : %ToString(%DefaultString(x));
 }
 
@@ -559,7 +532,14 @@ function NonStringToString(x) {
   if (IS_NUMBER(x)) return %_NumberToString(x);
   if (IS_BOOLEAN(x)) return x ? 'true' : 'false';
   if (IS_UNDEFINED(x)) return 'undefined';
+  if (IS_SYMBOL(x)) throw %MakeTypeError('symbol_to_string', []);
   return (IS_NULL(x)) ? 'null' : %ToString(%DefaultString(x));
+}
+
+
+// ES6 symbols
+function ToName(x) {
+  return IS_SYMBOL(x) ? x : %ToString(x);
 }
 
 
@@ -568,8 +548,9 @@ function ToObject(x) {
   if (IS_STRING(x)) return new $String(x);
   if (IS_NUMBER(x)) return new $Number(x);
   if (IS_BOOLEAN(x)) return new $Boolean(x);
+  if (IS_SYMBOL(x)) return %NewSymbolWrapper(x);
   if (IS_NULL_OR_UNDEFINED(x) && !IS_UNDETECTABLE(x)) {
-    throw %MakeTypeError('null_to_object', []);
+    throw %MakeTypeError('undefined_or_null_to_object', []);
   }
   return x;
 }
@@ -602,7 +583,9 @@ function SameValue(x, y) {
   if (IS_NUMBER(x)) {
     if (NUMBER_IS_NAN(x) && NUMBER_IS_NAN(y)) return true;
     // x is +0 and y is -0 or vice versa.
-    if (x === 0 && y === 0 && (1 / x) != (1 / y)) return false;
+    if (x === 0 && y === 0 && %_IsMinusZero(x) != %_IsMinusZero(y)) {
+      return false;
+    }
   }
   return x === y;
 }
@@ -625,37 +608,44 @@ function IsPrimitive(x) {
 
 // ECMA-262, section 8.6.2.6, page 28.
 function DefaultNumber(x) {
-  var valueOf = x.valueOf;
-  if (IS_SPEC_FUNCTION(valueOf)) {
-    var v = %_CallFunction(x, valueOf);
-    if (%IsPrimitive(v)) return v;
-  }
+  if (!IS_SYMBOL_WRAPPER(x)) {
+    var valueOf = x.valueOf;
+    if (IS_SPEC_FUNCTION(valueOf)) {
+      var v = %_CallFunction(x, valueOf);
+      if (%IsPrimitive(v)) return v;
+    }
 
-  var toString = x.toString;
-  if (IS_SPEC_FUNCTION(toString)) {
-    var s = %_CallFunction(x, toString);
-    if (%IsPrimitive(s)) return s;
+    var toString = x.toString;
+    if (IS_SPEC_FUNCTION(toString)) {
+      var s = %_CallFunction(x, toString);
+      if (%IsPrimitive(s)) return s;
+    }
   }
-
   throw %MakeTypeError('cannot_convert_to_primitive', []);
 }
 
-
 // ECMA-262, section 8.6.2.6, page 28.
 function DefaultString(x) {
-  var toString = x.toString;
-  if (IS_SPEC_FUNCTION(toString)) {
-    var s = %_CallFunction(x, toString);
-    if (%IsPrimitive(s)) return s;
-  }
+  if (!IS_SYMBOL_WRAPPER(x)) {
+    var toString = x.toString;
+    if (IS_SPEC_FUNCTION(toString)) {
+      var s = %_CallFunction(x, toString);
+      if (%IsPrimitive(s)) return s;
+    }
 
-  var valueOf = x.valueOf;
-  if (IS_SPEC_FUNCTION(valueOf)) {
-    var v = %_CallFunction(x, valueOf);
-    if (%IsPrimitive(v)) return v;
+    var valueOf = x.valueOf;
+    if (IS_SPEC_FUNCTION(valueOf)) {
+      var v = %_CallFunction(x, valueOf);
+      if (%IsPrimitive(v)) return v;
+    }
   }
-
   throw %MakeTypeError('cannot_convert_to_primitive', []);
+}
+
+function ToPositiveInteger(x, rangeErrorName) {
+  var i = TO_INTEGER(x);
+  if (i < 0) throw MakeRangeError(rangeErrorName);
+  return i;
 }
 
 

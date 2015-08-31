@@ -28,7 +28,8 @@ Returns the operating system platform.
 
 ## os.arch()
 
-Returns the operating system CPU architecture.
+Returns the operating system CPU architecture. Possible values are `"x64"`,
+`"arm"` and `"ia32"`.
 
 ## os.release()
 
@@ -135,17 +136,28 @@ Example inspection of os.cpus:
 
 Get a list of network interfaces:
 
-    { lo0: 
-       [ { address: '::1', family: 'IPv6', internal: true },
-         { address: 'fe80::1', family: 'IPv6', internal: true },
-         { address: '127.0.0.1', family: 'IPv4', internal: true } ],
-      en1: 
-       [ { address: 'fe80::cabc:c8ff:feef:f996', family: 'IPv6',
+    { lo:
+       [ { address: '127.0.0.1',
+           netmask: '255.0.0.0',
+           family: 'IPv4',
+           mac: '00:00:00:00:00:00',
+           internal: true },
+         { address: '::1',
+           netmask: 'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff',
+           family: 'IPv6',
+           mac: '00:00:00:00:00:00',
+           internal: true } ],
+      eth0:
+       [ { address: '192.168.1.108',
+           netmask: '255.255.255.0',
+           family: 'IPv4',
+           mac: '01:02:03:0a:0b:0c',
            internal: false },
-         { address: '10.0.1.123', family: 'IPv4', internal: false } ],
-      vmnet1: [ { address: '10.99.99.254', family: 'IPv4', internal: false } ],
-      vmnet8: [ { address: '10.88.88.1', family: 'IPv4', internal: false } ],
-      ppp0: [ { address: '10.2.0.231', family: 'IPv4', internal: false } ] }
+         { address: 'fe80::a00:27ff:fe4e:66a1',
+           netmask: 'ffff:ffff:ffff:ffff::',
+           family: 'IPv6',
+           mac: '01:02:03:0a:0b:0c',
+           internal: false } ] }
 
 ## os.EOL
 

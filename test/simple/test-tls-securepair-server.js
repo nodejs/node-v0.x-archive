@@ -19,19 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
+var common = require('../common');
+
+if (!common.opensslCli) {
+  console.error('Skipping because node compiled without OpenSSL CLI.');
   process.exit(0);
 }
 
-
-var common = require('../common');
 var assert = require('assert');
 
 var join = require('path').join;
 var net = require('net');
 var fs = require('fs');
-var crypto = require('crypto');
 var tls = require('tls');
 var spawn = require('child_process').spawn;
 
@@ -46,7 +45,7 @@ function log(a) {
 var server = net.createServer(function(socket) {
   connections++;
   log('connection fd=' + socket.fd);
-  var sslcontext = crypto.createCredentials({key: key, cert: cert});
+  var sslcontext = tls.createSecureContext({key: key, cert: cert});
   sslcontext.context.setCiphers('RC4-SHA:AES128-SHA:AES256-SHA');
 
   var pair = tls.createSecurePair(sslcontext, true);
@@ -115,7 +114,7 @@ var opensslExitCode = -1;
 
 server.listen(common.PORT, function() {
   // To test use: openssl s_client -connect localhost:8000
-  var client = spawn('openssl', ['s_client', '-connect', '127.0.0.1:' +
+  var client = spawn(common.opensslCli, ['s_client', '-connect', '127.0.0.1:' +
         common.PORT]);
 
 

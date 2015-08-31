@@ -11,14 +11,11 @@ var fs = require("fs")
 var asyncMap = require("slide").asyncMap
 var path = require("path")
 var readJson = require("read-package-json")
-var archy = require("archy")
-var util = require("util")
-var RegClient = require("npm-registry-client")
-var npmconf = require("npmconf")
 var semver = require("semver")
-var rimraf = require("rimraf")
+var rm = require("./utils/gently-rm.js")
 var log = require("npmlog")
 var npm = require("./npm.js")
+var mapToRegistry = require("./utils/map-to-registry.js")
 
 module.exports = dedupe
 
@@ -64,7 +61,7 @@ function dedupe_ (dir, filter, unavoidable, dryrun, silent, cb) {
       Object.keys(obj.children).forEach(function (k) {
         U(obj.children[k])
       })
-    })
+    })(data)
 
     // then collect them up and figure out who needs them
     ;(function C (obj) {
@@ -93,7 +90,6 @@ function dedupe_ (dir, filter, unavoidable, dryrun, silent, cb) {
         })]
       })]
     }).map(function (item) {
-      var name = item[0]
       var set = item[1]
 
       var ranges = set.map(function (i) {
@@ -137,7 +133,6 @@ function dedupe_ (dir, filter, unavoidable, dryrun, silent, cb) {
         b.pop()
         // find the longest chain that both A and B share.
         // then push the name back on it, and join by /node_modules/
-        var res = []
         for (var i = 0, al = a.length, bl = b.length; i < al && i < bl && a[i] === b[i]; i++);
         return a.slice(0, i).concat(name).join(path.sep + "node_modules" + path.sep)
       }) : undefined
@@ -204,11 +199,11 @@ function installAndRetest (set, filter, dir, unavoidable, silent, cb) {
 
     // hrm?
     return cb(new Error("danger zone\n" + name + " " +
-                        + regMatch + " " + locMatch))
+                        regMatch + " " + locMatch))
 
-  }, function (er, installed) {
+  }, function (er) {
     if (er) return cb(er)
-    asyncMap(remove, rimraf, function (er) {
+    asyncMap(remove, rm, function (er) {
       if (er) return cb(er)
       remove.forEach(function (r) {
         log.info("rm", r)
@@ -245,28 +240,39 @@ function findVersions (npm, summary, cb) {
     var versions = data.versions
 
     var ranges = data.ranges
-    npm.registry.get(name, function (er, data) {
+    mapToRegistry(name, npm.config, function (er, uri, auth) {
+      if (er) return cb(er)
+
+      npm.registry.get(uri, { auth : auth }, next)
+    })
+
+    function next (er, data) {
       var regVersions = er ? [] : Object.keys(data.versions)
       var locMatch = bestMatch(versions, ranges)
-      var regMatch;
-      var tag = npm.config.get("tag");
-      var distTags = data["dist-tags"];
-      if (distTags && distTags[tag] && data.versions[distTags[tag]]) {
-        regMatch = distTags[tag]
+      var tag = npm.config.get("tag")
+      var distTag = data["dist-tags"] && data["dist-tags"][tag]
+
+      var regMatch
+      if (distTag && data.versions[distTag] && matches(distTag, ranges)) {
+        regMatch = distTag
       } else {
         regMatch = bestMatch(regVersions, ranges)
       }
 
       cb(null, [[name, has, loc, locMatch, regMatch, locs]])
-    })
+    }
   }, cb)
+}
+
+function matches (version, ranges) {
+  return !ranges.some(function (r) {
+    return !semver.satisfies(version, r, true)
+  })
 }
 
 function bestMatch (versions, ranges) {
   return versions.filter(function (v) {
-    return !ranges.some(function (r) {
-      return !semver.satisfies(v, r, true)
-    })
+    return matches(v, ranges)
   }).sort(semver.compareLoose).pop()
 }
 
@@ -308,11 +314,28 @@ function readInstalled (dir, counter, parent, cb) {
   })
 
   fs.readdir(path.resolve(dir, "node_modules"), function (er, c) {
-    children = c || [] // error is ok, just means no children.
-    children = children.filter(function (p) {
-      return !p.match(/^[\._-]/)
-    })
-    next()
+    children = children || [] // error is ok, just means no children.
+    // check if there are scoped packages.
+    asyncMap(c || [], function (child, cb) {
+      if (child.indexOf('@') === 0) {
+        fs.readdir(path.resolve(dir, "node_modules", child), function (er, scopedChildren) {
+          // error is ok, just means no children.
+          (scopedChildren || []).forEach(function (sc) {
+            children.push(path.join(child, sc))
+          })
+          cb()
+        })
+      } else {
+        children.push(child)
+        cb()
+      }
+    }, function (er) {
+      if (er) return cb(er)
+      children = children.filter(function (p) {
+        return !p.match(/^[\._-]/)
+      })
+      next();
+    });
   })
 
   function next () {
@@ -350,4 +373,3 @@ function whoDepends_ (pkg, who, test) {
   })
   return who
 }
-

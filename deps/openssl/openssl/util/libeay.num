@@ -1806,7 +1806,9 @@ d2i_ASN1_SET_OF_PKCS12_SAFEBAG          2341	NOEXIST::FUNCTION:
 ASN1_UTCTIME_get                        2350	NOEXIST::FUNCTION:
 X509_REQ_digest                         2362	EXIST::FUNCTION:EVP
 X509_CRL_digest                         2391	EXIST::FUNCTION:EVP
+ASN1_STRING_clear_free                  2392	EXIST::FUNCTION:
 d2i_ASN1_SET_OF_PKCS7                   2397	NOEXIST::FUNCTION:
+X509_ALGOR_cmp                          2398	EXIST::FUNCTION:
 EVP_CIPHER_CTX_set_key_length           2399	EXIST::FUNCTION:
 EVP_CIPHER_CTX_ctrl                     2400	EXIST::FUNCTION:
 BN_mod_exp_mont_word                    2401	EXIST::FUNCTION:
@@ -3511,6 +3513,7 @@ BIO_set_callback                        3903	EXIST::FUNCTION:
 d2i_ASIdOrRange                         3904	EXIST::FUNCTION:RFC3779
 i2d_ASIdentifiers                       3905	EXIST::FUNCTION:RFC3779
 CRYPTO_memcmp                           3906	EXIST::FUNCTION:
+BN_consttime_swap                       3907	EXIST::FUNCTION:
 SEED_decrypt                            3908	EXIST::FUNCTION:SEED
 SEED_encrypt                            3909	EXIST::FUNCTION:SEED
 SEED_cbc_encrypt                        3910	EXIST::FUNCTION:SEED
