@@ -190,7 +190,7 @@ set NODE_VERSION=%NODE_VERSION%.%NIGHTLY%
 
 :msibuild
 echo Building node-%NODE_VERSION%
-msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeVersion=%NODE_VERSION% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /m /t:Clean,Build /p:Configuration=%config% /p:Platform=%msiplatform% /p:NodeFileVersion=%NODE_VERSION% /p:NodeVersion=%NODE_MSI_VERSION% %noetw_msi_arg% %noperfctr_msi_arg% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
 if defined nosign goto run
@@ -274,4 +274,8 @@ rem ***************
 set NODE_VERSION=
 for /F "usebackq tokens=*" %%i in (`python "%~dp0tools\getnodeversion.py"`) do set NODE_VERSION=%%i
 if not defined NODE_VERSION echo Cannot determine current version of node.js & exit /b 1
+
+set NODE_MSI_VERSION=
+for /F "usebackq tokens=*" %%i in (`python "%~dp0tools\getnodeversion.py" --msi`) do set NODE_MSI_VERSION=%%i
+if not defined NODE_MSI_VERSION echo Cannot determine current version of node.js & exit /b 1
 goto :EOF
