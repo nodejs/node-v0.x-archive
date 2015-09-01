@@ -359,12 +359,12 @@ def cc_macros():
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
   except OSError:
-    print '''Node.js configure error: No acceptable C compiler found!
+    print('''Node.js configure error: No acceptable C compiler found!
 
         Please make sure you have a C compiler installed on your system and/or
         consider adjusting the CC environment variable if you installed
         it in a non-standard prefix.
-        '''
+        ''')
     sys.exit()
 
   p.stdin.write('\n')
@@ -424,12 +424,12 @@ def is_arm_hard_float_abi():
         not '__VFP_FP__' in cc_macros()):
     return False
   else:
-    print '''Node.js configure error: Your version of GCC does not report
+    print('''Node.js configure error: Your version of GCC does not report
       the Floating-Point ABI to compile for your hardware
 
       Please manually specify which floating-point ABI to use with the
       --with-arm-float-abi option.
-      '''
+      ''')
     sys.exit()
 
 
@@ -727,7 +727,7 @@ def configure_winsdk(o):
 
 def write(filename, data):
   filename = os.path.join(root_dir, filename)
-  print 'creating ', filename
+  print('creating %s' % filename)
   f = open(filename, 'w+')
   f.write(data)
 
@@ -764,16 +764,16 @@ def configure_intl(o):
         if nodedownload.candownload(auto_downloads, "icu"):
           nodedownload.retrievefile(url, targetfile)
       else:
-        print ' Re-using existing %s' % targetfile
+        print(' Re-using existing %s' % targetfile)
       if os.path.isfile(targetfile):
         sys.stdout.write(' Checking file integrity with MD5:\r')
         gotmd5 = nodedownload.md5sum(targetfile)
-        print ' MD5:      %s  %s' % (gotmd5, targetfile)
+        print(' MD5:      %s  %s' % (gotmd5, targetfile))
         if (md5 == gotmd5):
           return targetfile
         else:
-          print ' Expected: %s      *MISMATCH*' % md5
-          print '\n ** Corrupted ZIP? Delete %s to retry download.\n' % targetfile
+          print(' Expected: %s      *MISMATCH*' % md5)
+          print('\n ** Corrupted ZIP? Delete %s to retry download.\n' % targetfile)
     return None
   icu_config = {
     'variables': {}
@@ -793,7 +793,7 @@ def configure_intl(o):
   with_icu_source = options.with_icu_source
   have_icu_path = bool(options.with_icu_path)
   if have_icu_path and with_intl:
-    print 'Error: Cannot specify both --with-icu-path and --with-intl'
+    print('Error: Cannot specify both --with-icu-path and --with-intl')
     sys.exit(1)
   elif have_icu_path:
     # Chromium .gyp mode: --with-icu-path
@@ -807,7 +807,7 @@ def configure_intl(o):
     with_intl = 'none'  # The default mode of Intl
   # sanity check localelist
   if options.with_icu_locales and (with_intl != 'small-icu'):
-    print 'Error: --with-icu-locales only makes sense with --with-intl=small-icu'
+    print('Error: --with-icu-locales only makes sense with --with-intl=small-icu')
     sys.exit(1)
   if with_intl == 'none' or with_intl is None:
     o['variables']['v8_enable_i18n_support'] = 0
@@ -830,8 +830,8 @@ def configure_intl(o):
     o['variables']['v8_enable_i18n_support'] = 1
     pkgicu = pkg_config('icu-i18n')
     if not pkgicu:
-      print 'Error: could not load pkg-config data for "icu-i18n".'
-      print 'See above errors or the README.md.'
+      print('Error: could not load pkg-config data for "icu-i18n".')
+      print('See above errors or the README.md.')
       sys.exit(1)
     (libs, cflags) = pkgicu
     o['libraries'] += libs.split()
@@ -840,7 +840,7 @@ def configure_intl(o):
     o['variables']['icu_gyp_path'] = 'tools/icu/icu-system.gyp'
     return
   else:
-    print 'Error: unknown value --with-intl=%s' % with_intl
+    print('Error: unknown value --with-intl=%s' % with_intl)
     sys.exit(1)
   # Note: non-ICU implementations could use other 'with_intl'
   # values.
@@ -857,17 +857,17 @@ def configure_intl(o):
   # --with-icu-source processing
   # first, check that they didn't pass --with-icu-source=deps/icu
   if with_icu_source and os.path.abspath(icu_full_path) == os.path.abspath(with_icu_source):
-    print 'Ignoring redundant --with-icu-source=%s' % (with_icu_source)
+    print('Ignoring redundant --with-icu-source=%s' % (with_icu_source))
     with_icu_source = None
   # if with_icu_source is still set, try to use it.
   if with_icu_source:
     if os.path.isdir(icu_full_path):
-      print 'Deleting old ICU source: %s' % (icu_full_path)
+      print('Deleting old ICU source: %s' % (icu_full_path))
       shutil.rmtree(icu_full_path)
     # now, what path was given?
     if os.path.isdir(with_icu_source):
       # it's a path. Copy it.
-      print '%s -> %s' % (with_icu_source, icu_full_path)
+      print('%s -> %s' % (with_icu_source, icu_full_path))
       shutil.copytree(with_icu_source, icu_full_path)
     else:
       # could be file or URL.
@@ -891,7 +891,7 @@ def configure_intl(o):
         os.rename(tmp_icu, icu_full_path)
         shutil.rmtree(icu_tmp_path)
       else:
-        print ' Error: --with-icu-source=%s did not result in an "icu" dir.' % with_icu_source
+        print(' Error: --with-icu-source=%s did not result in an "icu" dir.' % with_icu_source)
         shutil.rmtree(icu_tmp_path)
         sys.exit(1)
 
@@ -901,22 +901,22 @@ def configure_intl(o):
   # ICU source dir relative to root
   o['variables']['icu_path'] = icu_full_path
   if not os.path.isdir(icu_full_path):
-    print '* ECMA-402 (Intl) support didn\'t find ICU in %s..' % (icu_full_path)
+    print('* ECMA-402 (Intl) support didn\'t find ICU in %s..' % (icu_full_path))
     # can we download (or find) a zipfile?
     localzip = icu_download(icu_full_path)
     if localzip:
       nodedownload.unpack(localzip, icu_parent_path)
   if not os.path.isdir(icu_full_path):
-    print ' Cannot build Intl without ICU in %s.' % (icu_full_path)
-    print ' (Fix, or disable with "--with-intl=none" )'
+    print(' Cannot build Intl without ICU in %s.' % (icu_full_path))
+    print(' (Fix, or disable with "--with-intl=none" )')
     sys.exit(1)
   else:
-    print '* Using ICU in %s' % (icu_full_path)
+    print('* Using ICU in %s' % (icu_full_path))
   # Now, what version of ICU is it? We just need the "major", such as 54.
   # uvernum.h contains it as a #define.
   uvernum_h = os.path.join(icu_full_path, 'source/common/unicode/uvernum.h')
   if not os.path.isfile(uvernum_h):
-    print ' Error: could not load %s - is ICU installed?' % uvernum_h
+    print(' Error: could not load %s - is ICU installed?' % uvernum_h)
     sys.exit(1)
   icu_ver_major = None
   matchVerExp = r'^\s*#define\s+U_ICU_VERSION_SHORT\s+"([^"]*)".*'
@@ -926,7 +926,7 @@ def configure_intl(o):
     if m:
       icu_ver_major = m.group(1)
   if not icu_ver_major:
-    print ' Could not read U_ICU_VERSION_SHORT version from %s' % uvernum_h
+    print(' Could not read U_ICU_VERSION_SHORT version from %s' % uvernum_h)
     sys.exit(1)
   icu_endianness = sys.byteorder[0];  # TODO(srl295): EBCDIC should be 'e'
   o['variables']['icu_ver_major'] = icu_ver_major
@@ -953,8 +953,8 @@ def configure_intl(o):
   # this is the icudt*.dat file which node will be using (platform endianness)
   o['variables']['icu_data_file'] = icu_data_file
   if not os.path.isfile(icu_data_path):
-    print ' Error: ICU prebuilt data file %s does not exist.' % icu_data_path
-    print ' See the README.md.'
+    print(' Error: ICU prebuilt data file %s does not exist.' % icu_data_path)
+    print(' See the README.md.')
     # .. and we're not about to build it from .gyp!
     sys.exit(1)
   # map from variable name to subdirs
