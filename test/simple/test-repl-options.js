@@ -58,6 +58,7 @@ assert.equal(r1.useColors, r1.rli.terminal);
 // 2
 function writer() {}
 function evaler() {}
+function recoverTester() {}
 var r2 = repl.start({
   input: stream,
   output: stream,
@@ -66,6 +67,7 @@ var r2 = repl.start({
   useGlobal: true,
   ignoreUndefined: true,
   eval: evaler,
+  recoverable: recoverTester,
   writer: writer
 });
 assert.equal(r2.input, stream);
