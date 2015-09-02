@@ -211,10 +211,10 @@ out/doc/%: doc/%
 	cp -r $< $@
 
 out/doc/api/%.json: doc/api/%.markdown node
-	NODE_DOC_VERSION=$(NODE_DOC_VERSION) out/Release/node tools/doc/generate.js --format=json $< > $@
+	NODE_DOC_VERSION=$(NODE_DOC_VERSION) node-doc-generator --format=json $< > $@
 
 out/doc/api/%.html: doc/api/%.markdown node
-	NODE_DOC_VERSION=$(NODE_DOC_VERSION) out/Release/node tools/doc/generate.js --format=html --template=doc/template.html $< > $@
+	NODE_DOC_VERSION=$(NODE_DOC_VERSION) node-doc-generator --format=html --template=doc/template.html $< > $@
 
 email.md: ChangeLog tools/email-footer.md
 	bash tools/changelog-head.sh | sed 's|^\* #|* \\#|g' > $@
