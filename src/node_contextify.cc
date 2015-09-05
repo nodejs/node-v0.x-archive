@@ -485,13 +485,15 @@ class ContextifyScript : public BaseObject {
     TryCatch try_catch;
     Local<String> code = args[0]->ToString();
     Local<String> filename = GetFilenameArg(args, 1);
+    Local<Integer> lineOffset = GetLineOffsetArg(args, 1);
+    Local<Integer> columnOffset = GetColumnOffsetArg(args, 1);
     bool display_errors = GetDisplayErrorsArg(args, 1);
     if (try_catch.HasCaught()) {
       try_catch.ReThrow();
       return;
     }
 
-    ScriptOrigin origin(filename);
+    ScriptOrigin origin(filename, lineOffset, columnOffset);
     ScriptCompiler::Source source(code, origin);
     Local<UnboundScript> v8_script =
         ScriptCompiler::CompileUnbound(env->isolate(), &source);
@@ -655,6 +657,51 @@ class ContextifyScript : public BaseObject {
     Local<Value> value = args[i].As<Object>()->Get(key);
 
     return value->IsUndefined() ? defaultFilename : value->ToString();
+  }
+
+
+  static Local<Integer> GetLineOffsetArg(
+                                      const FunctionCallbackInfo<Value>& args,
+                                      const int i) {
+    Local<Integer> defaultLineOffset = Integer::New(args.GetIsolate(), 0);
+
+    if (args[i]->IsUndefined()) {
+      return defaultLineOffset;
+    }
+    if (args[i]->IsInt32()) {
+      return args[i].As<Integer>();
+    }
+    if (!args[i]->IsObject()) {
+      return defaultLineOffset;
+    }
+
+    Local<String> key = FIXED_ONE_BYTE_STRING(args.GetIsolate(), "lineOffset");
+    Local<Value> value = args[i].As<Object>()->Get(key);
+
+    return value->IsUndefined() ? defaultLineOffset : value->ToInteger();
+  }
+
+
+  static Local<Integer> GetColumnOffsetArg(
+                                      const FunctionCallbackInfo<Value>& args,
+                                      const int i) {
+    Local<Integer> defaultColumnOffset = Integer::New(args.GetIsolate(), 0);
+
+    if (args[i]->IsUndefined()) {
+      return defaultColumnOffset;
+    }
+    if (args[i]->IsInt32()) {
+      return args[i].As<Integer>();
+    }
+    if (!args[i]->IsObject()) {
+      return defaultColumnOffset;
+    }
+
+    Local<String> key = FIXED_ONE_BYTE_STRING(args.GetIsolate(),
+                                              "columnOffset");
+    Local<Value> value = args[i].As<Object>()->Get(key);
+
+    return value->IsUndefined() ? defaultColumnOffset : value->ToInteger();
   }
 
 

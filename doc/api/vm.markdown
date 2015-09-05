@@ -40,6 +40,10 @@ e.g. `(0,eval)('code')`. However, it also has the following additional options:
 
 - `filename`: allows you to control the filename that shows up in any stack
   traces produced.
+- `lineOffset`: allows you to add an offset to the line number that is
+  displayed in stack traces
+- `columnOffset`: allows you to add an offset to the column number that is
+  displayed in stack traces
 - `displayErrors`: whether or not to print any errors to stderr, with the
   line of code that caused them highlighted, before throwing an exception.
   Will capture both syntax errors from compiling `code` and runtime errors
