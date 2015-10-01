@@ -464,7 +464,7 @@
       'target_name': 'node_dtrace_header',
       'type': 'none',
       'conditions': [
-        [ 'node_use_dtrace=="true"', {
+        [ 'node_use_dtrace=="true" and OS!="mac" and OS!="linux"', {
           'actions': [
             {
               'action_name': 'node_dtrace_header',
@@ -474,7 +474,18 @@
                 '-o', '<@(_outputs)' ]
             }
           ]
-        } ]
+        } ],
+        [ 'node_use_dtrace=="true" and OS=="linux"', {
+          'actions': [
+            {
+              'action_name': 'node_dtrace_header',
+              'inputs': [ 'src/node_provider.d' ],
+              'outputs': [ '<(SHARED_INTERMEDIATE_DIR)/node_provider.h' ],
+              'action': [ 'dtrace', '-h', '-s', '<@(_inputs)',
+                '-o', '<@(_outputs)' ]
+            }
+          ]
+        } ],
       ]
     },
     {
