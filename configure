@@ -398,11 +398,6 @@ def is_arch_armv6():
           '__ARM_ARCH_6M__' in cc_macros_cache)
 
 
-def is_arm_neon():
-  """Check for ARM NEON support"""
-  return '__ARM_NEON__' in cc_macros()
-
-
 def is_arm_hard_float_abi():
   """Check for hardfloat or softfloat eabi on ARM"""
   # GCC versions 4.6 and above define __ARM_PCS or __ARM_PCS_VFP to specify
@@ -496,14 +491,12 @@ def configure_arm(o):
     arm_float_abi = 'default'
 
   if is_arch_armv7():
+    o['variables']['arm_fpu'] = 'vfpv3'
     o['variables']['arm_version'] = '7'
-  elif is_arch_armv6():
-    o['variables']['arm_version'] = '6'
   else:
-    o['variables']['arm_version'] = 'default'
+    o['variables']['arm_fpu'] = 'vfpv2'
+    o['variables']['arm_version'] = '6' if is_arch_armv6() else 'default'
 
-  o['variables']['arm_fpu'] = 'vfpv3'  # V8 3.18 no longer supports VFP2.
-  o['variables']['arm_neon'] = int(is_arm_neon())
   o['variables']['arm_thumb'] = 0      # -marm
   o['variables']['arm_float_abi'] = arm_float_abi
 
