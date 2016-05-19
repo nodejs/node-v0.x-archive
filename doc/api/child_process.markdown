@@ -349,6 +349,7 @@ callback or returning an EventEmitter).
 
 * `command` {String} The command to run
 * `args` {Array} List of string arguments
+  * Note that when passing strings with spaces, spaces must be escaped with a preceeding backslash.
 * `options` {Object}
   * `cwd` {String} Current working directory of the child process
   * `env` {Object} Environment key-value pairs
