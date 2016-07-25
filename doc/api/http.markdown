@@ -483,6 +483,10 @@ Options:
 - `keepAliveMsecs`: {Integer} When using HTTP KeepAlive, how often to
   send TCP KeepAlive packets over sockets being kept alive.  Default =
   `1000`.  Only relevant if `keepAlive` is set to `true`.
+- `keepAliveTimeout`: {Integer} Sets the socket to timeout
+  after `timeout` milliseconds of inactivity on the free socket.
+  By default free socket do not have a timeout.
+  Only relevant if `keepAlive` is set to `true`.
 
 The optional `callback` parameter will be added as a one time listener for
 the ['response'][] event.
@@ -629,6 +633,10 @@ Alternatively, you could just opt out of pooling entirely using
   * `keepAliveMsecs` {Integer} When using HTTP KeepAlive, how often
     to send TCP KeepAlive packets over sockets being kept alive.
     Default = `1000`.  Only relevant if `keepAlive` is set to `true`.
+  * `keepAliveTimeout`: {Integer} Sets the socket to timeout
+    after `timeout` milliseconds of inactivity on the free socket.
+    By default free socket do not have a timeout.
+    Only relevant if `keepAlive` is set to `true`.
   * `maxSockets` {Number} Maximum number of sockets to allow per
     host.  Default = `Infinity`.
   * `maxFreeSockets` {Number} Maximum number of sockets to leave open
