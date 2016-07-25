@@ -78,7 +78,7 @@
         NativeModule.require('_third_party_main');
       });
 
-    } else if (process.argv[1] == 'debug') {
+    } else if (process.argv[1] === 'debug') {
       // Start the debugger agent
       var d = NativeModule.require('_debugger');
       d.start();
