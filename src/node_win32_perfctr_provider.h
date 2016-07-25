@@ -22,6 +22,8 @@
 #ifndef SRC_NODE_WIN32_PERFCTR_PROVIDER_H_
 #define SRC_NODE_WIN32_PERFCTR_PROVIDER_H_
 
+#include <perflib.h>
+
 #if defined(_MSC_VER)
 # define INLINE __forceinline
 #else
