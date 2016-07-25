@@ -66,7 +66,8 @@ added to the `'request'` event.
 
 ## http.createClient([port][, host])
 
-This function is **deprecated**; please use [http.request()][] instead.
+    Stability: 0 - Deprecated: use [http.request()][] instead.
+
 Constructs a new HTTP client. `port` and `host` refer to the server to be
 connected to.
 

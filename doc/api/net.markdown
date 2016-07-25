@@ -296,7 +296,8 @@ with `child_process.fork()`.
 
 ### server.connections
 
-This function is **deprecated**; please use [server.getConnections()][] instead.
+    Stability: 0 - Deprecated: use [server.getConnections()][] instead.
+
 The number of concurrent connections on the server.
 
 This becomes `null` when sending a socket to a child with
