@@ -132,29 +132,10 @@ Example of sending a UDP packet to a random port on `localhost`;
 
 **A Note about UDP datagram size**
 
-The maximum size of an `IPv4/v6` datagram depends on the `MTU` (_Maximum Transmission Unit_)
-and on the `Payload Length` field size.
-
-- The `Payload Length` field is `16 bits` wide, which means that a normal payload
-  cannot be larger than 64K octets including internet header and data
-  (65,507 bytes = 65,535 − 8 bytes UDP header − 20 bytes IP header);
-  this is generally true for loopback interfaces, but such long datagrams
-  are impractical for most hosts and networks.
-
-- The `MTU` is the largest size a given link layer technology can support for datagrams.
-  For any link, `IPv4` mandates a minimum `MTU` of `68` octets, while the recommended `MTU`
-  for IPv4 is `576` (typically recommended as the `MTU` for dial-up type applications),
-  whether they arrive whole or in fragments.
-
-  For `IPv6`, the minimum `MTU` is `1280` octets, however, the mandatory minimum
-  fragment reassembly buffer size is `1500` octets.
-  The value of `68` octets is very small, since most current link layer technologies have
-  a minimum `MTU` of `1500` (like Ethernet).
-
-Note that it's impossible to know in advance the MTU of each link through which
-a packet might travel, and that generally sending a datagram greater than
-the (receiver) `MTU` won't work (the packet gets silently dropped, without
-informing the source that the data did not reach its intended recipient).
+The maximum size of an `IPv4/v6` datagram is limited by the `Payload
+Length` field which is `16 bits` wide. This means that a payload
+cannot be larger than 64K octets including internet header and data
+(65,507 bytes = 65,535 − 8 bytes UDP header − 20 bytes IP header).
 
 ### socket.bind(port[, address][, callback])
 
