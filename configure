@@ -323,6 +323,11 @@ parser.add_option('--xcode',
     dest='use_xcode',
     help='generate build files for use with xcode')
 
+parser.add_option('--with-v8-tests',
+    action='store_true',
+    dest='with_v8_tests',
+    help='Build v8 test suite')
+
 (options, args) = parser.parse_args()
 
 # set up auto-download list
@@ -667,6 +672,8 @@ def configure_v8(o):
     o['libraries'] += ['-lv8']
   if options.shared_v8_includes:
     o['include_dirs'] += [options.shared_v8_includes]
+  if options.with_v8_tests:
+    o['variables']['with_v8_tests'] = 1
 
 
 def configure_openssl(o):
