@@ -256,6 +256,10 @@ through the `constructor.super_` property.
     })
     stream.write("It works!"); // Received data: "It works!"
 
+Be sure to always call `util.inherits` before adding any method to the `constructor` prototype.
+Any method added to the `constructor` prototype before the call to `util.inherits` will be overwritten by
+the new prototype (methods present on the `constructor` prototype are not preserved).
+
 
 ## util.deprecate(function, string)
 
