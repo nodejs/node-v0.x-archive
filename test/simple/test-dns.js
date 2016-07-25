@@ -165,3 +165,18 @@ assert.doesNotThrow(function() {
     hints: dns.ADDRCONFIG | dns.V4MAPPED
   }, noop);
 });
+
+// test passing a number as family works
+dns.lookup('www.google.com', 6, function(err, addr, family) {
+  if (err) {
+    console.error('Looks like IPv6 is not really supported');
+    console.error(err);
+    return;
+  }
+
+  dns.lookup('www.google.com', { family: 6 }, function (err, _addr, _family) {
+    assert.ifError(err);
+    assert.equal(addr, _addr);
+    assert.equal(family, _family);
+  });
+});
