@@ -261,6 +261,13 @@
             // be ok to abort on an uncaught exception at this point
             process._emittingTopLevelDomainError = true;
             caught = domain.emit('error', er);
+
+            // Exit all domains on the stack.  Uncaught exceptions end the
+            // current tick and no domains should be left on the stack
+            // between ticks.
+            var domainModule = NativeModule.require('domain');
+            domainStack.length = 0;
+            domainModule.active = process.domain = null;
           } finally {
             process._emittingTopLevelDomainError = false;
           }
