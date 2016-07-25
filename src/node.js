@@ -176,6 +176,7 @@
     global.GLOBAL = global;
     global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
+    global.require = NativeModule.require;
     process.domain = null;
     process._exiting = false;
   };
