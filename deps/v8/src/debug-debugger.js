@@ -1960,7 +1960,7 @@ DebugCommandProcessor.prototype.resolveFrameFromScopeDescription_ =
   // Get the frame for which the scope or scopes are requested.
   // With no frameNumber argument use the currently selected frame.
   if (scope_description && !IS_UNDEFINED(scope_description.frameNumber)) {
-    frame_index = scope_description.frameNumber;
+    var frame_index = scope_description.frameNumber;
     if (frame_index < 0 || this.exec_state_.frameCount() <= frame_index) {
       throw new Error('Invalid frame number');
     }
@@ -2220,7 +2220,7 @@ DebugCommandProcessor.prototype.lookupRequest_ = function(request, response) {
 
   // Set 'includeSource' option for script lookup.
   if (!IS_UNDEFINED(request.arguments.includeSource)) {
-    includeSource = %ToBoolean(request.arguments.includeSource);
+    var includeSource = %ToBoolean(request.arguments.includeSource);
     response.setOption('includeSource', includeSource);
   }
 
