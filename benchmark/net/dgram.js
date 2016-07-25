@@ -3,9 +3,7 @@
 var common = require('../common.js');
 var PORT = common.PORT;
 
-// `num` is the number of send requests to queue up each time.
-// Keep it reasonably high (>10) otherwise you're benchmarking the speed of
-// event loop cycles more than anything else.
+
 var bench = common.createBenchmark(main, {
   len: [1, 64, 256, 1024],
   num: [100],
