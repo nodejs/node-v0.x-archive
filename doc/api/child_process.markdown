@@ -444,10 +444,12 @@ Otherwise, the 'stdio' option to `child_process.spawn()` is an array where each
 index corresponds to a fd in the child.  The value is one of the following:
 
 1. `'pipe'` - Create a pipe between the child process and the parent process.
-   The parent end of the pipe is exposed to the parent as a property on the
-   `child_process` object as `ChildProcess.stdio[fd]`. Pipes created for
-   fds 0 - 2 are also available as ChildProcess.stdin, ChildProcess.stdout
-   and ChildProcess.stderr, respectively.
+   Pipes created for fds 0 - 2 are already opened in the child and each is
+   available in the child as ChildProcess.stdin, ChildProcess.stdout and
+   ChildProcess.stderr, respectively. The parent end of all pipes is exposed to
+   the parent as a property on the `child_process` object as
+   `ChildProcess.stdio[fd]`. Fd's greater than 2 can be opened in the child
+   using a new [net.Socket][].
 2. `'ipc'` - Create an IPC channel for passing messages/file descriptors
    between parent and child. A ChildProcess may have at most *one* IPC stdio
    file descriptor. Setting this option enables the ChildProcess.send() method.
@@ -742,3 +744,4 @@ throw.  The `Error` object will contain the entire result from
 [`child_process.spawnSync`](#child_process_child_process_spawnsync_command_args_options)
 
 [EventEmitter]: events.html#events_class_events_eventemitter
+[net.Socket]: net.html#net_class_net_socket
