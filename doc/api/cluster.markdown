@@ -297,9 +297,11 @@ Example:
 
 This can only be called from the master process.
 
-## cluster.fork([env])
+## cluster.fork([env], [args], [execArgv])
 
 * `env` {Object} Key/value pairs to add to worker process environment.
+* `args` {Array} List of string arguments passed to the worker module.
+* `execArgv` {Array} List of string arguments passed to the executable.
 * return {Worker object}
 
 Spawn a new worker process.
