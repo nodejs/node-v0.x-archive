@@ -102,7 +102,7 @@ function run() {
 function compare() {
   // each result is an object with {"foo.js arg=bar":12345,...}
   // compare each thing, and show which node did the best.
-  // node[0] is shown in green, node[1] shown in red.
+  // node[0] is shown in green, node[1] is shown in red.
   var maxLen = -Infinity;
   var util = require('util');
   console.log(start);
