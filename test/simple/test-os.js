@@ -47,6 +47,10 @@ if (process.platform === 'win32') {
   assert.equal(os.tmpdir(), '/tmp');
 }
 
+var username = os.username();
+console.log('username = %s', username);
+assert.ok(username.length > 0);
+
 var endianness = os.endianness();
 console.log('endianness = %s', endianness);
 assert.ok(/[BL]E/.test(endianness));
