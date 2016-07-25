@@ -271,12 +271,6 @@ enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER};
 enum encoding ParseEncoding(v8::Isolate* isolate,
                             v8::Handle<v8::Value> encoding_v,
                             enum encoding _default = BINARY);
-NODE_DEPRECATED("Use ParseEncoding(isolate, ...)",
-                inline enum encoding ParseEncoding(
-      v8::Handle<v8::Value> encoding_v,
-      enum encoding _default = BINARY) {
-  return ParseEncoding(v8::Isolate::GetCurrent(), encoding_v, _default);
-})
 
 NODE_EXTERN void FatalException(v8::Isolate* isolate,
                                 const v8::TryCatch& try_catch);
