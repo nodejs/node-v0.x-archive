@@ -387,7 +387,7 @@ Example of running `ls -lh /usr`, capturing `stdout`, `stderr`, and the exit cod
     });
 
     ls.stderr.on('data', function (data) {
-      console.log('stderr: ' + data);
+      console.error('stderr: ' + data);
     });
 
     ls.on('close', function (code) {
@@ -406,7 +406,7 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
     });
 
     ps.stderr.on('data', function (data) {
-      console.log('ps stderr: ' + data);
+      console.error('ps stderr: ' + data);
     });
 
     ps.on('close', function (code) {
@@ -421,7 +421,7 @@ Example: A very elaborate way to run 'ps ax | grep ssh'
     });
 
     grep.stderr.on('data', function (data) {
-      console.log('grep stderr: ' + data);
+      console.error('grep stderr: ' + data);
     });
 
     grep.on('close', function (code) {
@@ -556,7 +556,7 @@ Runs a command in a shell and buffers the output.
     child = exec('cat *.js bad_file | wc -l',
       function (error, stdout, stderr) {
         console.log('stdout: ' + stdout);
-        console.log('stderr: ' + stderr);
+        console.error('stderr: ' + stderr);
         if (error !== null) {
           console.log('exec error: ' + error);
         }
