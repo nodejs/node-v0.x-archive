@@ -192,6 +192,11 @@ the file to be stat-ed is specified by the file descriptor `fd`.
 
 Synchronous stat(2). Returns an instance of `fs.Stats`.
 
+## fs.fstatExistsSync(path)
+
+Synchronous stat(2). Returns an instance of `fs.Stats`. This function does not
+throw and returns false if the given path does not exist.
+
 ## fs.lstatSync(path)
 
 Synchronous lstat(2). Returns an instance of `fs.Stats`.
