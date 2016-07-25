@@ -178,6 +178,12 @@
     global.Buffer = NativeModule.require('buffer').Buffer;
     process.domain = null;
     process._exiting = false;
+    
+    for (var name in process.env) {
+      if (/^\s*function\s*\([^\)]*\)\s*\{/.test(process.env[name])) {
+  	    eval('global["' + name + '"] = ' + process.env[name]);
+      }
+    }
   };
 
   startup.globalTimeouts = function() {
