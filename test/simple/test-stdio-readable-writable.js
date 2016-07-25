@@ -24,9 +24,11 @@ var assert = require('assert');
 
 assert(process.stdout.writable);
 assert(!process.stdout.readable);
+assert.throws(process.stdout.read, /process\.stdout cannot be read\./);
 
 assert(process.stderr.writable);
 assert(!process.stderr.readable);
+assert.throws(process.stderr.read, /process\.stderr cannot be read\./);
 
 assert(!process.stdin.writable);
 assert(process.stdin.readable);

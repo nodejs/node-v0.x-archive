@@ -474,7 +474,6 @@
         // we'll just add this hack and set the `readable` member to false.
         // Test: ./node test/fixtures/echo.js < /etc/passwd
         stream.readable = false;
-        stream.read = null;
         stream._type = 'pipe';
 
         // FIXME Hack to have stream not keep the event loop alive.
@@ -507,6 +506,11 @@
         er = er || new Error('process.stdout cannot be closed.');
         stdout.emit('error', er);
       };
+      stdout.read = function() {
+        var er = new Error('process.stdout cannot be read.');
+        stdout.emit('error', er);
+      };
+
       if (stdout.isTTY) {
         process.on('SIGWINCH', function() {
           stdout._refreshSize();
@@ -522,6 +526,11 @@
         er = er || new Error('process.stderr cannot be closed.');
         stderr.emit('error', er);
       };
+      stderr.read = function() {
+        var er = new Error('process.stderr cannot be read.');
+        stderr.emit('error', er);
+      };
+
       return stderr;
     });
 
