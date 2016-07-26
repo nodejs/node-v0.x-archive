@@ -7800,9 +7800,17 @@ void HGraphBuilder::VisitCallNew(CallNew* expr) {
   } else {
     // The constructor function is both an operand to the instruction and an
     // argument to the construct call.
-    CHECK_ALIVE(VisitArgument(expr->expression()));
-    HValue* constructor = HPushArgument::cast(Top())->argument();
-    CHECK_ALIVE(VisitArgumentList(expr->arguments()));
+    CHECK_ALIVE(VisitForValue(expr->expression()));
+    HValue* constructor = Top();
+    CHECK_ALIVE(VisitExpressions(expr->arguments()));
+
+    // Replace every argument value with PushArgument
+    for (int i = argument_count - 1; i >= 0; i--) {
+      HValue* arg = environment()->ExpressionStackAt(i);
+      HValue* push = AddInstruction(new(zone()) HPushArgument(arg));
+      environment()->SetExpressionStackAt(i, push);
+    }
+
     HInstruction* call =
         new(zone()) HCallNew(context, constructor, argument_count);
     Drop(argument_count);
