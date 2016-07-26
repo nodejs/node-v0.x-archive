@@ -211,3 +211,36 @@ testMe.complete(' ', function(error, data) {
 testMe.complete('toSt', function(error, data) {
   assert.deepEqual(data, [['toString'], 'toSt']);
 });
+
+// To test custom completer function.
+var putIn2 = new ArrayStream();
+var testMe2 = repl.start({
+  prompt: '',
+  input : putIn2,
+  output: putIn2,
+  completer: function customCompleter(line, cb) {
+    var completions = 'aaa aa1 aa2 bbb bb1 bb2 bb3 ccc ddd eee'.split(' ');
+    var hits = completions.filter(function (item) {
+      return item.indexOf(line) === 0;
+    });
+    // Show all completions if none was found.
+    cb([hits.length ? hits : completions, line]);
+  }
+});
+
+putIn2.run(['.clear']);
+
+// On empty line should output all the custom completions
+// without complete anything.
+putIn2.run(['']);
+testMe2.complete('', function(error, data) {
+  assert.deepEqual(data, [
+    'aaa aa1 aa2 bbb bb1 bb2 bb3 ccc ddd eee'.split(' '), ''
+  ]);
+});
+
+// On `a` should output `aaa aa1 aa2` and complete until `aa`.
+putIn2.run(['a']);
+testMe2.complete('a', function(error, data) {
+  assert.deepEqual(data, ['aaa aa1 aa2'.split(' '), 'a']);
+});

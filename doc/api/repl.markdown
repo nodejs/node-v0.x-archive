@@ -33,7 +33,7 @@ For example, you could add this to your bashrc file:
 ## repl.start(options)
 
 Returns and starts a `REPLServer` instance, that inherits from 
-[Readline Interface][]. Accepts an "options" Object that takes 
+[Readline Interface](readline.html#readline_readline). Accepts an "options" Object that takes 
 the following values:
 
  - `prompt` - the prompt and `stream` for all I/O. Defaults to `> `.
@@ -63,6 +63,9 @@ the following values:
  - `writer` - the function to invoke for each command that gets evaluated which
    returns the formatting (including coloring) to display. Defaults to
    `util.inspect`.
+
+ - `completer` - an optional function that is used for Tab autocompletion.
+   See [Readline Interface](readline.html#readline_readline) for an example of using this.
 
 You can use your own `eval` function if it has following signature:
 
