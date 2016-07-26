@@ -16,7 +16,7 @@ node benchmark/common.js buffers
 The above command will find all scripts under `buffers` directory and require
 each of them as a module. When a test script is required, it creates an instance
 of `Benchmark` (a class defined in common.js). In the next tick, the `Benchmark`
-constructor iterates through the configuration object property values and run
+constructor iterates through the configuration object property values and runs
 the test function with each of the combined arguments in spawned processes. For
 example, buffers/buffer-read.js has the following configuration:
 
