@@ -102,7 +102,7 @@ Benchmark.prototype._run = function() {
   if (this.config)
     return this.fn(this.config);
 
-  // one more more options weren't set.
+  // some more options weren't set.
   // run with all combinations
   var main = require.main.filename;
   var settings = [];
