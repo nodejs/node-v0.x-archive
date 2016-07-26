@@ -418,17 +418,18 @@ assert.deepEqual(Buffer('//++/++/++//', 'base64'), Buffer(expected));
 assert.deepEqual(Buffer('__--_--_--__', 'base64'), Buffer(expected));
 
 // big example
-var quote = 'Man is distinguished, not only by his reason, but by this ' +
+var quote = 'Humans are distinguished, not only by their reason, but by this ' +
             'singular passion from other animals, which is a lust ' +
             'of the mind, that by a perseverance of delight in the continued ' +
             'and indefatigable generation of knowledge, exceeds the short ' +
             'vehemence of any carnal pleasure.';
-var expected = 'TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24s' +
-               'IGJ1dCBieSB0aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltY' +
-               'WxzLCB3aGljaCBpcyBhIGx1c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZX' +
-               'JzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0aGUgY29udGludWVkIGFuZCBpbmR' +
-               'lZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdlLCBleGNlZWRzIHRo' +
-               'ZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4=';
+var expected = 'SHVtYW5zIGFyZSBkaXN0aW5ndWlzaGVkLCBub3Qgb25seSBieSB0aGVpciByZ' +
+               'WFzb24sIGJ1dCBieSB0aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlci' +
+               'BhbmltYWxzLCB3aGljaCBpcyBhIGx1c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnk' +
+               'gYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0aGUgY29udGludWVkIGFu' +
+               'ZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdlLCBleGNlZ' +
+               'WRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS' +
+               '4=';
 assert.equal(expected, (new Buffer(quote)).toString('base64'));
 
 
