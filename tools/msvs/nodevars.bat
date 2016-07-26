@@ -22,3 +22,4 @@ endlocal
 
 rem If we're in the node.js directory, change to the user's home dir.
 if "%CD%\"=="%~dp0" cd /d "%HOMEDRIVE%%HOMEPATH%"
+if not "%HOME%" == "" cd /d "%HOME%"
