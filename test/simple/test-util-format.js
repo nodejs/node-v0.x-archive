@@ -37,6 +37,7 @@ assert.equal(util.format('test'), 'test');
 
 // CHECKME this is for console.log() compatibility - but is it *right*?
 assert.equal(util.format('foo', 'bar', 'baz'), 'foo bar baz');
+assert.equal(util.format({}, 'foo', 'bar'), '{} foo bar');
 
 assert.equal(util.format('%d', 42.0), '42');
 assert.equal(util.format('%d', 42), '42');
