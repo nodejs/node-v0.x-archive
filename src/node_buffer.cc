@@ -434,6 +434,9 @@ void Utf8Write(const FunctionCallbackInfo<Value>& args) {
   StringWrite<UTF8>(args);
 }
 
+void Cesu8Write(const FunctionCallbackInfo<Value>& args) {
+  StringWrite<CESU8>(args);
+}
 
 void Ucs2Write(const FunctionCallbackInfo<Value>& args) {
   StringWrite<UCS2>(args);
@@ -620,6 +623,7 @@ void SetupBufferJS(const FunctionCallbackInfo<Value>& args) {
   NODE_SET_METHOD(proto, "hexWrite", HexWrite);
   NODE_SET_METHOD(proto, "ucs2Write", Ucs2Write);
   NODE_SET_METHOD(proto, "utf8Write", Utf8Write);
+  NODE_SET_METHOD(proto, "cesu8Write", Cesu8Write);
 
   NODE_SET_METHOD(proto, "copy", Copy);
 

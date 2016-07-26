@@ -155,6 +155,10 @@ static Isolate* node_isolate = NULL;
 int WRITE_UTF8_FLAGS = v8::String::HINT_MANY_WRITES_EXPECTED |
                        v8::String::NO_NULL_TERMINATION;
 
+int WRITE_CESU8_FLAGS = v8::String::HINT_MANY_WRITES_EXPECTED |
+                        v8::String::NO_NULL_TERMINATION       |
+                        v8::String::ENCODE_AS_CESU_8;
+
 class ArrayBufferAllocator : public ArrayBuffer::Allocator {
  public:
   // Impose an upper limit to avoid out of memory errors that bring down
@@ -1173,6 +1177,10 @@ enum encoding ParseEncoding(Isolate* isolate,
     return UTF8;
   } else if (strcasecmp(*encoding, "utf-8") == 0) {
     return UTF8;
+  } else if (strcasecmp(*encoding, "cesu8") == 0) {
+    return CESU8;
+  } else if (strcasecmp(*encoding, "cesu-8") == 0) {
+    return CESU8;
   } else if (strcasecmp(*encoding, "ascii") == 0) {
     return ASCII;
   } else if (strcasecmp(*encoding, "base64") == 0) {

@@ -30,6 +30,7 @@
 namespace node {
 
 extern int WRITE_UTF8_FLAGS;
+extern int WRITE_CESU8_FLAGS;
 
 class StringBytes {
  public:

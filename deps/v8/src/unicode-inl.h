@@ -91,7 +91,8 @@ unsigned Utf8::EncodeOneByte(char* str, uint8_t c) {
 unsigned Utf8::Encode(char* str,
                       uchar c,
                       int previous,
-                      bool replace_invalid) {
+                      bool replace_invalid,
+                      bool encode_as_cesu_8) {
   static const int kMask = ~(1 << 6);
   if (c <= kMaxOneByteChar) {
     str[0] = c;
@@ -101,7 +102,7 @@ unsigned Utf8::Encode(char* str,
     str[1] = 0x80 | (c & kMask);
     return 2;
   } else if (c <= kMaxThreeByteChar) {
-    if (Utf16::IsSurrogatePair(previous, c)) {
+    if (!encode_as_cesu_8 && Utf16::IsSurrogatePair(previous, c)) {
       const int kUnmatchedSize = kSizeOfUnmatchedSurrogate;
       return Encode(str - kUnmatchedSize,
                     Utf16::CombineSurrogatePair(previous, c),
@@ -150,6 +151,18 @@ unsigned Utf8::Length(uchar c, int previous) {
     return 3;
   } else {
     return 4;
+  }
+}
+
+unsigned Utf8::CesuLength(uchar c, int previous) {
+  if (c <= kMaxOneByteChar) {
+    return 1;
+  } else if (c <= kMaxTwoByteChar) {
+    return 2;
+  } else if (c <= kMaxThreeByteChar) {
+    return 3;
+  } else {
+    return 6;
   }
 }
 
