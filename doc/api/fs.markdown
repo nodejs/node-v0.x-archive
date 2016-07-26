@@ -633,9 +633,10 @@ less reliable.
 
 <!--type=misc-->
 
-Providing `filename` argument in the callback is not supported
-on every platform (currently it's only supported on Linux and Windows).  Even
-on supported platforms `filename` is not always guaranteed to be provided.
+Providing `filename` argument in the callback is not supported on every
+platform (currently it's only supported on Linux and Windows) mainly if
+you watch a file but for a folder, it is unlikely. Even on supported
+platforms `filename` is not always guaranteed to be provided.
 Therefore, don't assume that `filename` argument is always provided in the
 callback, and have some fallback logic if it is null.
 
