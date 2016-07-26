@@ -121,7 +121,7 @@ values are `"rr"` and `"none"`.
 ## cluster.settings
 
 * {Object}
-  * `execArgv` {Array} list of string arguments passed to the node executable. 
+  * `execArgv` {Array} list of string arguments passed to the node executable.
     (Default=`process.execArgv`)
   * `exec` {String} file path to worker file.  (Default=`process.argv[1]`)
   * `args` {Array} string arguments passed to worker.
@@ -374,7 +374,7 @@ it can be obtained using `cluster.worker`.
 
 ### worker.id
 
-* {String}
+* {Number}
 
 Each new worker is given its own unique id, this id is stored in the
 `id`.
