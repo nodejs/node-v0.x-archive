@@ -8,7 +8,7 @@ File I/O is provided by simple wrappers around standard POSIX functions.  To
 use this module do `require('fs')`. All the methods have asynchronous and
 synchronous forms.
 
-The asynchronous form always take a completion callback as its last argument.
+The asynchronous form always takes a completion callback as its last argument.
 The arguments passed to the completion callback depend on the method, but the
 first argument is always reserved for an exception. If the operation was
 completed successfully, then the first argument will be `null` or `undefined`.
@@ -59,8 +59,8 @@ In busy processes, the programmer is _strongly encouraged_ to use the
 asynchronous versions of these calls. The synchronous versions will block
 the entire process until they complete--halting all connections.
 
-Relative path to filename can be used, remember however that this path will be
-relative to `process.cwd()`.
+The relative path to a filename can be used. Remember, however, that this path
+will be relative to `process.cwd()`.
 
 Most fs functions let you omit the callback argument. If you do, a default
 callback is used that rethrows errors. To get a trace to the original call
@@ -547,11 +547,11 @@ The synchronous version of `fs.appendFile`. Returns `undefined`.
 Watch for changes on `filename`. The callback `listener` will be called each
 time the file is accessed.
 
-The second argument is optional. The `options` if provided should be an object
-containing two members a boolean, `persistent`, and `interval`. `persistent`
-indicates whether the process should continue to run as long as files are
-being watched. `interval` indicates how often the target should be polled,
-in milliseconds. The default is `{ persistent: true, interval: 5007 }`.
+The second argument is optional. The `options`, if provided, should be an object
+containing two members: a boolean, `persistent`, and an integer, `interval`.
+`persistent` indicates whether the process should continue to run as long as
+files are being watched. `interval` indicates how often the target should be
+polled, in milliseconds. The default is `{ persistent: true, interval: 5007 }`.
 
 The `listener` gets two arguments the current stat object and the previous
 stat object:
@@ -563,7 +563,7 @@ stat object:
 
 These stat objects are instances of `fs.Stat`.
 
-If you want to be notified when the file was modified, not just accessed
+If you want to be notified when the file was modified, not just accessed,
 you need to compare `curr.mtime` and `prev.mtime`.
 
 ## fs.unwatchFile(filename[, listener])
