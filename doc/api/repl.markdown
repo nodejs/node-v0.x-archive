@@ -132,6 +132,12 @@ to signal "end" on the `input` stream.
 
 Example of listening for `exit`:
 
+    var r = repl.start({
+      prompt: "> ",
+      input: process.stdin,
+      output: process.stdout
+    });
+
     r.on('exit', function () {
       console.log('Got "exit" event from repl!');
       process.exit();
