@@ -200,25 +200,33 @@ Synchronous lstat(2). Returns an instance of `fs.Stats`.
 
 Synchronous fstat(2). Returns an instance of `fs.Stats`.
 
-## fs.link(srcpath, dstpath, callback)
+## fs.link(target, path, callback)
 
 Asynchronous link(2). No arguments other than a possible exception are given to
 the completion callback.
 
-## fs.linkSync(srcpath, dstpath)
+## fs.linkSync(target, path)
 
 Synchronous link(2). Returns `undefined`.
 
-## fs.symlink(srcpath, dstpath[, type], callback)
+## fs.symlink(target, path[, type], callback)
 
-Asynchronous symlink(2). No arguments other than a possible exception are given
-to the completion callback.
+Asynchronous symlink(2). Creates a symbolic link at `path`, which links to `target`.
+No arguments other than a possible exception are given to the completion callback.
 The `type` argument can be set to `'dir'`, `'file'`, or `'junction'` (default
 is `'file'`) and is only available on Windows (ignored on other platforms).
-Note that Windows junction points require the destination path to be absolute.  When using
-`'junction'`, the `destination` argument will automatically be normalized to absolute path.
+Note that Windows junction points require the target path to be absolute.  When using
+`'junction'`, the `target` argument will automatically be normalized to absolute path.
 
-## fs.symlinkSync(srcpath, dstpath[, type])
+Example:
+
+    var fs = require('fs');
+    fs.symlink('/', 'a.symlink.to.root', function(err){
+      if (err) throw err;
+      console.log(fs.realpathSync('a.symlink.to.root')); // output: '/'
+    });
+
+## fs.symlinkSync(target, path[, type])
 
 Synchronous symlink(2). Returns `undefined`.
 
