@@ -96,6 +96,15 @@
       var path = NativeModule.require('path');
       process.argv[1] = path.resolve(process.argv[1]);
 
+      // check if user passed `-c` or `--check` arguments to Node.
+      if (process._syntax_check_only != null) {
+        var vm = NativeModule.require('vm');
+        var fs = NativeModule.require('fs');
+        var source = fs.readFileSync(process.argv[1], 'utf8').replace(/^#.*/, '');
+        new vm.Script(source, {filename: process.argv[1], displayErrors: true});
+        process.exit(0);
+      }
+
       // If this is a worker in cluster mode, start up the communication
       // channel.
       if (process.env.NODE_UNIQUE_ID) {
