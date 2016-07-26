@@ -140,3 +140,23 @@ the listener may not yet have been added to the array of listeners for the `even
 
 This event is emitted any time someone removes a listener.  When this event is triggered,
 the listener may not yet have been removed from the array of listeners for the `event`.
+
+
+### Properly inheriting from 'EventEmitter'
+
+Inheriting from `EventEmitter` is no different from inheriting from any other
+constructor function. For example,
+
+```js
+'use strict';
+const util = require('util');
+const EventEmitter = require('events').EventEmitter;
+
+function MyEventEmitter() {
+  // Initialize necessary properties from `EventEmitter` in this instance
+  EventEmitter.call(this);
+}
+
+// Inherit functions from `EventEmitter`'s prototype
+util.inherits(MyEventEmitter, EventEmitter);
+```
