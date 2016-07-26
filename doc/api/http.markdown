@@ -246,6 +246,30 @@ does not imply that the client has received anything yet.
 
 After this event, no more events will be emitted on the response object.
 
+### Event: 'chunkedRemainingBytes'
+
+`function (buff) { }`
+
+Fired when the incoming stream is `Transfer-Encoding: chunked` and the stream
+has been parsed successfully but there are trailing bytes at the end of the
+response. The callback is passed the bytes that were not successfully parsed.
+
+For backwards compatibility, if there is no listener attached to this event,
+an [Error][] will be emitted on the `request` side of this request/response
+pair. To detect this scenario has happened you can use the following code:
+
+    if (res.headers['transfer-encoding'] === 'chunked' &&
+        res.complete === true &&
+        err.code === 'HPE_INVALID_CONSTANT') {
+      console.error('we have trailing bytes', err.bytesParsed);
+    } else {
+      console.error('request error', err);
+    }
+
+In either scenario all of the data has been successfully delivered through to
+the EOF for the stream, but without the listener the request object will have
+an error and the socket will be destroyed.
+
 ### response.writeContinue()
 
 Sends a HTTP/1.1 100 Continue message to the client, indicating that
