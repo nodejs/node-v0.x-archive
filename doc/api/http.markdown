@@ -455,6 +455,10 @@ This function allows one to transparently issue requests.
 `options` can be an object or a string. If `options` is a string, it is
 automatically parsed with [url.parse()][].
 
+`callback` should be a function. If `callback` is provided, it is
+added as one-time `'response'` callback to the `ClientRequest`
+instance returned by `request()`.
+
 Options:
 
 - `protocol`: Protocol to use. Defaults to `'http:'`.
