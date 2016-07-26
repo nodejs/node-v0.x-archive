@@ -31,6 +31,7 @@ var args = process.argv.slice(2);
 var format = 'json';
 var template = null;
 var inputFile = null;
+var outputFile = null;
 
 args.forEach(function (arg) {
   if (!arg.match(/^\-\-/)) {
@@ -39,6 +40,8 @@ args.forEach(function (arg) {
     format = arg.replace(/^\-\-format=/, '');
   } else if (arg.match(/^\-\-template=/)) {
     template = arg.replace(/^\-\-template=/, '');
+  } else if (arg.match(/^\-\-output=/)) {
+    outputFile = arg.replace(/^\-\-output=/, '');
   }
 })
 
@@ -100,7 +103,7 @@ function next(er, input) {
   if (er) throw er;
   switch (format) {
     case 'json':
-      require('./json.js')(input, inputFile, function(er, obj) {
+      require('./json.js')(input, inputFile, outputFile, function(er, obj) {
         console.log(JSON.stringify(obj, null, 2));
         if (er) throw er;
       });
