@@ -2,7 +2,6 @@
 import optparse
 import os
 import pprint
-import re
 import shlex
 import subprocess
 import sys
@@ -656,7 +655,12 @@ def configure_winsdk(o):
   if flavor != 'win':
     return
 
-  winsdk_dir = os.environ.get("WindowsSdkDir")
+  winsdk_key = dict((k.lower(), k) for k in os.environ.keys()).get('WindowsSdkDir'.lower())
+  winsdk_dir = os.environ.get(winsdk_key)
+  ctrpp_exe = os.path.join(winsdk_dir, 'bin', 'ctrpp.exe')
+  #Try on x64 machine for WDK.
+  if winsdk_dir and not os.path.isfile(ctrpp_exe):
+    ctrpp_exe = os.path.join(winsdk_dir, 'bin', 'x86', 'ctrpp.exe')
 
   if winsdk_dir and os.path.isfile(winsdk_dir + '\\bin\\ctrpp.exe'):
     print "Found ctrpp in WinSDK--will build generated files into tools/msvs/genfiles."
