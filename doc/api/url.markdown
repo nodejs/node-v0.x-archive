@@ -67,7 +67,8 @@ The following methods are provided by the URL module:
 
 ## url.parse(urlStr[, parseQueryString][, slashesDenoteHost])
 
-Take a URL string, and return an object.
+Take a URL string, and return an object. The provided string should be
+URL encoded.
 
 Pass `true` as the second argument to also parse the query string using the
 `querystring` module. If `true` then the `query` property will always be
