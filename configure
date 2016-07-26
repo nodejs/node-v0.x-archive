@@ -232,6 +232,12 @@ parser.add_option('--with-arm-float-abi',
     help='specifies which floating-point ABI to use. Valid values are: '
          'soft, softfp, hard')
 
+parser.add_option('--with-arm-fpu',
+    action='store',
+    dest='arm_fpu',
+    help='specifies which vector floating point unit to use. Valid values are: '
+         'vfpv3, vfpv3-d16, neon')
+
 parser.add_option('--with-dtrace',
     action='store_true',
     dest='with_dtrace',
@@ -495,6 +501,11 @@ def configure_arm(o):
   else:
     arm_float_abi = 'default'
 
+  if options.arm_fpu:
+    arm_fpu = options.arm_fpu
+  else:
+    arm_fpu = 'vfpv3'
+
   if is_arch_armv7():
     o['variables']['arm_version'] = '7'
   elif is_arch_armv6():
@@ -502,7 +513,7 @@ def configure_arm(o):
   else:
     o['variables']['arm_version'] = 'default'
 
-  o['variables']['arm_fpu'] = 'vfpv3'  # V8 3.18 no longer supports VFP2.
+  o['variables']['arm_fpu'] = arm_fpu
   o['variables']['arm_neon'] = int(is_arm_neon())
   o['variables']['arm_thumb'] = 0      # -marm
   o['variables']['arm_float_abi'] = arm_float_abi
