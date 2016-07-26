@@ -50,6 +50,35 @@ bool CpuFeatures::initialized_ = false;
 unsigned CpuFeatures::supported_ = 0;
 unsigned CpuFeatures::found_by_runtime_probing_ = 0;
 
+#ifdef __arm__
+
+bool OS::ArmCpuHasFeature(CpuFeature feature) {
+  return false;
+}
+
+CpuImplementer OS::GetCpuImplementer() {
+  static bool use_cached_value = false;
+  static CpuImplementer cached_value = UNKNOWN_IMPLEMENTER;
+  if (use_cached_value) {
+    return cached_value;
+  }
+  cached_value = ARM_IMPLEMENTER;
+
+  use_cached_value = true;
+  return cached_value;
+}
+
+
+bool OS::ArmUsingHardFloat() {
+#if defined(__ARM_PCS_VFP)
+  return true;
+#else
+  return false;
+#endif
+}
+
+#endif  // def __arm__
+
 
 // Get the CPU features enabled by the build. For cross compilation the
 // preprocessor symbols CAN_USE_ARMV7_INSTRUCTIONS and CAN_USE_VFP3_INSTRUCTIONS
@@ -749,7 +778,7 @@ static bool fits_shifter(uint32_t imm32,
                          Instr* instr) {
   // imm32 must be unsigned.
   for (int rot = 0; rot < 16; rot++) {
-    uint32_t imm8 = (imm32 << 2*rot) | (imm32 >> (32 - 2*rot));
+    uint32_t imm8 = rot == 0 ? imm32 : ((imm32 << 2*rot) | (imm32 >> (32 - 2*rot)));
     if ((imm8 <= 0xff)) {
       *rotate_imm = rot;
       *immed_8 = imm8;
