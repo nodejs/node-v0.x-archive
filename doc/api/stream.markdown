@@ -1173,6 +1173,89 @@ In classes that extend the Duplex class, make sure to call the
 constructor so that the buffering settings can be properly
 initialized.
 
+#### Example: A Rudimentary Duplex Example
+
+The example below creates a simple Duplex that accepts input lowercase
+strings, converts those to uppercase, then writes those back out to the
+console. 
+
+```javascript
+var stream = require('stream');
+var util = require('util');
+var Duplex = stream.Duplex;
+
+function do_read(n) {
+  var self = this;
+  process.nextTick(function() {
+    while (self.in.length) {
+      var str = self.in.shift().toString().toUpperCase();
+      if (!self.push(new Buffer(str))) {
+        self.push(null);
+      }
+    }
+    if (self.continue) {
+      setTimeout(do_read.bind(self), 1000, n);
+    } else {
+      self.push(null);
+    }
+  });
+};
+
+function do_write(duplex) {
+  process.nextTick(function() {
+    if (duplex.continue) {
+      duplex.write('hello world');
+      setTimeout(do_write, 500, duplex);
+    }
+    else
+      duplex.end();
+  });
+}
+
+// create the duplex subclass...
+function MyDuplex(options) {
+  if (!(this instanceof MyDuplex))
+    return new MyDuplex(options);
+  Duplex.call(this, options);
+  this.in = [];
+  this.continue = true;
+}
+util.inherits(MyDuplex, Duplex);
+
+// we need to provide an implementation for Duplex._read...
+MyDuplex.prototype._read = do_read;
+
+// ... and Duplex._write
+MyDuplex.prototype._write =
+  function (chunk, enc, cb) {
+    console.log('in: ' + chunk.toString());
+    this.in.push(chunk);
+    cb();
+  };
+
+// ... tells our duplex subclass that we're done 
+MyDuplex.prototype.stop = function () {
+  this.continue = false;
+};
+
+var duplex = new MyDuplex();
+
+// we can now read from and write to our duplex
+duplex.on('readable', function () {
+  var data;
+  while (null !== (data = duplex.read())) {
+    console.log('out: ', data.toString());
+  }
+}).on('end', function() {
+    console.log('DONE!');
+  });
+
+do_write(duplex);
+
+setTimeout(function () {
+  duplex.stop();
+}, 2000);
+```
 
 ### Class: stream.Transform
 
