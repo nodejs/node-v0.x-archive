@@ -14,7 +14,8 @@ cases:
 * `1` **Uncaught Fatal Exception** - There was an uncaught exception,
   and it was not handled by a domain or an `uncaughtException` event
   handler.
-* `2` - Unused (reserved by Bash for builtin misuse)
+* `2` - Unused (reserved by Bash for builtin misuse: potentially a
+  missing keyword, command, or a permission issue).
 * `3` **Internal JavaScript Parse Error** - The JavaScript source code
   internal in Node's bootstrapping process caused a parse error.  This
   is extremely rare, and generally can only happen during development
