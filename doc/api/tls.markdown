@@ -134,6 +134,103 @@ the character "E" appended to the traditional abbreviations):
 Ephemeral methods may have some performance drawbacks, because key generation
 is expensive.
 
+## Modifying the Default Cipher Suite
+
+Node.js is built with a default suite of enabled and disabled ciphers.
+Currently, the default cipher suite is:
+
+    ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:
+    !RC4:!MD5:!aNULL
+
+This default can be overridden entirely using the `--cipher-list` command line
+switch or `NODE_CIPHER_LIST` environment variable. For instance:
+
+    node --cipher-list=ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384
+
+Setting the environment variable would have the same effect:
+
+    NODE_CIPHER_LIST=ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384
+
+CAUTION: The default cipher suite has been carefully selected to reflect current
+security best practices and risk mitigation. Changing the default cipher suite
+can have a significant impact on the security of an application. The
+`--cipher-list` and `NODE_CIPHER_LIST` options should only be used if
+absolutely necessary.
+
+### Using Legacy Default Cipher Suite ###
+
+It is possible for the built-in default cipher suite to change from one release
+of Node.js to another. For instance, v0.10.38 uses a different default than
+v0.12.2. Such changes can cause issues with applications written to assume
+certain specific defaults. To help buffer applications against such changes,
+the `--enable-legacy-cipher-list` command line switch or `NODE_LEGACY_CIPHER_LIST`
+environment variable can be set to specify a specific preset default:
+
+    # Use the v0.10.38 defaults
+    node --enable-legacy-cipher-list=v0.10.38
+    // or
+    NODE_LEGACY_CIPHER_LIST=v0.10.38
+
+    # Use the v0.12.2 defaults
+    node --enable-legacy-cipher-list=v0.12.2
+    // or
+    NODE_LEGACY_CIPHER_LIST=v0.12.2
+
+Currently, the values supported for the `enable-legacy-cipher-list` switch and
+`NODE_LEGACY_CIPHER_LIST` environment variable include:
+
+    v0.10.38 - To enable the default cipher suite used in v0.10.38
+
+      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
+
+    v0.10.39 - To enable the default cipher suite used in v0.10.39
+
+      ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL:!EDH
+
+    v0.12.2 - To enable the default cipher suite used in v0.12.2
+
+      ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:
+      HIGH:!MD5:!aNULL
+
+These legacy cipher suites are also made available for use via the
+`getLegacyCiphers()` method:
+
+    var tls = require('tls');
+    console.log(tls.getLegacyCiphers('v0.10.38'));
+
+CAUTION: Changes to the default cipher suite are typically made in order to
+strengthen the default security for applications running within Node.js.
+Reverting back to the defaults used by older releases can weaken the security
+of your applications. The legacy cipher suites should only be used if absolutely
+necessary.
+
+NOTE: Due to an error in Node.js v0.10.38, the default cipher list only applied
+to servers using TLS. The default cipher list would _not_ be used by clients.
+This behavior has been changed in v0.10.39 and v0.12.x and the default cipher
+list is now used by both the server and client when using TLS. However, when
+using `--enable-legacy-cipher-list=v0.10.38`, Node.js is reverted back to the
+v0.10.38 behavior of only using the default cipher list on the server.
+
+### Cipher List Precedence
+
+Note that the `--enable-legacy-cipher-list`, `NODE_LEGACY_CIPHER_LIST`,
+`--cipher-list` and `NODE_CIPHER_LIST` options are mutually exclusive.
+
+If the `NODE_CIPHER_LIST` and `NODE_LEGACY_CIPHER_LIST` environment variables
+are both specified, the `NODE_LEGACY_CIPHER_LIST` setting will take precedence.
+
+The `--cipher-list` and `--enable-legacy-cipher-list` command line options
+will override the environment variables. If both happen to be specified, the
+right-most (second one specified) will take precedence. For instance, in the
+example:
+
+    node --cipher-list=ABC --enable-legacy-cipher-list=v0.10.38
+
+The v0.10.38 default cipher list will be used.
+
+    node --enable-legacy-cipher-list=v0.10.38 --cipher-list=ABC
+
+The custom cipher list will be used.
 
 ## tls.getCiphers()
 
@@ -144,6 +241,18 @@ Example:
     var ciphers = tls.getCiphers();
     console.log(ciphers); // ['AES128-SHA', 'AES256-SHA', ...]
 
+## tls.getLegacyCiphers(version)
+
+Returns a default cipher list used in a previous version of Node.js. The
+version parameter must be a string whose value identifies previous Node.js
+release version. The only values currently supported are `v0.10.38`,
+`v0.10.39`, and `v0.12.2`.
+
+A TypeError will be thrown if: (a) the `version` is any type other than a
+string, (b) the `version` parameter is not specified, or (c) additional
+parameters are passed in. An Error will be thrown if the `version` parameter is
+passed in as a string but the value does not correlate to any known Node.js
+release for which a default cipher list is available.
 
 ## tls.createServer(options[, secureConnectionListener])
 
@@ -177,7 +286,7 @@ automatically set as a listener for the [secureConnection][] event.  The
     prioritize the non-CBC cipher.
 
     Defaults to
-    `ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL`.
+    `ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:HIGH:!RC4:!MD5:!aNULL`.
     Consult the [OpenSSL cipher list format documentation] for details
     on the format.
 
@@ -187,10 +296,7 @@ automatically set as a listener for the [secureConnection][] event.  The
     of OpenSSL.  Note that it is still possible for a TLS v1.2 client
     to negotiate a weaker cipher unless `honorCipherOrder` is enabled.
 
-    `RC4` is used as a fallback for clients that speak on older version of
-    the TLS protocol.  `RC4` has in recent years come under suspicion and
-    should be considered compromised for anything that is truly sensitive.
-    It is speculated that state-level actors possess the ability to break it.
+    `RC4` is explicitly switched off by default due to known vulnerabilities.
 
     **NOTE**: Previous revisions of this section suggested `AES256-SHA` as an
     acceptable cipher. Unfortunately, `AES256-SHA` is a CBC cipher and therefore
