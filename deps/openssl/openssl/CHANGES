@@ -55,9 +55,9 @@
      callbacks.
 
      This issue was reported to OpenSSL by Robert Swiecki (Google), and
-     independently by Hanno Bï¿½ck.
+     independently by Hanno Böck.
      (CVE-2015-1789)
-     [Emilia Kï¿½sper]
+     [Emilia Käsper]
 
   *) PKCS7 crash with missing EnvelopedContent
 
@@ -71,7 +71,7 @@
 
      This issue was reported to OpenSSL by Michal Zalewski (Google).
      (CVE-2015-1790)
-     [Emilia Kï¿½sper]
+     [Emilia Käsper]
 
   *) CMS verify infinite loop with unknown hash function
 
