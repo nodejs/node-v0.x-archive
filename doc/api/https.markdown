@@ -118,8 +118,7 @@ The options argument has the following options
  - `false`: opts out of connection pooling with an Agent, defaults request to
    `Connection: close`.
 
-The following options from [tls.connect()][] can also be specified. However, a
-[globalAgent][] silently ignores these.
+The following options from [tls.connect()][] can also be specified.
 
 - `pfx`: Certificate, Private key and CA certificates to use for SSL. Default `null`.
 - `key`: Private key to use for SSL. Default `null`.
@@ -137,42 +136,6 @@ The following options from [tls.connect()][] can also be specified. However, a
 - `secureProtocol`: The SSL method to use, e.g. `TLSv1_method` to force
   TLS version 1. The possible values depend on your installation of
   OpenSSL and are defined in the constant [SSL_METHODS][].
-
-In order to specify these options, use a custom `Agent`.
-
-Example:
-
-    var options = {
-      hostname: 'encrypted.google.com',
-      port: 443,
-      path: '/',
-      method: 'GET',
-      key: fs.readFileSync('test/fixtures/keys/agent2-key.pem'),
-      cert: fs.readFileSync('test/fixtures/keys/agent2-cert.pem')
-    };
-    options.agent = new https.Agent(options);
-
-    var req = https.request(options, function(res) {
-      ...
-    }
-
-Or does not use an `Agent`.
-
-Example:
-
-    var options = {
-      hostname: 'encrypted.google.com',
-      port: 443,
-      path: '/',
-      method: 'GET',
-      key: fs.readFileSync('test/fixtures/keys/agent2-key.pem'),
-      cert: fs.readFileSync('test/fixtures/keys/agent2-cert.pem'),
-      agent: false
-    };
-
-    var req = https.request(options, function(res) {
-      ...
-    }
 
 ## https.get(options, callback)
 
