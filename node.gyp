@@ -195,7 +195,8 @@
             'src/node_crypto_bio.h',
             'src/node_crypto_clienthello.h',
             'src/tls_wrap.cc',
-            'src/tls_wrap.h'
+            'src/tls_wrap.h',
+            'src/tls_wrap-inl.h',
           ],
           'conditions': [
             [ 'node_shared_openssl=="false"', {

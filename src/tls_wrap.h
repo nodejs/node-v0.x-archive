@@ -98,6 +98,21 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
     QUEUE member_;
   };
 
+  // Shutdown callback queue's item
+  class ShutdownItem {
+   public:
+    ShutdownItem(ShutdownWrap* w, uv_shutdown_cb cb) : w_(w), cb_(cb) {
+    }
+    ~ShutdownItem() {
+      w_ = NULL;
+      cb_ = NULL;
+    }
+
+    ShutdownWrap* w_;
+    uv_shutdown_cb cb_;
+    QUEUE member_;
+  };
+
   TLSCallbacks(Environment* env,
                Kind kind,
                v8::Handle<v8::Object> sc,
@@ -123,6 +138,8 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
       EncOut();
     }
   }
+
+  inline bool IsDrained();
 
   v8::Local<v8::Value> GetSSLError(int status, int* err, const char** msg);
   const char* PrintErrors();
@@ -155,6 +172,7 @@ class TLSCallbacks : public crypto::SSLWrap<TLSCallbacks>,
   size_t write_queue_size_;
   QUEUE write_item_queue_;
   QUEUE pending_write_items_;
+  QUEUE shutdown_queue_;
   bool started_;
   bool established_;
   bool shutdown_;

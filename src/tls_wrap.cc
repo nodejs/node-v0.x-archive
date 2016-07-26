@@ -20,6 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tls_wrap.h"
+#include "tls_wrap-inl.h"
 #include "async-wrap.h"
 #include "async-wrap-inl.h"
 #include "node_buffer.h"  // Buffer
@@ -84,6 +85,7 @@ TLSCallbacks::TLSCallbacks(Environment* env,
   // Initialize queue for clearIn writes
   QUEUE_INIT(&write_item_queue_);
   QUEUE_INIT(&pending_write_items_);
+  QUEUE_INIT(&shutdown_queue_);
 
   // We've our own session callbacks
   SSL_CTX_sess_set_get_cb(sc_->ctx_, SSLWrap<TLSCallbacks>::GetSessionCallback);
@@ -379,6 +381,30 @@ void TLSCallbacks::EncOutCb(uv_write_t* req, int status) {
   // Try writing more data
   callbacks->write_size_ = 0;
   callbacks->EncOut();
+
+  // Perform shutdown, if queued
+  if (callbacks->IsDrained() && !QUEUE_EMPTY(&callbacks->shutdown_queue_)) {
+    QUEUE queue;
+    QUEUE* q = QUEUE_HEAD(&callbacks->shutdown_queue_);
+    QUEUE_SPLIT(&callbacks->shutdown_queue_, q, &queue);
+    while (QUEUE_EMPTY(&queue) == false) {
+      q = QUEUE_HEAD(&queue);
+      QUEUE_REMOVE(q);
+
+      ShutdownItem* si = ContainerOf(&ShutdownItem::member_, q);
+      int r = callbacks->DoShutdown(si->w_, si->cb_);
+      if (r != 0) {
+        // XXX: The request is most likely not initialized here, but
+        // AfterShutdown requires it to have proper `req->handle`.
+        //
+        // Another XXX: This may cause shutdown callbacks after the .close()
+        // call.
+        si->w_->req_.handle = callbacks->wrap()->stream();
+        si->cb_(&si->w_->req_, r);
+      }
+      delete si;
+    }
+  }
 }
 
 
@@ -675,6 +701,13 @@ void TLSCallbacks::DoRead(uv_stream_t* handle,
 
 
 int TLSCallbacks::DoShutdown(ShutdownWrap* req_wrap, uv_shutdown_cb cb) {
+  if (!IsDrained()) {
+    // Write already in progress, schedule shutdown after all of them
+    ShutdownItem* si = new ShutdownItem(req_wrap, cb);
+    QUEUE_INSERT_TAIL(&shutdown_queue_, &si->member_);
+    return 0;
+  }
+
   if (SSL_shutdown(ssl_) == 0)
     SSL_shutdown(ssl_);
   shutdown_ = true;
