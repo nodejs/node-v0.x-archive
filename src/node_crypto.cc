@@ -1343,6 +1343,10 @@ void SSLWrap<Base>::GetPeerCertificate(
   if (args.Length() < 1 || !args[0]->IsTrue()) {
     result = X509ToObject(env,
                           cert == NULL ? sk_X509_value(ssl_certs, 0) : cert);
+
+    if (cert != NULL)
+        X509_free(cert);
+
     goto done;
   }
 
