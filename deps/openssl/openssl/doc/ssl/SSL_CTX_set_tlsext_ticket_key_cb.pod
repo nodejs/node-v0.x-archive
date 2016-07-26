@@ -15,7 +15,7 @@ SSL_CTX_set_tlsext_ticket_key_cb - set a callback for session ticket processing
 
 =head1 DESCRIPTION
 
-SSL_CTX_set_tlsext_ticket_key_cb() sets a callback fuction I<cb> for handling 
+SSL_CTX_set_tlsext_ticket_key_cb() sets a callback function I<cb> for handling 
 session tickets for the ssl context I<sslctx>. Session tickets, defined in 
 RFC5077 provide an enhanced session resumption capability where the server
 implementation is not required to maintain per session state. It only applies
@@ -44,9 +44,9 @@ Before the callback function is started I<ctx> and I<hctx> have been
 initialised with EVP_CIPHER_CTX_init and HMAC_CTX_init respectively.
 
 For new sessions tickets, when the client doesn't present a session ticket, or
-an attempted retreival of the ticket failed, or a renew option was indicated,
+an attempted retrieval of the ticket failed, or a renew option was indicated,
 the callback function will be called with I<enc> equal to 1. The OpenSSL
-library expects that the function will set an arbitary I<name>, initialize
+library expects that the function will set an arbitrary I<name>, initialize
 I<iv>, and set the cipher context I<ctx> and the hash context I<hctx>.
 
 The I<name> is 16 characters long and is used as a key identifier.
@@ -59,17 +59,17 @@ I<ctx> should use the initialisation vector I<iv>. The cipher context can be
 set using L<EVP_EncryptInit_ex>. The hmac context can be set using L<HMAC_Init_ex>.
 
 When the client presents a session ticket, the callback function with be called 
-with I<enc> set to 0 indicating that the I<cb> function should retreive a set
+with I<enc> set to 0 indicating that the I<cb> function should retrieve a set
 of parameters. In this case I<name> and I<iv> have already been parsed out of
 the session ticket. The OpenSSL library expects that the I<name> will be used
 to retrieve a cryptographic parameters and that the cryptographic context
-I<ctx> will be set with the retreived parameters and the initialization vector
+I<ctx> will be set with the retrieved parameters and the initialization vector
 I<iv>. using a function like L<EVP_DecryptInit_ex>. The I<hctx> needs to be set
 using L<HMAC_Init_ex>.
 
 If the I<name> is still valid but a renewal of the ticket is required the
 callback function should return 2. The library will call the callback again
-with an arguement of enc equal to 1 to set the new ticket.
+with an argument of enc equal to 1 to set the new ticket.
 
 The return value of the I<cb> function is used by OpenSSL to determine what
 further processing will occur. The following return values have meaning:
@@ -92,7 +92,7 @@ continue on those parameters.
 =item Z<>0
 
 This indicates that it was not possible to set/retrieve a session ticket and 
-the SSL/TLS session will continue by by negiotationing a set of cryptographic
+the SSL/TLS session will continue by by negotiating a set of cryptographic
 parameters or using the alternate SSL/TLS resumption mechanism, session ids.
 
 If called with enc equal to 0 the library will call the I<cb> again to get
@@ -107,10 +107,10 @@ This indicates an error.
 =head1 NOTES
 
 Session resumption shortcuts the TLS so that the client certificate
-negiotation don't occur. It makes up for this by storing client certificate
+negotiation don't occur. It makes up for this by storing client certificate
 an all other negotiated state information encrypted within the ticket. In a
 resumed session the applications will have all this state information available
-exactly as if a full negiotation had occured.
+exactly as if a full negotiation had occurred.
 
 If an attacker can obtain the key used to encrypt a session ticket, they can
 obtain the master secret for any ticket using that key and decrypt any traffic
@@ -125,7 +125,7 @@ enable an attacker to obtain the session keys.
 
 =head1 EXAMPLES
 
-Reference Implemention:
+Reference Implementation:
   SSL_CTX_set_tlsext_ticket_key_cb(SSL,ssl_tlsext_ticket_key_cb);
   ....
 
