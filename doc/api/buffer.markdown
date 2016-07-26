@@ -244,7 +244,7 @@ may be beyond the end of the buffer. Defaults to `false`.
 
 ### buf.toString([encoding][, start][, end])
 
-* `encoding` String, Optional, Default: 'utf8'
+* `encoding` String, Default: 'utf8'
 * `start` Number, Optional, Default: 0
 * `end` Number, Optional, Default: `buffer.length`
 
