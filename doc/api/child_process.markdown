@@ -308,9 +308,10 @@ socket to a "special" child process. Other sockets will go to a "normal" process
       if (socket.remoteAddress === '74.125.127.100') {
         special.send('socket', socket);
         return;
-      }
+      } else {
       // just the usual dudes
-      normal.send('socket', socket);
+        normal.send('socket', socket);
+      }
     });
     server.listen(1337);
 
