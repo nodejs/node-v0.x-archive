@@ -198,6 +198,13 @@ The same as `dns.resolve()`, but only for canonical name records (`CNAME`
 records). `addresses` is an array of the canonical name records available for
 `hostname` (e.g., `['bar.example.com']`).
 
+## dns.resolveUri(hostname, callback)
+
+The same as `dns.resolve()`, but only for URI records (`URI` records).
+`addresses` is an array of the SRV records available for `hostname`. Properties
+of URI records are priority, weight and target (e.g.,
+`[{'priority': 10, 'weight': 5, 'target': 'http://tools.ietf.org/html/draft-faltstrom-uri'}, ...]`).
+
 ## dns.reverse(ip, callback)
 
 Reverse resolves an ip address to an array of hostnames.

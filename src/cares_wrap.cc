@@ -46,6 +46,15 @@
 # include <arpa/nameser.h>
 #endif
 
+/* nameser.h frequently omits new DNS record types
+ *  so define constant for URI record
+ *
+ * (reference: RR types as defined by IANA, published at:
+ *  http://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml)
+ */
+#ifndef T_URI
+  #define T_URI 256
+#endif
 
 namespace node {
 namespace cares_wrap {
@@ -812,6 +821,57 @@ class QuerySoaWrap: public QueryWrap {
 };
 
 
+class QueryUriWrap: public QueryWrap {
+ public:
+  explicit QueryUriWrap(Environment* env, Local<Object> req_wrap_obj)
+      : QueryWrap(env, req_wrap_obj) {
+  }
+
+  int Send(const char* name) {
+    ares_query(env()->cares_channel(),
+               name,
+               ns_c_in,
+               T_URI,
+               Callback,
+               GetQueryArg());
+    return 0;
+  }
+
+ protected:
+  void Parse(unsigned char* buf, int len) {
+    HandleScope handle_scope(env()->isolate());
+    Context::Scope context_scope(env()->context());
+
+    struct ares_uri_reply* uri_start;
+    int status = ares_parse_uri_reply(buf, len, &uri_start);
+    if (status != ARES_SUCCESS) {
+      ParseError(status);
+      return;
+    }
+
+    Local<Array> uri_records = Array::New(env()->isolate());
+    Local<String> target_symbol = env()->target_string();
+    Local<String> priority_symbol = env()->priority_string();
+    Local<String> weight_symbol = env()->weight_string();
+
+    ares_uri_reply* current = uri_start;
+    for (uint32_t i = 0; current != NULL; ++i, current = current->next) {
+      Local<Object> uri_record = Object::New(env()->isolate());
+      uri_record->Set(target_symbol,
+                      OneByteString(env()->isolate(), current->target));
+      uri_record->Set(priority_symbol,
+                      Integer::New(env()->isolate(), current->priority));
+      uri_record->Set(weight_symbol,
+                      Integer::New(env()->isolate(), current->weight));
+      uri_records->Set(i, uri_record);
+    }
+
+    ares_free_data(uri_start);
+
+    this->CallOnComplete(uri_records);
+  }
+};
+
 class GetHostByAddrWrap: public QueryWrap {
  public:
   explicit GetHostByAddrWrap(Environment* env, Local<Object> req_wrap_obj)
@@ -1284,6 +1344,7 @@ static void Initialize(Handle<Object> target,
   NODE_SET_METHOD(target, "queryNaptr", Query<QueryNaptrWrap>);
   NODE_SET_METHOD(target, "querySoa", Query<QuerySoaWrap>);
   NODE_SET_METHOD(target, "getHostByAddr", Query<GetHostByAddrWrap>);
+  NODE_SET_METHOD(target, "queryUri", Query<QueryUriWrap>);
 
   NODE_SET_METHOD(target, "getaddrinfo", GetAddrInfo);
   NODE_SET_METHOD(target, "getnameinfo", GetNameInfo);
