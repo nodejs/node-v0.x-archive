@@ -118,7 +118,9 @@ var parseTests = {
     'host': 'www.example.com',
     'hostname': 'www.example.com',
     'pathname': '/',
-    'path': '/'
+    'path': '/',
+    'username': 'user',
+    'password': 'pw'
   },
 
   'http://USER:PW@www.ExAmPlE.com/' : {
@@ -129,7 +131,9 @@ var parseTests = {
     'host': 'www.example.com',
     'hostname': 'www.example.com',
     'pathname': '/',
-    'path': '/'
+    'path': '/',
+    'username': 'USER',
+    'password': 'PW'
   },
 
   'http://user@www.example.com/' : {
@@ -140,18 +144,20 @@ var parseTests = {
     'host': 'www.example.com',
     'hostname': 'www.example.com',
     'pathname': '/',
-    'path': '/'
+    'path': '/',
+    'username': 'user'
   },
 
   'http://user%3Apw@www.example.com/' : {
-    'href': 'http://user:pw@www.example.com/',
+    'href': 'http://user%3Apw@www.example.com/',
     'protocol': 'http:',
     'slashes': true,
     'auth': 'user:pw',
     'host': 'www.example.com',
     'hostname': 'www.example.com',
     'pathname': '/',
-    'path': '/'
+    'path': '/',
+    'username': 'user:pw'
   },
 
   'http://x.com/path?that\'s#all, folks' : {
@@ -268,7 +274,7 @@ var parseTests = {
 
   'http://mt0.google.com/vt/lyrs=m@114???&hl=en&src=api&x=2&y=2&z=3&s=' : {
     'href': 'http://mt0.google.com/vt/lyrs=m@114???&hl=en&src=api' +
-        '&x=2&y=2&z=3&s=',
+    '&x=2&y=2&z=3&s=',
     'protocol': 'http:',
     'slashes': true,
     'host': 'mt0.google.com',
@@ -280,19 +286,21 @@ var parseTests = {
   },
 
   'http://user:pass@mt0.google.com/vt/lyrs=m@114???&hl=en&src=api&x=2&y=2&z=3&s=':
-      {
-        'href': 'http://user:pass@mt0.google.com/vt/lyrs=m@114???' +
-            '&hl=en&src=api&x=2&y=2&z=3&s=',
-        'protocol': 'http:',
-        'slashes': true,
-        'host': 'mt0.google.com',
-        'auth': 'user:pass',
-        'hostname': 'mt0.google.com',
-        'search': '???&hl=en&src=api&x=2&y=2&z=3&s=',
-        'query': '??&hl=en&src=api&x=2&y=2&z=3&s=',
-        'pathname': '/vt/lyrs=m@114',
-        'path': '/vt/lyrs=m@114???&hl=en&src=api&x=2&y=2&z=3&s='
-      },
+  {
+    'href': 'http://user:pass@mt0.google.com/vt/lyrs=m@114???' +
+    '&hl=en&src=api&x=2&y=2&z=3&s=',
+    'protocol': 'http:',
+    'slashes': true,
+    'host': 'mt0.google.com',
+    'auth': 'user:pass',
+    'hostname': 'mt0.google.com',
+    'search': '???&hl=en&src=api&x=2&y=2&z=3&s=',
+    'query': '??&hl=en&src=api&x=2&y=2&z=3&s=',
+    'pathname': '/vt/lyrs=m@114',
+    'path': '/vt/lyrs=m@114???&hl=en&src=api&x=2&y=2&z=3&s=',
+    'username': 'user',
+    'password': 'pass'
+  },
 
   'file:///etc/passwd' : {
     'href': 'file:///etc/passwd',
@@ -373,7 +381,9 @@ var parseTests = {
     'search': '?baz=quux',
     'query': 'baz=quux',
     'pathname': '/foo/bar',
-    'path': '/foo/bar?baz=quux'
+    'path': '/foo/bar?baz=quux',
+    'username': 'user',
+    'password': 'pass'
   },
 
   '//user:pass@example.com:8000/foo/bar?baz=quux#frag' : {
@@ -387,7 +397,9 @@ var parseTests = {
     'search': '?baz=quux',
     'query': 'baz=quux',
     'pathname': '/foo/bar',
-    'path': '/foo/bar?baz=quux'
+    'path': '/foo/bar?baz=quux',
+    'username': 'user',
+    'password': 'pass'
   },
 
   '/foo/bar?baz=quux#frag' : {
@@ -417,7 +429,8 @@ var parseTests = {
     'hostname' : 'bar.com',
     'search': '?subject=hello',
     'query': 'subject=hello',
-    'path': '?subject=hello'
+    'path': '?subject=hello',
+    'username': 'foo'
   },
 
   'javascript:alert(\'hello\');' : {
@@ -432,7 +445,8 @@ var parseTests = {
     'protocol': 'xmpp:',
     'host': 'jabber.org',
     'auth': 'isaacschlueter',
-    'hostname': 'jabber.org'
+    'hostname': 'jabber.org',
+    'username': 'isaacschlueter'
   },
 
   'http://atpass:foo%40bar@127.0.0.1:8080/path?search=foo#bar' : {
@@ -447,7 +461,9 @@ var parseTests = {
     'search' : '?search=foo',
     'query' : 'search=foo',
     'hash' : '#bar',
-    'path': '/path?search=foo'
+    'path': '/path?search=foo',
+    'username': 'atpass',
+    'password': 'foo@bar'
   },
 
   'svn+ssh://foo/bar': {
@@ -647,7 +663,9 @@ var parseTests = {
     'hostname': '3ffe:2a00:100:7031::1',
     'href': 'http://user:password@[3ffe:2a00:100:7031::1]:8080/',
     'pathname': '/',
-    'path': '/'
+    'path': '/',
+    'username': 'user',
+    'password': 'password'
   },
 
   'coap://u:p@[::192.9.5.5]:61616/.well-known/r?n=Temperature': {
@@ -661,7 +679,9 @@ var parseTests = {
     'search': '?n=Temperature',
     'query': 'n=Temperature',
     'pathname': '/.well-known/r',
-    'path': '/.well-known/r?n=Temperature'
+    'path': '/.well-known/r?n=Temperature',
+    'username': 'u',
+    'password': 'p'
   },
 
   // empty port
@@ -751,6 +771,8 @@ var parseTests = {
     'href': 'http://user:pass@-lovemonsterz.tumblr.com/rss',
     'pathname': '/rss',
     'path': '/rss',
+    'username': 'user',
+    'password': 'pass'
   },
 
   'http://user:pass@-lovemonsterz.tumblr.com:80/rss': {
@@ -763,6 +785,8 @@ var parseTests = {
     'href': 'http://user:pass@-lovemonsterz.tumblr.com:80/rss',
     'pathname': '/rss',
     'path': '/rss',
+    'username': 'user',
+    'password': 'pass'
   },
 
   'http://_jabber._tcp.google.com/test': {
@@ -784,6 +808,8 @@ var parseTests = {
     'href': 'http://user:pass@_jabber._tcp.google.com/test',
     'pathname': '/test',
     'path': '/test',
+    'username': 'user',
+    'password': 'pass'
   },
 
   'http://_jabber._tcp.google.com:80/test': {
@@ -807,6 +833,8 @@ var parseTests = {
     'href': 'http://user:pass@_jabber._tcp.google.com:80/test',
     'pathname': '/test',
     'path': '/test',
+    'username': 'user',
+    'password': 'pass'
   },
 
   'http://x:1/\' <>"`/{}|\\^~`/': {
@@ -828,7 +856,8 @@ var parseTests = {
     hostname: 'c',
     href: 'http://a%40b@c/',
     path: '/',
-    pathname: '/'
+    pathname: '/',
+    username: 'a@b'
   },
 
   'http://a@b?@c': {
@@ -841,7 +870,8 @@ var parseTests = {
     path: '/?@c',
     pathname: '/',
     search: '?@c',
-    query: '@c'
+    query: '@c',
+    username: 'a'
   },
 
   'http://a\r" \t\n<\'b:b@c\r\nd/e?f':{
@@ -856,7 +886,9 @@ var parseTests = {
     query: 'f',
     pathname: '%0D%0Ad/e',
     path: '%0D%0Ad/e?f',
-    href: 'http://a%0D%22%20%09%0A%3C\'b:b@c/%0D%0Ad/e?f'
+    href: 'http://a%0D%22%20%09%0A%3C\'b:b@c/%0D%0Ad/e?f',
+    username: 'a\r" \t\n<\'b',
+    password: 'b'
   },
 
   // git urls used by npm
@@ -872,7 +904,8 @@ var parseTests = {
     query: null,
     pathname: '/:npm/npm',
     path: '/:npm/npm',
-    href: 'git+ssh://git@github.com/:npm/npm'
+    href: 'git+ssh://git@github.com/:npm/npm',
+    username: 'git'
   }
 
 };
@@ -1178,6 +1211,14 @@ var relativeTests = [
   ['/foo/bar/baz/', 'quux/baz', '/foo/bar/baz/quux/baz'],
   ['/foo/bar/baz', '../../../../../../../../quux/baz', '/quux/baz'],
   ['/foo/bar/baz', '../../../../../../../quux/baz', '/quux/baz'],
+  ['/foo', '.', '/'],
+  ['/foo', '..', '/'],
+  ['/foo/', '.', '/foo/'],
+  ['/foo/', '..', '/'],
+  ['/foo/bar', '.', '/foo/'],
+  ['/foo/bar', '..', '/'],
+  ['/foo/bar/', '.', '/foo/bar/'],
+  ['/foo/bar/', '..', '/foo/'],
   ['foo/bar', '../../../baz', '../../baz'],
   ['foo/bar/', '../../../baz', '../baz'],
   ['http://example.com/b//c//d;p?q#blarg', 'https:#hash2', 'https:///#hash2'],
