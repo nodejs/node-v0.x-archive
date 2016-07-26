@@ -609,6 +609,61 @@ class ZCtx : public AsyncWrap {
 };
 
 
+template <uLong (*update)(uLong checksum, const Bytef *buf, uInt len)>
+class Checksum : public BaseObject {
+public:
+  static void Initialize(Environment* env, v8::Handle<v8::Object> target, v8::Handle<v8::String> name) {
+    Local<FunctionTemplate> t = FunctionTemplate::New(env->isolate(), New);
+
+    t->InstanceTemplate()->SetInternalFieldCount(1);
+
+    NODE_SET_PROTOTYPE_METHOD(t, "update", ChecksumUpdate);
+    NODE_SET_PROTOTYPE_METHOD(t, "digest", ChecksumDigest);
+
+    target->Set(name, t->GetFunction());
+  }
+
+protected:
+  static void New(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
+
+    Checksum* checksum = new Checksum(env, args.This());
+  }
+
+  static void ChecksumUpdate(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
+
+    Checksum* checksum = Unwrap<Checksum>(args.This());
+
+    assert(Buffer::HasInstance(args[0]));
+
+    char* buf = Buffer::Data(args[0]);
+    size_t buflen = Buffer::Length(args[0]);
+    checksum->checksum_ = update(checksum->checksum_, reinterpret_cast<Bytef *>(buf), buflen);
+  }
+
+  static void ChecksumDigest(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    Environment* env = Environment::GetCurrent(args.GetIsolate());
+    HandleScope scope(env->isolate());
+
+    Checksum* checksum = Unwrap<Checksum>(args.This());
+
+    args.GetReturnValue().Set(Number::New(env->isolate(), checksum->checksum_));
+  }
+
+  Checksum(Environment* env, v8::Local<v8::Object> wrap)
+      : BaseObject(env, wrap),
+        checksum_(update(0L, Z_NULL, 0)) {
+    MakeWeak<Checksum>(this);
+  }
+
+private:
+  uLong checksum_;
+};
+
+
 void InitZlib(Handle<Object> target,
               Handle<Value> unused,
               Handle<Context> context,
@@ -627,6 +682,9 @@ void InitZlib(Handle<Object> target,
 
   z->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "Zlib"));
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "Zlib"), z->GetFunction());
+
+  Checksum<adler32>::Initialize(env, target, FIXED_ONE_BYTE_STRING(env->isolate(), "Adler32"));
+  Checksum<crc32>::Initialize(env, target, FIXED_ONE_BYTE_STRING(env->isolate(), "CRC32"));
 
   // valid flush values.
   NODE_DEFINE_CONSTANT(target, Z_NO_FLUSH);
