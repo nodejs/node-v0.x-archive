@@ -348,7 +348,7 @@ Construct a new socket object.
 
 `options` is an object with the following defaults:
 
-    { fd: null
+    { fd: null,
       allowHalfOpen: false,
       readable: false,
       writable: false
