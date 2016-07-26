@@ -724,6 +724,168 @@ Examples of Transform streams include:
 * [crypto streams][]
 
 
+### Common Stream Methods
+
+**All** streams have the following methods, be they Readable, Writable, Duplex,
+Transform, PassThrough, or classic.
+
+#### stream.addPipelineErrorHandler(handlerFunction)
+
+Adds an error handler to the stream. This is *distinct* from adding an 
+"error" listener: all errors that occur upstream of this handler will be forwarded
+to this handler. This handler fires before the streams are unpiped, and has the 
+option of preventing the default error handling behavior. The handlerFunction is
+provided a single argument, a [PipelineErrorEvent][] object that provides the original
+error object and the stream the error originated on.
+
+```javascript
+
+var A = createReadableSomehow();
+var B = createTransform();
+var C = createWritable();
+
+A.name = 'A';
+B.name = 'B';
+C.name = 'C';
+
+C.addPipelineErrorHandler(function(errorEvent) {
+  console.log(errorEvent.stream.name, errorEvent.error);
+
+  // prevent the stream from unpiping or exploding if there are
+  // no "error" listeners.
+  errorEvent.handleError();
+})
+
+A.pipe(B).pipe(C);
+
+A.emit('error', new Error('problem!'));   // logs, "A problem!"
+B.emit('error', new Error('problem!'));   // logs, "B problem!"
+C.emit('error', new Error('problem!'));   // logs, "C problem!"
+```
+
+If the error is not handled on the current turn of the event loop, the streams
+will be unpiped and if there are no error listeners on the stream that
+generated the error, the error will be thrown. For example:
+
+```javascript
+A.pipe(B).pipe(C).addPipelineErrorHandler(function (ev) {
+  console.log(ev.error.message);
+});
+
+A.emit('error', new Error('beep boop')); // logs "beep boop", and then the process crashes
+```
+
+Error events will propagate downward from the stream that emitted them. Handling
+the error event will also stop its propagation downstream.
+
+```javascript
+
+A.pipe(B).addPipelineErrorHandler(function (ev) {
+    console.log('B');
+  })
+  .pipe(C).addPipelineErrorHandler(function (ev) {
+    console.log('C');
+    ev.handleError();
+  })
+  .pipe(D).addPipelineErrorHandler(function (ev) {
+    console.log('D')
+  });
+
+A.emit('error', new Error('hello!')); // logs "B" and "C", but *not* "D"
+```
+
+#### stream.removePipelineErrorHandler(handlerFunction)
+
+Remove an error handler from a stream.
+
+```javascript
+
+var handler = function (ev) {
+  ev.handleError();
+};
+aStream.addPipelineErrorHandler(handler);
+aStream.removePipelineErrorHandler(handler);
+```
+
+#### stream.next()
+
+Returns an array of streams that this stream is piped to currently.
+
+```javascript
+A.pipe(B).pipe(C);
+A.next(); // [B]
+A.pipe(X);
+A.next(); // [B, X]
+```
+
+#### stream.prev()
+
+Returns an array of streams that are piping to this stream.
+
+```javascript
+A.pipe(B).pipe(C);
+C.prev(); // [B]
+X.pipe(C);
+C.prev(); // [B, X]
+```
+
+#### stream.nextAll()
+
+Returns an array of streams representing all downstream streams from this stream,
+with no cycles or duplicates, not including the current stream.
+
+```javascript
+A.pipe(B).pipe(C).pipe(D);
+A.pipe(X).pipe(Y);
+
+A.nextAll() // [B, C, D, X, Y]
+
+U.pipe(V).pipe(U);
+U.nextAll() // [V]
+```
+
+#### stream.prevAll()
+
+Returns an array of streams representing all upstream streams from this stream,
+with no cycles or duplicates, not including the current stream.
+
+```javascript
+A.pipe(B).pipe(C).pipe(D);
+X.pipe(Y).pipe(D);
+
+D.prevAll() // [C, B, A, Y, X]
+```
+
+### Class: PipelineErrorEvent
+
+This is the object that is provided to pipeline error handlers. It
+contains details about the error -- the original error object, as well
+as the stream the error was initially emitted on. Additionally, within
+an error event handler, it can be used to stop propagation of the error
+event and prevent the default unpiping behavior. Users should never need
+to instantiate this class themselves.
+
+```javascript
+
+fs.createReadStream('does/not/exist')
+  .pipe(http.request('http://localhost:8124'))
+  .addPipelineErrorHandler(function (errorEvent) {
+    errorEvent.error        // Error: ENOENT
+    errorEvent.stream       // fs.ReadStream
+    errorEvent.isHandled()  // 
+  })
+
+```
+
+#### errorEvent.isHandled()
+
+Returns a boolean value -- true if the error event is handled, and false if it
+is not.
+
+#### errorEvent.handleError()
+
+Prevents the error event from unpiping the streams, and stops the event from propagating downstream.
+
 ## API for Stream Implementors
 
 <!--type=misc-->
