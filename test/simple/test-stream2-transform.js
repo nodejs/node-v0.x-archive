@@ -230,7 +230,7 @@ test('assymetric transform (expand)', function(t) {
   });
 });
 
-test('assymetric transform (compress)', function(t) {
+test('asymmetric transform (compress)', function(t) {
   var pt = new Transform;
 
   // each output is the first char of 3 consecutive chunks,
@@ -519,4 +519,40 @@ test('object transform (json stringify)', function(t) {
     t.ok(ended);
     t.end();
   })
+});
+
+test("_flush with async call should complete before 'finish' is triggered", function (t) {
+  var stream = new Transform();
+
+  var order = [];
+
+  // Nothing interesting here
+  stream._transform = function (chunk, enc, next) {
+    next();
+  };
+
+  // _flush makes an async call.
+  stream._flush = function (callback) {
+    order.push("Expecting 1st: starting flush");
+
+    return process.nextTick(function () {
+      order.push("Expecting 2nd: finishing flush");
+      callback();
+    });
+  };
+
+  stream.on('finish',function () {
+    order.push("Expecting 3rd: finish triggered after flush is done");
+
+    t.same(order,[
+      "Expecting 1st: starting flush",
+      "Expecting 2nd: finishing flush",
+      "Expecting 3rd: finish triggered after flush is done"
+   ]);
+   t.end();
+
+  });
+
+  stream.end("chunk");
+
 });
