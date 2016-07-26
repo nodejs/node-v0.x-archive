@@ -856,6 +856,45 @@ Emitted when the WriteStream's file is opened.
 The number of bytes written so far. Does not include data that is still queued
 for writing.
 
+
+## fs.createDuplexStream(path, [options])
+
+Returns a new DuplexStream object (See `Duplex Stream`).
+
+`options` is an object with the following defaults:
+
+    { flags: 'r+',
+      encoding: null,
+      fd: null,
+      mode: 0666,
+      autoClose: true
+    }
+
+For more information on `options`, see `ReadStream` and `WriteStream`.
+Note that replacing a file rather than modifying it may require a `flags`
+mode of `w+` rather than the default mode `r+`.
+
+Note that if `autoClose` is set to false, the `fd` used by `DuplexStream`
+will still be closed if `end` is called.
+
+## Class: fs.DuplexStream
+
+`DuplexStream` is a [Duplex Stream](stream.html#stream_class_stream_duplex).
+It is built using parasitic inheritance from the the above ReadStream and
+WriteStream classes. 
+
+### Event: 'open'
+
+* `fd` {Integer} file descriptor used by the ReadStream.
+
+Emitted when the DuplexStream's file is opened.
+
+### file.bytesWritten
+
+The number of bytes written so far. Does not include data that is still queued
+for writing.
+
+
 ## Class: fs.FSWatcher
 
 Objects returned from `fs.watch()` are of this type.
