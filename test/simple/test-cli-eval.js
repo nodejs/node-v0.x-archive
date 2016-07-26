@@ -66,6 +66,22 @@ child.exec(nodejs + ' --eval "console.error(42)"',
       });
 });
 
+['--printf', '-n -e', '-ne', '-n'].forEach(function(s) {
+  var cmd = nodejs + ' ' + s + ' ';
+
+  child.exec(cmd + '42',
+      function(err, stdout, stderr) {
+        assert.equal(stdout, '42');
+        assert.equal(stderr, '');
+      });
+
+  child.exec(cmd + "'[]'",
+      function(err, stdout, stderr) {
+        assert.equal(stdout, '[]');
+        assert.equal(stderr, '');
+      });
+});
+
 // assert that module loading works
 child.exec(nodejs + ' --eval "require(\'' + filename + '\')"',
     function(status, stdout, stderr) {

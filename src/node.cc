@@ -123,6 +123,7 @@ using v8::Value;
 using v8::kExternalUint32Array;
 
 static bool print_eval = false;
+static bool printf_eval = false;
 static bool force_repl = false;
 static bool trace_deprecation = false;
 static bool throw_deprecation = false;
@@ -2685,6 +2686,11 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process, "_print_eval", True(env->isolate()));
   }
 
+  // -n, --printf
+  if (printf_eval) {
+    READONLY_PROPERTY(process, "_printf_eval", True(env->isolate()));
+  }
+
   // -i, --interactive
   if (force_repl) {
     READONLY_PROPERTY(process, "_forceRepl", True(env->isolate()));
@@ -2918,6 +2924,7 @@ static void PrintHelp() {
          "  -v, --version        print node's version\n"
          "  -e, --eval script    evaluate script\n"
          "  -p, --print          evaluate script and print result\n"
+         "  -n, --printf         same as -p, but without a trailing newline\n"
          "  -i, --interactive    always enter the REPL even if stdin\n"
          "                       does not appear to be a terminal\n"
          "  --no-deprecation     silence deprecation warnings\n"
@@ -3020,11 +3027,21 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--eval") == 0 ||
                strcmp(arg, "-e") == 0 ||
                strcmp(arg, "--print") == 0 ||
+               strcmp(arg, "-p") == 0 ||
+               strcmp(arg, "--printf") == 0 ||
+               strcmp(arg, "-n") == 0 ||
                strcmp(arg, "-pe") == 0 ||
-               strcmp(arg, "-p") == 0) {
+               strcmp(arg, "-ne") == 0) {
       bool is_eval = strchr(arg, 'e') != NULL;
-      bool is_print = strchr(arg, 'p') != NULL;
+      bool is_printf = strcmp(arg, "-n") == 0 ||
+                       strcmp(arg, "--printf") == 0 ||
+                       strcmp(arg, "-ne") == 0;
+      bool is_print = strcmp(arg, "-p") == 0 ||
+                      strcmp(arg, "-pe") == 0 ||
+                      (strcmp(arg, "--print") == 0 &&
+                        strcmp(arg, "--printf") != 0);
       print_eval = print_eval || is_print;
+      printf_eval = (printf_eval || is_printf) && !print_eval;
       // --eval, -e and -pe always require an argument.
       if (is_eval == true) {
         args_consumed += 1;
