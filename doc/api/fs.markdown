@@ -153,11 +153,14 @@ Only available on Mac OS X.
 
 Synchronous lchmod(2). Returns `undefined`.
 
-## fs.stat(path, callback)
+## fs.stat(path, callback, [throwSafe])
 
 Asynchronous stat(2). The callback gets two arguments `(err, stats)` where
 `stats` is a [fs.Stats](#fs_class_fs_stats) object.  See the [fs.Stats](#fs_class_fs_stats)
 section below for more information.
+
+The throwSafe parameter if set to true prevents the error creation. If the call
+fails, the first parameter of the callback will be true.
 
 ## fs.lstat(path, callback)
 
@@ -172,9 +175,12 @@ Asynchronous fstat(2). The callback gets two arguments `(err, stats)` where
 `stats` is a `fs.Stats` object. `fstat()` is identical to `stat()`, except that
 the file to be stat-ed is specified by the file descriptor `fd`.
 
-## fs.statSync(path)
+## fs.statSync(path, [throwSafe])
 
 Synchronous stat(2). Returns an instance of `fs.Stats`.
+
+The throwSafe parameter if set to true prevents the error creation. If the call
+fails, the first parameter of the callback will be true.
 
 ## fs.lstatSync(path)
 

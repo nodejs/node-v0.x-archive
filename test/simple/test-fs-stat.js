@@ -36,6 +36,34 @@ fs.stat('.', function(err, stats) {
   assert(this === global);
 });
 
+fs.stat('.', function(err, stats) {
+  if (err) {
+    got_error = true;
+  } else {
+    console.dir(stats);
+    assert.ok(stats.mtime instanceof Date);
+    success_count++;
+  }
+  assert(this === global);
+}, true);
+
+fs.stat('nonexisting_file', function(err, stats) {
+  if (err) {
+    assert.ok(err instanceof Error);
+    success_count++;
+  } else {
+    got_error = true;
+  }
+  assert(this === global);
+});
+
+fs.stat('nonexisting_file', function(err, stats) {
+  assert.equal(true, err);
+  assert.equal(false, stats);
+  assert(this === global);
+  success_count++;
+}, true);
+
 fs.lstat('.', function(err, stats) {
   if (err) {
     got_error = true;
@@ -84,40 +112,39 @@ fs.open('.', 'r', undefined, function(err, fd) {
 });
 
 console.log('stating: ' + __filename);
-fs.stat(__filename, function(err, s) {
+fs.stat(__filename, function(err, stats) {
   if (err) {
     got_error = true;
   } else {
-    console.dir(s);
+    console.dir(stats);
     success_count++;
 
-    console.log('isDirectory: ' + JSON.stringify(s.isDirectory()));
-    assert.equal(false, s.isDirectory());
+    console.log('isDirectory: ' + JSON.stringify(stats.isDirectory()));
+    assert.equal(false, stats.isDirectory());
 
-    console.log('isFile: ' + JSON.stringify(s.isFile()));
-    assert.equal(true, s.isFile());
+    console.log('isFile: ' + JSON.stringify(stats.isFile()));
+    assert.equal(true, stats.isFile());
 
-    console.log('isSocket: ' + JSON.stringify(s.isSocket()));
-    assert.equal(false, s.isSocket());
+    console.log('isSocket: ' + JSON.stringify(stats.isSocket()));
+    assert.equal(false, stats.isSocket());
 
-    console.log('isBlockDevice: ' + JSON.stringify(s.isBlockDevice()));
-    assert.equal(false, s.isBlockDevice());
+    console.log('isBlockDevice: ' + JSON.stringify(stats.isBlockDevice()));
+    assert.equal(false, stats.isBlockDevice());
 
-    console.log('isCharacterDevice: ' + JSON.stringify(s.isCharacterDevice()));
-    assert.equal(false, s.isCharacterDevice());
+    console.log('isCharacterDevice: ' + JSON.stringify(stats.isCharacterDevice()));
+    assert.equal(false, stats.isCharacterDevice());
 
-    console.log('isFIFO: ' + JSON.stringify(s.isFIFO()));
-    assert.equal(false, s.isFIFO());
+    console.log('isFIFO: ' + JSON.stringify(stats.isFIFO()));
+    assert.equal(false, stats.isFIFO());
 
-    console.log('isSymbolicLink: ' + JSON.stringify(s.isSymbolicLink()));
-    assert.equal(false, s.isSymbolicLink());
+    console.log('isSymbolicLink: ' + JSON.stringify(stats.isSymbolicLink()));
+    assert.equal(false, stats.isSymbolicLink());
 
-    assert.ok(s.mtime instanceof Date);
+    assert.ok(stats.mtime instanceof Date);
   }
 });
 
 process.on('exit', function() {
-  assert.equal(5, success_count);
+  assert.equal(8, success_count);
   assert.equal(false, got_error);
 });
-

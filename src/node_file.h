@@ -27,6 +27,12 @@
 
 namespace node {
 
+struct node_fs_t {
+    uv_fs_t req;
+    int throwSafe;
+    void* data;
+};
+
 class File {
  public:
   static void Initialize(v8::Handle<v8::Object> target);

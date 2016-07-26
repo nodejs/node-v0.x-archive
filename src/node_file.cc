@@ -49,7 +49,7 @@ using namespace v8;
 
 #define THROW_BAD_ARGS TYPE_ERROR("Bad argument")
 
-class FSReqWrap: public ReqWrap<uv_fs_t> {
+class FSReqWrap: public ReqWrap<node_fs_t> {
  public:
   void* operator new(size_t size, char* storage) { return storage; }
 
@@ -92,8 +92,10 @@ static inline bool IsInt64(double x) {
 static void After(uv_fs_t *req) {
   HandleScope scope;
 
-  FSReqWrap* req_wrap = (FSReqWrap*) req->data;
-  assert(&req_wrap->req_ == req);
+  node_fs_t* req_node = (node_fs_t*) req;
+
+  FSReqWrap* req_wrap = (FSReqWrap*) req_node->data;
+  assert(&req_wrap->req_.req == req);
 
   // there is always at least one argument. "error"
   int argc = 1;
@@ -107,7 +109,11 @@ static void After(uv_fs_t *req) {
   if (req->result == -1) {
     // If the request doesn't have a path parameter set.
 
-    if (!req->path) {
+    if (req_node->throwSafe == 1) {
+      argc = 2;
+      argv[0] = Local<Value>::New(True());
+      argv[1] = Local<Value>::New(False());
+    } else if (!req->path) {
       argv[0] = UVException(req->errorno,
                             NULL,
                             req_wrap->syscall());
@@ -125,6 +131,7 @@ static void After(uv_fs_t *req) {
                             req_wrap->syscall(),
                             static_cast<const char*>(req->path));
     }
+
   } else {
     // error value is empty or null for non-error.
     argv[0] = Local<Value>::New(Null());
@@ -213,7 +220,7 @@ static void After(uv_fs_t *req) {
   }
   MakeCallback(req_wrap->object_, oncomplete_sym, argc, argv);
 
-  uv_fs_req_cleanup(&req_wrap->req_);
+  uv_fs_req_cleanup(&req_wrap->req_.req);
   delete req_wrap;
 }
 
@@ -221,15 +228,16 @@ static void After(uv_fs_t *req) {
 // For async calls FSReqWrap is used.
 struct fs_req_wrap {
   fs_req_wrap() {}
-  ~fs_req_wrap() { uv_fs_req_cleanup(&req); }
+  ~fs_req_wrap() { uv_fs_req_cleanup(&req.req); }
   // Ensure that copy ctor and assignment operator are not used.
   fs_req_wrap(const fs_req_wrap& req);
   fs_req_wrap& operator=(const fs_req_wrap& req);
-  uv_fs_t req;
+  node_fs_t req;
 };
 
 
-#define ASYNC_DEST_CALL(func, callback, dest_path, ...)           \
+#define ASYNC_DEST_CALL(func, callback, dest_path,                \
+  throwSafeValue, ...)                                            \
   FSReqWrap* req_wrap;                                            \
   char* dest_str = (dest_path);                                   \
   int dest_len = dest_str == NULL ? 0 : strlen(dest_str);         \
@@ -241,14 +249,15 @@ struct fs_req_wrap {
            dest_str,                                              \
            dest_len + 1);                                         \
   }                                                               \
+  req_wrap->req_.throwSafe = throwSafeValue;                      \
   int r = uv_fs_##func(uv_default_loop(),                         \
-                       &req_wrap->req_,                           \
+                       &req_wrap->req_.req,                       \
                        __VA_ARGS__,                               \
                        After);                                    \
   req_wrap->object_->Set(oncomplete_sym, callback);               \
   req_wrap->Dispatched();                                         \
   if (r < 0) {                                                    \
-    uv_fs_t* req = &req_wrap->req_;                               \
+    uv_fs_t* req = &req_wrap->req_.req;                           \
     req->result = r;                                              \
     req->path = NULL;                                             \
     req->errorno = uv_last_error(uv_default_loop()).code;         \
@@ -256,16 +265,21 @@ struct fs_req_wrap {
   }                                                               \
   return scope.Close(req_wrap->object_);
 
-#define ASYNC_CALL(func, callback, ...)                           \
-  ASYNC_DEST_CALL(func, callback, NULL, __VA_ARGS__)              \
+#define ASYNC_CALL(func, callback, throwSafeValue, ...)           \
+  ASYNC_DEST_CALL(func, callback, NULL, throwSafeValue,           \
+    __VA_ARGS__)                                                  \
 
-#define SYNC_DEST_CALL(func, path, dest, ...)                     \
+#define SYNC_DEST_CALL(func, path, dest, throwSafeValue, ...)     \
   fs_req_wrap req_wrap;                                           \
+  req_wrap.req.throwSafe = throwSafeValue;                        \
   int result = uv_fs_##func(uv_default_loop(),                    \
-                            &req_wrap.req,                        \
+                            &req_wrap.req.req,                    \
                             __VA_ARGS__,                          \
                             NULL);                                \
   if (result < 0) {                                               \
+    if (req_wrap.req.throwSafe == 1) {                            \
+      return False();                                             \
+    }                                                             \
     int code = uv_last_error(uv_default_loop()).code;             \
     if (dest != NULL &&                                           \
         (code == UV_EEXIST ||                                     \
@@ -277,10 +291,10 @@ struct fs_req_wrap {
     }                                                             \
   }                                                               \
 
-#define SYNC_CALL(func, path, ...)                                \
-  SYNC_DEST_CALL(func, path, NULL, __VA_ARGS__)                   \
+#define SYNC_CALL(func, path, throwSafeValue, ...)                \
+  SYNC_DEST_CALL(func, path, NULL, throwSafeValue, __VA_ARGS__)   \
 
-#define SYNC_REQ req_wrap.req
+#define SYNC_REQ req_wrap.req.req
 
 #define SYNC_RESULT result
 
@@ -295,9 +309,9 @@ static Handle<Value> Close(const Arguments& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(close, args[1], fd)
+    ASYNC_CALL(close, args[1], 0, fd)
   } else {
-    SYNC_CALL(close, 0, fd)
+    SYNC_CALL(close, 0, 0, fd)
     return Undefined();
   }
 }
@@ -406,10 +420,15 @@ static Handle<Value> Stat(const Arguments& args) {
 
   node::Utf8Value path(args[0]);
 
+  int throwSafe = 0;
+  if (args[2]->IsTrue()) {
+    throwSafe = 1;
+  }
+
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(stat, args[1], *path)
+    ASYNC_CALL(stat, args[1], throwSafe, *path)
   } else {
-    SYNC_CALL(stat, *path, *path)
+    SYNC_CALL(stat, *path, throwSafe, *path)
     return scope.Close(
         BuildStatsObject(static_cast<const uv_statbuf_t*>(SYNC_REQ.ptr)));
   }
@@ -424,9 +443,9 @@ static Handle<Value> LStat(const Arguments& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(lstat, args[1], *path)
+    ASYNC_CALL(lstat, args[1], 0, *path)
   } else {
-    SYNC_CALL(lstat, *path, *path)
+    SYNC_CALL(lstat, *path, 0, *path)
     return scope.Close(
         BuildStatsObject(static_cast<const uv_statbuf_t*>(SYNC_REQ.ptr)));
   }
@@ -442,9 +461,9 @@ static Handle<Value> FStat(const Arguments& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(fstat, args[1], fd)
+    ASYNC_CALL(fstat, args[1], 0, fd)
   } else {
-    SYNC_CALL(fstat, 0, fd)
+    SYNC_CALL(fstat, 0, 0, fd)
     return scope.Close(
         BuildStatsObject(static_cast<const uv_statbuf_t*>(SYNC_REQ.ptr)));
   }
@@ -476,9 +495,9 @@ static Handle<Value> Symlink(const Arguments& args) {
   }
 
   if (args[3]->IsFunction()) {
-    ASYNC_DEST_CALL(symlink, args[3], *dest, *dest, *path, flags)
+    ASYNC_DEST_CALL(symlink, args[3], *dest, 0, *dest, *path, flags)
   } else {
-    SYNC_DEST_CALL(symlink, *path, *dest, *dest, *path, flags)
+    SYNC_DEST_CALL(symlink, *path, *dest, 0, *dest, *path, flags)
     return Undefined();
   }
 }
@@ -496,9 +515,9 @@ static Handle<Value> Link(const Arguments& args) {
   node::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_DEST_CALL(link, args[2], *new_path, *orig_path, *new_path)
+    ASYNC_DEST_CALL(link, args[2], *new_path, 0, *orig_path, *new_path)
   } else {
-    SYNC_DEST_CALL(link, *orig_path, *new_path, *orig_path, *new_path)
+    SYNC_DEST_CALL(link, *orig_path, *new_path, 0, *orig_path, *new_path)
     return Undefined();
   }
 }
@@ -512,9 +531,9 @@ static Handle<Value> ReadLink(const Arguments& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(readlink, args[1], *path)
+    ASYNC_CALL(readlink, args[1], 0, *path)
   } else {
-    SYNC_CALL(readlink, *path, *path)
+    SYNC_CALL(readlink, *path, 0, *path)
     return scope.Close(String::New((char*)SYNC_REQ.ptr));
   }
 }
@@ -532,9 +551,9 @@ static Handle<Value> Rename(const Arguments& args) {
   node::Utf8Value new_path(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_DEST_CALL(rename, args[2], *new_path, *old_path, *new_path)
+    ASYNC_DEST_CALL(rename, args[2], *new_path, 0, *old_path, *new_path)
   } else {
-    SYNC_DEST_CALL(rename, *old_path, *new_path, *old_path, *new_path)
+    SYNC_DEST_CALL(rename, *old_path, *new_path, 0, *old_path, *new_path)
     return Undefined();
   }
 }
@@ -552,9 +571,9 @@ static Handle<Value> FTruncate(const Arguments& args) {
   int64_t len = GET_TRUNCATE_LENGTH(args[1]);
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(ftruncate, args[2], fd, len)
+    ASYNC_CALL(ftruncate, args[2], 0, fd, len)
   } else {
-    SYNC_CALL(ftruncate, 0, fd, len)
+    SYNC_CALL(ftruncate, 0, 0, fd, len)
     return Undefined();
   }
 }
@@ -569,9 +588,9 @@ static Handle<Value> Fdatasync(const Arguments& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(fdatasync, args[1], fd)
+    ASYNC_CALL(fdatasync, args[1], 0, fd)
   } else {
-    SYNC_CALL(fdatasync, 0, fd)
+    SYNC_CALL(fdatasync, 0, 0, fd)
     return Undefined();
   }
 }
@@ -586,9 +605,9 @@ static Handle<Value> Fsync(const Arguments& args) {
   int fd = args[0]->Int32Value();
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(fsync, args[1], fd)
+    ASYNC_CALL(fsync, args[1], 0, fd)
   } else {
-    SYNC_CALL(fsync, 0, fd)
+    SYNC_CALL(fsync, 0, 0, fd)
     return Undefined();
   }
 }
@@ -602,9 +621,9 @@ static Handle<Value> Unlink(const Arguments& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(unlink, args[1], *path)
+    ASYNC_CALL(unlink, args[1], 0, *path)
   } else {
-    SYNC_CALL(unlink, *path, *path)
+    SYNC_CALL(unlink, *path, 0, *path)
     return Undefined();
   }
 }
@@ -618,9 +637,9 @@ static Handle<Value> RMDir(const Arguments& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(rmdir, args[1], *path)
+    ASYNC_CALL(rmdir, args[1], 0, *path)
   } else {
-    SYNC_CALL(rmdir, *path, *path)
+    SYNC_CALL(rmdir, *path, 0, *path)
     return Undefined();
   }
 }
@@ -636,9 +655,9 @@ static Handle<Value> MKDir(const Arguments& args) {
   int mode = static_cast<int>(args[1]->Int32Value());
 
   if (args[2]->IsFunction()) {
-    ASYNC_CALL(mkdir, args[2], *path, mode)
+    ASYNC_CALL(mkdir, args[2], 0, *path, mode)
   } else {
-    SYNC_CALL(mkdir, *path, *path, mode)
+    SYNC_CALL(mkdir, *path, 0, *path, mode)
     return Undefined();
   }
 }
@@ -652,12 +671,12 @@ static Handle<Value> ReadDir(const Arguments& args) {
   node::Utf8Value path(args[0]);
 
   if (args[1]->IsFunction()) {
-    ASYNC_CALL(readdir, args[1], *path, 0 /*flags*/)
+    ASYNC_CALL(readdir, args[1], 0, *path, 0 /*flags*/)
   } else {
-    SYNC_CALL(readdir, *path, *path, 0 /*flags*/)
+    SYNC_CALL(readdir, *path, 0, *path, 0 /*flags*/)
 
     char *namebuf = static_cast<char*>(SYNC_REQ.ptr);
-    int nnames = req_wrap.req.result;
+    int nnames = req_wrap.req.req.result;
     Local<Array> names = Array::New(nnames);
 
     for (int i = 0; i < nnames; i++) {
@@ -692,9 +711,9 @@ static Handle<Value> Open(const Arguments& args) {
   int mode = static_cast<int>(args[2]->Int32Value());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(open, args[3], *path, flags, mode)
+    ASYNC_CALL(open, args[3], 0, *path, flags, mode)
   } else {
-    SYNC_CALL(open, *path, *path, flags, mode)
+    SYNC_CALL(open, *path, 0, *path, flags, mode)
     int fd = SYNC_RESULT;
     return scope.Close(Integer::New(fd));
   }
@@ -746,9 +765,9 @@ static Handle<Value> Write(const Arguments& args) {
   Local<Value> cb = args[5];
 
   if (cb->IsFunction()) {
-    ASYNC_CALL(write, cb, fd, buf, len, pos)
+    ASYNC_CALL(write, cb, 0, fd, buf, len, pos)
   } else {
-    SYNC_CALL(write, 0, fd, buf, len, pos)
+    SYNC_CALL(write, 0, 0, fd, buf, len, pos)
     return scope.Close(Integer::New(SYNC_RESULT));
   }
 }
@@ -809,9 +828,9 @@ static Handle<Value> Read(const Arguments& args) {
   cb = args[5];
 
   if (cb->IsFunction()) {
-    ASYNC_CALL(read, cb, fd, buf, len, pos);
+    ASYNC_CALL(read, cb, 0, fd, buf, len, pos);
   } else {
-    SYNC_CALL(read, 0, fd, buf, len, pos)
+    SYNC_CALL(read, 0, 0, fd, buf, len, pos)
     Local<Integer> bytesRead = Integer::New(SYNC_RESULT);
     return scope.Close(bytesRead);
   }
@@ -831,9 +850,9 @@ static Handle<Value> Chmod(const Arguments& args) {
   int mode = static_cast<int>(args[1]->Int32Value());
 
   if(args[2]->IsFunction()) {
-    ASYNC_CALL(chmod, args[2], *path, mode);
+    ASYNC_CALL(chmod, args[2], 0, *path, mode);
   } else {
-    SYNC_CALL(chmod, *path, *path, mode);
+    SYNC_CALL(chmod, *path, 0, *path, mode);
     return Undefined();
   }
 }
@@ -852,9 +871,9 @@ static Handle<Value> FChmod(const Arguments& args) {
   int mode = static_cast<int>(args[1]->Int32Value());
 
   if(args[2]->IsFunction()) {
-    ASYNC_CALL(fchmod, args[2], fd, mode);
+    ASYNC_CALL(fchmod, args[2], 0, fd, mode);
   } else {
-    SYNC_CALL(fchmod, 0, fd, mode);
+    SYNC_CALL(fchmod, 0, 0, fd, mode);
     return Undefined();
   }
 }
@@ -879,9 +898,9 @@ static Handle<Value> Chown(const Arguments& args) {
   uv_gid_t gid = static_cast<uv_gid_t>(args[2]->Uint32Value());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(chown, args[3], *path, uid, gid);
+    ASYNC_CALL(chown, args[3], 0, *path, uid, gid);
   } else {
-    SYNC_CALL(chown, *path, *path, uid, gid);
+    SYNC_CALL(chown, *path, 0, *path, uid, gid);
     return Undefined();
   }
 }
@@ -906,9 +925,9 @@ static Handle<Value> FChown(const Arguments& args) {
   uv_gid_t gid = static_cast<uv_gid_t>(args[2]->Uint32Value());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(fchown, args[3], fd, uid, gid);
+    ASYNC_CALL(fchown, args[3], 0, fd, uid, gid);
   } else {
-    SYNC_CALL(fchown, 0, fd, uid, gid);
+    SYNC_CALL(fchown, 0, 0, fd, uid, gid);
     return Undefined();
   }
 }
@@ -930,9 +949,9 @@ static Handle<Value> UTimes(const Arguments& args) {
   const double mtime = static_cast<double>(args[2]->NumberValue());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(utime, args[3], *path, atime, mtime);
+    ASYNC_CALL(utime, args[3], 0, *path, atime, mtime);
   } else {
-    SYNC_CALL(utime, *path, *path, atime, mtime);
+    SYNC_CALL(utime, *path, 0, *path, atime, mtime);
     return Undefined();
   }
 }
@@ -953,9 +972,9 @@ static Handle<Value> FUTimes(const Arguments& args) {
   const double mtime = static_cast<double>(args[2]->NumberValue());
 
   if (args[3]->IsFunction()) {
-    ASYNC_CALL(futime, args[3], fd, atime, mtime);
+    ASYNC_CALL(futime, args[3], 0, fd, atime, mtime);
   } else {
-    SYNC_CALL(futime, 0, fd, atime, mtime);
+    SYNC_CALL(futime, 0, 0, fd, atime, mtime);
     return Undefined();
   }
 }
