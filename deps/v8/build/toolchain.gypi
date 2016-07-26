@@ -554,9 +554,9 @@
             'Optimization': '0',
             'conditions': [
               ['component=="shared_library"', {
-                'RuntimeLibrary': '3',  # /MDd
+                'RuntimeLibrary': 3 # MDd
               }, {
-                'RuntimeLibrary': '1',  # /MTd
+                'RuntimeLibrary': 3 # MDd
               }],
             ],
           },
@@ -599,9 +599,9 @@
             'BasicRuntimeChecks': '0',
             'conditions': [
               ['component=="shared_library"', {
-                'RuntimeLibrary': '3',  # /MDd
+                'RuntimeLibrary': 3 # MDd
               }, {
-                'RuntimeLibrary': '1',  # /MTd
+                'RuntimeLibrary': 3 # MDd
               }],
             ],
           },
@@ -653,9 +653,9 @@
             'BasicRuntimeChecks': '0',
             'conditions': [
               ['component=="shared_library"', {
-                'RuntimeLibrary': '3',  #/MDd
+                'RuntimeLibrary': 3 # MDd
               }, {
-                'RuntimeLibrary': '1',  #/MTd
+                'RuntimeLibrary': 3 # MDd
               }],
               ['v8_target_arch=="x64"', {
                 # TODO(2207): remove this option once the bug is fixed.
@@ -826,9 +826,9 @@
                 'StringPooling': 'true',
                 'conditions': [
                   ['component=="shared_library"', {
-                    'RuntimeLibrary': '2',  #/MD
+                    'RuntimeLibrary': 2 # MD
                   }, {
-                    'RuntimeLibrary': '0',  #/MT
+                    'RuntimeLibrary': 2 # MD
                   }],
                   ['v8_target_arch=="x64"', {
                     # TODO(2207): remove this option once the bug is fixed.

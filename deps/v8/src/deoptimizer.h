@@ -451,9 +451,12 @@ class FrameDescription {
     return malloc(size + frame_size - kPointerSize);
   }
 
+  // Bug in VS2015 RC, reported fixed in RTM. Microsoft bug: 1153909.
+  #if !defined(_MSC_FULL_VER) || _MSC_FULL_VER != 190022720
   void operator delete(void* pointer, uint32_t frame_size) {
     free(pointer);
   }
+  #endif  // _MSC_FULL_VER
 
   void operator delete(void* description) {
     free(description);

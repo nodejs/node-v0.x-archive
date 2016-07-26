@@ -50,7 +50,7 @@
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'RuntimeLibrary': 1, # static debug
+            'RuntimeLibrary': 3, # MDd
             'Optimization': 0, # /Od, no optimization
             'MinimalRebuild': 'false',
             'OmitFramePointers': 'false',
@@ -89,7 +89,7 @@
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
-            'RuntimeLibrary': 0, # static release
+            'RuntimeLibrary': 2, # MD
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favour speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
@@ -181,7 +181,7 @@
       }],
       [ 'OS in "linux freebsd openbsd solaris android"', {
         'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
-        'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
+        'cflags_cc': [ '-fno-rtti', '-fno-exceptions', '-std=c++11' ],
         'ldflags': [ '-rdynamic' ],
         'target_conditions': [
           ['_type=="static_library"', {
@@ -212,6 +212,10 @@
       ['OS=="mac"', {
         'defines': ['_DARWIN_USE_64_BIT_INODE=1'],
         'xcode_settings': {
+          'CLANG_CXX_LIBRARY': 'libc++',
+          'CLANG_CXX_LANGUAGE_STANDARD':'c++11',
+          'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
+          'GCC_OPTIMIZATION_LEVEL': '3',
           'ALWAYS_SEARCH_USER_PATHS': 'NO',
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
           'GCC_DYNAMIC_NO_PIC': 'NO',               # No -mdynamic-no-pic
@@ -221,7 +225,7 @@
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
           'PREBINDING': 'NO',                       # No -Wl,-prebind
-          'MACOSX_DEPLOYMENT_TARGET': '10.5',       # -mmacosx-version-min=10.5
+          'MACOSX_DEPLOYMENT_TARGET': '10.9',       # -mmacosx-version-min=10.9
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [
             '-fno-strict-aliasing',

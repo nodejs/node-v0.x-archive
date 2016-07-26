@@ -2293,7 +2293,7 @@ static void EnvSetter(Local<String> property,
   WCHAR* key_ptr = reinterpret_cast<WCHAR*>(*key);
   // Environment variables that start with '=' are read-only.
   if (key_ptr[0] != L'=') {
-    SetEnvironmentVariableW(key_ptr, reinterpret_cast<WCHAR*>(*val));
+    _wputenv_s(key_ptr, reinterpret_cast<WCHAR*>(*val));
   }
 #endif
   // Whether it worked or not, always return rval.
