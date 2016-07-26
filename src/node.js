@@ -142,7 +142,7 @@
           useGlobal: true,
           ignoreUndefined: false
         };
-        if (parseInt(process.env['NODE_NO_READLINE'], 10)) {
+        if (parseInt(process.env['NODE_NO_READLINE'], 10) || process.env['TERM'] === 'dumb') {
           opts.terminal = false;
         }
         if (parseInt(process.env['NODE_DISABLE_COLORS'], 10)) {
