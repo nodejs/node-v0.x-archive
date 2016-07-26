@@ -403,3 +403,25 @@ test('finish is emitted if last chunk is empty', function(t) {
   w.write(Buffer(1));
   w.end(Buffer(0));
 });
+
+test('write flush', function(t) {
+  var w = new W();
+  var writtenData = [];
+  w._write = function(chunk, e, cb){
+    writtenData.push(chunk.toString());
+    cb();
+  }
+  w._flush = function(cb){
+    writtenData.push('flushed');
+    cb();
+  }
+
+  w.write('start');
+  w.end();
+
+  w.on('finish', function() {
+    t.equal(writtenData[0], 'start');
+    t.equal(writtenData[1], 'flushed');
+    t.end();
+  });
+});
