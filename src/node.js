@@ -170,8 +170,6 @@
   startup.globalVariables = function() {
     global.process = process;
     global.global = global;
-    global.GLOBAL = global;
-    global.root = global;
     global.Buffer = NativeModule.require('buffer').Buffer;
     process.domain = null;
     process._exiting = false;
