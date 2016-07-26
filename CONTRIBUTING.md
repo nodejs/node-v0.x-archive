@@ -52,7 +52,8 @@ and start hacking:
 $ git checkout -b my-feature-branch -t origin/v0.10
 ```
 
-(Where v0.10 is the latest stable branch as of this writing.)
+Where `v0.10` is the latest stable branch as of this writing if you want
+to add a bug fix, or `master` if you plan to add a new feature.
 
 
 ### COMMIT
@@ -72,6 +73,8 @@ changed and why.  Follow these guidelines when writing one:
    subsystem (e.g. "net: add localAddress and localPort to Socket").
 2. Keep the second line blank.
 3. Wrap all other lines at 72 columns.
+4. If this commit addresses a specific issue in the tracker
+   make sure to reference it appropriately.
 
 A good commit log looks like this:
 
@@ -86,6 +89,8 @@ The body of the commit message can be several paragraphs, and
 please do proper word-wrap and keep columns shorter than about
 72 characters or so. That way `git log` will show things
 nicely even when it is indented.
+
+Fixes #1234
 ```
 
 The header line should be meaningful; it is what other people see when they
@@ -103,6 +108,9 @@ Use `git rebase` (not `git merge`) to sync your work from time to time.
 $ git fetch upstream
 $ git rebase upstream/v0.10  # or upstream/master
 ```
+
+While you can select from any repository or branch to rebase against,
+you generally use the same branch you selected when creating this branch. 
 
 
 ### TEST
@@ -125,10 +133,10 @@ can use this syntax to run it exactly as the test harness would:
 python tools/test.py -v --mode=release simple/test-stream2-transform
 ```
 
-You can run tests directly with node:
+You can run tests directly with the built version of node with:
 
 ```
-node ./test/simple/test-streams2-transform.js
+./node ./test/simple/test-streams2-transform.js
 ```
 
 
@@ -139,7 +147,8 @@ $ git push origin my-feature-branch
 ```
 
 Go to https://github.com/username/node and select your feature branch.  Click
-the 'Pull Request' button and fill out the form.
+the 'Pull Request' button and fill out the form. The destination branch has
+to be the one that you initially used for your creating your feature branch.
 
 Pull requests are usually reviewed within a few days.  If there are comments
 to address, apply your changes in a separate commit and push that to your
