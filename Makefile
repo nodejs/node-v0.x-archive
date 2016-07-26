@@ -394,6 +394,9 @@ tools/wrk/wrk:
 bench-net: all
 	@$(NODE) benchmark/common.js net
 
+bench-events: all
+	@$(NODE) benchmark/common.js events
+
 bench-crypto: all
 	@$(NODE) benchmark/common.js crypto
 
