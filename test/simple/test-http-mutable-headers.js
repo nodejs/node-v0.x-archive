@@ -46,18 +46,32 @@ var s = http.createServer(function(req, res) {
       assert.throws(function() { res.setHeader('someHeader') });
       assert.throws(function() { res.getHeader() });
       assert.throws(function() { res.removeHeader() });
+      assert.throws(function() { res.setHeaders(1) });
+      assert.throws(function() { res.setHeaders([1]) });
 
       res.setHeader('x-test-header', 'testing');
       res.setHeader('X-TEST-HEADER2', 'testing');
       res.setHeader('set-cookie', cookies);
       res.setHeader('x-test-array-header', [1, 2, 3]);
+      res.setHeaders({
+        'x-test-setheaders': 'abc', 
+        'x-test-setheaders2': 'xyz'
+      });
 
       var val1 = res.getHeader('x-test-header');
       var val2 = res.getHeader('x-test-header2');
+
+      var val3 = res.getHeader('x-test-setheaders');
+      var val4 = res.getHeader('x-test-setheaders2');
+
       assert.equal(val1, 'testing');
       assert.equal(val2, 'testing');
+      assert.equal(val3, 'abc');
+      assert.equal(val4, 'xyz');
 
       res.removeHeader('x-test-header2');
+      res.removeHeader('x-test-setheaders');
+      res.removeHeader('x-test-setheaders2');
       break;
 
     case 'contentLength':

@@ -324,6 +324,28 @@ or
 
 Boolean (read-only). True if headers were sent, false otherwise.
 
+### response.setHeaders(headers) 
+
+Sets multiple header values for implicit headers. When multiple headers are 
+to be set, rather than calling `response.setHeader` for each, an object or
+an array containing each of the headers to be set can be passed to 
+`response.setHeaders`. If a header already exists in the to-be-sent headers,
+its value will be replaced. Use an array of strings as the value to send 
+multiple headers with the same name.
+
+    response.setHeaders({
+      "Content-Type": "text/html",
+      "Set-Cookie": ["type=ninja", "language=javascript"]
+    });
+
+The `headers` parameter can be passed either as an object (as illustrated above)
+or an array whose members are arrays (as illustrated below)
+
+    response.setHeaders([
+      ['Content-Type', 'text/html'],
+      ['Set-Cookie', ["type=ninja", "language=javascript"]]
+    ]);
+
 ### response.sendDate
 
 When true, the Date header will be automatically generated and sent in
@@ -394,6 +416,10 @@ emit trailers, with a list of the header fields in its value. E.g.,
     response.addTrailers({'Content-MD5': "7895bf4b8828b55ceaf47747b4bca667"});
     response.end();
 
+The `headers` parameter can be passed either as an object (as illustrated above)
+or an array whose members are arrays (as illustrated below)
+
+    response.addTrailers([['Content-MD5', '7895bf4b8828b55ceaf47747b4bca667']]);
 
 ### response.end([data], [encoding])
 
