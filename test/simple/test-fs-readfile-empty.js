@@ -30,9 +30,51 @@ fs.readFile(fn, function(err, data) {
   assert.ok(data);
 });
 
+tempFd(function(fd, close) {
+  fs.readFile(fd, function(err, data) {
+    if (err) throw err;
+    assert.ok(data);
+    close();
+  });
+});
+
 fs.readFile(fn, 'utf8', function(err, data) {
   assert.strictEqual('', data);
 });
 
+tempFd(function(fd, close) {
+  fs.readFile(fd, 'utf8', function(err, data) {
+    assert.strictEqual('', data);
+    close();
+  });
+});
+
 assert.ok(fs.readFileSync(fn));
+
+tempFdSync(function(fd) {
+  assert.ok(fs.readFileSync(fd));
+});
+
 assert.strictEqual('', fs.readFileSync(fn, 'utf8'));
+
+tempFdSync(function(fd) {
+  assert.strictEqual('', fs.readFileSync(fd, 'utf8'));
+});
+
+function tempFd(callback) {
+  fs.open(fn, 'r', function(err, fd) {
+    assert.strictEqual(err, null);
+
+    callback(fd, function() {
+      fs.close(fd, function(err) {
+        assert.strictEqual(err, null);
+      });
+    });
+  });
+}
+
+function tempFdSync(callback) {
+  var fd = fs.openSync(fn, 'r');
+  callback(fd);
+  fs.closeSync(fd);
+}
