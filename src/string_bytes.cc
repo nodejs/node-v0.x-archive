@@ -183,7 +183,7 @@ size_t base64_decode(char* buf,
   const TypeName* srcEnd = src + srcLen;
 
   while (src < srcEnd && dst < dstEnd) {
-    int remaining = srcEnd - src;
+    size_t remaining = srcEnd - src;
 
     while (unbase64(*src) < 0 && src < srcEnd)
       src++, remaining--;

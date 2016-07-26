@@ -2507,7 +2507,7 @@ void NeedImmediateCallbackGetter(Local<String> property,
   Environment* env = Environment::GetCurrent(info.GetIsolate());
   const uv_check_t* immediate_check_handle = env->immediate_check_handle();
   bool active = uv_is_active(
-      reinterpret_cast<const uv_handle_t*>(immediate_check_handle));
+      reinterpret_cast<const uv_handle_t*>(immediate_check_handle)) != 0;
   info.GetReturnValue().Set(active);
 }
 
@@ -2521,7 +2521,7 @@ static void NeedImmediateCallbackSetter(
 
   uv_check_t* immediate_check_handle = env->immediate_check_handle();
   bool active = uv_is_active(
-      reinterpret_cast<const uv_handle_t*>(immediate_check_handle));
+      reinterpret_cast<const uv_handle_t*>(immediate_check_handle)) != 0;
 
   if (active == value->BooleanValue())
     return;
@@ -3749,19 +3749,19 @@ int Start(int argc, char** argv) {
     if (use_debug_agent)
       EnableDebug(env);
 
-    bool more;
+    int more;
     do {
       more = uv_run(env->event_loop(), UV_RUN_ONCE);
-      if (more == false) {
+      if (more == 0) {
         EmitBeforeExit(env);
 
         // Emit `beforeExit` if the loop became alive either after emitting
         // event, or after running some callbacks.
         more = uv_loop_alive(env->event_loop());
         if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
-          more = true;
+          more = 1;
       }
-    } while (more == true);
+    } while (more != 0);
     code = EmitExit(env);
     RunAtExit(env);
 

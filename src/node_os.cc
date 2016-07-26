@@ -122,6 +122,11 @@ static void GetOSRelease(const FunctionCallbackInfo<Value>& args) {
   OSVERSIONINFO info;
 
   info.dwOSVersionInfoSize = sizeof(info);
+#ifdef _MSC_VER
+  // `GetVersionEx` has been deprecated. It seems that it will only report the
+  // version this code is build for (so it can be mocked during build)
+  #pragma warning(disable: 4996)
+#endif
   if (GetVersionEx(&info) == 0)
     return;
 
@@ -288,7 +293,7 @@ static void GetInterfaceAddresses(const FunctionCallbackInfo<Value>& args) {
              Integer::NewFromUnsigned(env->isolate(), scopeid));
     }
 
-    const bool internal = interfaces[i].is_internal;
+    const bool internal = interfaces[i].is_internal != 0;
     o->Set(env->internal_string(),
            internal ? True(env->isolate()) : False(env->isolate()));
 

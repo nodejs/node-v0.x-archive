@@ -129,9 +129,13 @@
         'BufferSecurityCheck': 'true',
         'ExceptionHandling': 1, # /EHsc
         'SuppressStartupBanner': 'true',
-        'WarnAsError': 'false',
+        'WarnAsError': 'true',
       },
+      # 4221 - linker warning about object not exporting new symbols
       'VCLibrarianTool': {
+        'AdditionalOptions': [
+          '/ignore:4221',
+        ],
       },
       'VCLinkerTool': {
         'conditions': [
@@ -159,7 +163,12 @@
         'SuppressStartupBanner': 'true',
       },
     },
-    'msvs_disabled_warnings': [4351, 4355, 4800],
+    # 4351, 4355, 4800 - Legacy
+    # 4244 - when passing an int64 as int, and truncation will happen
+    # 4267 - int64 passed as int, truncation might happen (depends on linkage)
+    # 4530 - No exception semantics (leaking from MS STL xlocale)
+    # 4996 - winsock ip4 calls deprecated
+    'msvs_disabled_warnings': [4351, 4355, 4800, 4244, 4267, 4530, 4996],
     'conditions': [
       ['OS == "win"', {
         'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin

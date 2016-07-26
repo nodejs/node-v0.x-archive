@@ -166,6 +166,10 @@
         'NODE_TAG="<(node_tag)"',
         'NODE_V8_OPTIONS="<(node_v8_options)"',
       ],
+      # these should not occur in `node` code. Only allowed:
+      # 4244 - when passing an int64 as int, and truncation will happen
+      # 4267 - int64 passed as int, truncation might happen (depends on linkage)
+      'msvs_disabled_warnings!': [4351, 4355, 4800, 4530, 4996],
 
       'conditions': [
         [ 'gcc_version<=44', {
@@ -327,6 +331,10 @@
         [ 'OS=="win"', {
           'sources': [
             'src/res/node.rc',
+          ],
+            # we need to use node's preferred "win32" rather than gyp's preferred "win"
+          'defines!': [
+            'PLATFORM="win"',
           ],
           'defines': [
             'FD_SETSIZE=1024',

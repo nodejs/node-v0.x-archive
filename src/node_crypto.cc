@@ -1139,7 +1139,7 @@ void SSLWrap<Base>::OnClientHello(void* arg,
   hello_obj->Set(env->tls_ticket_string(),
                  Boolean::New(env->isolate(), hello.has_ticket()));
   hello_obj->Set(env->ocsp_request_string(),
-                 Boolean::New(env->isolate(), hello.ocsp_request()));
+                 Boolean::New(env->isolate(), hello.ocsp_request() != 0));
 
   Local<Value> argv[] = { hello_obj };
   w->MakeCallback(env->onclienthello_string(), ARRAY_SIZE(argv), argv);
@@ -1506,7 +1506,7 @@ template <class Base>
 void SSLWrap<Base>::IsSessionReused(const FunctionCallbackInfo<Value>& args) {
   HandleScope scope(args.GetIsolate());
   Base* w = Unwrap<Base>(args.Holder());
-  bool yes = SSL_session_reused(w->ssl_);
+  bool yes = SSL_session_reused(w->ssl_) != 0;
   args.GetReturnValue().Set(yes);
 }
 
@@ -2790,11 +2790,8 @@ bool CipherBase::Update(const char* data,
 
   *out_len = len + EVP_CIPHER_CTX_block_size(&ctx_);
   *out = new unsigned char[*out_len];
-  return EVP_CipherUpdate(&ctx_,
-                          *out,
-                          out_len,
-                          reinterpret_cast<const unsigned char*>(data),
-                          len);
+  const unsigned char* cdata = reinterpret_cast<const unsigned char*>(data);
+  return EVP_CipherUpdate(&ctx_, *out, out_len, cdata, len) != 0;
 }
 
 
@@ -2849,7 +2846,7 @@ void CipherBase::Update(const FunctionCallbackInfo<Value>& args) {
 bool CipherBase::SetAutoPadding(bool auto_padding) {
   if (!initialised_)
     return false;
-  return EVP_CIPHER_CTX_set_padding(&ctx_, auto_padding);
+  return EVP_CIPHER_CTX_set_padding(&ctx_, auto_padding) != 0;
 }
 
 
