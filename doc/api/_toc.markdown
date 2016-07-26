@@ -11,6 +11,7 @@
 * [DNS](dns.html)
 * [Domain](domain.html)
 * [Events](events.html)
+* [Errors](errors.html)
 * [File System](fs.html)
 * [Globals](globals.html)
 * [HTTP](http.html)

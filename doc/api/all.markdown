@@ -2,6 +2,7 @@
 @include synopsis
 @include globals
 @include console
+@include errors
 @include timers
 @include modules
 @include addons
