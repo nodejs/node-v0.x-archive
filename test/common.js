@@ -109,74 +109,133 @@ exports.spawnPwd = function(options) {
   }
 };
 
-var knownGlobals = [setTimeout,
-                    setInterval,
-                    setImmediate,
-                    clearTimeout,
-                    clearInterval,
-                    clearImmediate,
-                    console,
-                    constructor, // Enumerable in V8 3.21.
-                    Buffer,
-                    process,
-                    global];
+var knownGlobals = ['setTimeout',
+                    'setInterval',
+                    'setImmediate',
+                    'clearTimeout',
+                    'clearInterval',
+                    'clearImmediate',
+                    'console',
+                    'Buffer',
+                    'process',
+                    'global',
+                    'constructor',
+                    'module',
+                    'require',
+                    'undefined',
+                    'GLOBAL',
+                    'root',
+                    'Array',
+                    'isNaN',
+                    'ReferenceError',
+                    'Number',
+                    'RangeError',
+                    'EvalError',
+                    'Function',
+                    'isFinite',
+                    'Object',
+                    'undefined',
+                    'Date',
+                    'SyntaxError',
+                    'WeakSet',
+                    'String',
+                    'eval',
+                    'parseFloat',
+                    'unescape',
+                    'Error',
+                    'encodeURI',
+                    'NaN',
+                    'RegExp',
+                    'encodeURIComponent',
+                    'Math',
+                    'decodeURI',
+                    'parseInt',
+                    'Infinity',
+                    'escape',
+                    'decodeURIComponent',
+                    'JSON',
+                    'TypeError',
+                    'URIError',
+                    'Boolean',
+                    'ArrayBuffer',
+                    'Int8Array',
+                    'Uint8Array',
+                    'Uint8ClampedArray',
+                    'Int16Array',
+                    'Uint16Array',
+                    'Int32Array',
+                    'Uint32Array',
+                    'Float32Array',
+                    'Float64Array',
+                    'DataView'];
 
 if (global.gc) {
-  knownGlobals.push(gc);
+  knownGlobals.push('gc');
 }
 
 if (global.DTRACE_HTTP_SERVER_RESPONSE) {
-  knownGlobals.push(DTRACE_HTTP_SERVER_RESPONSE);
-  knownGlobals.push(DTRACE_HTTP_SERVER_REQUEST);
-  knownGlobals.push(DTRACE_HTTP_CLIENT_RESPONSE);
-  knownGlobals.push(DTRACE_HTTP_CLIENT_REQUEST);
-  knownGlobals.push(DTRACE_NET_STREAM_END);
-  knownGlobals.push(DTRACE_NET_SERVER_CONNECTION);
-  knownGlobals.push(DTRACE_NET_SOCKET_READ);
-  knownGlobals.push(DTRACE_NET_SOCKET_WRITE);
+  knownGlobals.push('DTRACE_HTTP_SERVER_RESPONSE');
+  knownGlobals.push('DTRACE_HTTP_SERVER_REQUEST');
+  knownGlobals.push('DTRACE_HTTP_CLIENT_RESPONSE');
+  knownGlobals.push('DTRACE_HTTP_CLIENT_REQUEST');
+  knownGlobals.push('DTRACE_NET_STREAM_END');
+  knownGlobals.push('DTRACE_NET_SERVER_CONNECTION');
+  knownGlobals.push('DTRACE_NET_SOCKET_READ');
+  knownGlobals.push('DTRACE_NET_SOCKET_WRITE');
 }
 
 if (global.COUNTER_NET_SERVER_CONNECTION) {
-  knownGlobals.push(COUNTER_NET_SERVER_CONNECTION);
-  knownGlobals.push(COUNTER_NET_SERVER_CONNECTION_CLOSE);
-  knownGlobals.push(COUNTER_HTTP_SERVER_REQUEST);
-  knownGlobals.push(COUNTER_HTTP_SERVER_RESPONSE);
-  knownGlobals.push(COUNTER_HTTP_CLIENT_REQUEST);
-  knownGlobals.push(COUNTER_HTTP_CLIENT_RESPONSE);
-}
-
-if (global.ArrayBuffer) {
-  knownGlobals.push(ArrayBuffer);
-  knownGlobals.push(Int8Array);
-  knownGlobals.push(Uint8Array);
-  knownGlobals.push(Uint8ClampedArray);
-  knownGlobals.push(Int16Array);
-  knownGlobals.push(Uint16Array);
-  knownGlobals.push(Int32Array);
-  knownGlobals.push(Uint32Array);
-  knownGlobals.push(Float32Array);
-  knownGlobals.push(Float64Array);
-  knownGlobals.push(DataView);
+  knownGlobals.push('COUNTER_NET_SERVER_CONNECTION');
+  knownGlobals.push('COUNTER_NET_SERVER_CONNECTION_CLOSE');
+  knownGlobals.push('COUNTER_HTTP_SERVER_REQUEST');
+  knownGlobals.push('COUNTER_HTTP_SERVER_RESPONSE');
+  knownGlobals.push('COUNTER_HTTP_CLIENT_REQUEST');
+  knownGlobals.push('COUNTER_HTTP_CLIENT_RESPONSE');
 }
 
 // Harmony features.
 if (global.Proxy) {
-  knownGlobals.push(Proxy);
+  knownGlobals.push('Proxy');
 }
 
 if (global.Symbol) {
-  knownGlobals.push(Symbol);
+  knownGlobals.push('Symbol');
+}
+
+if (global.WeakMap) {
+  knownGlobals.push('WeakMap');
+}
+
+if (global.Promise) {
+  knownGlobals.push('Promise');
+}
+
+function getNonEnumKeys() {
+
+  var allKeys = Object.getOwnPropertyNames(global);
+  var enumKeys = Object.keys(global);
+
+  return allKeys.filter(function(key) {
+    return (enumKeys.indexOf(key) === -1);
+  });
 }
 
 function leakedGlobals() {
   var leaked = [];
 
   for (var val in global)
-    if (-1 === knownGlobals.indexOf(global[val]))
+    if (knownGlobals.indexOf(val) === -1)
       leaked.push(val);
 
+  var nonEnumKeys = getNonEnumKeys();
+  for (var i = 0, il = nonEnumKeys.length; i < il; ++i) {
+    var currentGlobal = nonEnumKeys[i];
+    if (knownGlobals.indexOf(currentGlobal) === -1)
+      leaked.push(currentGlobal);
+  }
+
   return leaked;
-};
+}
 exports.leakedGlobals = leakedGlobals;
 
 // Turn this off if the test should not check for global leaks.
