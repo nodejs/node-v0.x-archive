@@ -535,14 +535,14 @@ def RunProcess(context, timeout, args, **rest):
   # Compute the end time - if the process crosses this limit we
   # consider it timed out.
   if timeout is None: end_time = None
-  else: end_time = time.time() + timeout
+  else: end_time = time.time() * 1000.0 + timeout
   timed_out = False
   # Repeatedly check the exit code from the process in a
   # loop and keep track of whether or not it times out.
   exit_code = None
   sleep_time = INITIAL_SLEEP_TIME
   while exit_code is None:
-    if (not end_time is None) and (time.time() >= end_time):
+    if (not end_time is None) and (time.time() * 1000.0 >= end_time):
       # Kill the process and wait for it to exit.
       KillProcessWithID(process.pid)
       exit_code = process.wait()
@@ -1217,8 +1217,8 @@ def BuildOptions():
       default=False, action="store_true")
   result.add_option("-s", "--suite", help="A test suite",
       default=[], action="append")
-  result.add_option("-t", "--timeout", help="Timeout in seconds",
-      default=60, type="int")
+  result.add_option("-t", "--timeout", help="Timeout in milliseconds",
+      default=30000, type="long")
   result.add_option("--arch", help='The architecture to run tests for',
       default='none')
   result.add_option("--snapshot", help="Run the tests with snapshot turned on",
