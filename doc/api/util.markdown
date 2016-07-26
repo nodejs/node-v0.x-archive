@@ -131,7 +131,7 @@ Highlighted styles and their default values are:
  * `special` - only function at this time (cyan)
  * `name` (intentionally no styling)
 
-Predefined color codes are: `white`, `grey`, `black`, `blue`, `cyan`, 
+Predefined color codes are: `white`, `grey`, `black`, `blue`, `cyan`,
 `green`, `magenta`, `red` and `yellow`.
 There are also `bold`, `italic`, `underline` and `inverse` codes.
 
@@ -271,6 +271,59 @@ It returns a modified function which warns once by default. If
 `--no-deprecation` is set then this function is a NO-OP. If
 `--throw-deprecation` is set then the application will throw an exception
 if the deprecated API is used.
+
+## util.isBoolean(object)
+
+Returns `true` if the given "object" is a `boolean`. `false` otherwise.
+
+## util.isNull(object)
+
+Returns `true` if the given "object" is `null`. `false` otherwise.
+
+## util.isNullOrUndefined(object)
+
+Exactly like `util.isNull` but syntactically better.
+
+## util.isNumber(object)
+
+Returns `true` if the given "object" is a `number`. `false` otherwise.
+
+## util.isString(object)
+
+Returns `true` if the given "object" is a `string`. `false` otherwise.
+
+## util.isSymbol(object)
+
+Returns `true` if the given "object" is a `symbol`. `false` otherwise.
+
+## util.isUndefined(object)
+
+Returns `true` if the given "object" is either `void` or is `undefined`. `false` otherwise.
+
+## util.isObject(object)
+
+Returns `true` if the given "object" is an `object` and is not `null`. `false` otherwise.
+
+## util.isFunction(object)
+
+Returns `true` if the given "object" is a `function`. `false` otherwise.
+
+## util.isPrimitive(object)
+
+Returns `true` if the given "object" is either:
+
+- null
+- boolean
+- number
+- string
+- symbol
+- undefined
+
+`false` otherwise.
+
+## util.isBuffer(object)
+
+Returns `true` if the given "object" is a `buffer`. `false` otherwise.
 
 ## util.debug(string)
 
