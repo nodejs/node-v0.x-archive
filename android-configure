@@ -3,17 +3,30 @@
 export TOOLCHAIN=$PWD/android-toolchain
 mkdir -p $TOOLCHAIN
 $1/build/tools/make-standalone-toolchain.sh \
-    --toolchain=arm-linux-androideabi-4.7 \
+    --toolchain=arm-linux-androideabi-4.8 \
     --arch=arm \
     --install-dir=$TOOLCHAIN \
     --platform=android-9
+    --platform=android-16
 export PATH=$TOOLCHAIN/bin:$PATH
 export AR=arm-linux-androideabi-ar
 export CC=arm-linux-androideabi-gcc
 export CXX=arm-linux-androideabi-g++
 export LINK=arm-linux-androideabi-g++
+export CPPFLAGS="-fPIE"
+export LDFLAGS="-fPIE -pie -L$PREFIX/lib"
 
 ./configure \
     --without-snapshot \
     --dest-cpu=arm \
     --dest-os=android
+
+if [ -d "/usr/bin/python2.7" ]; then
+    rm -rf android-toolchain/bin/python2.7
+    ln -s /usr/bin/python2.7 android-toolchain/bin/python2.7
+elif [ -d "/usr/lib/python2.7" ]; then
+    rm -rf android-toolchain/bin/python2.7
+    ln -s /usr/lib/python2.7 android-toolchain/bin/python2.7
+else
+    echo "WARNING: You don't have python2.7 installed! Your build will fail! \nPlease install python2.7 and rerun this script."
+fi
