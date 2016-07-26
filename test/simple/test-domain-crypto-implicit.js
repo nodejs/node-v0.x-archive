@@ -20,36 +20,27 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-// Simple tests of most basic domain functionality.
+
+try {
+  var crypto = require('crypto');
+} catch (e) {
+  console.log('Not compiled with OPENSSL support.');
+  process.exit();
+}
 
 var common = require('../common');
 var assert = require('assert');
 var domain = require('domain');
 var events = require('events');
 var caught = 0;
-var expectCaught = 2;
+var expectCaught = 3;
 
 var d = new domain.Domain();
-var d2 = new domain.Domain();
-var e = new events.EventEmitter();
 
 d.on('error', function(er) {
   console.error('caught', er);
 
   assert.strictEqual(er.domain, d);
-  assert.strictEqual(er.domainThrown, true);
-  assert.ok(!er.domainEmitter);
-  assert.strictEqual(er.code, 'ENOENT');
-  assert.ok(/\bthis file does not exist\b/i.test(er.path));
-  assert.strictEqual(typeof er.errno, 'number');
-
-  caught++;
-});
-
-d2.on('error', function(er) {
-  console.error('caught', er);
-
-  assert.strictEqual(er.domain, d2);
   assert.strictEqual(er.domain_thrown, true);
   assert.ok(!er.domain_emitter);
   assert.strictEqual(er.message, 'TEST');
@@ -72,24 +63,8 @@ process.on('exit', function() {
 // calls will be bound to the domain, even if multiple levels of
 // handles are created.
 d.run(function() {
-  setTimeout(function() {
-    var fs = require('fs');
-    fs.readdir(__dirname, function() {
-      fs.open('this file does not exist', 'r', function(er) {
-        if (er) throw er;
-        throw new Error('should not get here!');
-      });
-    });
-  }, 100);
+  crypto.randomBytes(8, function() { throw new Error("TEST"); });
+  crypto.pseudoRandomBytes(8, function() { throw new Error("TEST"); });
+  crypto.pbkdf2('password', 'salt', 8, 8, function() { throw new Error("TEST"); });
 });
 
-d2.run(function() {
-  setTimeout(function() {
-    var fs = require('fs');
-    fs.readdir(__dirname, function() {
-      fs.open('this file does not exist', 'r', function(er) {
-        throw new Error('TEST');
-      });
-    });
-  }, 100);
-});
