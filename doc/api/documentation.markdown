@@ -74,9 +74,7 @@ change.  Please do not suggest changes in this area; they will be refused.
 
 ## JSON Output
 
-    Stability: 1 - Experimental
+    Stability: 2 - Unstable
 
 Every HTML file in the markdown has a corresponding JSON file with the
 same data.
-
-This feature is new as of node v0.6.12.  It is experimental.
