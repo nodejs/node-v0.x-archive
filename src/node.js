@@ -293,7 +293,7 @@
     var _runMicrotasks = {};
 
     // This tickInfo thing is used so that the C++ code in src/node.cc
-    // can have easy accesss to our nextTick state, and avoid unnecessary
+    // can have easy access to our nextTick state, and avoid unnecessary
     var tickInfo = {};
 
     // *Must* match Environment::TickInfo::Fields in src/env.h.
