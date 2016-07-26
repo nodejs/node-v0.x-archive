@@ -1032,6 +1032,10 @@ config = {
   'PYTHON': sys.executable,
 }
 
+# '/' paths also work in windows, and this allows us to run python based
+# targets on windows e.g. `make cpplint`
+if os.name == 'nt': config['PYTHON'] = config['PYTHON'].replace('\\', '/')
+
 if options.prefix:
   config['PREFIX'] = options.prefix
 

@@ -434,6 +434,8 @@ jslintfix:
 jslint:
 	PYTHONPATH=tools/closure_linter/ $(PYTHON) tools/closure_linter/closure_linter/gjslint.py --unix_mode --strict --nojsdoc -r lib/ -r src/ --exclude_files lib/punycode.js
 
+CPPLINT=$(PYTHON) tools/cpplint.py
+
 CPPLINT_EXCLUDE ?=
 CPPLINT_EXCLUDE += src/node_root_certs.h
 CPPLINT_EXCLUDE += src/node_win32_perfctr_provider.cc
@@ -441,10 +443,25 @@ CPPLINT_EXCLUDE += src/queue.h
 CPPLINT_EXCLUDE += src/tree.h
 CPPLINT_EXCLUDE += src/v8abbr.h
 
-CPPLINT_FILES = $(filter-out $(CPPLINT_EXCLUDE), $(wildcard src/*.cc src/*.h src/*.c tools/icu/*.h tools/icu/*.cc deps/debugger-agent/include/* deps/debugger-agent/src/*))
+CPPLINT_INCLUDE ?=
+CPPLINT_INCLUDE += src/*.cc
+CPPLINT_INCLUDE += src/*.h
+CPPLINT_INCLUDE += src/*.c
+CPPLINT_INCLUDE += tools/*/*.h
+CPPLINT_INCLUDE += tools/*/*.cc
+CPPLINT_INCLUDE += deps/debugger-agent/*/*.cc
+CPPLINT_INCLUDE += deps/debugger-agent/*/*.h
+
+CPPLINT_FILES = $(filter-out $(CPPLINT_EXCLUDE), $(wildcard $(CPPLINT_INCLUDE)))
+
+CPPLINT_WARNINGS_FILTER =--filter=
+#TODO(refack) Rules that need further discussion
+CPPLINT_WARNINGS_FILTER +=-build/include,-build/include_order
+#TODO(refack) Rules we can implement now
+CPPLINT_WARNINGS_FILTER +=,-whitespace/indent,-readability/braces,-runtime/int,-readability/namespace,-whitespace/blank_line,-runtime/references,-build/header_guard,-runtime/indentation_namespace
 
 cpplint:
-	@$(PYTHON) tools/cpplint.py $(CPPLINT_FILES)
+	@$(CPPLINT) $(CPPLINT_WARNINGS_FILTER) $(CPPLINT_FILES)
 
 lint: jslint cpplint
 
