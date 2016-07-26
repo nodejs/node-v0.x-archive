@@ -4861,15 +4861,17 @@ const char* ToCString(const String::Utf8Value& value) {
 void DefaultCiphers(const v8::FunctionCallbackInfo<v8::Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
+
+  if (args.Length() != 1 || !args[0]->IsString()) {
+    return env->ThrowTypeError("A single string parameter is required");
+  }
   v8::String::Utf8Value key(args[0]);
   const char * list = legacy_cipher_list(ToCString(key));
   if (list != NULL) {
     args.GetReturnValue().Set(
       v8::String::NewFromUtf8(args.GetIsolate(), list));
   } else {
-    args.GetReturnValue().Set(
-      v8::String::NewFromUtf8(args.GetIsolate(),
-                             DEFAULT_CIPHER_LIST_HEAD));
+    env->ThrowError("Unknown legacy cipher list");
   }
 }
 
