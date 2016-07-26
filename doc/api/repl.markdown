@@ -75,13 +75,12 @@ will share the same global object but will have unique I/O.
 
 Here is an example that starts a REPL on stdin, a Unix socket, and a TCP socket:
 
-    var net = require("net"),
-        repl = require("repl");
-
-    connections = 0;
+    var net = require('net'),
+        repl = require('repl'),
+        connections = 0;
 
     repl.start({
-      prompt: "node via stdin> ",
+      prompt: 'node via stdin> ',
       input: process.stdin,
       output: process.stdout
     });
@@ -89,18 +88,18 @@ Here is an example that starts a REPL on stdin, a Unix socket, and a TCP socket:
     net.createServer(function (socket) {
       connections += 1;
       repl.start({
-        prompt: "node via Unix socket> ",
+        prompt: 'node via Unix socket> ',
         input: socket,
         output: socket
       }).on('exit', function() {
         socket.end();
       })
-    }).listen("/tmp/node-repl-sock");
+    }).listen('/tmp/node-repl-sock');
 
     net.createServer(function (socket) {
       connections += 1;
       repl.start({
-        prompt: "node via TCP socket> ",
+        prompt: 'node via TCP socket> ',
         input: socket,
         output: socket
       }).on('exit', function() {
@@ -131,7 +130,9 @@ Emitted when the user exits the REPL in any of the defined ways. Namely, typing
 to signal "end" on the `input` stream.
 
 Example of listening for `exit`:
-
+    
+    var r = repl.start({ options ... });
+  
     r.on('exit', function () {
       console.log('Got "exit" event from repl!');
       process.exit();
@@ -149,7 +150,7 @@ be emitted.
 Example of listening for `reset`:
 
     // Extend the initial repl context.
-    r = repl.start({ options ... });
+    var r = repl.start({ options ... });
     someExtension.extend(r.context);
 
     // When a new context is created extend it as well.
@@ -168,7 +169,7 @@ Tab completion is supported for both global and local variables.
 
 The special variable `_` (underscore) contains the result of the last expression.
 
-    > [ "a", "b", "c" ]
+    > [ 'a', 'b', 'c' ]
     [ 'a', 'b', 'c' ]
     > _.length
     3
@@ -180,10 +181,10 @@ a variable to the REPL explicitly by assigning it to the `context` object
 associated with each `REPLServer`.  For example:
 
     // repl_test.js
-    var repl = require("repl"),
-        msg = "message";
+    var repl = require('repl'),
+        msg = 'message';
 
-    repl.start("> ").context.m = msg;
+    repl.start('> ').context.m = msg;
 
 Things in the `context` object appear as local within the REPL:
 
@@ -209,4 +210,3 @@ The following key combinations in the REPL have these special effects:
   - `<ctrl>C` - Similar to the `.break` keyword.  Terminates the current
     command.  Press twice on a blank line to forcibly exit.
   - `<ctrl>D` - Similar to the `.exit` keyword.
-
