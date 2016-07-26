@@ -1,5 +1,13 @@
 #!/bin/bash
 
+args=( "$@" )
+extra_arguments=""
+
+for (( i=1; i<=$(( $# -1 )); i++ ))
+do
+    extra_arguments=${extra_arguments}" ${args[$i]}"
+done
+
 export TOOLCHAIN=$PWD/android-toolchain
 mkdir -p $TOOLCHAIN
 $1/build/tools/make-standalone-toolchain.sh \
@@ -16,4 +24,5 @@ export LINK=arm-linux-androideabi-g++
 ./configure \
     --without-snapshot \
     --dest-cpu=arm \
-    --dest-os=android
+    --dest-os=android \
+    $extra_arguments
