@@ -30,8 +30,8 @@ trace and exit the program.
 All EventEmitters emit the event `'newListener'` when new listeners are
 added and `'removeListener'` when a listener is removed.
 
-### emitter.addListener(event, listener)
-### emitter.on(event, listener)
+### emitter.addListener(event, listener, [context])
+### emitter.on(event, listener, [context])
 
 Adds a listener to the end of the listeners array for the specified `event`.
 No checks are made to see if the `listener` has already been added. Multiple
@@ -42,9 +42,15 @@ calls passing the same combination of `event` and `listener` will result in the
       console.log('someone connected!');
     });
 
-Returns emitter, so calls can be chained.
+Returns emitter, so calls can be chained. By default the context of the
+executed function is set to the object on which the event is emitted. This 
+can be overridden by specifying the context argument.
 
-### emitter.once(event, listener)
+    server.on('connection', function (stream) {
+      console.log(this); // foo
+    }, 'foo');
+
+### emitter.once(event, listener, [context])
 
 Adds a **one time** listener for the event. This listener is
 invoked only the next time the event is fired, after which
@@ -54,7 +60,13 @@ it is removed.
       console.log('Ah, we have our first user!');
     });
 
-Returns emitter, so calls can be chained.
+Returns emitter, so calls can be chained. By default the context of the
+executed function is is set to the object on which the event is emitted. 
+This can be overridden by specifying the context argument.
+
+    server.once('connection', function (stream) {
+      console.log(this); // foo
+    }, 'foo');
 
 ### emitter.removeListener(event, listener)
 

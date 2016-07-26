@@ -1,4 +1,3 @@
-
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,38 +23,29 @@ var common = require('../common');
 var assert = require('assert');
 var events = require('events');
 
-var EventEmitter = require('events').EventEmitter;
-var assert = require('assert');
+var e = new events.EventEmitter();
 
-var e = new EventEmitter;
-var fl;  // foo listeners
+var pattern = '';
+var emitted = 0;
+var ctx = 1345;
 
-fl = e.listeners('foo');
-assert(Array.isArray(fl));
-assert(fl.length === 0);
-assert.deepEqual(e._events, {});
+e.once('foo', function (foo) {
+  assert.equal(this, ctx);
+  assert.equal(foo, 'bar');
+  emitted++;
+}, ctx);
 
-e.on('foo', assert.fail);
-fl = e.listeners('foo');
-assert(e._events.foo.fn === assert.fail);
-assert(Array.isArray(fl));
-assert(fl.length === 1);
-assert(fl[0] === assert.fail);
+function bar() {
+  pattern += this;
+}
 
-e.listeners('bar');
-assert(!e._events.hasOwnProperty('bar'));
+e.once('foo', bar, 'bar');
+e.once('foo', bar, 'baz');
 
-e.on('foo', assert.ok);
-fl = e.listeners('foo');
+e.emit('foo', 'bar');
+e.emit('foo', 'bar');
 
-assert(Array.isArray(e._events.foo));
-assert(e._events.foo.length === 2);
-assert(e._events.foo[0].fn === assert.fail);
-assert(e._events.foo[1].fn === assert.ok);
-
-assert(Array.isArray(fl));
-assert(fl.length === 2);
-assert(fl[0] === assert.fail);
-assert(fl[1] === assert.ok);
-
-console.log('ok');
+process.on('exit', function() {
+  assert.equal(1, emitted);
+  assert.equal('barbaz', pattern);
+});
