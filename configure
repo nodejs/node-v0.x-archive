@@ -495,17 +495,19 @@ def configure_arm(o):
   else:
     arm_float_abi = 'default'
 
-  if is_arch_armv7():
-    o['variables']['arm_version'] = '7'
-  elif is_arch_armv6():
-    o['variables']['arm_version'] = '6'
-  else:
-    o['variables']['arm_version'] = 'default'
-
-  o['variables']['arm_fpu'] = 'vfpv3'  # V8 3.18 no longer supports VFP2.
+  # configure arm defaults which would be most widely supported
   o['variables']['arm_neon'] = int(is_arm_neon())
   o['variables']['arm_thumb'] = 0      # -marm
   o['variables']['arm_float_abi'] = arm_float_abi
+  o['variables']['arm_version'] = 'default'
+  o['variables']['arm_fpu'] = 'vfpv2' # according to 'armcc', ARMv1 is syn. with ARMv2
+
+  # implement arch-specific overrides
+  if is_arch_armv7():
+    o['variables']['arm_version'] = '7'
+    o['variables']['arm_fpu'] = 'vfpv3'
+  elif is_arch_armv6():
+    o['variables']['arm_version'] = '6'
 
 
 def configure_node(o):
