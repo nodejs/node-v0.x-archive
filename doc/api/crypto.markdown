@@ -662,6 +662,9 @@ such as in the generation of encryption keys.
 
 Usage is otherwise identical to `crypto.randomBytes`.
 
+Note: This function, unlike `crypto.randomBytes`, cannot fail, so the
+`ex` callback argument can be ignored.
+
 ## Class: Certificate
 
 The class used for working with signed public key & challenges. The most
