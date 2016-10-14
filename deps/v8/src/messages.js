@@ -756,23 +756,17 @@ function GetStackTraceLine(recv, fun, pos, isGlobal) {
 
 // Defines accessors for a property that is calculated the first time
 // the property is read.
-function DefineOneShotAccessor(obj, name, fun) {
+function DefineOneShotAccessor(obj, name, value_factory) {
   // Note that the accessors consistently operate on 'obj', not 'this'.
   // Since the object may occur in someone else's prototype chain we
   // can't rely on 'this' being the same as 'obj'.
-  var hasBeenSet = false;
-  var value;
   var getter = function() {
-    if (hasBeenSet) {
-      return value;
-    }
-    hasBeenSet = true;
-    value = fun(obj);
+    value = value_factory(obj);
+    %DefineOrRedefineDataProperty(obj, name, value, NONE);
     return value;
   };
   var setter = function(v) {
-    hasBeenSet = true;
-    value = v;
+    %DefineOrRedefineDataProperty(this, name, v, NONE);
   };
   %DefineOrRedefineAccessorProperty(obj, name, getter, setter, DONT_ENUM);
 }
@@ -1254,4 +1248,30 @@ InstallFunctions($Error.prototype, DONT_ENUM, ['toString', ErrorToString]);
 
 // Boilerplate for exceptions for stack overflows. Used from
 // Isolate::StackOverflow().
-var kStackOverflowBoilerplate = MakeRangeError('stack_overflow', []);
+function SetUpStackOverflowBoilerplate() {
+  var boilerplate = MakeRangeError('stack_overflow', []);
+
+  function getter() {
+    var holder = this;
+    while (!IS_ERROR(holder)) {
+      holder = %GetPrototype(holder);
+      if (holder == null) return MakeSyntaxError('illegal_access', []);
+    }
+    var raw_stack = %GetOverflowedRawStackTrace(holder);
+    var result = IS_ARRAY(raw_stack) ? FormatRawStackTrace(holder, raw_stack)
+                                     : void 0;
+    %DefineOrRedefineDataProperty(holder, 'stack', result, NONE);
+    return result;
+  }
+
+  function setter(v) {
+    %DefineOrRedefineDataProperty(this, 'stack', v, NONE);
+  }
+
+  %DefineOrRedefineAccessorProperty(
+      boilerplate, 'stack', getter, setter, DONT_ENUM);
+
+  return boilerplate;
+}
+
+var kStackOverflowBoilerplate = SetUpStackOverflowBoilerplate();
