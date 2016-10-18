@@ -360,8 +360,8 @@ function load (npm, cli, cb) {
       npm.registry = new CachingRegClient(npm.config)
 
       var umask = npm.config.get("umask")
-      npm.modes = { exec: 0777 & (~umask)
-                  , file: 0666 & (~umask)
+      npm.modes = { exec: 0755 & (~umask)
+                  , file: 0644 & (~umask)
                   , umask: umask }
 
       var gp = Object.getOwnPropertyDescriptor(config, "globalPrefix")
