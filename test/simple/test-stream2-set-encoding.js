@@ -231,6 +231,41 @@ test('setEncoding base64', function(t) {
   });
 });
 
+test('setEncoding base64', function(t) {
+  var tr = new TestReader(100);
+  tr.setEncoding('base64');
+  var out = [];
+  var expect =
+    [ 'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYQ==' ];
+
+  tr.on('readable', function flow() {
+    var chunk;
+    while (null !== (chunk = tr.read(10)))
+      out.push(chunk);
+  });
+
+  tr.on('end', function() {
+    t.same(out, expect);
+    t.end();
+  });
+
+  // just kick it off.
+  tr.emit('readable');
+});
+
 test('encoding: utf8', function(t) {
   var tr = new TestReader(100, { encoding: 'utf8' });
   var out = [];
@@ -358,4 +393,38 @@ test('encoding: base64', function(t) {
     t.same(out, expect);
     t.end();
   });
+});
+
+test('encoding: base64', function(t) {
+  var tr = new TestReader(100, { encoding: 'base64' });
+  var out = [];
+  var expect =
+    [ 'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYWFhYWFh',
+      'YWFhYWFhYW',
+      'FhYQ==' ];
+
+  tr.on('readable', function flow() {
+    var chunk;
+    while (null !== (chunk = tr.read(10)))
+      out.push(chunk);
+  });
+
+  tr.on('end', function() {
+    t.same(out, expect);
+    t.end();
+  });
+
+  // just kick it off.
+  tr.emit('readable');
 });
