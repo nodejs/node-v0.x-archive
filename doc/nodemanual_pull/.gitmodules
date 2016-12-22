@@ -1,0 +1,6 @@
+[submodule "build/doc-build"]
+	path = build/doc-build
+	url = git://github.com/c9/doc-build.git
+[submodule "build/ndoc"]
+	path = build/ndoc
+	url = git://github.com/c9/ndoc.git

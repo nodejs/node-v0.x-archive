@@ -1,0 +1,135 @@
+-var dirPrefix = "./../";
+-var nodejsRef = 'false'
+-var jsDoc = 'false'
+-var nodejsDev = 'false'
+-var landingPage = 'false'
+-var versions = []
+
+mixin doctype
+  !!! 5
+  <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en"> <![endif]-->
+  <!--[if IE 7]>    <html class="no-js ie7 oldie" lang="en"> <![endif]-->
+  <!--[if IE 8]>    <html class="no-js ie8 oldie" lang="en"> <![endif]-->
+  <!--[if gt IE 8]><!--> <html class="no-js" lang="en"> <!--<![endif]-->
+
+mixin head(guideTitle, additionalCSS)
+  meta(charset="utf-8")
+  //- N.B. http://blog.yjl.im/2011/01/bad-value-x-ua-compatible-for-attribute.html
+  meta(http-equiv="X-UA-Compatible", content="IE=edge,chrome=1")
+
+  title #{guideTitle}
+
+  meta(name="generator", content="c9-doc-build")
+  meta(name="description", content="A complete and community-driven resource for learning and developing Node.js applications.")
+  meta(name="author", content="Garen J. Torikian")
+
+  meta(name="viewport", content="width=device-width,initial-scale=1")
+
+  link(rel="stylesheet", href="#{dirPrefix}resources/csses/bootstrap.css")
+  link(rel="stylesheet", href="#{dirPrefix}resources/csses/prettify.css")
+  link(rel="stylesheet", href="#{dirPrefix}resources/csses/refguide_overrides.css")
+
+  if additionalCSS
+    link(rel="stylesheet", href="#{additionalCSS}")
+
+  script(src="#{dirPrefix}resources/javascripts/jquery.js")
+  script(src="#{dirPrefix}resources/javascripts/clicker.js")
+  script(src="#{dirPrefix}resources/javascripts/jquery.collapse.js")
+  script(src="#{dirPrefix}resources/javascripts/jquery.cookie.js")
+  script(src="#{dirPrefix}resources/javascripts/bootstrap-dropdown.js")
+
+mixin topBar(fullPath)
+  div.topbar
+      div.fill
+        div.container#topSection
+          ul.nav(class="leftnav")
+              li(class="dropdown", data-dropdown="dropdown")
+                  a(class="dropdown-toggle brand", href="/")
+              li(class="dropdown versions")
+                  a(class="dropdown-toggle versionToggler", href="#") Version&nbsp;
+                    mixin makeVersionLabel(fullPath)
+                  ul(class="dropdown-menu")
+                    include versionsList
+
+          ul.nav
+            li#node_js_ref
+              a(href='#{dirPrefix}nodejs_ref_guide/index.html') Node.js API Reference
+          form(id='searchbox', action='', class='pull-right')  
+            input(class='span3', name='query', type='text', placeholder="Search Documentation", title="Search across all the documentation types")
+          span(id='currentVersion', style='display: none')
+            mixin makeVersionLabel(fullPath, true)
+
+mixin header
+  header.jumbotron.masthead#overview
+    //- a(class="c9-sponsor", href="http://c9.io/", title="cloud9 ide", target="_blank")
+    div.inner
+      div.container
+        if nodejsRef == 'true'
+          h1 Node.js API Reference
+        else if jsDoc == 'true'
+          h1 Javascript Reference
+        else if nodejsDev == 'true'
+          h1 Node.js Guide
+        else
+          h1 Node.js Manual
+        p.lead
+
+mixin footer
+  footer#footer
+        .container
+          .footer-text Thanks to these content providers | &#169; 2012:
+          .sponsors
+              a(class="c9-logo sponsor", href="http://c9.io/", title="cloud9 ide", target="_blank")
+              a(class="joyent-logo sponsor", href="http://www.joyent.com/", title="joyent", target="_blank")
+              a(class="mozilla-logo sponsor", href="http://www.mozilla.org/", title="mozilla", target="_blank")
+              a(class="debuggable-logo sponsor", href="http://www.debuggable.com/", title="debuggable", target="_blank")
+
+
+mixin endingScripts
+  // scripts concatenated and minified via ant build script
+  <script defer src="#{dirPrefix}resources/javascripts/plugins.js"></script>
+  <script defer src="#{dirPrefix}resources/javascripts/prettify.js"></script>
+  <script defer src="#{dirPrefix}resources/javascripts/prettify-extension.js"></script>
+  <script defer src="#{dirPrefix}resources/javascripts/script.js"></script>
+  //-<script defer src="tree.js"></script>
+  // end scripts
+
+  //if lt IE 7
+    script(src="//ajax.googleapis.com/ajax/libs/chrome-frame/1.0.3/CFInstall.min.js")
+    script
+      window.attachEvent('onload',function(){CFInstall.check({mode:'overlay'})})
+
+
+mixin identifyBuild(tree, type)
+  -nodejsRef = 'true'
+
+mixin markdown(text, inline)
+  html = markdown(text, inline)
+  != restoreNotes(html)
+
+-function restoreNotes(html)
+  -var noteORegex = new RegExp('<note>', "ig")
+  -var noteCRegex = new RegExp('</note>', "ig")
+  -var warningORegex = new RegExp('<warning>', "ig")
+  -var warningCRegex = new RegExp('</warning>', "ig")
+
+  if (html.match(noteORegex))
+    -html = html.replace(noteORegex, "<div class='alert-message block-message warning'>")
+  if (html.match(warningORegex))
+    -html = html.replace(warningORegex, "<div class='alert-message block-message error'>")
+
+  if (html.match(noteCRegex))
+    -html = html.replace(noteCRegex, "</div>")
+    if (html.match(warningCRegex))
+    -html = html.replace(warningCRegex, "</div>")
+
+  != html
+
+mixin makeVersionLabel(fullPath, showText)
+  -if (fullPath.indexOf("latest") >= 0)
+    -if (!showText)
+      != '0.6.9'
+    else
+      != 'latest'
+  -else
+    != fullPath.match(/\d\.\d\.\d/)
