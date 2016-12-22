@@ -40,3 +40,15 @@ var fs = require('fs');
     assert.equal(content, 'a\n');
   }));
 })();
+
+(function() {
+  var file = path.join(common.tmpDir, 'write-end-test2.txt');
+  var stream = fs.createWriteStream(file);
+  stream.on('close', common.mustCall(function() {
+    var content = fs.readFileSync(file, 'utf8');
+    assert.equal(content, 'ab\n');
+  }));
+  stream.write('ab\n', 'utf8');
+  stream.write('', 'utf8');
+  stream.end();
+})();
