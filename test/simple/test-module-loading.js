@@ -147,6 +147,20 @@ require.extensions['.test'] = function(module, filename) {
 
 assert.equal(require('../fixtures/registerExt2').custom, 'passed');
 
+common.debug('load custom file types with multiple extensions');
+require.extensions['.test2.test'] = function(module, filename) {
+  module._compile('exports.multiple = \'passed\'', filename);
+}
+
+require.extensions['.test'] = function(module, filename) {
+  module._compile('exports.fallback = \'passed\'', filename);
+}
+
+assert.equal(require('../fixtures/registerExt.test2.test').multiple, 'passed');
+
+assert.equal(require('../fixtures/registerExt.test3.test').fallback, 'passed');
+
+
 assert.equal(require('../fixtures/foo').foo, 'ok',
              'require module with no extension');
 
@@ -251,6 +265,8 @@ assert.deepEqual(children, {
   'fixtures/registerExt.test': {},
   'fixtures/registerExt.hello.world': {},
   'fixtures/registerExt2.test': {},
+  'fixtures/registerExt.test2.test': {},
+  'fixtures/registerExt.test3.test': {},
   'fixtures/empty.js': {},
   'fixtures/module-load-order/file1': {},
   'fixtures/module-load-order/file2.js': {},
