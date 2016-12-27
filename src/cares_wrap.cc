@@ -643,6 +643,39 @@ class QueryTxtWrap: public QueryWrap {
 };
 
 
+class QuerySpfWrap: public QueryWrap {
+ public:
+  int Send(const char* name) {
+    // TODO: change ns_t_txt to ns_t_spf when arpa/nameser.h gets updated
+    ares_query(ares_channel, name, ns_c_in, ns_t_txt, Callback, GetQueryArg());
+    return 0;
+  }
+
+ protected:
+  void Parse(unsigned char* buf, int len) {
+    struct ares_txt_reply* spf_out;
+
+    int status = ares_parse_txt_reply(buf, len, &spf_out);
+    if (status != ARES_SUCCESS) {
+      this->ParseError(status);
+      return;
+    }
+
+    Local<Array> spf_records = Array::New();
+
+    struct ares_txt_reply *current = spf_out;
+    for (int i = 0; current; ++i, current = current->next) {
+      Local<String> spf = String::New(reinterpret_cast<char*>(current->txt));
+      spf_records->Set(Integer::New(i), spf);
+    }
+
+    ares_free_data(spf_out);
+
+    this->CallOnComplete(spf_records);
+  }
+};
+
+
 class QuerySrvWrap: public QueryWrap {
  public:
   explicit QuerySrvWrap(Environment* env, Local<Object> req_wrap_obj)
@@ -1280,6 +1313,7 @@ static void Initialize(Handle<Object> target,
   NODE_SET_METHOD(target, "queryMx", Query<QueryMxWrap>);
   NODE_SET_METHOD(target, "queryNs", Query<QueryNsWrap>);
   NODE_SET_METHOD(target, "queryTxt", Query<QueryTxtWrap>);
+  NODE_SET_METHOD(target, "querySpf", Query<QuerySpfWrap>);
   NODE_SET_METHOD(target, "querySrv", Query<QuerySrvWrap>);
   NODE_SET_METHOD(target, "queryNaptr", Query<QueryNaptrWrap>);
   NODE_SET_METHOD(target, "querySoa", Query<QuerySoaWrap>);
