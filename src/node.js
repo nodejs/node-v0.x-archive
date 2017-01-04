@@ -152,6 +152,12 @@
         repl.on('exit', function() {
           process.exit();
         });
+        process.stdin.on('keypress', function(s, key) {
+          if (key && key.ctrl && ''.toUpperCase.call(key.name) == 'L') {
+            process.stdout.write('\u001B[2J\u001B[0;0f');
+            repl.displayPrompt(repl.prompt);
+          }
+        });
 
       } else {
         // Read all of stdin - execute it.
