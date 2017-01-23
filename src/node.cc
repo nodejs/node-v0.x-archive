@@ -2354,8 +2354,10 @@ static void EnvDeleter(Local<String> property,
 
 
 static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  // I still havn't figured out why the Current Eviroment gets back coruppted
   Environment* env = Environment::GetCurrent(info.GetIsolate());
-  HandleScope scope(env->isolate());
+  HandleScope scope(isolate);
 #ifdef __POSIX__
   int size = 0;
   while (environ[size])
@@ -2377,7 +2379,7 @@ static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
   WCHAR* environment = GetEnvironmentStringsW();
   if (environment == NULL)
     return;  // This should not happen.
-  Local<Array> envarr = Array::New(env->isolate());
+  Local<Array> envarr = Array::New(isolate);
   WCHAR* p = environment;
   int i = 0;
   while (*p != NULL) {
@@ -2394,7 +2396,7 @@ static void EnvEnumerator(const PropertyCallbackInfo<Array>& info) {
     }
     const uint16_t* two_byte_buffer = reinterpret_cast<const uint16_t*>(p);
     const size_t two_byte_buffer_len = s - p;
-    Local<String> value = String::NewFromTwoByte(env->isolate(),
+	Local<String> value = String::NewFromTwoByte(isolate,
                                                  two_byte_buffer,
                                                  String::kNormalString,
                                                  two_byte_buffer_len);
@@ -3775,6 +3777,7 @@ int Start(int argc, char** argv) {
     RunAtExit(env);
 
     env->Dispose();
+	locker.IsActive();
     env = NULL;
   }
 
