@@ -544,6 +544,9 @@ The synchronous version of `fs.appendFile`. Returns `undefined`.
 
     Stability: 2 - Unstable.  Use fs.watch instead, if possible.
 
+***Warning:*** This method is deprecated, and will throw an error under
+Windows. Use `fs.watch` instead.
+
 Watch for changes on `filename`. The callback `listener` will be called each
 time the file is accessed.
 
