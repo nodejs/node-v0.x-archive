@@ -105,7 +105,27 @@ assert.throws(makeBlock(a.deepEqual, 4, '5'),
               a.AssertionError,
               'deepEqual == check');
 
+
 // 7.5
+// If the actual object has an equals function,
+// use it for matching.
+var expected = {  equals: function(x) { return true } }
+var actual = "irrelevant"
+assert.doesNotThrow(makeBlock(a.deepEqual, actual, expected), 'deepEqual equals()');
+
+expected = {  equals: function(x) { return false } }
+actual = "irrelevant"
+assert.throws(makeBlock(a.deepEqual, actual, expected), 
+              a.AssertionError, 'deepEqual equals()');
+
+// Just in the (crazy) case someone has named a non-function
+// property "equals", it should fall back on normal comparisons.
+expected =    { equals: 'a string' };
+actual =  { equals: 'a string' };
+assert.doesNotThrow(makeBlock(a.deepEqual, actual, expected), 'deepEqual equals()');
+
+
+// 7.6
 // having the same number of owned properties && the same set of keys
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4}, {a: 4}));
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
