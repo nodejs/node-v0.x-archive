@@ -149,6 +149,25 @@
           opts.useColors = false;
         }
         var repl = Module.requireRepl().start(opts);
+        // define npm
+        repl.defineCommand('npm', {
+          help: 'Execute npm from a REPL session',
+          action: function(cmd) {
+            if (!cmd) {
+              cmd = '';
+            }
+
+            var exec = NativeModule.require('child_process').exec,
+                that = this,
+                cp = exec('npm ' + cmd,
+                          {cwd: process.cwd()},
+                          // stderr will output to the REPL console
+                          // so I just need to bring back the prompt
+                          function() {that.displayPrompt();});
+            cp.stdout.pipe(this.outputStream, {end: false});
+            cp.stderr.pipe(this.outputStream, {end: false});
+          }
+        });
         repl.on('exit', function() {
           process.exit();
         });
