@@ -29,6 +29,7 @@
 
 {
   'variables': {
+    'arm_neon%': 1,
     'use_system_v8%': 0,
     'msvs_use_common_release': 0,
     'gcc_version%': 'unknown',

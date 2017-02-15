@@ -170,7 +170,7 @@ bool OS::ArmCpuHasFeature(CpuFeature feature) {
 // calling this will return 1.0 and otherwise 0.0.
 static void ArmUsingHardFloatHelper() {
   asm("mov r0, #0":::"r0");
-#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+#if defined(__ARM_PCS_VFP) && !defined(__SOFTFP__)
   // Load 0x3ff00000 into r1 using instructions available in both ARM
   // and Thumb mode.
   asm("mov r1, #3":::"r1");
@@ -195,7 +195,7 @@ static void ArmUsingHardFloatHelper() {
 #else
   asm("vmov d0, r0, r1");
 #endif  // __thumb__
-#endif  // defined(__VFP_FP__) && !defined(__SOFTFP__)
+#endif  // defined(__ARM_PCS_VFP) && !defined(__SOFTFP__)
   asm("mov r1, #0":::"r1");
 }
 
