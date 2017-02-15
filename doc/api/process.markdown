@@ -723,9 +723,10 @@ Number of seconds Node has been running.
 ## process.hrtime()
 
 Returns the current high-resolution real time in a `[seconds, nanoseconds]`
-tuple Array. It is relative to an arbitrary time in the past. It is not
-related to the time of day and therefore not subject to clock drift. The
-primary use is for measuring performance between intervals.
+tuple Array with the sum of both being the overall result. It is relative
+to an arbitrary time in the past. It is not related to the time of day and
+therefore not subject to clock drift. The primary use is for measuring
+performance between intervals.
 
 You may pass in the result of a previous call to `process.hrtime()` to get
 a diff reading, useful for benchmarks and measuring intervals:
