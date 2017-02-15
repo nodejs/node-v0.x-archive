@@ -756,6 +756,15 @@ var b = Buffer('xxx');
 a.write('aaaaaaaa', 'base64');
 assert.equal(b.toString(), 'xxx');
 
+// Be verbose on all incorrect offset values
+var a = Buffer(2);
+assert.throws(function() {
+  a.writeUInt8(1, -Infinity)
+}, 'missing or incorrect offset');
+assert.throws(function() {
+  a.readUInt8(-Infinity);
+}, 'missing or incorrect offset');
+
 // issue GH-3416
 Buffer(Buffer(0), 0, 0);
 
