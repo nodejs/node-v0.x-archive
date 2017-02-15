@@ -125,6 +125,15 @@ void EmitExit(v8::Handle<v8::Object> process);
   obj->Set(v8::String::NewSymbol(name),                                   \
            v8::FunctionTemplate::New(callback)->GetFunction())
 
+#define NODE_SET_CONSTRUCTOR(constr, newmethod, name)                     \
+do {                                                                      \
+  v8::Local<v8::FunctionTemplate> __constr##_TEM =                        \
+    FunctionTemplate::New(newmethod);                                     \
+  constr = v8::Persistent<v8::FunctionTemplate>::New(__constr##_TEM);     \
+  constr->InstanceTemplate()->SetInternalFieldCount(1);                   \
+  constr->SetClassName(name);                                             \
+} while (0)
+
 #define NODE_SET_PROTOTYPE_METHOD(templ, name, callback)                  \
 do {                                                                      \
   v8::Local<v8::Signature> __callback##_SIG = v8::Signature::New(templ);  \
@@ -133,6 +142,12 @@ do {                                                                      \
                           __callback##_SIG);                              \
   templ->PrototypeTemplate()->Set(v8::String::NewSymbol(name),            \
                                   __callback##_TEM);                      \
+} while (0)
+
+#define NODE_SET_PROTOTYPE_ACCESSOR(templ, name, getter, setter)          \
+do {                                                                      \
+  templ->PrototypeTemplate()->SetAccessor(v8::String::NewSymbol(name),    \
+                                  getter, setter);                        \
 } while (0)
 
 enum encoding {ASCII, UTF8, BASE64, UCS2, BINARY, HEX};
