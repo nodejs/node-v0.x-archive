@@ -1,0 +1,169 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-  
+
+""" Node-gyp is a utility that helps the node module’s project generation.
+    In order to use this module, you must have node's source tree.
+	For windows you need to build node using vcbuild.bat."""
+
+import os
+import os.path
+import sys
+import subprocess
+
+def generate_project(argv):
+	""" Generate node module project. Takes two optional arguments:
+		make	: A command to request project building after its generation.
+		filename: The gyp file to use. If not defined, it tries to locate module.gyp file."""
+	
+	# Currently the script assumes that it runs in the 
+	# node source dir inside folder tools.
+	toolsdir = os.path.dirname(os.path.realpath(__file__))
+	
+	# Check that gypi file exists in the tools folder
+	if not check_for_file(toolsdir, "node_module.gypi"):
+		return False
+	
+	# Get a reference to node's source root
+	nodeRoot = os.path.join(toolsdir, "..")
+	
+	# Windows specific: we have to locate header files and node.lib
+	if sys.platform == 'win32':
+		# Try to locate the headers and exit if fail
+		if not windows_include_headers_found(nodeRoot):
+			return False
+		# Try to locate the node.lib file
+		node_lib_folder = windows_locate_node_lib(nodeRoot)
+		if not node_lib_folder: # if not found
+			return False # exit
+		
+	# Check for input file
+	gyp_definition_file = locate_gyp_file(argv)
+	if not gyp_definition_file:
+		return False
+	
+	# Try to load gyp
+	gyp = load_gyp(toolsdir)
+	if not gyp:
+		return False
+	
+	# Create the gyp arguments
+	gyp_args = [gyp_definition_file, '--depth=.', '-DNODE_ROOT=%s' % nodeRoot, '-I%s' % os.path.join(toolsdir,"node_module.gypi")];
+	if sys.platform == 'win32': # Visual studio 2010 for windows
+		gyp_args.extend(['-f', 'msvs', '-G', 'msvs_version=2010', '-Dnode_lib_folder=%s' % node_lib_folder])
+	else: # If we want XCode for Mac, this is the place to specify it
+		gyp_args.extend(['-f', 'make'])
+	
+	# Execute the project generation
+	if gyp.main(gyp_args) != 0:
+		print "An error occured generating the project. Check the output for info"
+		return False
+	
+	print 'Generating project(s): Done'
+	
+	# Check if user asked to build the project too
+	if user_requested_build(argv):
+		if sys.platform == 'win32':
+			return build_project_with_visual_studio(toolsdir, gyp_definition_file)
+		else: # If we want XCode for Mac, this is the place to specify it, too
+			return build_project_with_make()
+			
+	# End of node-gyp
+	return True
+	
+def check_for_file(path, *args):
+	""" Check if the specified file exist and returns True or False.
+		If the file is not found, it prints a message."""
+	
+	testFile = os.path.join(path, *args)
+	if not os.path.isfile(testFile):
+		print 'Could not locate %s' % testFile
+		return False
+	else:
+		return True
+
+def windows_include_headers_found(nodeRoot):
+	""" Check the nodeRoot folder to see if node.h, v8.h and uv.h 
+		files exist in there. Returns True or False"""
+		
+	return check_for_file(nodeRoot, "src", "node.h") and check_for_file(nodeRoot, "deps", "v8" , "include", "v8.h") and check_for_file(nodeRoot, "deps", "uv", "include", "uv.h")
+
+def windows_locate_node_lib(nodeRoot):
+	""" Check the nodeRoot folder to see if node.lib file exists and returns 
+		whether the file was found in the Release or the Debug folder.
+		Returns None if the lib was not found."""
+		
+	if not check_for_file(nodeRoot, "Release", "node.lib"):
+		if check_for_file(nodeRoot, "Debug", "node.lib"):
+			return "Debug"
+	else:
+		return "Release"
+	# if we haven't returned anything by now, then we couldn't locate node.lib
+	print "node.lib file was not found in neither Release nor Debug folders in %s" % nodeRoot
+	return None	
+	
+def locate_gyp_file(argv):
+	""" Examines the arguments to see if the user has asked for a specific gyp file.
+		If not or the file does not exist, tries to locate a module.gyp file in 
+		the path of invocation. Returns the full path to the gyp file or None if
+		not found."""
+		
+	gyp_definition_file = None
+	# if there are any arguments available ("make" and/or filename)
+	if argv:
+		if argv[0]!= "make" and check_for_file(os.getcwd(), argv[0]):
+			gyp_definition_file= os.path.join(os.getcwd(), argv[0])
+		elif len(argv) == 2 and argv[1]!= "make" and check_for_file(os.getcwd(),argv[1]):
+			gyp_definition_file= os.path.join(os.getcwd(), argv[1])
+	
+	# if the file is not specified in the arguments, check for default file
+	if gyp_definition_file is None:
+		if check_for_file(os.getcwd(), "module.gyp"):
+			gyp_definition_file = os.path.join(os.getcwd(), "module.gyp")
+	return gyp_definition_file
+
+def load_gyp(toolsdir):
+	""" Tries to load gyp from the path. If not found, tries to load
+		it from node's source tree. Returns the gyp module or None if
+		it fails."""
+	
+	try: # to load installed gyp
+		import gyp 
+		return gyp
+	except ImportError, e:
+		print "gyp is not in your path environment variable. Trying to retrieve it from node."
+		if not check_for_file(toolsdir, "gyp", "pylib", "gyp", "__init__.py"):
+			return None
+		else:
+			sys.path.append(os.path.join(toolsdir, "gyp", "pylib"))
+			print "gyp located at %s" % os.path.join(toolsdir, "gyp")
+			import gyp
+			return gyp
+	
+def user_requested_build(argv):
+	""" Examines the arguments to see if the user asked to build the project.
+		Returns True or False"""
+		
+	if len(argv) > 0:
+		if argv[0]== "make":
+			return True
+		elif len(argv) == 2 and argv[1]== "make":
+			return True
+	return False
+	
+def build_project_with_visual_studio(toolsdir, gyp_definition_file):
+	""" Builds the generated project using Visual Studio's tools. Calls the vsbuild.bat
+		script located in the same folder as this module"""
+		
+	return subprocess.call([os.path.join(toolsdir, "vsbuild.bat"), gyp_definition_file])
+
+def build_project_with_make():
+	""" Builds the generated Makefile using make"""
+		
+	return subprocess.call("make")
+	
+if __name__ == '__main__':
+	# If this is called directly from python, then generate_project reading the command line args
+	generate_project(sys.argv[1:])
+
+
+
