@@ -796,7 +796,7 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname) { ',
+    '(function (exports, require, module, define, __filename, __dirname) { ',
     '\n});'
   ];
 
