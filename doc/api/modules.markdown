@@ -316,6 +316,45 @@ To illustrate the behaviour, imagine this hypothetical implementation of
 As a guideline, if the relationship between `exports` and `module.exports`
 seems like magic to you, ignore `exports` and only use `module.exports`.
 
+### module.deprecate(method, message)
+* `method` {String}
+* `message` {String}
+
+The `module.deprecate` method provides a way to easily mark a method as
+deprecated. This will warn the user once that a method in the module is
+deprecated, while still allowing the method to be called for backwards
+compatibility.
+
+Example:
+
+    exports.test = function() {
+      return "Testing..";
+    };
+    module.deprecate('test', 'Will be removed in the future.');
+
+This will return:
+
+    test.test is deprecated. Will be removed in the future.
+    Testing..
+
+**Note:** This will not work with certain exports exported with `module.exports`.
+
+For example:
+
+    function Test() {
+
+    }
+    module.exports = Test;
+    module.deprecate('Test', 'This will never trigger.');
+
+However:
+
+    module.exports.test = function() {
+      return "Testing..";
+    };
+    module.deprecate('test', 'This will trigger.');
+
+
 ### module.require(id)
 
 * `id` {String}
@@ -328,7 +367,6 @@ Note that in order to do this, you must get a reference to the `module`
 object.  Since `require()` returns the `module.exports`, and the `module` is
 typically *only* available within a specific module's code, it must be
 explicitly exported in order to be used.
-
 
 ### module.id
 
