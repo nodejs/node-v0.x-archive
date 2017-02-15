@@ -157,6 +157,9 @@
         // Read all of stdin - execute it.
         process.stdin.setEncoding('utf8');
 
+        // Always print result to console.log 
+        process._print_eval = true;
+
         var code = '';
         process.stdin.on('data', function(d) {
           code += d;
