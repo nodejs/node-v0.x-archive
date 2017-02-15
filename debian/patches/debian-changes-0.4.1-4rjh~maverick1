@@ -1,0 +1,38 @@
+Description: Upstream changes introduced in version 0.4.1-4rjh~maverick1
+ This patch has been created by dpkg-source during the package build.
+ Here's the last changelog entry, hopefully it gives details on why
+ those changes were made:
+ .
+ nodejs (0.4.1-4rjh~maverick1) maverick; urgency=low
+ .
+   * Fixed print_help() to say nodejs not node.
+ .
+ The person named in the Author field signed this changelog entry.
+Author: Richard Harvey (SquareCows.com) <richard@squarecows.com>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: http://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: <YYYY-MM-DD>
+
+--- nodejs-0.4.1.orig/src/node.cc
++++ nodejs-0.4.1/src/node.cc
+@@ -2099,8 +2099,8 @@ static void ParseDebugOpt(const char* ar
+ }
+ 
+ static void PrintHelp() {
+-  printf("Usage: node [options] script.js [arguments] \n"
+-         "       node debug script.js [arguments] \n"
++  printf("Usage: nodejs [options] script.js [arguments] \n"
++         "       nodejs debug script.js [arguments] \n"
+          "\n"
+          "Options:\n"
+          "  -v, --version        print node's version\n"

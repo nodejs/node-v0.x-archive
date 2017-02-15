@@ -1,0 +1,22 @@
+nodejs for Debian
+---------------
+
+Warning: the API is expected to change until nodejs reaches version 0.2
+
+node-repl is using rlwrap, and is located at :
+/usr/bin/nodejs-repl
+
+node-waf is in nodejs-dev package, to build a module using waf, do :
+/usr/bin/nodejs-waf configure build
+
+To install such a module, be root and do :
+/usr/bin/nodejs-waf install
+
+Modules path : /usr/lib/nodejs/
+Module 'foo' is searched in that order :
+/usr/lib/nodejs/foo.js
+/usr/lib/nodejs/foo.node
+/usr/lib/nodejs/foo/index.js
+/usr/lib/nodejs/foo/index.addon
+
+ -- Jérémy Lal <kapouer@melix.org>  Fri, 07 May 2010 18:13:57 +0200

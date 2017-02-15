@@ -1,0 +1,8 @@
+--- a/bin/node-repl.orig	2010-10-08 22:57:16.943353999 -0700
++++ b/bin/node-repl	2010-10-08 22:57:24.347354000 -0700
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env node
++#!/usr/bin/env nodejs
+ 
+ console.log("Type '.help' for options.");
+ console.log("(The REPL can also be started by typing 'node' without arguments)");

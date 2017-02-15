@@ -1,0 +1,20 @@
+diff -urN node-v0.4.1.orig//wscript node-v0.4.1/wscript
+--- node-v0.4.1.orig/wscript	2011-02-19 18:45:34.000000000 -0800
++++ node-v0.4.1/wscript	2011-02-19 23:52:48.718066002 -0800
+@@ -859,12 +859,12 @@
+ 
+   # Only install the man page if it exists.
+   # Do 'make doc install' to build and install it.
+-  if os.path.exists('doc/node.1'):
+-    bld.install_files('${PREFIX}/share/man/man1/', 'doc/node.1')
++  if os.path.exists('doc/nodejs.1'):
++    bld.install_files('${PREFIX}/share/man/man1/', 'doc/nodejs.1')
+ 
+   bld.install_files('${PREFIX}/bin/', 'tools/node-waf', chmod=0755)
+-  bld.install_files('${PREFIX}/lib/node/wafadmin', 'tools/wafadmin/*.py')
+-  bld.install_files('${PREFIX}/lib/node/wafadmin/Tools', 'tools/wafadmin/Tools/*.py')
++  bld.install_files('${PREFIX}/share/nodejs/wafadmin', 'tools/wafadmin/*.py')
++  bld.install_files('${PREFIX}/share/nodejs/wafadmin/Tools', 'tools/wafadmin/Tools/*.py')
+ 
+   # create a pkg-config(1) file
+   node_conf = bld.new_task_gen('subst', before="cxx")

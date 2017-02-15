@@ -1,0 +1,57 @@
+Source: nodejs
+Section: web
+Priority: extra
+Maintainer: Richard Harvey (SquareCows.com) <richard@squarecows.com>
+Uploaders:
+Build-Depends: debhelper (>= 7), python, quilt (>= 0.46-7~), libev-dev (>= 3.9), scons (>= 1.2.0), binutils, libc-ares-dev (>= 1.7.3), libssl-dev (>= 0.9.8), pkg-config
+Standards-Version: 3.9.1
+Homepage: http://nodejs.org/
+Vcs-Browser: https://github.com/joyent/node.git
+Vcs-Git: git://github.com/joyent/node.git
+
+Package: nodejs-dev
+Section: devel
+Architecture: any
+Depends: nodejs (= ${binary:Version}), ${misc:Depends}, python, libev-dev (>= 3.9), libssl-dev (>= 0.9.8), libc-ares-dev (>= 1.7.3)
+Description: Development files for Node.js
+ Node.js provides an event-based server-side javascript engine.
+ .
+ It is similar in design to and influenced by systems like
+ Ruby's Event Machine or Python's Twisted.
+ .
+ Node.js takes the event model a bit further - it presents the event
+ loop as a language construct instead of as a library.
+ .
+ This package is needed to build plugins.
+
+Package: nodejs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, rlwrap
+Description: Node.js event-based server-side javascript engine
+ Node.js is similar in design to and influenced by systems like
+ Ruby's Event Machine or Python's Twisted.
+ .
+ It takes the event model a bit further - it presents the event
+ loop as a language construct instead of as a library.
+ .
+ Node.js is bundled with several useful libraries to handle server tasks :
+ System, Events, Standard I/O, Modules, Timers, Child Processes, POSIX,
+ HTTP, Multipart Parsing, TCP, DNS, Assert, Path, URL, Query Strings.
+
+Package: nodejs-dbg
+Section: debug
+Architecture: any
+Depends: ${misc:Depends}, nodejs (= ${binary:Version})
+Suggests: libv8-dbg (>= 2.2.7)
+Description: Node.js event-based server-side javascript engine (debug)
+ Node.js is similar in design to and influenced by systems like
+ Ruby's Event Machine or Python's Twisted.
+ .
+ It takes the event model a bit further - it presents the event
+ loop as a language construct instead of as a library.
+ .
+ Node.js is bundled with several useful libraries to handle server tasks :
+ System, Events, Standard I/O, Modules, Timers, Child Processes, POSIX,
+ HTTP, Multipart Parsing, TCP, DNS, Assert, Path, URL, Query Strings.
+ .
+ This package contains the debugging symbols.

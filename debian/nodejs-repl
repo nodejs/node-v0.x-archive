@@ -1,0 +1,2 @@
+#!/bin/sh
+/usr/bin/rlwrap /usr/share/nodejs/node-repl

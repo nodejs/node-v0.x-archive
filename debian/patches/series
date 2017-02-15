@@ -1,0 +1,5 @@
+install-wscript-corrections.patch
+node_addon-paths-and-ev_multiplicity.patch
+nodejs-waf-and-node_path.patch
+
+debian-changes-0.4.1-4rjh~maverick1

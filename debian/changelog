@@ -1,0 +1,148 @@
+nodejs (0.5.0-0.1) natty; urgency=low
+
+  * Import natty packaging, push into git source.
+
+ -- Jeff Buchbinder <jeff@freemedsoftware.org>  Fri, 23 Sep 2011 13:15:47 -0400
+
+nodejs (0.4.1-4rjh~maverick1) maverick; urgency=low
+
+  * Fixed print_help() to say nodejs not node.
+
+ -- Richard Harvey (SquareCows.com) <richard@squarecows.com>  Thu, 24 Feb 2011 16:26:12 +0000
+
+nodejs (0.4.1-3rjh~maverick1) maverick; urgency=low
+
+  * Added to my PPA to support nodester install.
+  * Updated package to remove lib-ares 1.7.1 mx patch as 1.7.3 is now
+    available which fixes the issue.
+
+ -- Richard Harvey (SquareCows.com) <richard@squarecows.com>  Tue, 22 Feb 2011 12:20:00 +0000
+
+nodejs (0.4.1-2chl1~maverick1) maverick; urgency=low
+
+  * Fix waf-admin path issue 
+
+ -- Chris Lea <chl@chrislea.com>  Sun, 20 Feb 2011 11:10:54 +0000
+
+nodejs (0.4.1-1chl1~maverick1) maverick; urgency=low
+
+  * 0.4.1 release 
+
+ -- Chris Lea <chl@chrislea.com>  Sat, 19 Feb 2011 23:45:32 -0800
+
+nodejs (0.2.6-1chl1~maverick1) maverick; urgency=low
+
+  * 0.2.6 release 
+
+ -- Chris Lea <chl@chrislea.com>  Sun, 09 Jan 2011 18:37:57 +0000
+
+nodejs (0.2.5-1chl1~maverick1) maverick; urgency=low
+
+  * 0.2.5 release
+
+ -- Chris Lea <chl@chrislea.com>  Wed, 17 Dec 2010 15:04:00 -0400
+
+nodejs (0.2.4-1chl1~maverick1) maverick; urgency=low
+
+  * 0.2.4 release
+
+ -- Chris Lea <chl@chrislea.com>  Wed, 27 Oct 2010 15:36:00 -0700
+
+nodejs (0.2.3-2chl1~maverick1) maverick; urgency=low
+
+  * Fixed to compile on maverick
+
+ -- Chris Lea <chl@chrislea.com>  Fri, 08 Oct 2010 23:13:24 -0700
+
+nodejs (0.2.3-1chl1~maverick1) maverick; urgency=low
+
+  * 0.2.3 release
+
+ -- Chris Lea <chl@chrislea.com>  Mon, 04 Oct 2010 12:01:24 +0100
+
+nodejs (0.2.2-3chl1~maverick1) maverick; urgency=low
+
+  * Remove unneeded quilt include from debian/rules
+
+ -- Chris Lea <chl@chrislea.com>  Thu, 23 Sep 2010 12:45:24 -0700
+
+nodejs (0.2.2-2chl1~maverick1) maverick; urgency=low
+
+  * Add build dependency on quilt
+
+ -- Chris Lea <chl@chrislea.com>  Thu, 23 Sep 2010 12:45:24 -0700
+
+nodejs (0.2.2-1chl1~maverick1) maverick; urgency=low
+
+  * New upstream release
+
+ -- Chris Lea <chl@chrislea.com>  Thu, 23 Sep 2010 11:31:24 -0700
+
+nodejs (0.1.97-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jérémy Lal <kapouer@melix.org>  Sun, 30 May 2010 23:14:24 +0200
+
+nodejs (0.1.95-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jérémy Lal <kapouer@melix.org>  Fri, 14 May 2010 02:05:25 +0200
+
+nodejs (0.1.94-2) unstable; urgency=low
+
+  * Drop dependencies on libgnutls-dev, libgpg-error-dev.
+  * Modules path moved to /usr/lib/nodejs (without /modules), to
+    follow more closely upstream practice.
+  * node-repl is now in /usr/share/nodejs because it is
+    simply a js script file ; nodejs-repl still in /usr/bin
+
+ -- Jérémy Lal <kapouer@melix.org>  Tue, 11 May 2010 19:52:12 +0200
+
+nodejs (0.1.94-1) unstable; urgency=low
+
+  * New upstream release
+  * API has changed and will be more stable with 0.2 release
+  * Fix dependency on libv8. (Closes: #579044)
+  * Switched from gnutls to libssl.
+
+ -- Jérémy Lal <kapouer@melix.org>  Thu, 06 May 2010 23:19:12 +0200
+
+nodejs (0.1.92-1) unstable; urgency=low
+
+  * New upstream release
+  * Switch from udns to c-ares.
+
+ -- Jérémy Lal <kapouer@melix.org>  Sat, 24 Apr 2010 09:12:06 +0200
+
+nodejs (0.1.33-3) unstable; urgency=low
+
+  * Fix wrong use of binary-indep target in debian/rules.
+    (Closes: #575383) 
+
+ -- Jérémy Lal <kapouer@melix.org>  Mon, 05 Apr 2010 15:26:40 +0200
+
+nodejs (0.1.33-2) unstable; urgency=low
+
+  * Previous package was broken in some way. (Closes: #575383)
+
+ -- Jérémy Lal <kapouer@melix.org>  Thu, 25 Mar 2010 12:24:06 +0100
+
+nodejs (0.1.33-1) unstable; urgency=low
+
+  * New upstream release. (Closes: #572023)
+  * Debian package has the same license as upstream (MIT).
+  * Include waf in source package and nodejs-dev package. (Closes: #571710)
+  * Switch to dpkg-source 3.0 (quilt) format.
+  * Place modules directory in usr/lib/nodejs/modules,
+    and add it to nodejs module path. Documentation in README.Debian.
+  * Architecture: any since the supported archs depends only on libv8.
+
+ -- Jérémy Lal <kapouer@melix.org>  Mon, 22 Mar 2010 01:53:48 +0100
+
+nodejs (0.1.27+dfsg-1) unstable; urgency=low
+
+  * Initial release (Closes: #553514)
+
+ -- Jérémy Lal <kapouer@melix.org>  Sun, 07 Feb 2010 01:16:07 +0100
