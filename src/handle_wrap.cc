@@ -75,6 +75,20 @@ Handle<Value> HandleWrap::Unref(const Arguments& args) {
   return v8::Undefined();
 }
 
+Handle<Value> HandleWrap::Ref(const Arguments& args) {
+  HandleScope scope;
+
+  UNWRAP
+
+  // Calling this function twice should never happen.
+  assert(wrap->unref == true);
+
+  wrap->unref = false;
+  uv_ref(uv_default_loop());
+
+  return v8::Undefined();
+}
+
 
 // Adds a reference to keep uv alive because of this thing.
 Handle<Value> HandleWrap::Ref(const Arguments& args) {
