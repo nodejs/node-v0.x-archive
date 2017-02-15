@@ -564,7 +564,7 @@ stat object:
 These stat objects are instances of `fs.Stat`.
 
 If you want to be notified when the file was modified, not just accessed
-you need to compare `curr.mtime` and `prev.mtime`.
+you need to compare `curr.mtime.getTime()` and `prev.mtime.getTime()`.
 
 ## fs.unwatchFile(filename[, listener])
 
