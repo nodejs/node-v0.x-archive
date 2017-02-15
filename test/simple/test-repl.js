@@ -173,6 +173,9 @@ function error_test() {
       expect: prompt_unix },
     { client: client_unix, send: 'blah()',
       expect: '1\n' + prompt_unix },
+    // Functions should return function.toString() when not called. (#3509)
+    { client: client_unix, send: 'blah',
+      expect: /^function blah()/ },
     // Functions should not evaluate twice (#2773)
     { client: client_unix, send: 'var I = [1,2,3,function() {}]; I.pop()',
       expect: '[Function]' },
