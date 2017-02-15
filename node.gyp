@@ -56,6 +56,7 @@
       'lib/_stream_passthrough.js',
       'lib/string_decoder.js',
       'lib/sys.js',
+      'lib/this.js',
       'lib/timers.js',
       'lib/tls.js',
       'lib/_tls_common.js',
