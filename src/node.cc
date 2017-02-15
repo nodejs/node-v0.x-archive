@@ -2819,9 +2819,7 @@ void LoadEnvironment(Environment* env) {
   V8::SetFatalErrorHandler(node::OnFatalError);
   V8::AddMessageListener(OnMessage);
 
-  // Compile, execute the src/node.js file. (Which was included as static C
-  // string in node_natives.h. 'natve_node' is the string containing that
-  // source code.)
+  // Compile, execute the src/node.js file.
 
   // The node.js file returns a function 'f'
   atexit(AtExit);
