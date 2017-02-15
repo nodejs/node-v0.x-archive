@@ -81,6 +81,28 @@ the best compatibility if it defines an `output.columns` property, and fires
 a `"resize"` event on the `output` if/when the columns ever change
 (`process.stdout` does this automatically when it is a TTY).
 
+## readline.emitKeypressEvents(stream)
+
+Accepts a readable Stream instance and makes it emit `keypress` events.
+
+## readline.cursorTo(stream, [x], [y])
+
+Moves the cursor to the x and y coordinate on the given stream.
+
+## readline.moveCursor(stream, [x], [y])
+
+Moves the cursor relative to its current location on the given stream.
+
+## readline.clearLine(stream, [direction])
+
+Clears the current line the cursor is on. `direction` is `0` by default and
+will clear the entire line. `-1` will clear to the left of the cursor and `1`
+will clear to the right of the cursor.
+
+## readline.clearScreenDown(stream)
+
+Clears the screen from the current position of the cursor down.
+
 ## Class: Interface
 
 The class that represents a readline interface with an input and output
@@ -150,6 +172,10 @@ Example:
     // Simulate ctrl+u to delete the line written previously
     rl.write(null, {ctrl: true, name: 'u'});
 
+### rl.clearLine()
+
+Moves the cursor to the end and writes a newline.
+
 ## Events
 
 ### Event: 'line'
@@ -204,6 +230,21 @@ the `input` stream receives `^D`, respectively known as `EOT`.
 
 This event is also called if there is no `SIGINT` event listener present when
 the `input` stream receives a `^C`, respectively known as `SIGINT`.
+
+### Event: 'keypress'
+
+`function (character, key) {}`
+
+Emitted when a key is pressed on an `input` stream.
+
+`character` is a string of the character pressed. `key` is an object literal
+with information about the key pressed. For example `Ctrl + c` would be:
+
+    { name: 'c',
+      ctrl: true,
+      meta: false,
+      shift: false,
+      sequence: '\u0003' }
 
 ### Event: 'SIGINT'
 
