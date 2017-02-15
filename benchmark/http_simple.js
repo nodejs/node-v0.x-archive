@@ -13,15 +13,8 @@ var fixed = makeString(20 * 1024, 'C'),
 
 var useDomains = process.env.NODE_USE_DOMAINS;
 
-// set up one global domain.
 if (useDomains) {
   var domain = require('domain');
-  var gdom = domain.create();
-  gdom.on('error', function(er) {
-    console.log('Error on global domain', er);
-    throw er;
-  });
-  gdom.enter();
 }
 
 var server = http.createServer(function (req, res) {
@@ -29,6 +22,7 @@ var server = http.createServer(function (req, res) {
     var dom = domain.create();
     dom.add(req);
     dom.add(res);
+    dom.enter();
   }
 
   var commands = req.url.split('/');
