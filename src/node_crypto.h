@@ -648,6 +648,11 @@ class DiffieHellman : public BaseObject {
     if (dh != NULL) {
       DH_free(dh);
     }
+
+#ifdef OPENSSL_NPN_NEGOTIATED
+    if (!npnProtos_.IsEmpty()) npnProtos_.Dispose();
+    if (!selectedNPNProto_.IsEmpty()) selectedNPNProto_.Dispose();
+#endif
   }
 
   static void Initialize(Environment* env, v8::Handle<v8::Object> target);
