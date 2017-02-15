@@ -270,6 +270,12 @@ does not imply that the client has received anything yet.
 
 After this event, no more events will be emitted on the response object.
 
+### Event: 'finish'
+
+`function () { }`
+
+Indicates that `response.end()` was called and executed properly.
+
 ### response.writeContinue()
 
 Sends a HTTP/1.1 100 Continue message to the client, indicating that
