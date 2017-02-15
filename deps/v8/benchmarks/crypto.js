@@ -192,7 +192,7 @@ function bnpFromInt(x) {
   this.t = 1;
   this.s = (x<0)?-1:0;
   if(x > 0) this_array[0] = x;
-  else if(x < -1) this_array[0] = x+DV;
+  else if(x < -1) this_array[0] = x+BI_DV;
   else this.t = 0;
 }
 
@@ -413,7 +413,6 @@ function bnpSubTo(a,r) {
 // (protected) r = this * a, r != this,a (HAC 14.12)
 // "this" should be the larger one if appropriate.
 function bnpMultiplyTo(a,r) {
-  var this_array = this.array;
   var r_array = r.array;
   var x = this.abs(), y = a.abs();
   var y_array = y.array;
@@ -902,6 +901,7 @@ function cbit(x) {
 
 // (public) return number of set bits
 function bnBitCount() {
+  var this_array = this.array;
   var r = 0, x = this.s&BI_DM;
   for(var i = 0; i < this.t; ++i) r += cbit(this_array[i]^x);
   return r;
