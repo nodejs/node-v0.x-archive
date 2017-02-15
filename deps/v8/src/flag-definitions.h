@@ -175,6 +175,19 @@ DEFINE_IMPLICATION(harmony_modules, harmony_scoping)
 
 DEFINE_IMPLICATION(harmony, es_staging)
 
+#define DEFINE_implication(whenflag, thenflag) \
+  if (FLAG_##whenflag) FLAG_##thenflag = true;
+#else
+#error No mode supplied when including flags.defs
+#endif
+
+DEFINE_bool(harmony, false, "enable all harmony features (typeof, proxies, weakmaps, block-scoping)")
+DEFINE_implication(harmony, harmony_typeof)
+DEFINE_implication(harmony, harmony_weakmaps)
+DEFINE_implication(harmony, harmony_proxies)
+DEFINE_implication(harmony, harmony_block_scoping)
+DEFINE_implication(harmony_modules, harmony_scoping)
+
 // Flags for experimental implementation features.
 DEFINE_BOOL(compiled_keyed_dictionary_loads, true,
             "use optimizing compiler to generate keyed dictionary load stubs")
