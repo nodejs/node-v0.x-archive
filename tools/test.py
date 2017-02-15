@@ -231,6 +231,29 @@ class DotsProgressIndicator(SimpleProgressIndicator):
       sys.stdout.write('.')
       sys.stdout.flush()
 
+class TapProgressIndicator(SimpleProgressIndicator):
+
+  def Starting(self):
+    print '1..%i' % len(self.cases)
+    self._done = 0
+
+  def AboutToRun(self, case):
+    pass
+
+  def HasRun(self, output):
+    self._done += 1
+    command = basename(output.command[1])
+    if output.UnexpectedOutput():
+      print 'not ok %i - %s' % (self._done, command)
+      for l in output.output.stderr.split(os.linesep):
+        print '#' + l
+      for l in output.output.stdout.split(os.linesep):
+        print '#' + l
+    else:
+      print 'ok %i - %s' % (self._done, command)
+
+  def Done(self):
+    pass
 
 class TapProgressIndicator(SimpleProgressIndicator):
 
