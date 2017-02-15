@@ -796,7 +796,8 @@
   };
 
   NativeModule.wrapper = [
-    '(function (exports, require, module, __filename, __dirname) { ',
+    '(function (exports, require, module, __filename, __dirname) { ' +
+    'function define(factory) { factory(require, exports, module); } ',
     '\n});'
   ];
 
