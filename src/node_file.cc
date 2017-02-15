@@ -260,7 +260,7 @@ static void After(uv_fs_t *req) {
 // This struct is only used on sync fs calls.
 // For async calls FSReqWrap is used.
 struct fs_req_wrap {
-  fs_req_wrap() {}
+  fs_req_wrap() { req->path = NULL; }
   ~fs_req_wrap() { uv_fs_req_cleanup(&req); }
   // Ensure that copy ctor and assignment operator are not used.
   fs_req_wrap(const fs_req_wrap& req);
