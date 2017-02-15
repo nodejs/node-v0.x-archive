@@ -14,6 +14,7 @@ import sys
 
 # set at init time
 dst_dir = None
+dst_dir_prefix = None
 node_prefix = None # dst_dir without DESTDIR prefix
 target_defaults = None
 variables = None
@@ -168,6 +169,8 @@ def npm_files(action):
       shebang = '/bin/sh\n// 2>/dev/null; exec "`dirname "$0"`/node" "$0" "$@"'
     else:
       shebang = os.path.join(node_prefix, 'bin/node')
+    if dst_dir_prefix:
+      shebang = abspath(dst_dir_prefix + '/' + shebang)
     update_shebang(link_path, shebang)
   else:
     assert(0) # unhandled action type
@@ -212,7 +215,7 @@ def files(action):
   if 'true' == variables.get('node_install_npm'): npm_files(action)
 
 def run(args):
-  global dst_dir, node_prefix, target_defaults, variables
+  global dst_dir, dst_dir_prefix, node_prefix, target_defaults, variables
 
   # chdir to the project's top-level directory
   os.chdir(abspath(os.path.dirname(__file__), '..'))
@@ -223,7 +226,9 @@ def run(args):
 
   # argv[2] is a custom install prefix for packagers (think DESTDIR)
   dst_dir = node_prefix = variables.get('node_prefix') or '/usr/local'
-  if len(args) > 2: dst_dir = abspath(args[2] + '/' + dst_dir)
+  if len(args) > 2:
+    dst_dir_prefix = args[2]
+    dst_dir = abspath(dst_dir_prefix + '/' + dst_dir)
 
   cmd = args[1] if len(args) > 1 else 'install'
   if cmd == 'install': return files(install)
