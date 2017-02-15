@@ -203,6 +203,12 @@
             'cflags!': [ '-pthread' ],
             'ldflags!': [ '-pthread' ],
           }],
+          [ 'OS=="solaris"', {
+            'cflags': [ '-pthreads' ],
+            'ldflags': [ '-pthreads' ],
+            'cflags!': [ '-pthread' ],
+            'ldflags!': [ '-pthread' ],
+          }],
         ],
       }],
       [ 'OS=="android"', {
