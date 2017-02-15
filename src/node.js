@@ -55,6 +55,12 @@
     startup.processStdio();
     startup.processKillAndExit();
     startup.processSignalHandlers();
+    
+    global.__defineGetter__('__callsite', function() {
+      var stack = (new Error).stack.replace(/  |at /g, '').split('\n');
+      stack.shift(); stack.shift(); // get rid of 2 useless frames
+      return stack;
+    });
 
     // Do not initialize channel in debugger agent, it deletes env variable
     // and the main thread won't see it.
