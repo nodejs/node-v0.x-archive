@@ -151,6 +151,10 @@ an empty string.  Examples:
     path.extname('index.html')
     // returns
     '.html'
+    
+    path.extname('index.coffee.md')
+    // returns
+    '.md'
 
     path.extname('index.coffee.md')
     // returns
