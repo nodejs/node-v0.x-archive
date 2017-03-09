@@ -200,6 +200,8 @@ function error_test() {
     { client: client_unix, send: 'url.format("http://google.com")',
       expect: 'http://google.com/' },
     { client: client_unix, send: 'var path = 42; path',
+      expect: '42' },
+    { client: client_unix, send: '\n\n42',
       expect: '42' }
   ]);
 }
