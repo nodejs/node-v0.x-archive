@@ -20,11 +20,6 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-// SIGUSR1 and SIGHUP are not supported on Windows
-if (process.platform === 'win32') {
-  process.exit(0);
-}
-
 var common = require('../common');
 var assert = require('assert');
 
@@ -65,7 +60,10 @@ process.on('SIGHUP', function() { sighup = true });
 process.kill(process.pid, 'SIGHUP');
 
 process.on('exit', function() {
-  assert.equal(1, first);
-  assert.equal(1, second);
+  // SIGUSR1 is not supported on Windows
+  if (process.platform !== 'win32') {
+    assert.equal(1, first);
+    assert.equal(1, second);
+  }
   assert.equal(true, sighup);
 });
