@@ -186,7 +186,7 @@ Stops the server from accepting new connections.  See [net.Server.close()][].
 
 ### server.maxHeadersCount
 
-Limits maximum incoming headers count, equal to 1000 by default. If set to 0 -
+Limits maximum incoming headers count, equal to 2000 by default. If set to 0 -
 no limit will be applied.
 
 ### server.setTimeout(msecs, callback)
