@@ -51,6 +51,8 @@ if (process.platform === 'win32') {
   exports.faketimeCli = path.join(__dirname, "..", "tools", "faketime", "src",
     "faketime");
 }
+if (!fs.existsSync(exports.opensslCli))
+  exports.opensslCli = false;
 
 var ifaces = os.networkInterfaces();
 exports.hasIPv6 = Object.keys(ifaces).some(function(name) {
