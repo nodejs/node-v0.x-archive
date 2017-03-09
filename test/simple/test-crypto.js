@@ -311,7 +311,12 @@ var rfc4231 = [
 for (var i = 0, l = rfc4231.length; i < l; i++) {
   for (var hash in rfc4231[i]['hmac']) {
     var str = crypto.createHmac(hash, rfc4231[i].key);
-    str.end(rfc4231[i].data);
+    try {
+      str.end(rfc4231[i].data);
+    } catch (e) {
+      throw e;
+      continue;
+    }
     var strRes = str.read().toString('hex');
     var result = crypto.createHmac(hash, rfc4231[i]['key'])
                      .update(rfc4231[i]['data'])
