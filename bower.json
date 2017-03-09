@@ -1,0 +1,11 @@
+{
+  "name": "joyent/node",
+  "version": "0.11.13",
+  "main": [],
+  "description": "evented I/O for v8 javascript http://nodejs.org/",
+  "license": "LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/joyent/node.git"
+  }
+}
