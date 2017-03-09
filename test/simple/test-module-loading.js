@@ -172,6 +172,7 @@ require.extensions['.reg2'] = require.extensions['.js'];
 
 assert.equal(require(loadOrder + 'file1').file1, 'file1', msg);
 assert.equal(require(loadOrder + 'file2').file2, 'file2.js', msg);
+assert.equal(require(loadOrder + 'file2/').file2, 'file2/index.js', msg);
 try {
   require(loadOrder + 'file3');
 } catch (e) {
