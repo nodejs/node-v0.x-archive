@@ -1,0 +1,14 @@
+language: node_js
+
+before_script:
+  - "./configure"
+  - "make"
+
+script:
+  - "make test"
+
+notifications:
+  email: false
+  irc:
+    - secure: "h8AOh/k2u3nsBfhvnn6poBLbG7PN9OKm2xoZSs7+/QfuxgxB4V4VSYQEYWc+\neKbBa870H/mW+pL+2aWz6vtmmD6V01ii/4Q5A8V03ztFAOg25URdAUAmgpO8\n7JXM9xKYhvczk/dBxb6yIlRrqyWnwc2usKGL57z+IQ884qaW7CY="
+
