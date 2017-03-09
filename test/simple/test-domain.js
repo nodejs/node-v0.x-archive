@@ -177,6 +177,16 @@ expectCaught++;
 
 
 
+// implicit addition of a nextTick created within a domain-bound context.
+d.run(function() {
+  process.nextTick(function() {
+    throw new Error('implicit nextTick');
+  });
+});
+expectCaught++;
+
+
+
 // Event emitters added to the domain have their errors routed.
 d.add(e);
 e.emit('error', new Error('emitted'));
