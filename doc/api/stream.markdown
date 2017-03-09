@@ -1631,3 +1631,5 @@ JSONParseStream.prototype._flush = function(cb) {
 [`pause()`]: #stream_readable_pause
 [`unpipe()`]: #stream_readable_unpipe_destination
 [`pipe()`]: #stream_readable_pipe_destination_options
+[`end`]: #stream_event_end
+[`finish`]: #stream_event_finish
