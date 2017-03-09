@@ -77,8 +77,13 @@ using v8::Value;
   } \
   node::Utf8Value _##member(obj->Get(OneByteString(env->isolate(), \
                                                      #member))); \
-  if ((*(const char **)valp = *_##member) == NULL) \
-    *(const char **)valp = "<unknown>";
+  if ((*(uint64_t *)valp = (uint64_t) (intptr_t) *_##member) == 0) \
+    *(uint64_t *)valp = (uint64_t) (intptr_t) "<unknown>";
+
+#define SLURP_TO_STRING(val) \
+  (static_cast<uint64_t>(reinterpret_cast<intptr_t>((val))))
+
+#define SLURP_FROM_STRING(val) (reinterpret_cast<const char*>((val)))
 
 #define SLURP_INT(obj, member, valp) \
   if (!(obj)->IsObject()) { \
@@ -149,7 +154,11 @@ void DTRACE_NET_SERVER_CONNECTION(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
   SLURP_CONNECTION(args[0], conn);
-  NODE_NET_SERVER_CONNECTION(&conn, conn.remote, conn.port, conn.fd);
+  NODE_NET_SERVER_CONNECTION(
+      &conn,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      conn.fd);
 }
 
 
@@ -159,7 +168,11 @@ void DTRACE_NET_STREAM_END(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
   SLURP_CONNECTION(args[0], conn);
-  NODE_NET_STREAM_END(&conn, conn.remote, conn.port, conn.fd);
+  NODE_NET_STREAM_END(
+      &conn,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      conn.fd);
 }
 
 
@@ -175,7 +188,12 @@ void DTRACE_NET_SOCKET_READ(const FunctionCallbackInfo<Value>& args) {
   }
 
   int nbytes = args[1]->Int32Value();
-  NODE_NET_SOCKET_READ(&conn, nbytes, conn.remote, conn.port, conn.fd);
+  NODE_NET_SOCKET_READ(
+      &conn,
+      nbytes,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      conn.fd);
 }
 
 
@@ -191,7 +209,12 @@ void DTRACE_NET_SOCKET_WRITE(const FunctionCallbackInfo<Value>& args) {
   }
 
   int nbytes = args[1]->Int32Value();
-  NODE_NET_SOCKET_WRITE(&conn, nbytes, conn.remote, conn.port, conn.fd);
+  NODE_NET_SOCKET_WRITE(
+      &conn,
+      nbytes,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      conn.fd);
 }
 
 
@@ -220,12 +243,19 @@ void DTRACE_HTTP_SERVER_REQUEST(const FunctionCallbackInfo<Value>& args) {
   Local<Value> strfwdfor = headers->Get(env->x_forwarded_string());
   node::Utf8Value fwdfor(strfwdfor);
 
-  if (!strfwdfor->IsString() || (req.forwardedFor = *fwdfor) == NULL)
-    req.forwardedFor = const_cast<char*>("");
+  if (!strfwdfor->IsString() ||
+      (req.forwardedFor = SLURP_TO_STRING(*fwdfor)) == 0)
+    req.forwardedFor = SLURP_TO_STRING("");
 
   SLURP_CONNECTION(args[1], conn);
-  NODE_HTTP_SERVER_REQUEST(&req, &conn, conn.remote, conn.port, req.method, \
-                           req.url, conn.fd);
+  NODE_HTTP_SERVER_REQUEST(
+      &req,
+      &conn,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      SLURP_FROM_STRING(req.method),
+      SLURP_FROM_STRING(req.url),
+      conn.fd);
 }
 
 
@@ -235,7 +265,11 @@ void DTRACE_HTTP_SERVER_RESPONSE(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
   SLURP_CONNECTION(args[0], conn);
-  NODE_HTTP_SERVER_RESPONSE(&conn, conn.remote, conn.port, conn.fd);
+  NODE_HTTP_SERVER_RESPONSE(
+      &conn,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      conn.fd);
 }
 
 
@@ -258,7 +292,7 @@ void DTRACE_HTTP_CLIENT_REQUEST(const FunctionCallbackInfo<Value>& args) {
   Local<Object> arg0 = Local<Object>::Cast(args[0]);
   SLURP_STRING(arg0, _header, &header);
 
-  req.method = header;
+  req.method = SLURP_TO_STRING(header);
 
   while (*header != '\0' && *header != ' ')
     header++;
@@ -266,7 +300,7 @@ void DTRACE_HTTP_CLIENT_REQUEST(const FunctionCallbackInfo<Value>& args) {
   if (*header != '\0')
     *header++ = '\0';
 
-  req.url = header;
+  req.url = SLURP_TO_STRING(header);
 
   while (*header != '\0' && *header != ' ')
     header++;
@@ -274,8 +308,14 @@ void DTRACE_HTTP_CLIENT_REQUEST(const FunctionCallbackInfo<Value>& args) {
   *header = '\0';
 
   SLURP_CONNECTION_HTTP_CLIENT(args[1], conn);
-  NODE_HTTP_CLIENT_REQUEST(&req, &conn, conn.remote, conn.port, req.method, \
-                           req.url, conn.fd);
+  NODE_HTTP_CLIENT_REQUEST(
+      &req,
+      &conn,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      SLURP_FROM_STRING(req.method),
+      SLURP_FROM_STRING(req.url),
+      conn.fd);
 }
 
 
@@ -285,7 +325,11 @@ void DTRACE_HTTP_CLIENT_RESPONSE(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
   HandleScope scope(env->isolate());
   SLURP_CONNECTION_HTTP_CLIENT_RESPONSE(args[0], args[1], conn);
-  NODE_HTTP_CLIENT_RESPONSE(&conn, conn.remote, conn.port, conn.fd);
+  NODE_HTTP_CLIENT_RESPONSE(
+      &conn,
+      SLURP_FROM_STRING(conn.remote),
+      conn.port,
+      conn.fd);
 }
 
 

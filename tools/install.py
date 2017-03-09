@@ -130,7 +130,7 @@ def files(action):
   action(['out/Release/node'], 'bin/node')
 
   if 'true' == variables.get('node_use_dtrace'):
-    action(['out/Release/node.d'], 'lib/dtrace/node.d')
+    action(['src/node.d'], 'lib/dtrace/node.d')
 
   # behave similarly for systemtap
   action(['src/node.stp'], 'share/systemtap/tapset/')
