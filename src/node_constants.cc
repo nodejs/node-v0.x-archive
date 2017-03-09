@@ -19,13 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#if defined(__sun)
 // O_NONBLOCK is not exported unless _XOPEN_SOURCE >= 500.
-#if defined(_XOPEN_SOURCE) && _XOPEN_SOURCE < 500
+#if defined(_XOPEN_SOURCE) && (_XOPEN_SOURCE - 0L) < 500
 #undef _XOPEN_SOURCE
 #endif
 
 #if !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE 500
+#endif
 #endif
 
 #include "node_constants.h"
