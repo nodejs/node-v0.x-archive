@@ -739,7 +739,7 @@ class XcodeSettings(object):
 
   def _GetStripPostbuilds(self, configname, output_binary, quiet):
     """Returns a list of shell commands that contain the shell commands
-    neccessary to strip this target's binary. These should be run as postbuilds
+    necessary to strip this target's binary. These should be run as postbuilds
     before the actual postbuilds run."""
     self.configname = configname
 
@@ -773,7 +773,7 @@ class XcodeSettings(object):
 
   def _GetDebugInfoPostbuilds(self, configname, output, output_binary, quiet):
     """Returns a list of shell commands that contain the shell commands
-    neccessary to massage this target's debug information. These should be run
+    necessary to massage this target's debug information. These should be run
     as postbuilds before the actual postbuilds run."""
     self.configname = configname
 

@@ -281,7 +281,7 @@ AR.target ?= $(AR)
 
 # C++ apps need to be linked with g++.
 #
-# Note: flock is used to seralize linking. Linking is a memory-intensive
+# Note: flock is used to serialize linking. Linking is a memory-intensive
 # process so running parallel links can often lead to thrashing.  To disable
 # the serialization, override LINK via an envrionment variable as follows:
 #
@@ -1716,7 +1716,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       # discusses this problem and has this solution:
       # 1) Write the naive rule that would produce parallel runs of
       # the action.
-      # 2) Make the outputs seralized on each other, so we won't start
+      # 2) Make the outputs serialized on each other, so we won't start
       # a parallel run until the first run finishes, at which point
       # we'll have generated all the outputs and we're done.
       self.WriteLn('%s: %s' % (' '.join(outputs[1:]), outputs[0]))
