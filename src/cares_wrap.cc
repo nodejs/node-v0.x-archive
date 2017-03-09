@@ -643,6 +643,60 @@ class QueryTxtWrap: public QueryWrap {
 };
 
 
+class QuerySpfWrap: public QueryWrap {
+ public:
+  QuerySpfWrap(Environment* env, Local<Object> req_wrap_obj)
+      : QueryWrap(env, req_wrap_obj) {
+  }
+
+  int Send(const char* name) {
+    ares_query(env()->cares_channel(),
+               name,
+               ns_c_in,
+               99,        /* TODO: use ns_t_spf after arpa/nameser.h catches up */
+               Callback,
+               GetQueryArg());
+    return 0;
+  }
+
+ protected:
+  void Parse(unsigned char* buf, int len) {
+    HandleScope handle_scope(env()->isolate());
+    Context::Scope context_scope(env()->context());
+    struct ares_txt_reply* spf_out;
+
+    int status = ares_parse_txt_reply(buf, len, &spf_out);
+    if (status != ARES_SUCCESS) {
+      ParseError(status);
+      return;
+    }
+
+    Local<Array> spf_records = Array::New(env()->isolate());
+    Local<Array> spf_chunk;
+
+    ares_txt_reply* current = spf_out;
+    uint32_t i = 0;
+    for (uint32_t j = 0; current != NULL; current = current->next) {
+      Local<String> spf = OneByteString(env()->isolate(), current->txt);
+      // New record found - write out the current chunk
+      if (current->record_start) {
+        if (!spf_chunk.IsEmpty())
+          spf_records->Set(i++, spf_chunk);
+        spf_chunk = Array::New(env()->isolate());
+        j = 0;
+      }
+      spf_chunk->Set(j++, spf);
+    }
+    // Push last chunk
+    spf_records->Set(i, spf_chunk);
+
+    ares_free_data(spf_out);
+
+    this->CallOnComplete(spf_records);
+  }
+};
+
+
 class QuerySrvWrap: public QueryWrap {
  public:
   explicit QuerySrvWrap(Environment* env, Local<Object> req_wrap_obj)
@@ -1280,6 +1334,7 @@ static void Initialize(Handle<Object> target,
   NODE_SET_METHOD(target, "queryMx", Query<QueryMxWrap>);
   NODE_SET_METHOD(target, "queryNs", Query<QueryNsWrap>);
   NODE_SET_METHOD(target, "queryTxt", Query<QueryTxtWrap>);
+  NODE_SET_METHOD(target, "querySpf", Query<QuerySpfWrap>);
   NODE_SET_METHOD(target, "querySrv", Query<QuerySrvWrap>);
   NODE_SET_METHOD(target, "queryNaptr", Query<QueryNaptrWrap>);
   NODE_SET_METHOD(target, "querySoa", Query<QuerySoaWrap>);

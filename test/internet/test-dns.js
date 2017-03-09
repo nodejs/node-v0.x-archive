@@ -302,7 +302,19 @@ TEST(function test_resolveTxt(done) {
     if (err) throw err;
     assert.equal(records.length, 1);
     assert.ok(util.isArray(records[0]));
-    assert.equal(records[0][0].indexOf('v=spf1'), 0);
+    done();
+  });
+
+  checkWrap(req);
+});
+
+
+TEST(function test_resolveSpf(done) {
+  var req = dns.resolveSpf('digitalocean.com', function (err, records) {
+    if (err) throw err;
+    assert.notEqual(records.length, 0);
+    assert.ok(util.isArray(records[0]));
+    assert.ok(new RegExp("^v=spf1\\b").test(records[0][0]));
     done();
   });
 
