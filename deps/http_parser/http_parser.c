@@ -293,6 +293,8 @@ enum state
   , s_chunk_size
   , s_chunk_parameters
   , s_chunk_size_almost_done
+  , s_chunk_finished
+  , s_chunk_almost_finished
 
   , s_headers_almost_done
   , s_headers_done
@@ -1623,13 +1625,37 @@ size_t http_parser_execute (http_parser *parser,
         }
       }
 
+    case s_chunk_finished:
+      {
+	/* if there is a second response in this chunk, thats okay,
+	   just parse it out as normal. */
+	if(ch == 'H') {
+	  parser->state = NEW_MESSAGE();
+	  goto reexecute_byte;
+	}
+	 
+	/* continue to ignore the rest of the parse buffer, because this if 
+	   after the chunks and trailing headers */
+	parser->state = s_chunk_almost_finished;
+	break;
+      }
+
+    case s_chunk_almost_finished:
+      {
+	break;
+      }
+
       case s_headers_almost_done:
       {
         STRICT_CHECK(ch != LF);
 
         if (parser->flags & F_TRAILING) {
           /* End of a chunked request */
-          parser->state = NEW_MESSAGE();
+	  if(http_should_keep_alive(parser)) {
+	    parser->state = s_chunk_finished;
+	  } else {
+	    parser->state = NEW_MESSAGE();
+	  }
           CALLBACK_NOTIFY(message_complete);
           break;
         }
