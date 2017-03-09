@@ -137,7 +137,6 @@ The following pattern illustrates how to read arguments from JavaScript
 function calls and return a result. This is the main and only needed source
 `addon.cc`:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
 
     using namespace v8;
@@ -179,7 +178,6 @@ You can test it with the following JavaScript snippet:
 You can pass JavaScript functions to a C++ function and execute them from
 there. Here's `addon.cc`:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
 
     using namespace v8;
@@ -190,7 +188,7 @@ there. Here's `addon.cc`:
       Local<Function> cb = Local<Function>::Cast(args[0]);
       const unsigned argc = 1;
       Local<Value> argv[argc] = { Local<Value>::New(String::New("hello world")) };
-      cb->Call(Context::GetCurrent()->Global(), argc, argv);
+      node::MakeCallback(Context::GetCurrent()->Global(), cb, argc, argv);
 
       return scope.Close(Undefined());
     }
@@ -222,7 +220,6 @@ You can create and return new objects from within a C++ function with this
 `addon.cc` pattern, which returns an object with property `msg` that echoes
 the string passed to `createObject()`:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
 
     using namespace v8;
@@ -257,7 +254,6 @@ To test it in JavaScript:
 This pattern illustrates how to create and return a JavaScript function that
 wraps a C++ function:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
 
     using namespace v8;
@@ -299,7 +295,6 @@ Here we will create a wrapper for a C++ object/class `MyObject` that can be
 instantiated in JavaScript through the `new` operator. First prepare the main
 module `addon.cc`:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
     #include "myobject.h"
 
@@ -338,7 +333,6 @@ And in `myobject.cc` implement the various methods that you want to expose.
 Here we expose the method `plusOne` by adding it to the constructor's
 prototype:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
     #include "myobject.h"
 
@@ -411,7 +405,6 @@ explicitly instantiating them with the `new` operator in JavaScript, e.g.
 
 Let's register our `createObject` method in `addon.cc`:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
     #include "myobject.h"
 
@@ -434,7 +427,6 @@ Let's register our `createObject` method in `addon.cc`:
 In `myobject.h` we now introduce the static method `NewInstance` that takes
 care of instantiating the object (i.e. it does the job of `new` in JavaScript):
 
-    #define BUILDING_NODE_EXTENSION
     #ifndef MYOBJECT_H
     #define MYOBJECT_H
 
@@ -459,7 +451,6 @@ care of instantiating the object (i.e. it does the job of `new` in JavaScript):
 
 The implementation is similar to the above in `myobject.cc`:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
     #include "myobject.h"
 
@@ -542,7 +533,6 @@ by unwrapping them with Node's `node::ObjectWrap::Unwrap` helper function.
 In the following `addon.cc` we introduce a function `add()` that can take on two
 `MyObject` objects:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
     #include "myobject.h"
 
@@ -580,7 +570,6 @@ In the following `addon.cc` we introduce a function `add()` that can take on two
 To make things interesting we introduce a public method in `myobject.h` so we
 can probe private values after unwrapping the object:
 
-    #define BUILDING_NODE_EXTENSION
     #ifndef MYOBJECT_H
     #define MYOBJECT_H
 
@@ -605,7 +594,6 @@ can probe private values after unwrapping the object:
 
 The implementation of `myobject.cc` is similar as before:
 
-    #define BUILDING_NODE_EXTENSION
     #include <node.h>
     #include "myobject.h"
 
@@ -663,3 +651,272 @@ Test it with:
     var result = addon.add(obj1, obj2);
 
     console.log(result); // 30
+
+### Asynchronous execution
+
+Node performs non-blocking asynchronous I/O by using worker-threads to execute
+code that would otherwise block the main V8 thread. Addons are also able to use
+these threads by interacting with libuv.
+
+Multi-threaded addons for Node must be careful to only interact with V8 in the
+main thread. Before executing any code in a worker-thread, inputs must first be
+converted from V8 objects into suitable data structures. Likewise, when
+returning back to the V8 thread, outputs must be converted into V8 objects.
+
+As a simple asynchronous execution example we will perform a
+**Monte Carlo approximation of &pi;**. This involves generating a large sample
+of random points on a plane and using the ratio of points that fall inside a
+circle and those that fall outside, to estimate &pi;.
+
+Node's worker-threads are normally used for I/O, but a computationally intensive
+task provides a clear demonstration of worker-threads in action on a multi-core
+system.
+
+The &pi; approximation calculations can be performed in a single loop, or split
+up into chunks and executed simultaneously across multiple threads. To
+demonstrate that the code is executing asynchronously this example will
+implement both synchronous and asynchronous versions and compare execution time
+of both.
+
+The estimation function is implemented in `pi_est.h`:
+
+    double Estimate(int points);
+
+and `pi_est.cc`:
+
+    #include <cstdlib>
+    #include "pi_est.h"
+
+    /*
+    Estimate the value of π by using a Monte Carlo method.
+
+    Take `points` samples of random x and y values on a [0,1][0,1] plane.
+    Calculating the length of the diagonal from [0,0] tells us whether the
+    point lies inside, or outside a quarter circle running from 0,1 to 1,0.
+    The ratio of the number of points inside to outside gives us an
+    approximation of π/4.
+
+    See https://en.wikipedia.org/wiki/File%3aPi_30K.gif for a visualization
+    of how this works.
+    */
+
+    double Estimate(int points) {
+      int i = points;
+      int inside = 0;
+      // unique seed for each run, for threaded use
+      unsigned int seed = rand();
+      double x, y;
+
+      while (i-- > 0) {
+        // rand_r() is used to avoid thread locking
+        x = rand_r(&seed) / (double)RAND_MAX;
+        y = rand_r(&seed) / (double)RAND_MAX;
+
+        // x & y and now values between 0 and 1
+        // now do a pythagorean diagonal calculation
+        // `1` represents the 1/4 circle
+        if ((x * x) + (y * y) <= 1)
+          inside++;
+      }
+
+      // calculate ratio and multiply by 4 for π
+      return (inside / static_cast<double>(points)) * 4;
+    }
+
+The synchronous version will be familiar as it simply involves taking one
+value from V8 and returning a result. In `sync.h` we have:
+
+    #include <node.h>
+
+    v8::Handle<v8::Value> CalculateSync(const v8::Arguments& args);
+
+And in `sync.cc`:
+
+    #include <node.h>
+    #include "pi_est.h"
+    #include "sync.h"
+
+    using namespace v8;
+
+    // Simple synchronous access to the `Estimate()` function
+    Handle<Value> CalculateSync(const Arguments& args) {
+      HandleScope scope;
+
+      // expect a number as the first argument
+      int points = args[0]->Uint32Value();
+      double est = Estimate(points);
+
+      return scope.Close(Number::New(est));
+    }
+
+The asynchronous version is a little more involved. The interface in `async.h`
+looks the same:
+
+    #include <node.h>
+
+    v8::Handle<v8::Value> CalculateAsync(const v8::Arguments& args);
+
+But `async.cc` has to involve libuv to hand off to a worker-thread:
+
+    #include <node.h>
+    #include "pi_est.h"
+    #include "async.h"
+
+    using namespace v8;
+
+    // libuv allows us to pass around a pointer to an arbitrary object when
+    // running asynchronous functions. We create a data structure to hold the
+    // data we need during and after the async work.
+    typedef struct AsyncData {
+      int points;                    // estimation points
+      Persistent<Function> callback; // callback function
+      double estimate;               // estimation result
+    } AsyncData;
+
+    // Function to execute inside the worker-thread.
+    // It is not safe to access V8, or V8 data structures here, so everything
+    // we need for input and output should go on the req->data object.
+    void AsyncWork(uv_work_t *req) {
+      // fetch our data structure
+      AsyncData *asyncData = static_cast<AsyncData*>(req->data);
+      // run Estimate() and assign the result to our data structure
+      asyncData->estimate = Estimate(asyncData->points);
+    }
+
+    // Function to execute when the async work is complete this function will
+    // be run inside the main event loop so it is safe to use V8 again
+    void AsyncAfter(uv_work_t *req, int status) {
+      HandleScope scope;
+
+      // fetch our data structure
+      AsyncData *asyncData = static_cast<AsyncData*>(req->data);
+      // create an arguments array for the callback
+      Handle<Value> argv[] = {
+        Null(),
+        Number::New(asyncData->estimate)
+      };
+
+      // surround in a try/catch for safety
+      TryCatch try_catch;
+      // execute the callback function
+      node::MakeCallback(Context::GetCurrent()->Global(),
+          asyncData->callback, 2, argv);
+      if (try_catch.HasCaught())
+        node::FatalException(try_catch);
+
+      // dispose the Persistent handle so the callback function can be
+      // garbage-collected
+      asyncData->callback.Dispose();
+      asyncData->callback.Clear();
+      // clean up any memory we allocated
+      delete asyncData;
+      delete req;
+    }
+
+    // Asynchronous access to the `Estimate()` function
+    Handle<Value> CalculateAsync(const Arguments& args) {
+      HandleScope scope;
+
+      // create an async work token
+      uv_work_t *req = new uv_work_t;
+      // assign the data structure that will be passed around
+      AsyncData *asyncData = new AsyncData;
+      req->data = asyncData;
+
+      // expect a number as the first argument
+      asyncData->points = args[0]->Uint32Value();
+      // expect a function as the second argument, create a Persistent
+      // handle for it so it won't be garbage-collected
+      asyncData->callback = Persistent<Function>::New(args[1].As<Function>());
+
+      // pass the work token to libuv to be run when a worker-thread
+      // becomes available
+      uv_queue_work(
+        uv_default_loop(),
+        req,       // work token
+        AsyncWork, // work function
+                   // function to run when complete
+        static_cast<uv_after_work_cb>(AsyncAfter)
+      );
+
+      return Undefined();
+    }
+
+`addon.cc` ties it all together and exposes the two functions to V8:
+
+    #include <node.h>
+    #include "sync.h"
+    #include "async.h"
+
+    using namespace v8;
+
+    // Expose synchronous and asynchronous access to the Estimate() function
+    void InitAll(Handle<Object> exports) {
+      exports->Set(String::New("calculateSync"),
+          FunctionTemplate::New(CalculateSync)->GetFunction());
+
+      exports->Set(String::New("calculateAsync"),
+          FunctionTemplate::New(CalculateAsync)->GetFunction());
+    }
+
+    NODE_MODULE(addon, InitAll)
+
+Now the functions can be called from JavaScript in `addon.js`:
+
+    var addon = require('./build/Release/addon');
+    var calculations = process.argv[2] || 100000000;
+
+    function printResult(type, pi, ms) {
+      console.log(type, 'method:')
+      console.log('\tπ ≈ ' + pi
+          + ' (' + Math.abs(pi - Math.PI) + ' away from actual)')
+      console.log('\tTook ' + ms + 'ms');
+      console.log()
+    }
+
+    function runSync() {
+      var start = Date.now();
+      // Estimate() will execute in the current thread, the next line won't
+      // return until it is finished
+      var result = addon.calculateSync(calculations);
+      printResult('Sync', result, Date.now() - start)
+    }
+
+    function runAsync() {
+      // how many batches should we split the work in to?
+      var batches = process.argv[3] || 16;
+      var ended = 0;
+      var total = 0;
+      var start = Date.now();
+
+      function done(err, result) {
+        total += result;
+
+        // have all the batches finished executing?
+        if (++ended == batches) {
+          printResult('Async', total / batches, Date.now() - start)
+        }
+      }
+
+      // for each batch of work, request an async Estimate() for a portion of
+      // the total number of calculations
+      for (var i = 0; i < batches; i++) {
+        addon.calculateAsync(calculations / batches, done);
+      }
+    }
+
+    runSync()
+    runAsync()
+
+Running the example should result in something like:
+
+    Sync method:
+      π ≈ 3.14162296 (0.00003030641020673741 away from actual)
+      Took 2086ms
+
+    Async method:
+      π ≈ 3.14145804 (0.00013461358979327542 away from actual)
+      Took 596ms
+
+The timings show us that the 4 worker-threads result in close to 1/4 of the time
+to approximate &pi; from the same number of points.
