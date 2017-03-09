@@ -108,11 +108,14 @@ assert.throws(makeBlock(a.deepEqual, 4, '5'),
 // 7.5
 // having the same number of owned properties && the same set of keys
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4}, {a: 4}));
+assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: { c: 2 }}, 
+                                           {a: 4, b: { c: 2 }}));
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '2'}, {a: 4, b: '2'}));
 assert.doesNotThrow(makeBlock(a.deepEqual, [4], ['4']));
 assert.throws(makeBlock(a.deepEqual, {a: 4}, {a: 4, b: true}),
               a.AssertionError);
-assert.doesNotThrow(makeBlock(a.deepEqual, ['a'], {0: 'a'}));
+assert.throws(makeBlock(a.deepEqual, ['a'], {0: 'a'}), 
+              a.AssertionError);
 //(although not necessarily the same order),
 assert.doesNotThrow(makeBlock(a.deepEqual, {a: 4, b: '1'}, {b: '1', a: 4}));
 var a1 = [1, 2, 3];
@@ -152,6 +155,33 @@ assert.doesNotThrow(makeBlock(a.deepEqual, nb1, nb2));
 nameBuilder2.prototype = Object;
 nb2 = new nameBuilder2('Ryan', 'Dahl');
 assert.throws(makeBlock(a.deepEqual, nb1, nb2), a.AssertionError);
+
+// test with Object.create 
+var onb1 = null,
+    onb2 = null,
+    onb3 = null,
+    onbRoot = { toString: null };
+
+onbRoot.toString = nbRoot.toString;
+
+onb1 = Object.create(onbRoot, {
+    fist: { writable: true, enumerable: true, value: 'Jack' },
+    last: { writable: true, enumerable: true, value: 'White' }
+});
+
+onb2 = Object.create(onbRoot, {
+    fist: { writable: true, enumerable: true, value: 'Jack' },
+    last: { writable: true, enumerable: true, value: 'White' }
+});
+
+onb3 = Object.create(null, {
+    fist: { writable: true, enumerable: true, value: 'Jack' },
+    last: { writable: true, enumerable: true, value: 'White' }
+});
+
+assert.doesNotThrow(makeBlock(a.deepEqual, onb1, onb2));
+assert.doesNotThrow(makeBlock(a.deepEqual, onb1, onb3), a.AssertionError);
+assert.throws(makeBlock(a.deepEqual, onb1.__proto__, onb3.__proto__), a.AssertionError);
 
 // String literal + object blew up my implementation...
 assert.throws(makeBlock(a.deepEqual, 'a', {}), a.AssertionError);
