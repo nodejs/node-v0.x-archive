@@ -53,5 +53,8 @@ if __name__ == '__main__':
 
   args.append('-Dcomponent=static_library')
   args.append('-Dlibrary=static_library')
+  #  GYP will crash on standard FreeBSD7.x and FreeBSD8.x builds as they cannot support gyp parallel option
+  if ( sys.platform.startswith('freebsd7') or sys.platform.startswith('freebsd8') ):
+    args.append('--no-parallel')
   gyp_args = list(args)
   run_gyp(gyp_args)
