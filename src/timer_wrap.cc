@@ -57,7 +57,8 @@ class TimerWrap : public HandleWrap {
     constructor->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "kOnTimeout"),
                      Integer::New(env->isolate(), kOnTimeout));
 
-    NODE_SET_METHOD(constructor, "now", Now);
+    constructor->Set(FIXED_ONE_BYTE_STRING(node_isolate, "now"),
+                     FunctionTemplate::New(Now)->GetFunction());
 
     NODE_SET_PROTOTYPE_METHOD(constructor, "close", HandleWrap::Close);
     NODE_SET_PROTOTYPE_METHOD(constructor, "ref", HandleWrap::Ref);

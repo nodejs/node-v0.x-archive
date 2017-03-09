@@ -209,10 +209,9 @@ NODE_EXTERN void RunAtExit(Environment* env);
     1000 * static_cast<double>(t))
 #define NODE_V8_UNIXTIME(v) (static_cast<double>((v)->NumberValue())/1000.0);
 
-// Used to be a macro, hence the uppercase name.
 #define NODE_DEFINE_CONSTANT(target, constant)                                \
   do {                                                                        \
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();                         \
+    v8::Isolate* isolate = (target)->CreationContext()->GetIsolate();         \
     v8::Local<v8::String> constant_name =                                     \
         v8::String::NewFromUtf8(isolate, #constant);                          \
     v8::Local<v8::Number> constant_value =                                    \
@@ -239,7 +238,7 @@ template <typename TypeName>
 inline void NODE_SET_METHOD(const TypeName& recv,
                             const char* name,
                             v8::FunctionCallback callback) {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::Isolate* isolate = recv->CreationContext()->GetIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate,
                                                                 callback);
