@@ -698,3 +698,275 @@ Test it with:
     var result = addon.add(obj1, obj2);
 
     console.log(result); // 30
+
+### Asynchronous execution
+
+One of the main reasons Node is fast is because I/O is performed asynchronously,
+with 4 (by default) worker-threads executing code that would otherwise block the
+main program thread.
+
+When writing Node addons, it's important to keep in mind that you should not
+access V8 or V8 data structures outside of the main event-loop thread. Before
+you execute code in a worker-thread, you should first convert your inputs from
+V8 objects into suitable data structures. Likewise, when you return back to the
+event-loop thread, you will need to convert your outputs back in to V8 objects.
+
+As a simple asynchronous execution example, rather than performing I/O, which
+is the normal use-case for asynchronous execution in Node, we will perform a
+**Monte Carlo approximation of &pi;**. This involves generating a large sample
+of random points on a plane and using the ratio of points that fall inside a
+circle and those that fall outside, to estimate &pi;.
+
+We can perform this work in a single loop, or split it up into chunks and
+execute the work across multiple threads. To demonstrate that our code is
+executing asynchronously we will implement both a synchronous and an
+asynchronous version and time the execution speed.
+
+Our estimation function is implemented in pi_est.h:
+
+    double Estimate (int points);
+
+and pi_est.cc:
+
+    #include <cstdlib>
+    #include "pi_est.h"
+
+    /*
+    Estimate the value of π by using a Monte Carlo method.
+    Take `points` samples of random x and y values on a
+    [0,1][0,1] plane. Calculating the length of the diagonal
+    tells us whether the point lies inside, or outside a
+    quarter circle running from 0,1 to 1,0. The ratio of the
+    number of points inside to outside gives us an
+    approximation of π/4.
+
+    See https://en.wikipedia.org/wiki/File:Pi_30K.gif
+    for a visualization of how this works.
+    */
+
+    double Estimate (int points) {
+      int i = points;
+      int inside = 0;
+      // unique seed for each run, for threaded use
+      unsigned int seed = rand();
+      double x, y;
+
+      while (i-- > 0) {
+        // rand_r() is used to avoid thread locking
+        x = rand_r(&seed) / (double)RAND_MAX;
+        y = rand_r(&seed) / (double)RAND_MAX;
+
+        // x & y and now values between 0 and 1
+        // now do a pythagorean diagonal calculation
+        // `1` represents our 1/4 circle
+        if ((x * x) + (y * y) <= 1)
+          inside++;
+      }
+
+      // calculate ratio and multiply by 4 for π
+      return (inside / (double)points) * 4;
+    }
+
+The synchronous version will be familiar as it simply involves taking one
+value from V8 and returning a result. In sync.h we have:
+
+    #include <node.h>
+
+    v8::Handle<v8::Value> CalculateSync(const v8::Arguments& args);
+
+And in sync.cc:
+
+    #include <node.h>
+    #include "pi_est.h"
+    #include "sync.h"
+
+    using namespace v8;
+
+    // Simple synchronous access to the `Estimate()` function
+    Handle<Value> CalculateSync(const Arguments& args) {
+      Isolate* isolate = Isolate::GetCurrent();
+      HandleScope scope(isolate);
+
+      // expect a number as the first argument
+      int points = args[0]->Uint32Value();
+      double est = Estimate(points);
+
+      return scope.Close(Number::New(est));
+    }
+
+The asynchronous version is a little more involved, the interface in async.h
+looks the same:
+
+    #include <node.h>
+
+    v8::Handle<v8::Value> CalculateAsync(const v8::Arguments& args);
+
+But in async.cc we have to involve libuv:
+
+    #include <node.h>
+    #include "pi_est.h"
+    #include "async.h"
+
+    using namespace v8;
+
+    // libuv allows us to pass around a pointer to an arbitrary
+    // object when running asynchronous functions. We create a
+    // data structure to hold the data we need during and after
+    // the async work.
+    typedef struct AsyncData {
+      int points;                    // estimation points
+      Persistent<Function> callback; // callback function
+      double estimate;               // estimation result
+    } AsyncData;
+
+    // Function to execute inside the worker-thread.
+    // It is not safe to access V8, or V8 data structures
+    // here, so everything we need for input and output
+    // should go on our req->data object.
+    void AsyncWork(uv_work_t *req) {
+      // fetch our data structure
+      AsyncData *asyncData = (AsyncData *)req->data;
+      // run Estimate() and assign the result to our data structure
+      asyncData->estimate = Estimate(asyncData->points);
+    }
+
+    // Function to execute when the async work is complete
+    // this function will be run inside the main event loop
+    // so it is safe to use V8 again
+    void AsyncAfter(uv_work_t *req) {
+      Isolate* isolate = Isolate::GetCurrent();
+      HandleScope scope(isolate);
+
+      // fetch our data structure
+      AsyncData *asyncData = (AsyncData *)req->data;
+      // create an arguments array for the callback
+      Handle<Value> argv[] = {
+        Null(),
+        Number::New(isolate, asyncData->estimate)
+      };
+
+      // surround in a try/catch for safety
+      TryCatch try_catch;
+      // execute the callback function
+      asyncData->callback->Call(Context::GetCurrent()->Global(), 2, argv);
+      if (try_catch.HasCaught())
+        node::FatalException(try_catch);
+
+      // dispose the Persistent handle so the callback
+      // function can be garbage-collected
+      asyncData->callback.Dispose(isolate);
+      // clean up any memory we allocated
+      delete asyncData;
+      delete req;
+    }
+
+    // Asynchronous access to the `Estimate()` function
+    Handle<Value> CalculateAsync(const Arguments& args) {
+      Isolate* isolate = Isolate::GetCurrent();
+      HandleScope scope(isolate);
+
+      // create an async work token
+      uv_work_t *req = new uv_work_t;
+      // assign our data structure that will be passed around
+      AsyncData *asyncData = new AsyncData;
+      req->data = asyncData;
+
+      // expect a number as the first argument
+      asyncData->points = args[0]->Uint32Value();
+      // expect a function as the second argument
+      // we create a Persistent reference to it so
+      // it won't be garbage-collected
+      asyncData->callback = Persistent<Function>::New(isolate,
+          Local<Function>::Cast(args[1]));
+
+      // pass the work token to libuv to be run when a
+      // worker-thread is available to
+      uv_queue_work(
+        uv_default_loop(),
+        req,                          // work token
+        AsyncWork,                    // work function
+        (uv_after_work_cb)AsyncAfter  // function to run when complete
+      );
+
+      return scope.Close(Undefined());
+    }
+
+addon.cc ties it all together and exposes the two functions to V8:
+
+    #include <node.h>
+    #include "sync.h"
+    #include "async.h"
+
+    using namespace v8;
+
+    // Expose synchronous and asynchronous access to our
+    // Estimate() function
+    void InitAll(Handle<Object> exports) {
+      exports->Set(String::NewSymbol("calculateSync"),
+          FunctionTemplate::New(CalculateSync)->GetFunction());
+
+      exports->Set(String::NewSymbol("calculateAsync"),
+          FunctionTemplate::New(CalculateAsync)->GetFunction());
+    }
+
+    NODE_MODULE(addon, InitAll)
+
+Now we can call the functions from addon.js:
+
+    var addon = require('./build/Release/addon');
+    var calculations = process.argv[2] || 100000000;
+
+    function printResult(type, pi, ms) {
+      console.log(type, 'method:')
+      console.log('\tπ ≈ ' + pi
+          + ' (' + Math.abs(pi - Math.PI) + ' away from actual)')
+      console.log('\tTook ' + ms + 'ms');
+      console.log()
+    }
+
+    function runSync () {
+      var start = Date.now();
+      // Estimate() will execute in the current thread,
+      // the next line won't return until it is finished
+      var result = addon.calculateSync(calculations);
+      printResult('Sync', result, Date.now() - start)
+    }
+
+    function runAsync () {
+      // how many batches should we split the work in to?
+      var batches = process.argv[3] || 16;
+      var ended = 0;
+      var total = 0;
+      var start = Date.now();
+
+      function done (err, result) {
+        total += result;
+
+        // have all the batches finished executing?
+        if (++ended == batches) {
+          printResult('Async', total / batches, Date.now() - start)
+        }
+      }
+
+      // for each batch of work, request an async Estimate() for
+      // a portion of the total number of calculations
+      for (var i = 0; i < batches; i++) {
+        addon.calculateAsync(calculations / batches, done);
+      }
+    }
+
+    runSync()
+    runAsync()
+
+Finally, we can execute our code. Running it should result in something like:
+
+    Sync method:
+      π ≈ 3.14162296 (0.00003030641020673741 away from actual)
+      Took 2086ms
+
+    Async method:
+      π ≈ 3.14145804 (0.00013461358979327542 away from actual)
+      Took 596ms
+
+The timings show us that the 4 worker-threads result in close to 1/4 of the time
+to approximate &pi; from the same number of points.
