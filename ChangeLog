@@ -451,6 +451,8 @@
 
 * v8: upgrade to 3.24.35.22
 
+* openssl: upgrade to 1.0.1g
+
 * buffer: add compare and equals methods (Sean McArthur)
 
 * buffer: improve {read,write}{U}Int* methods (Nick Apperson)
