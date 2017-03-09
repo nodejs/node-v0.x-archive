@@ -727,7 +727,7 @@ the data is read it will consume memory that can eventually lead to a
 Note: Node does not check whether Content-Length and the length of the body
 which has been transmitted are equal or not.
 
-The request implements the [Writable Stream][] interface. This is an
+The request implements the [Readable Stream][] interface. This is an
 [EventEmitter][] with the following events:
 
 ### Event: 'response'
