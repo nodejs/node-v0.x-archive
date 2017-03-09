@@ -132,7 +132,7 @@ $L$1st_enter::
 
 	mul	rbp
 	cmp	r15,r9
-	jne	$L$1st
+	jl	$L$1st
 
 DB	102,72,15,126,195
 
@@ -215,7 +215,7 @@ $L$inner_enter::
 
 	mul	rbp
 	cmp	r15,r9
-	jne	$L$inner
+	jl	$L$inner
 
 DB	102,72,15,126,195
 

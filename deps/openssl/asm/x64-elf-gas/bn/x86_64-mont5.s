@@ -116,7 +116,7 @@ bn_mul_mont_gather5:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	.L1st
+	jl	.L1st
 
 .byte	102,72,15,126,195
 
@@ -199,7 +199,7 @@ bn_mul_mont_gather5:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	.Linner
+	jl	.Linner
 
 .byte	102,72,15,126,195
 

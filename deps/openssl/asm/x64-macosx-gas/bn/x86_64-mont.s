@@ -77,7 +77,7 @@ L$1st_enter:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	L$1st
+	jl	L$1st
 
 	addq	%rax,%r13
 	movq	(%rsi),%rax
@@ -143,7 +143,7 @@ L$inner_enter:
 
 	mulq	%rbp
 	cmpq	%r9,%r15
-	jne	L$inner
+	jl	L$inner
 
 	addq	%rax,%r13
 	movq	(%rsi),%rax

@@ -140,7 +140,7 @@ $code.=<<___;
 
 	mulq	$m1			# np[j]*m1
 	cmp	$num,$j
-	jne	.L1st
+	jl	.L1st
 
 	add	%rax,$hi1
 	mov	($ap),%rax		# ap[0]
@@ -206,7 +206,7 @@ $code.=<<___;
 
 	mulq	$m1			# np[j]*m1
 	cmp	$num,$j
-	jne	.Linner
+	jl	.Linner
 
 	add	%rax,$hi1
 	mov	($ap),%rax		# ap[0]
