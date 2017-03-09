@@ -97,6 +97,8 @@ the worker pool for your application's needs.
   * `execArgv` {Array} list of string arguments passed to the node executable. 
     (Default=`process.execArgv`)
   * `exec` {String} file path to worker file.  (Default=`process.argv[1]`)
+  * `execArgv` {Array} list of string arguments passed to executable `exec`. 
+    (Default=`process.execArgv`)
   * `args` {Array} string arguments passed to worker.
     (Default=`process.argv.slice(2)`)
   * `silent` {Boolean} whether or not to send output to parent's stdio.
