@@ -1,10 +1,10 @@
-
 module.exports = docs
 
-docs.usage = "npm docs <pkgname>"
+docs.usage  = "npm docs <pkgname>"
+docs.usage += "\n"
+docs.usage += "npm docs ."
 
 docs.completion = function (opts, cb) {
-  if (opts.conf.argv.remain.length > 2) return cb()
   registry.get("/-/short", 60000, function (er, list) {
     return cb(null, list || [])
   })
@@ -12,18 +12,51 @@ docs.completion = function (opts, cb) {
 
 var npm = require("./npm.js")
   , registry = npm.registry
-  , log = require("npmlog")
   , opener = require("opener")
+  , path = require('path')
+  , log = require('npmlog')
+
+function url (json) {
+  return json.homepage ? json.homepage : "https://npmjs.org/package/" + json.name
+}
 
 function docs (args, cb) {
-  if (!args.length) return cb(docs.usage)
-  var n = args[0].split("@").shift()
-  registry.get(n + "/latest", 3600, function (er, d) {
-    if (er) return cb(er)
-    var homepage = d.homepage
-      , repo = d.repository || d.repositories
-      , url = homepage ? homepage
-            : "https://npmjs.org/package/" + d.name
-    opener(url, { command: npm.config.get("browser") }, cb)
+  args = args || []
+  var pending = args.length
+  if (!pending) return getDoc('.', cb)
+  args.forEach(function(proj) {
+    getDoc(proj, function(err) {
+      if (err) return cb(err)
+      --pending || cb()
+    })
+  })
+}
+
+function getDoc (project, cb) {
+  project = project || '.'
+  var package = path.resolve(process.cwd(), "package.json")
+
+  if (project === '.' || project === './') {
+    try {
+      var json = require(package)
+      if (!json.name) throw new Error('package.json does not have a valid "name" property')
+      project = json.name
+    } catch (e) {
+      log.error(e.message)
+      return cb(docs.usage)
+    }
+
+    return opener(url(json), { command: npm.config.get("browser") }, cb)
+  }
+
+  registry.get(project + "/latest", 3600, function (er, json) {
+    var github = "https://github.com/" + project + "#readme"
+
+    if (er) {
+      if (project.split("/").length !== 2) return cb(er)
+      return opener(github, { command: npm.config.get("browser") }, cb)
+    }
+
+    return opener(url(json), { command: npm.config.get("browser") }, cb)
   })
 }

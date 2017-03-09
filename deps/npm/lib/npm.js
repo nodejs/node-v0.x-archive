@@ -24,44 +24,32 @@ var EventEmitter = require("events").EventEmitter
   , abbrev = require("abbrev")
   , which = require("which")
   , semver = require("semver")
-  , findPrefix = require("./utils/find-prefix.js")
-  , getUid = require("uid-number")
-  , mkdirp = require("mkdirp")
-  , slide = require("slide")
-  , chain = slide.chain
   , RegClient = require("npm-registry-client")
+  , charSpin = require("char-spinner")
 
-npm.config = {loaded: false}
-
-// /usr/local is often a read-only fs, which is not
-// well handled by node or mkdirp.  Just double-check
-// in the case of errors when making the prefix dirs.
-function mkdir (p, cb) {
-  mkdirp(p, function (er, made) {
-    // it could be that we couldn't create it, because it
-    // already exists, and is on a read-only fs.
-    if (er) {
-      return fs.stat(p, function (er2, st) {
-        if (er2 || !st.isDirectory()) return cb(er)
-        return cb(null, made)
-      })
-    }
-    return cb(er, made)
-  })
+npm.config = {
+  loaded: false,
+  get: function() {
+    throw new Error('npm.load() required')
+  },
+  set: function() {
+    throw new Error('npm.load() required')
+  }
 }
 
 npm.commands = {}
 
 try {
+  var pv = process.version.replace(/^v/, '')
   // startup, ok to do this synchronously
   var j = JSON.parse(fs.readFileSync(
     path.join(__dirname, "../package.json"))+"")
   npm.version = j.version
   npm.nodeVersionRequired = j.engines.node
-  if (!semver.satisfies(process.version, j.engines.node)) {
+  if (!semver.satisfies(pv, j.engines.node)) {
     log.warn("unsupported version", [""
             ,"npm requires node version: "+j.engines.node
-            ,"And you have: "+process.version
+            ,"And you have: "+pv
             ,"which is not satisfactory."
             ,""
             ,"Bad things will likely happen.  You have been warned."
@@ -103,8 +91,10 @@ var commandCache = {}
               , "login": "adduser"
               , "add-user": "adduser"
               , "tst": "test"
+              , "t": "test"
               , "find-dupes": "dedupe"
               , "ddp": "dedupe"
+              , "v": "view"
               }
 
   , aliasNames = Object.keys(aliases)
@@ -145,6 +135,7 @@ var commandCache = {}
               , "edit"
               , "explore"
               , "docs"
+              , "repo"
               , "bugs"
               , "faq"
               , "root"
@@ -163,35 +154,76 @@ var commandCache = {}
                , "unbuild"
                , "xmas"
                , "substack"
+               , "visnup"
                ]
   , fullList = npm.fullList = cmdList.concat(aliasNames).filter(function (c) {
       return plumbing.indexOf(c) === -1
     })
   , abbrevs = abbrev(fullList)
 
+npm.spinner =
+  { int: null
+  , started: false
+  , start: function () {
+      if (npm.spinner.int) return
+      var c = npm.config.get("spin")
+      if (!c) return
+      var stream = npm.config.get("logstream")
+      var opt = { tty: c !== "always", stream: stream }
+      opt.cleanup = !npm.spinner.started
+      npm.spinner.int = charSpin(opt)
+      npm.spinner.started = true
+    }
+  , stop: function () {
+      clearInterval(npm.spinner.int)
+      npm.spinner.int = null
+    }
+  }
+
 Object.keys(abbrevs).concat(plumbing).forEach(function addCommand (c) {
   Object.defineProperty(npm.commands, c, { get : function () {
     if (!loaded) throw new Error(
-      "Call npm.load(conf, cb) before using this command.\n"+
+      "Call npm.load(config, cb) before using this command.\n"+
       "See the README.md or cli.js for example usage.")
     var a = npm.deref(c)
     if (c === "la" || c === "ll") {
       npm.config.set("long", true)
     }
+
     npm.command = c
     if (commandCache[a]) return commandCache[a]
+
     var cmd = require(__dirname+"/"+a+".js")
+
     commandCache[a] = function () {
       var args = Array.prototype.slice.call(arguments, 0)
       if (typeof args[args.length - 1] !== "function") {
         args.push(defaultCb)
       }
       if (args.length === 1) args.unshift([])
+
+      npm.registry.version = npm.version
+      if (!npm.registry.refer) {
+        npm.registry.refer = [a].concat(args[0]).map(function (arg) {
+          // exclude anything that might be a URL, path, or private module
+          // Those things will always have a slash in them somewhere
+          if (arg && arg.match && arg.match(/\/|\\/)) {
+            return "[REDACTED]"
+          } else {
+            return arg
+          }
+        }).filter(function (arg) {
+          return arg && arg.match
+        }).join(" ")
+      }
+
       cmd.apply(npm, args)
     }
+
     Object.keys(cmd).forEach(function (k) {
       commandCache[a][k] = cmd[k]
     })
+
     return commandCache[a]
   }, enumerable: fullList.indexOf(c) !== -1 })
 
@@ -272,16 +304,24 @@ function load (npm, cli, cb) {
     //console.error("about to look up configs")
 
     var builtin = path.resolve(__dirname, "..", "npmrc")
-    npmconf.load(cli, builtin, function (er, conf) {
-      if (er === conf) er = null
+    npmconf.load(cli, builtin, function (er, config) {
+      if (er === config) er = null
 
-      npm.config = conf
+      // Include npm-version and node-version in user-agent
+      var ua = config.get("user-agent") || ""
+      ua = ua.replace(/\{node-version\}/gi, process.version)
+      ua = ua.replace(/\{npm-version\}/gi, npm.version)
+      ua = ua.replace(/\{platform\}/gi, process.platform)
+      ua = ua.replace(/\{arch\}/gi, process.arch)
+      config.set("user-agent", ua)
 
-      var color = conf.get("color")
+      npm.config = config
 
-      log.level = conf.get("loglevel")
-      log.heading = "npm"
-      log.stream = conf.get("logstream")
+      var color = config.get("color")
+
+      log.level = config.get("loglevel")
+      log.heading = config.get("heading") || "npm"
+      log.stream = config.get("logstream")
       switch (color) {
         case "always": log.enableColor(); break
         case false: log.disableColor(); break
@@ -309,117 +349,23 @@ function load (npm, cli, cb) {
 
       // at this point the configs are all set.
       // go ahead and spin up the registry client.
-      var token = conf.get("_token")
-      if (typeof token === "string") {
-        try {
-          token = JSON.parse(token)
-          conf.set("_token", token, "user")
-          conf.save("user")
-        } catch (e) { token = null }
-      }
-
       npm.registry = new RegClient(npm.config)
-
-      // save the token cookie in the config file
-      if (npm.registry.couchLogin) {
-        npm.registry.couchLogin.tokenSet = function (tok) {
-          npm.config.set("_token", tok, "user")
-          // ignore save error.  best effort.
-          npm.config.save("user")
-        }
-      }
 
       var umask = npm.config.get("umask")
       npm.modes = { exec: 0777 & (~umask)
                   , file: 0666 & (~umask)
                   , umask: umask }
 
-      chain([ [ loadPrefix, npm, cli ]
-            , [ setUser, conf, conf.root ]
-            , [ loadUid, npm ]
-            ], cb)
+      var gp = Object.getOwnPropertyDescriptor(config, "globalPrefix")
+      Object.defineProperty(npm, "globalPrefix", gp)
+
+      var lp = Object.getOwnPropertyDescriptor(config, "localPrefix")
+      Object.defineProperty(npm, "localPrefix", lp)
+
+      return cb()
     })
   })
 }
-
-function loadPrefix (npm, conf, cb) {
-  // try to guess at a good node_modules location.
-  var p
-    , gp
-  if (!Object.prototype.hasOwnProperty.call(conf, "prefix")) {
-    p = process.cwd()
-  } else {
-    p = npm.config.get("prefix")
-  }
-  gp = npm.config.get("prefix")
-
-  findPrefix(p, function (er, p) {
-    Object.defineProperty(npm, "localPrefix",
-      { get : function () { return p }
-      , set : function (r) { return p = r }
-      , enumerable : true
-      })
-    // the prefix MUST exist, or else nothing works.
-    if (!npm.config.get("global")) {
-      mkdir(p, next)
-    } else {
-      next(er)
-    }
-  })
-
-  gp = path.resolve(gp)
-  Object.defineProperty(npm, "globalPrefix",
-    { get : function () { return gp }
-    , set : function (r) { return gp = r }
-    , enumerable : true
-    })
-  // the prefix MUST exist, or else nothing works.
-  mkdir(gp, next)
-
-
-  var i = 2
-    , errState = null
-  function next (er) {
-    if (errState) return
-    if (er) return cb(errState = er)
-    if (--i === 0) return cb()
-  }
-}
-
-
-function loadUid (npm, cb) {
-  // if we're not in unsafe-perm mode, then figure out who
-  // to run stuff as.  Do this first, to support `npm update npm -g`
-  if (!npm.config.get("unsafe-perm")) {
-    getUid(npm.config.get("user"), npm.config.get("group"), cb)
-  } else {
-    process.nextTick(cb)
-  }
-}
-
-function setUser (cl, dc, cb) {
-  // If global, leave it as-is.
-  // If not global, then set the user to the owner of the prefix folder.
-  // Just set the default, so it can be overridden.
-  if (cl.get("global")) return cb()
-  if (process.env.SUDO_UID) {
-    dc.user = +(process.env.SUDO_UID)
-    return cb()
-  }
-
-  var prefix = path.resolve(cl.get("prefix"))
-  mkdir(prefix, function (er) {
-    if (er) {
-      log.error("could not create prefix dir", prefix)
-      return cb(er)
-    }
-    fs.stat(prefix, function (er, st) {
-      dc.user = st && st.uid
-      return cb(er)
-    })
-  })
-}
-
 
 Object.defineProperty(npm, "prefix",
   { get : function () {
@@ -475,9 +421,14 @@ Object.defineProperty(npm, "cache",
   })
 
 var tmpFolder
+var crypto = require("crypto")
+var rand = crypto.randomBytes(6)
+                 .toString("base64")
+                 .replace(/\//g, '_')
+                 .replace(/\+/, '-')
 Object.defineProperty(npm, "tmp",
   { get : function () {
-      if (!tmpFolder) tmpFolder = "npm-" + process.pid
+      if (!tmpFolder) tmpFolder = "npm-" + process.pid + "-" + rand
       return path.resolve(npm.config.get("tmp"), tmpFolder)
     }
   , enumerable : true

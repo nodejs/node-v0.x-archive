@@ -14,7 +14,8 @@ rebuild.usage = "npm rebuild [<name>[@<version>] [name[@<version>] ...]]"
 rebuild.completion = require("./utils/completion/installed-deep.js")
 
 function rebuild (args, cb) {
-  readInstalled(npm.prefix, npm.config.get("depth"), function (er, data) {
+  var opt = { depth: npm.config.get("depth"), dev: true }
+  readInstalled(npm.prefix, opt, function (er, data) {
     log.info("readInstalled", typeof data)
     if (er) return cb(er)
     var set = filter(data, args)
@@ -52,7 +53,7 @@ function filter (data, args, set, seen) {
         , n = nv.shift()
         , v = nv.join("@")
       if (n !== data.name) continue
-      if (!semver.satisfies(data.version, v)) continue
+      if (!semver.satisfies(data.version, v, true)) continue
       pass = true
       break
     }

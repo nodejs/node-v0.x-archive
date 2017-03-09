@@ -72,8 +72,12 @@ var npm = require("./npm.js")
   , mkdir = require("mkdirp")
   , lifecycle = require("./utils/lifecycle.js")
   , archy = require("archy")
+  , isGitUrl = require("./utils/is-git-url.js")
+  , npmInstallChecks = require("npm-install-checks")
+  , sortedObject = require("sorted-object")
 
 function install (args, cb_) {
+  var hasArguments = !!args.length
 
   function cb (er, installed) {
     if (er) return cb_(er)
@@ -94,7 +98,7 @@ function install (args, cb_) {
         , pretty = prettify(tree, installed).trim()
 
       if (pretty) console.log(pretty)
-      save(where, installed, tree, pretty, cb_)
+      save(where, installed, tree, pretty, hasArguments, cb_)
     })
   }
 
@@ -134,6 +138,7 @@ function install (args, cb_) {
                       , ancestors: {}
                       , explicit: false
                       , parent: data
+                      , root: true
                       , wrap: null }
 
         if (data.name === path.basename(where) &&
@@ -160,15 +165,20 @@ function install (args, cb_) {
 
     // initial "family" is the name:version of the root, if it's got
     // a package.json file.
-    readJson(path.resolve(where, "package.json"), function (er, data) {
-      if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
+    var jsonFile = path.resolve(where, "package.json")
+    readJson(jsonFile, log.warn, function (er, data) {
+      if (er
+          && er.code !== "ENOENT"
+          && er.code !== "ENOTDIR") return cb(er)
       if (er) data = null
       var context = { family: {}
                     , ancestors: {}
                     , explicit: true
                     , parent: data
+                    , root: true
                     , wrap: null }
-      if (data) {
+      if (data && data.name === path.basename(where) &&
+          path.basename(path.dirname(where)) === "node_modules") {
         context.family[data.name] = context.ancestors[data.name] = data.version
       }
       var fn = npm.config.get("global") ? installMany : installManyTop
@@ -178,7 +188,7 @@ function install (args, cb_) {
 }
 
 function findPeerInvalid (where, cb) {
-  readInstalled(where, function (er, data) {
+  readInstalled(where, { log: log.warn, dev: true }, function (er, data) {
     if (er) return cb(er)
 
     cb(null, findPeerInvalid_(data.dependencies, []))
@@ -234,7 +244,9 @@ function readDependencies (context, where, opts, cb) {
   var wrap = context ? context.wrap : null
 
   readJson( path.resolve(where, "package.json")
+          , log.warn
           , function (er, data) {
+    if (er && er.code === "ENOENT") er.code = "ENOPACKAGEJSON"
     if (er)  return cb(er)
 
     if (opts && opts.dev) {
@@ -315,8 +327,9 @@ function readWrap (w) {
 // if the -S|--save option is specified, then write installed packages
 // as dependencies to a package.json file.
 // This is experimental.
-function save (where, installed, tree, pretty, cb) {
-  if (!npm.config.get("save") &&
+function save (where, installed, tree, pretty, hasArguments, cb) {
+  if (!hasArguments ||
+      !npm.config.get("save") &&
       !npm.config.get("save-dev") &&
       !npm.config.get("save-optional") ||
       npm.config.get("global")) {
@@ -324,6 +337,7 @@ function save (where, installed, tree, pretty, cb) {
   }
 
   var saveBundle = npm.config.get('save-bundle')
+  var savePrefix = npm.config.get('save-prefix') || "^";
 
   // each item in the tree is a top-level thing that should be saved
   // to the package.json file.
@@ -337,9 +351,10 @@ function save (where, installed, tree, pretty, cb) {
         if (u && u.protocol) w[1] = t.from
         return w
       }).reduce(function (set, k) {
-        var rangeDescriptor = semver.valid(k[1]) &&
-                              semver.gte(k[1], "0.1.0")
-                            ? "~" : ""
+        var rangeDescriptor = semver.valid(k[1], true) &&
+                              semver.gte(k[1], "0.1.0", true) &&
+                              !npm.config.get("save-exact")
+                            ? savePrefix : ""
         set[k[0]] = rangeDescriptor + k[1]
         return set
       }, {})
@@ -366,7 +381,7 @@ function save (where, installed, tree, pretty, cb) {
       var bundle = data.bundleDependencies || data.bundledDependencies
       delete data.bundledDependencies
       if (!Array.isArray(bundle)) bundle = []
-      data.bundleDependencies = bundle
+      data.bundleDependencies = bundle.sort()
     }
 
     log.verbose('saving', things)
@@ -376,8 +391,11 @@ function save (where, installed, tree, pretty, cb) {
       if (saveBundle) {
         var i = bundle.indexOf(t)
         if (i === -1) bundle.push(t)
+        data.bundleDependencies = bundle.sort()
       }
     })
+
+    data[deps] = sortedObject(data[deps])
 
     data = JSON.stringify(data, null, 2) + "\n"
     fs.writeFile(saveTarget, data, function (er) {
@@ -431,7 +449,7 @@ function prettify (tree, installed) {
                      if (g) g = " (" + g + ")"
                      return c.what + g
                    })
-                 })
+                 }, "", { unicode: npm.config.get("unicode") })
   }).join("\n")
 }
 
@@ -494,7 +512,7 @@ function installManyTop (what, where, context, cb_) {
 
   if (context.explicit) return next()
 
-  readJson(path.join(where, "package.json"), function (er, data) {
+  readJson(path.join(where, "package.json"), log.warn, function (er, data) {
     if (er) return next(er)
     lifecycle(data, "preinstall", where, next)
   })
@@ -519,7 +537,7 @@ function installManyTop_ (what, where, context, cb) {
     asyncMap(pkgs.map(function (p) {
       return path.resolve(nm, p, "package.json")
     }), function (jsonfile, cb) {
-      readJson(jsonfile, function (er, data) {
+      readJson(jsonfile, log.warn, function (er, data) {
         if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
         if (er) return cb(null, [])
         return cb(null, [[data.name, data.version]])
@@ -570,7 +588,9 @@ function installMany (what, where, context, cb) {
       var newPrev = Object.create(context.family)
         , newAnc = Object.create(context.ancestors)
 
-      newAnc[data.name] = data.version
+      if (!context.root) {
+        newAnc[data.name] = data.version
+      }
       targets.forEach(function (t) {
         newPrev[t.name] = t.version
       })
@@ -610,7 +630,7 @@ function targetResolver (where, context, deps) {
     })
 
     asyncMap(inst, function (pkg, cb) {
-      readJson(path.resolve(nm, pkg, "package.json"), function (er, d) {
+      readJson(path.resolve(nm, pkg, "package.json"), log.warn, function (er, d) {
         if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
         // error means it's not a package, most likely.
         if (er) return cb(null, [])
@@ -619,12 +639,21 @@ function targetResolver (where, context, deps) {
         // otherwise, make sure that it's a semver match with what we want.
         var bd = parent.bundleDependencies
         if (bd && bd.indexOf(d.name) !== -1 ||
-            semver.satisfies(d.version, deps[d.name] || "*")) {
+            semver.satisfies(d.version, deps[d.name] || "*", true) ||
+            deps[d.name] === d._resolved) {
           return cb(null, d.name)
         }
 
-        // something is there, but it's not satisfactory.  Clobber it.
-        return cb(null, [])
+        // see if the package had been previously linked
+        fs.lstat(path.resolve(nm, pkg), function(err, s) {
+          if (err) return cb(null, [])
+          if (s.isSymbolicLink()) {
+            return cb(null, d.name)
+          }
+
+          // something is there, but it's not satisfactory.  Clobber it.
+          return cb(null, [])
+        })
       })
     }, function (er, inst) {
       // this is the list of things that are valid and should be ignored.
@@ -675,7 +704,13 @@ function targetResolver (where, context, deps) {
       what = what + "@" + deps[what]
     }
 
-    cache.add(what, function (er, data) {
+    // This is where we actually fetch the package, if it's not already
+    // in the cache.
+    // If it's a git repo, then we want to install it, even if the parent
+    // already has a matching copy.
+    // If it's not a git repo, and the parent already has that pkg, then
+    // we can skip installing it again.
+    cache.add(what, null, false, function (er, data) {
       if (er && parent && parent.optionalDependencies &&
           parent.optionalDependencies.hasOwnProperty(what.split("@")[0])) {
         log.warn("optional dep failed, continuing", what)
@@ -683,17 +718,24 @@ function targetResolver (where, context, deps) {
         return cb(null, [])
       }
 
+      var isGit = false
+        , maybeGit = what.split("@").slice(1).join()
+
+      if (maybeGit)
+        isGit = isGitUrl(url.parse(maybeGit))
+
       if (!er &&
           data &&
           !context.explicit &&
           context.family[data.name] === data.version &&
-          !npm.config.get("force")) {
+          !npm.config.get("force") &&
+          !isGit) {
         log.info("already installed", data.name + "@" + data.version)
         return cb(null, [])
       }
 
       if (data && !data._from) data._from = what
-
+      if (er && parent && parent.name) er.parent = parent.name
       return cb(er, data || [])
     })
   }
@@ -729,7 +771,7 @@ function localLink (target, where, context, cb) {
                              , "package.json" )
     , parent = context.parent
 
-  readJson(jsonFile, function (er, data) {
+  readJson(jsonFile, log.warn, function (er, data) {
     if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     if (er || data._id === target._id) {
       if (er) {
@@ -807,12 +849,16 @@ function installOne_ (target, where, context, cb) {
   }
   installOnesInProgress[target.name].push(where)
   var indexOfIOIP = installOnesInProgress[target.name].length - 1
+    , force = npm.config.get("force")
+    , nodeVersion = npm.config.get("node-version")
+    , strict = npm.config.get("engine-strict")
+    , c = npmInstallChecks
 
   chain
-    ( [ [checkEngine, target]
-      , [checkPlatform, target]
-      , [checkCycle, target, context.ancestors]
-      , [checkGit, targetFolder]
+    ( [ [c.checkEngine, target, npm.version, nodeVersion, force, strict]
+      , [c.checkPlatform, target, force]
+      , [c.checkCycle, target, context.ancestors]
+      , [c.checkGit, targetFolder]
       , [write, target, targetFolder, context] ]
     , function (er, d) {
         installOnesInProgress[target.name].splice(indexOfIOIP, 1)
@@ -823,146 +869,6 @@ function installOne_ (target, where, context, cb) {
         cb(er, d)
       }
     )
-}
-
-function checkEngine (target, cb) {
-  var npmv = npm.version
-    , force = npm.config.get("force")
-    , nodev = force ? null : npm.config.get("node-version")
-    , strict = npm.config.get("engine-strict") || target.engineStrict
-    , eng = target.engines
-  if (!eng) return cb()
-  if (nodev && eng.node && !semver.satisfies(nodev, eng.node)
-      || eng.npm && !semver.satisfies(npmv, eng.npm)) {
-    if (strict) {
-      var er = new Error("Unsupported")
-      er.code = "ENOTSUP"
-      er.required = eng
-      er.pkgid = target._id
-      return cb(er)
-    } else {
-      log.warn( "engine", "%s: wanted: %j (current: %j)"
-              , target._id, eng, {node: nodev, npm: npm.version} )
-    }
-  }
-  return cb()
-}
-
-function checkPlatform (target, cb) {
-  var platform = process.platform
-    , arch = process.arch
-    , osOk = true
-    , cpuOk = true
-    , force = npm.config.get("force")
-
-  if (force) {
-    return cb()
-  }
-
-  if (target.os) {
-    osOk = checkList(platform, target.os)
-  }
-  if (target.cpu) {
-    cpuOk = checkList(arch, target.cpu)
-  }
-  if (!osOk || !cpuOk) {
-    var er = new Error("Unsupported")
-    er.code = "EBADPLATFORM"
-    er.os = target.os || ['any']
-    er.cpu = target.cpu || ['any']
-    er.pkgid = target._id
-    return cb(er)
-  }
-  return cb()
-}
-
-function checkList (value, list) {
-  var tmp
-    , match = false
-    , blc = 0
-  if (typeof list === "string") {
-    list = [list]
-  }
-  if (list.length === 1 && list[0] === "any") {
-    return true
-  }
-  for (var i = 0; i < list.length; ++i) {
-    tmp = list[i]
-    if (tmp[0] === '!') {
-      tmp = tmp.slice(1)
-      if (tmp === value) {
-        return false
-      }
-      ++blc
-    } else {
-      match = match || tmp === value
-    }
-  }
-  return match || blc === list.length
-}
-
-function checkCycle (target, ancestors, cb) {
-  // there are some very rare and pathological edge-cases where
-  // a cycle can cause npm to try to install a never-ending tree
-  // of stuff.
-  // Simplest:
-  //
-  // A -> B -> A' -> B' -> A -> B -> A' -> B' -> A -> ...
-  //
-  // Solution: Simply flat-out refuse to install any name@version
-  // that is already in the prototype tree of the ancestors object.
-  // A more correct, but more complex, solution would be to symlink
-  // the deeper thing into the new location.
-  // Will do that if anyone whines about this irl.
-  //
-  // Note: `npm install foo` inside of the `foo` package will abort
-  // earlier if `--force` is not set.  However, if it IS set, then
-  // we need to still fail here, but just skip the first level. Of
-  // course, it'll still fail eventually if it's a true cycle, and
-  // leave things in an undefined state, but that's what is to be
-  // expected when `--force` is used.  That is why getPrototypeOf
-  // is used *twice* here: to skip the first level of repetition.
-
-  var p = Object.getPrototypeOf(Object.getPrototypeOf(ancestors))
-    , name = target.name
-    , version = target.version
-  while (p && p !== Object.prototype && p[name] !== version) {
-    p = Object.getPrototypeOf(p)
-  }
-  if (p[name] !== version) return cb()
-
-  var er = new Error("Unresolvable cycle detected")
-  var tree = [target._id, JSON.parse(JSON.stringify(ancestors))]
-    , t = Object.getPrototypeOf(ancestors)
-  while (t && t !== Object.prototype) {
-    if (t === p) t.THIS_IS_P = true
-    tree.push(JSON.parse(JSON.stringify(t)))
-    t = Object.getPrototypeOf(t)
-  }
-  log.verbose("unresolvable dependency tree", tree)
-  er.pkgid = target._id
-  er.code = "ECYCLE"
-  return cb(er)
-}
-
-function checkGit (folder, cb) {
-  // if it's a git repo then don't touch it!
-  fs.lstat(folder, function (er, s) {
-    if (er || !s.isDirectory()) return cb()
-    else checkGit_(folder, cb)
-  })
-}
-
-function checkGit_ (folder, cb) {
-  fs.stat(path.resolve(folder, ".git"), function (er, s) {
-    if (!er && s.isDirectory()) {
-      var e = new Error("Appears to be a git repo or submodule.")
-      e.path = folder
-      e.code = "EISGIT"
-      return cb(e)
-    }
-    cb()
-  })
 }
 
 function write (target, targetFolder, context, cb_) {
@@ -977,7 +883,7 @@ function write (target, targetFolder, context, cb_) {
     if (!er) return cb_(er, data)
 
     if (false === npm.config.get("rollback")) return cb_(er)
-    npm.commands.unbuild([targetFolder], function (er2) {
+    npm.commands.unbuild([targetFolder], true, function (er2) {
       if (er2) log.error("error rolling back", target._id, er2)
       return cb_(er, data)
     })
@@ -1016,10 +922,10 @@ function write (target, targetFolder, context, cb_) {
             family)
         var depsTargetFolder = targetFolder
         var depsContext = { family: family
-                         , ancestors: context.ancestors
-                         , parent: target
-                         , explicit: false
-                         , wrap: wrap }
+                          , ancestors: context.ancestors
+                          , parent: target
+                          , explicit: false
+                          , wrap: wrap }
 
         var peerDeps = prepareForInstallMany(data, "peerDependencies", bundled,
             wrap, family)
@@ -1066,7 +972,10 @@ function prepareForInstallMany (packageData, depsKey, bundled, wrap, family) {
     // prefer to not install things that are satisfied by
     // something in the "family" list, unless we're installing
     // from a shrinkwrap.
-    return wrap || !semver.satisfies(family[d], packageData[depsKey][d])
+    if (wrap) return wrap
+    if (semver.validRange(family[d], true))
+      return !semver.satisfies(family[d], packageData[depsKey][d], true)
+    return true
   }).map(function (d) {
     var t = packageData[depsKey][d]
       , parsed = url.parse(t.replace(/^git\+/, "git"))

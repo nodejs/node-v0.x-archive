@@ -44,7 +44,7 @@ process.on("exit", function (code) {
 })
 
 function exit (code, noLog) {
-  exitCode = exitCode || code
+  exitCode = exitCode || process.exitCode || code
 
   var doExit = npm.config.get("_exit")
   log.verbose("exit", [code, doExit])
@@ -63,6 +63,7 @@ function exit (code, noLog) {
     // if we're really exiting, then let it exit on its own, so that
     // in-process stuff can finish or clean up first.
     if (!doExit) process.emit("exit", code)
+    npm.spinner.stop()
   }
 }
 
@@ -146,9 +147,13 @@ function errorHandler (er) {
 
   case "E404":
     er.code = "E404"
+    var msg = [er.message]
     if (er.pkgid && er.pkgid !== "-") {
-      var msg = ["'"+er.pkgid+"' is not in the npm registry."
-                ,"You should bug the author to publish it"]
+      msg.push("", "'"+er.pkgid+"' is not in the npm registry."
+              ,"You should bug the author to publish it")
+      if (er.parent) {
+        msg.push("It was specified as a dependency of '"+er.parent+"'")
+      }
       if (er.pkgid.match(/^node[\.\-]|[\.\-]js$/)) {
         var s = er.pkgid.replace(/^node[\.\-]|[\.\-]js$/g, "")
         if (s !== er.pkgid) {
@@ -158,8 +163,8 @@ function errorHandler (er) {
       }
       msg.push("\nNote that you can also install from a"
               ,"tarball, folder, or http url, or git url.")
-      log.error("404", msg.join("\n"))
     }
+    log.error("404", msg.join("\n"))
     break
 
   case "EPUBLISHCONFLICT":
@@ -224,13 +229,30 @@ function errorHandler (er) {
     log.error("peerinvalid", [er.message].concat(peerErrors).join("\n"))
     break
 
+  case "ECONNRESET":
   case "ENOTFOUND":
+  case "ETIMEDOUT":
     log.error("network", [er.message
               ,"This is most likely not a problem with npm itself"
               ,"and is related to network connectivity."
               ,"In most cases you are behind a proxy or have bad network settings."
               ,"\nIf you are behind a proxy, please make sure that the"
               ,"'proxy' config is set properly.  See: 'npm help config'"
+              ].join("\n"))
+    break
+
+  case "ENOPACKAGEJSON":
+    log.error("package.json", [er.message
+              ,"This is most likely not a problem with npm itself."
+              ,"npm can't find a package.json file in your current directory."
+              ].join("\n"))
+    break
+
+  case "ETARGET":
+    log.error("notarget", [er.message
+              ,"This is most likely not a problem with npm itself."
+              ,"In most cases you or one of your dependencies are requesting"
+              ,"a package version that doesn't exist."
               ].join("\n"))
     break
 
@@ -248,10 +270,9 @@ function errorHandler (er) {
 
   default:
     log.error("", er.stack || er.message || er)
-    log.error("", ["If you need help, you may report this log at:"
-                  ,"    <http://github.com/isaacs/npm/issues>"
-                  ,"or email it to:"
-                  ,"    <npm-@googlegroups.com>"
+    log.error("", ["If you need help, you may report this *entire* log,"
+                  ,"including the npm and node versions, at:"
+                  ,"    <http://github.com/npm/npm/issues>"
                   ].join("\n"))
     printStack = false
     break
@@ -259,7 +280,7 @@ function errorHandler (er) {
 
   var os = require("os")
   // just a line break
-  console.error("")
+  if (log.levels[log.level] <= log.levels.error) console.error("")
   log.error("System", os.type() + " " + os.release())
   log.error("command", process.argv
             .map(JSON.stringify).join(" "))

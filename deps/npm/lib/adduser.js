@@ -15,12 +15,13 @@ try {
 adduser.usage = "npm adduser\nThen enter stuff at the prompts"
 
 function adduser (args, cb) {
+  npm.spinner.stop()
   if (!crypto) return cb(new Error(
     "You must compile node with ssl support to use the adduser feature"))
 
-  var c = { u : npm.config.get("username")
-          , p : npm.config.get("_password")
-          , e : npm.config.get("email")
+  var c = { u : npm.config.get("username") || ""
+          , p : npm.config.get("_password") || ""
+          , e : npm.config.get("email") || ""
           }
     , changed = false
     , u = {}
@@ -37,7 +38,7 @@ function adduser (args, cb) {
 
 function readUsername (c, u, cb) {
   var v = userValidate.username
-  read({prompt: "Username: ", default: c.u}, function (er, un) {
+  read({prompt: "Username: ", default: c.u || ""}, function (er, un) {
     if (er) {
       return cb(er.message === "cancelled" ? er.message : er)
     }
@@ -66,13 +67,22 @@ function readUsername (c, u, cb) {
 function readPassword (c, u, cb) {
   var v = userValidate.pw
 
-  if (!c.changed) {
-    u.p = c.p
-    return cb()
+  var prompt
+  if (c.p && !c.changed) {
+    prompt = "Password: (or leave unchanged) "
+  } else {
+    prompt = "Password: "
   }
-  read({prompt: "Password: ", silent: true}, function (er, pw) {
+
+  read({prompt: prompt, silent: true}, function (er, pw) {
     if (er) {
       return cb(er.message === "cancelled" ? er.message : er)
+    }
+
+    if (!c.changed && pw === "") {
+      // when the username was not changed,
+      // empty response means "use the old value"
+      pw = c.p
     }
 
     if (!pw) {
@@ -85,6 +95,7 @@ function readPassword (c, u, cb) {
       return readPassword(c, u, cb)
     }
 
+    c.changed = c.changed || c.p != pw
     u.p = pw
     cb(er)
   })
@@ -92,8 +103,8 @@ function readPassword (c, u, cb) {
 
 function readEmail (c, u, cb) {
   var v = userValidate.email
-
-  read({prompt: "Email: ", default: c.e}, function (er, em) {
+  var r = { prompt: "Email: (this IS public) ", default: c.e || "" }
+  read(r, function (er, em) {
     if (er) {
       return cb(er.message === "cancelled" ? er.message : er)
     }
@@ -121,9 +132,10 @@ function save (c, u, cb) {
     registry.username = u.u
     registry.password = u.p
   }
-
+  npm.spinner.start()
   // save existing configs, but yank off for this PUT
   registry.adduser(u.u, u.p, u.e, function (er) {
+    npm.spinner.stop()
     if (er) return cb(er)
     registry.username = u.u
     registry.password = u.p
@@ -131,6 +143,7 @@ function save (c, u, cb) {
     npm.config.set("username", u.u, "user")
     npm.config.set("_password", u.p, "user")
     npm.config.set("email", u.e, "user")
+    npm.config.del("_token", "user")
     log.info("adduser", "Authorized user %s", u.u)
     npm.config.save("user", cb)
   })

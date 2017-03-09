@@ -8,6 +8,7 @@ var npm = require("./npm.js")
   , fs = require("fs")
   , path = require("path")
   , readJson = require("read-package-json")
+  , sortedObject = require("sorted-object")
 
 shrinkwrap.usage = "npm shrinkwrap"
 
@@ -38,6 +39,11 @@ function shrinkwrap_ (pkginfo, silent, dev, cb) {
         return cb(er)
       if (data.devDependencies) {
         Object.keys(data.devDependencies).forEach(function (dep) {
+          if (data.dependencies && data.dependencies[dep]) {
+            // do not exclude the dev dependency if it's also listed as a dependency
+            return
+          }
+
           log.warn("shrinkwrap", "Excluding devDependency: %s", dep)
           delete pkginfo.dependencies[dep]
         })
@@ -51,6 +57,9 @@ function shrinkwrap_ (pkginfo, silent, dev, cb) {
 
 
 function save (pkginfo, silent, cb) {
+  // copy the keys over in a well defined order
+  // because javascript objects serialize arbitrarily
+  pkginfo.dependencies = sortedObject(pkginfo.dependencies || {})
   try {
     var swdata = JSON.stringify(pkginfo, null, 2) + "\n"
   } catch (er) {

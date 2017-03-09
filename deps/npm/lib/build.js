@@ -174,10 +174,13 @@ function linkBins (pkg, folder, parent, gtop, cb) {
       if (er) return cb(er)
       // bins should always be executable.
       // XXX skip chmod on windows?
-      fs.chmod(path.resolve(folder, pkg.bin[b]), npm.modes.exec, function (er) {
+      var src = path.resolve(folder, pkg.bin[b])
+      fs.chmod(src, npm.modes.exec, function (er) {
+        if (er && er.code === "ENOENT" && npm.config.get("ignore-scripts")) {
+          return cb()
+        }
         if (er || !gtop) return cb(er)
         var dest = path.resolve(binRoot, b)
-          , src = path.resolve(folder, pkg.bin[b])
           , out = npm.config.get("parseable")
                 ? dest + "::" + src + ":BINFILE"
                 : dest + " -> " + src
@@ -200,19 +203,25 @@ function linkMans (pkg, folder, parent, gtop, cb) {
   if (!pkg.man || !gtop || process.platform === "win32") return cb()
 
   var manRoot = path.resolve(npm.config.get("prefix"), "share", "man")
+
+  // make sure that the mans are unique.
+  // otherwise, if there are dupes, it'll fail with EEXIST
+  var set = pkg.man.reduce(function (acc, man) {
+    acc[path.basename(man)] = man
+    return acc
+  }, {})
+  pkg.man = pkg.man.filter(function (man) {
+    return set[path.basename(man)] === man
+  })
+
   asyncMap(pkg.man, function (man, cb) {
     if (typeof man !== "string") return cb()
-    var parseMan = man.match(/(.*)\.([0-9]+)(\.gz)?$/)
+    var parseMan = man.match(/(.*\.([0-9]+)(\.gz)?)$/)
       , stem = parseMan[1]
       , sxn = parseMan[2]
       , gz = parseMan[3] || ""
       , bn = path.basename(stem)
-      , manDest = path.join( manRoot
-                           , "man"+sxn
-                           , (bn.indexOf(pkg.name) === 0 ? bn
-                             : pkg.name + "-" + bn)
-                             + "." + sxn + gz
-                           )
+      , manDest = path.join(manRoot, "man" + sxn, bn)
 
     linkIfExists(man, manDest, gtop && folder, cb)
   }, cb)
