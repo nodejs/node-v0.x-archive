@@ -41,7 +41,8 @@ Returns the system uptime in seconds.
 
 ## os.loadavg()
 
-Returns an array containing the 1, 5, and 15 minute load averages.
+Returns an array containing the 1, 5, and 15 minute load averages.  
+Note that this statement will always return zero values when under windows as it is not applicable to the architecture. 
 
 The load average is a measure of system activity, calculated by the operating
 system and expressed as a fractional number.  As a rule of thumb, the load
