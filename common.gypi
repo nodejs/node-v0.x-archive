@@ -180,7 +180,7 @@
         'ldflags': [ '-pthread' ],
       }],
       [ 'OS in "linux freebsd openbsd solaris android"', {
-        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', ],
+        'cflags': [ '-Wall', '-Wextra', '-Wno-unused-parameter', '-Wno-unused-local-typedefs', ],
         'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
         'ldflags': [ '-rdynamic' ],
         'target_conditions': [
