@@ -675,11 +675,7 @@ int StreamWrapCallbacks::DoWrite(WriteWrap* w,
                                  uv_stream_t* send_handle,
                                  uv_write_cb cb) {
   int r;
-  if (send_handle == NULL) {
-    r = uv_write(&w->req_, wrap()->stream(), bufs, count, cb);
-  } else {
-    r = uv_write2(&w->req_, wrap()->stream(), bufs, count, send_handle, cb);
-  }
+  r = uv_write2(&w->req_, wrap()->stream(), bufs, count, send_handle, cb);
 
   if (!r) {
     size_t bytes = 0;
