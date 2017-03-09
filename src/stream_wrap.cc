@@ -757,6 +757,8 @@ void StreamWrapCallbacks::DoRead(uv_stream_t* handle,
     pending_obj = AcceptHandle<UDPWrap, uv_udp_t>(env, handle, wrap());
   } else {
     assert(pending == UV_UNKNOWN_HANDLE);
+    argv[2] = Integer::New(handle->accepted_fd);
+    handle->accepted_fd = -1;
   }
 
   if (!pending_obj.IsEmpty()) {
