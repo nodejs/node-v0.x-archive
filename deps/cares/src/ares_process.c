@@ -419,7 +419,7 @@ static void read_udp_packets(ares_channel channel, fd_set *read_fds,
   ssize_t count;
   unsigned char buf[MAXENDSSZ + 1];
 #ifdef HAVE_RECVFROM
-  ares_socklen_t fromlen;
+  socklen_t fromlen;
   union {
     struct sockaddr     sa;
     struct sockaddr_in  sa4;
