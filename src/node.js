@@ -30,14 +30,98 @@
 (function(process) {
   this.global = this;
 
+  (function(Object){
+    // https://code.google.com/p/v8/issues/detail?id=2645
+    // enrich Object with setPrototypeOf(target, proto):target
+    // if V8 is the patched one with
+    // --expose-proto-setter
+    // flag enabled, drops the prototype from the environment
+    // do nothing otherwise
+    var
+      deprecateInsteadOfThrowing = true,
+      bloodyProto = '__proto__',
+      setPrototypeOf = 'setPrototypeOf',
+      getPrototypeOf = 'getPrototypeOf',
+      ObjectPrototype = Object.prototype,
+      hasProto = bloodyProto in ObjectPrototype,
+      defineProperty = Object.defineProperty,
+      getOPD = Object.getOwnPropertyDescriptor,
+      descriptor = hasProto && getOPD && getOPD(
+        ObjectPrototype, bloodyProto
+      ),
+      set;
+    function addProperty(where, who, what) {
+      try {
+        defineProperty(
+          where,
+          who,
+          {
+            enumerable: false,
+            configurable: true,
+            writable: false,
+            value: what
+          }
+        );
+      } catch(o_O) {
+        where[who] = what;
+      }
+    }
+    if (!(setPrototypeOf in Object)) {
+      if (descriptor && descriptor.configurable && (
+        set = descriptor.set
+      )) {
+        try {
+          set.call(descriptor, ObjectPrototype);
+          addProperty(Object, setPrototypeOf, function (t, proto) {
+            set.call(t, proto);
+            return t;
+          });
+          delete ObjectPrototype[bloodyProto];
+          if (deprecateInsteadOfThrowing) {
+            defineProperty(
+              ObjectPrototype,
+              bloodyProto,
+              {
+                get: function () {
+                  console.warn(
+                    '[DEPRECATED] use ' +
+                    'Object.getPrototypeOf(object) instead'
+                  );
+                  return Object.getPrototypeOf(this);
+                },
+                set: function (proto) {
+                  console.warn(
+                    '[DEPRECATED] use ' +
+                    'Object.setPrototypeOf(o, proto) instead'
+                  );
+                  set.call(this, proto);
+                }
+              }
+            );
+          }
+        } catch(o_O) {}
+      }
+      if (hasProto && !(setPrototypeOf in Object)) {
+        addProperty(Object, setPrototypeOf, function (target, proto) {
+          target[bloodyProto] = proto;
+          return target;
+        });
+      }
+    }
+  }(Object));
+
   function startup() {
     var EventEmitter = NativeModule.require('events').EventEmitter;
 
-    process.__proto__ = Object.create(EventEmitter.prototype, {
-      constructor: {
-        value: process.constructor
-      }
-    });
+    Object.setPrototypeOf(
+      process,
+      Object.create(EventEmitter.prototype, {
+        constructor: {
+          value: process.constructor
+        }
+      })
+    );
+
     EventEmitter.call(process);
 
     process.EventEmitter = EventEmitter; // process.EventEmitter is deprecated
