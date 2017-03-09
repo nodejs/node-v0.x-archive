@@ -124,6 +124,7 @@ using v8::kExternalUint32Array;
 
 static bool print_eval = false;
 static bool force_repl = false;
+static bool strip_until_shebang_node = false;
 static bool trace_deprecation = false;
 static bool throw_deprecation = false;
 static const char* eval_string = NULL;
@@ -2690,6 +2691,11 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process, "_forceRepl", True(env->isolate()));
   }
 
+  // -x
+  if (strip_until_shebang_node) {
+    READONLY_PROPERTY(process, "_stripUntilShebangNode", True(node_isolate));
+  }
+
   // --no-deprecation
   if (no_deprecation) {
     READONLY_PROPERTY(process, "noDeprecation", True(env->isolate()));
@@ -2920,6 +2926,7 @@ static void PrintHelp() {
          "  -p, --print          evaluate script and print result\n"
          "  -i, --interactive    always enter the REPL even if stdin\n"
          "                       does not appear to be a terminal\n"
+         "  -x                   ignore text before #!node line\n"
          "  --no-deprecation     silence deprecation warnings\n"
          "  --throw-deprecation  throw an exception anytime a deprecated "
          "function is used\n"
@@ -3045,6 +3052,8 @@ static void ParseArgs(int* argc,
       }
     } else if (strcmp(arg, "--interactive") == 0 || strcmp(arg, "-i") == 0) {
       force_repl = true;
+    } else if (strcmp(arg, "-x") == 0) {
+      strip_until_shebang_node = true;
     } else if (strcmp(arg, "--no-deprecation") == 0) {
       no_deprecation = true;
     } else if (strcmp(arg, "--trace-deprecation") == 0) {

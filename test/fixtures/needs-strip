@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+exec /usr/bin/env node -x --no-deprecation $0 "$@"
+#!node
+// javascript code begins here
+console.log("ok");
